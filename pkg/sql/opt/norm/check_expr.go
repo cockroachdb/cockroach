@@ -61,14 +61,14 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 			}
 		}
 
-	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp:
+	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
 		var ordering *props.OrderingChoice
 		switch ev.Operator() {
 		case opt.LimitOp, opt.OffsetOp:
 			ordering = ev.Private().(*props.OrderingChoice)
 		case opt.RowNumberOp:
 			ordering = &ev.Private().(*memo.RowNumberDef).Ordering
-		case opt.GroupByOp:
+		case opt.GroupByOp, opt.ScalarGroupByOp:
 			ordering = &ev.Private().(*memo.GroupByDef).Ordering
 		}
 		if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {

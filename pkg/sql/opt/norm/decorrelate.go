@@ -277,29 +277,7 @@ func (c *CustomFuncs) AppendNonKeyCols(in, aggs memo.GroupID) memo.GroupID {
 		panic("expected input expression to have key")
 	}
 	nonKeyCols := c.OutputCols(in).Difference(keyCols)
-
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	aggsColList := c.ExtractColList(aggsExpr.Cols())
-
-	outElems := make([]memo.GroupID, len(aggsElems), len(aggsElems)+nonKeyCols.Len())
-	copy(outElems, aggsElems)
-	outColList := make(opt.ColList, len(outElems), cap(outElems))
-	copy(outColList, aggsColList)
-
-	// Add each non-key column from the left input as a AnyNotNull aggregate
-	// function.
-	nonKeyCols.ForEach(func(i int) {
-		outAgg := c.f.ConstructAnyNotNull(
-			c.f.ConstructVariable(
-				c.f.mem.InternColumnID(opt.ColumnID(i)),
-			),
-		)
-		outElems = append(outElems, outAgg)
-		outColList = append(outColList, opt.ColumnID(i))
-	})
-
-	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+	return c.AppendAnyNotNullCols(aggs, nonKeyCols)
 }
 
 // GroupByKey constructs a new unordered GroupByDef using the candidate key
@@ -528,7 +506,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	existsProjection := pb.buildProjections()
 
 	return r.f.ConstructProject(
-		r.f.ConstructGroupBy(
+		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
 				subquery,
 				trueProjection,
@@ -650,7 +628,7 @@ func (r *subqueryHoister) constructGroupByAny(
 	nullVal := r.f.ConstructNull(r.f.InternType(types.Unknown))
 
 	return r.f.ConstructProject(
-		r.f.ConstructGroupBy(
+		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
 					input,

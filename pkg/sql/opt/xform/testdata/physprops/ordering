@@ -244,6 +244,37 @@ memo (optimized)
  └── G8: (variable a.y)
 
 # --------------------------------------------------
+# GroupBy operator.
+# --------------------------------------------------
+opt
+SELECT array_agg(z) FROM (SELECT * FROM a ORDER BY y)
+----
+scalar-group-by
+ ├── columns: array_agg:5(decimal[])
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: y:2(float!null) z:3(decimal)
+ │    ├── ordering: +2
+ │    └── scan a
+ │         └── columns: y:2(float!null) z:3(decimal)
+ └── aggregations
+      └── array-agg [type=decimal[]]
+           └── variable: a.z [type=decimal]
+
+opt
+SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY x, y DESC)
+----
+scalar-group-by
+ ├── columns: array_agg:5(int[])
+ ├── ordering: +1,-2
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(float!null)
+ │    └── ordering: +1,-2
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: a.x [type=int]
+
+# --------------------------------------------------
 # Explain operator.
 # --------------------------------------------------
 opt

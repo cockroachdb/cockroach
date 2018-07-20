@@ -17,7 +17,7 @@ TABLE abc
 opt
 select max(a) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: max:5(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -34,7 +34,7 @@ group-by
 opt
 select max(b) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: max:5(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -49,9 +49,9 @@ memo
 select max(b) from abc
 ----
 memo (optimized)
- ├── G1: (group-by G9 G2 cols=()) (group-by G3 G4 cols=())
+ ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: max:5]"
- │         ├── best: (group-by G9 G2 cols=())
+ │         ├── best: (scalar-group-by G9 G2 cols=())
  │         └── cost: 1050.00
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=-2)
@@ -84,7 +84,7 @@ memo (optimized)
 opt
 SELECT min(a) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -101,7 +101,7 @@ group-by
 opt
 SELECT min(b) FROM abc
 ----
-group-by
+scalar-group-by
  ├── columns: min:5(float)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -145,7 +145,7 @@ TABLE xyz
 opt
 SELECT min(y) FROM xyz where z=7
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -170,7 +170,7 @@ group-by
 opt
 SELECT max(y) FROM xyz where z=7
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -199,7 +199,7 @@ group-by
 opt
 SELECT min(y) FROM xyz WHERE x>7
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -219,7 +219,7 @@ group-by
 opt
 SELECT max(y) FROM xyz WHERE x>7
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -236,7 +236,7 @@ group-by
 opt
 SELECT max(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -253,7 +253,7 @@ group-by
 opt
 SELECT min(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -270,7 +270,7 @@ group-by
 opt
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -288,7 +288,7 @@ group-by
 opt
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -306,7 +306,7 @@ group-by
 opt
 SELECT min(y) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -324,7 +324,7 @@ group-by
 opt
 SELECT min(y), min(y) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int) min:4(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -400,7 +400,7 @@ project
 opt
 SELECT min(y), min(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: min:4(int) min:5(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -421,7 +421,7 @@ group-by
 opt
 SELECT max(y), max(x) FROM xyz
 ----
-group-by
+scalar-group-by
  ├── columns: max:4(int) max:5(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -441,44 +441,36 @@ group-by
 opt
 SELECT x,min(y) FROM xyz GROUP BY x,y
 ----
-project
+group-by
  ├── columns: x:1(int!null) min:4(int)
+ ├── grouping columns: x:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── group-by
-      ├── columns: x:1(int!null) y:2(int) min:4(int)
-      ├── grouping columns: x:1(int!null) y:2(int)
-      ├── key: (1)
-      ├── fd: (1)-->(2,4)
-      ├── scan xyz@xy
-      │    ├── columns: x:1(int!null) y:2(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── aggregations [outer=(2)]
-           └── min [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(2)]
+      └── min [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit does not apply with
 # multiple grouping columns
 opt
 SELECT x,max(y) FROM xyz GROUP BY x,y
 ----
-project
+group-by
  ├── columns: x:1(int!null) max:4(int)
+ ├── grouping columns: x:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── group-by
-      ├── columns: x:1(int!null) y:2(int) max:4(int)
-      ├── grouping columns: x:1(int!null) y:2(int)
-      ├── key: (1)
-      ├── fd: (1)-->(2,4)
-      ├── scan xyz@xy
-      │    ├── columns: x:1(int!null) y:2(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
-      └── aggregations [outer=(2)]
-           └── max [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+ ├── scan xyz@xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(2)]
+      └── max [type=int, outer=(2)]
+           └── variable: xyz.y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply to non-scalar
 # aggregates
@@ -488,10 +480,10 @@ SELECT min(x), count(y) FROM xyz GROUP BY x,y
 project
  ├── columns: min:4(int) count:5(int)
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) min:4(int) count:5(int)
-      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── columns: x:1(int!null) min:4(int) count:5(int)
+      ├── grouping columns: x:1(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2,4,5)
+      ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
@@ -510,10 +502,10 @@ SELECT max(x), count(y) FROM xyz GROUP BY x,y
 project
  ├── columns: max:4(int) count:5(int)
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) max:4(int) count:5(int)
-      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── columns: x:1(int!null) max:4(int) count:5(int)
+      ├── grouping columns: x:1(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2,4,5)
+      ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
@@ -528,9 +520,9 @@ memo
 SELECT min(a) FROM abc
 ----
 memo (optimized)
- ├── G1: (group-by G6 G2 cols=()) (group-by G3 G4 cols=())
+ ├── G1: (scalar-group-by G6 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: min:5]"
- │         ├── best: (group-by G3 G4 cols=())
+ │         ├── best: (scalar-group-by G3 G4 cols=())
  │         └── cost: 1.05
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=+1) (scan abc,cols=(1),lim=1)
@@ -554,9 +546,9 @@ memo
 SELECT min(b) FROM abc
 ----
 memo (optimized)
- ├── G1: (group-by G9 G2 cols=()) (group-by G3 G4 cols=())
+ ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: min:5]"
- │         ├── best: (group-by G9 G2 cols=())
+ │         ├── best: (scalar-group-by G9 G2 cols=())
  │         └── cost: 1050.00
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=+2)
@@ -590,9 +582,9 @@ memo
 SELECT max(a) FROM abc
 ----
 memo (optimized)
- ├── G1: (group-by G6 G2 cols=()) (group-by G3 G4 cols=())
+ ├── G1: (scalar-group-by G6 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: max:5]"
- │         ├── best: (group-by G3 G4 cols=())
+ │         ├── best: (scalar-group-by G3 G4 cols=())
  │         └── cost: 1.10
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1)
@@ -616,9 +608,9 @@ memo
 SELECT max(b) FROM abc
 ----
 memo (optimized)
- ├── G1: (group-by G9 G2 cols=()) (group-by G3 G4 cols=())
+ ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: max:5]"
- │         ├── best: (group-by G9 G2 cols=())
+ │         ├── best: (scalar-group-by G9 G2 cols=())
  │         └── cost: 1050.00
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=-2)

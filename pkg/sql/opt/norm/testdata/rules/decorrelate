@@ -899,16 +899,16 @@ FROM xy, uv
 WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
 ----
 project
- ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int)
  ├── key: (3)
  ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
+      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1), (3)==(10), (10)==(3)
       ├── group-by
-      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
-      │    ├── grouping columns: x:1(int!null) u:3(int!null)
+      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
       │    ├── inner-join
@@ -941,13 +941,15 @@ project
       │    │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4,5), (4)==(1,5), (5)==(1,4)]
       │    │         ├── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
       │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │    └── aggregations [outer=(2,4,6)]
+      │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: a.i [type=int, outer=(6)]
       │         ├── any-not-null [type=int, outer=(4)]
       │         │    └── variable: uv.v [type=int, outer=(4)]
-      │         └── any-not-null [type=int, outer=(2)]
-      │              └── variable: xy.y [type=int, outer=(2)]
+      │         ├── any-not-null [type=int, outer=(2)]
+      │         │    └── variable: xy.y [type=int, outer=(2)]
+      │         └── any-not-null [type=int, outer=(1)]
+      │              └── variable: xy.x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
            └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
 
@@ -1019,18 +1021,18 @@ project
  ├── columns: y:2(int) cst:3(string!null)
  ├── fd: ()-->(2,3)
  ├── select
- │    ├── columns: y:2(int) i:5(int) max:9(string!null) rownum:10(int!null)
+ │    ├── columns: y:2(int) max:9(string!null) rownum:10(int!null)
  │    ├── key: (10)
- │    ├── fd: ()-->(2,5,9)
+ │    ├── fd: ()-->(2,9)
  │    ├── group-by
- │    │    ├── columns: y:2(int) i:5(int) max:9(string) rownum:10(int!null)
- │    │    ├── grouping columns: i:5(int) rownum:10(int!null)
+ │    │    ├── columns: y:2(int) max:9(string) rownum:10(int!null)
+ │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
- │    │    ├── fd: ()-->(2,5), (10)-->(2,5,9)
+ │    │    ├── fd: ()-->(2), (10)-->(2,9)
  │    │    ├── inner-join
- │    │    │    ├── columns: y:2(int!null) k:4(int!null) i:5(int) s:7(string) rownum:10(int!null)
+ │    │    │    ├── columns: y:2(int!null) k:4(int!null) s:7(string) rownum:10(int!null)
  │    │    │    ├── key: (10)
- │    │    │    ├── fd: ()-->(2,4,5,7), (2)==(4), (4)==(2)
+ │    │    │    ├── fd: ()-->(2,4,7), (2)==(4), (4)==(2)
  │    │    │    ├── row-number
  │    │    │    │    ├── columns: y:2(int) rownum:10(int!null)
  │    │    │    │    ├── key: (10)
@@ -1038,10 +1040,10 @@ project
  │    │    │    │    └── scan xy
  │    │    │    │         └── columns: y:2(int)
  │    │    │    ├── scan a
- │    │    │    │    ├── columns: k:4(int!null) i:5(int) s:7(string)
+ │    │    │    │    ├── columns: k:4(int!null) s:7(string)
  │    │    │    │    ├── limit: 1
  │    │    │    │    ├── key: ()
- │    │    │    │    └── fd: ()-->(4,5,7)
+ │    │    │    │    └── fd: ()-->(4,7)
  │    │    │    └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
  │    │    │         └── a.k = xy.y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
  │    │    └── aggregations [outer=(2,7)]
@@ -1266,7 +1268,7 @@ project
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(9)
-      │    ├── group-by
+      │    ├── scalar-group-by
       │    │    ├── columns: concat_agg:9(string)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [1 - 1]
@@ -1321,7 +1323,7 @@ project
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(10)
-      │    ├── group-by
+      │    ├── scalar-group-by
       │    │    ├── columns: max:10(string)
       │    │    ├── ordering: +8 opt(9)
       │    │    ├── outer: (1)
@@ -2096,7 +2098,7 @@ project
 opt
 SELECT max((SELECT y FROM xy WHERE y=i)) FROM a
 ----
-group-by
+scalar-group-by
  ├── columns: max:9(int)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -2419,64 +2421,70 @@ SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── inner-join-apply
- │    ├── columns: k:1(int!null) column1:8(bool) exists:11(bool)
+ ├── left-join-apply
+ │    ├── columns: k:1(int!null) column1:8(bool)
  │    ├── key: (1)
- │    ├── fd: (1)-->(8,11)
+ │    ├── fd: (1)-->(8)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    ├── inner-join-apply
- │    │    ├── columns: column1:8(bool) exists:11(bool)
+ │    ├── project
+ │    │    ├── columns: column1:8(bool)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [1 - 1]
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(8,11)
- │    │    ├── project
- │    │    │    ├── columns: exists:11(bool)
- │    │    │    ├── outer: (1)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(11)
- │    │    │    ├── group-by
- │    │    │    │    ├── columns: any_not_null:10(bool)
- │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── right-join
- │    │    │    │    │    ├── columns: x:6(int) true:9(bool)
- │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: ()~~>(9), (6)-->(9)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: true:9(bool!null) x:6(int!null)
- │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: ()-->(9)
- │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    ├── columns: x:6(int!null)
- │    │    │    │    │    │    │    └── key: (6)
- │    │    │    │    │    │    └── projections [outer=(6)]
- │    │    │    │    │    │         └── true [type=bool]
- │    │    │    │    │    ├── values
- │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    └── tuple [type=tuple]
- │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │    │    │    └── aggregations [outer=(9)]
- │    │    │    │         └── any-not-null [type=bool, outer=(9)]
- │    │    │    │              └── variable: true [type=bool, outer=(9)]
- │    │    │    └── projections [outer=(10)]
- │    │    │         └── any_not_null IS NOT NULL [type=bool, outer=(10)]
- │    │    ├── values
- │    │    │    ├── columns: column1:8(bool)
- │    │    │    ├── outer: (11)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(8)
- │    │    │    └── (exists) [type=tuple{bool}, outer=(11)]
- │    │    └── true [type=bool]
+ │    │    ├── fd: ()-->(8)
+ │    │    └── inner-join-apply
+ │    │         ├── columns: column1:8(bool) exists:11(bool)
+ │    │         ├── outer: (1)
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         ├── fd: ()-->(8,11)
+ │    │         ├── project
+ │    │         │    ├── columns: exists:11(bool)
+ │    │         │    ├── outer: (1)
+ │    │         │    ├── cardinality: [0 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    ├── fd: ()-->(11)
+ │    │         │    ├── group-by
+ │    │         │    │    ├── columns: any_not_null:10(bool)
+ │    │         │    │    ├── outer: (1)
+ │    │         │    │    ├── cardinality: [0 - 1]
+ │    │         │    │    ├── key: ()
+ │    │         │    │    ├── fd: ()-->(10)
+ │    │         │    │    ├── right-join
+ │    │         │    │    │    ├── columns: x:6(int) true:9(bool)
+ │    │         │    │    │    ├── outer: (1)
+ │    │         │    │    │    ├── key: (6)
+ │    │         │    │    │    ├── fd: ()~~>(9), (6)-->(9)
+ │    │         │    │    │    ├── project
+ │    │         │    │    │    │    ├── columns: true:9(bool!null) x:6(int!null)
+ │    │         │    │    │    │    ├── key: (6)
+ │    │         │    │    │    │    ├── fd: ()-->(9)
+ │    │         │    │    │    │    ├── scan xy
+ │    │         │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │         │    │    │    │    │    └── key: (6)
+ │    │         │    │    │    │    └── projections [outer=(6)]
+ │    │         │    │    │    │         └── true [type=bool]
+ │    │         │    │    │    ├── values
+ │    │         │    │    │    │    ├── cardinality: [1 - 1]
+ │    │         │    │    │    │    ├── key: ()
+ │    │         │    │    │    │    └── tuple [type=tuple]
+ │    │         │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         │    │    └── aggregations [outer=(9)]
+ │    │         │    │         └── any-not-null [type=bool, outer=(9)]
+ │    │         │    │              └── variable: true [type=bool, outer=(9)]
+ │    │         │    └── projections [outer=(10)]
+ │    │         │         └── any_not_null IS NOT NULL [type=bool, outer=(10)]
+ │    │         ├── values
+ │    │         │    ├── columns: column1:8(bool)
+ │    │         │    ├── outer: (11)
+ │    │         │    ├── cardinality: [1 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    ├── fd: ()-->(8)
+ │    │         │    └── (exists) [type=tuple{bool}, outer=(11)]
+ │    │         └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]
       └── variable: column1 [type=bool, outer=(8)]
@@ -2487,71 +2495,77 @@ SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── inner-join-apply
- │    ├── columns: k:1(int!null) column1:8(bool) case:11(bool)
+ ├── left-join-apply
+ │    ├── columns: k:1(int!null) column1:8(bool)
  │    ├── key: (1)
- │    ├── fd: (1)-->(8,11)
+ │    ├── fd: (1)-->(8)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    ├── inner-join-apply
- │    │    ├── columns: column1:8(bool) case:11(bool)
+ │    ├── project
+ │    │    ├── columns: column1:8(bool)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [1 - 1]
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(8,11)
- │    │    ├── project
- │    │    │    ├── columns: case:11(bool)
- │    │    │    ├── outer: (1)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(11)
- │    │    │    ├── group-by
- │    │    │    │    ├── columns: bool_or:10(bool)
- │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── right-join
- │    │    │    │    │    ├── columns: x:6(int) notnull:9(bool)
- │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(9)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
- │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: (6)-->(9)
- │    │    │    │    │    │    ├── select
- │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    │    │    └── fd: (6)-->(7)
- │    │    │    │    │    │    │    └── filters [type=bool, outer=(7)]
- │    │    │    │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
- │    │    │    │    │    │    └── projections [outer=(6,7)]
- │    │    │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
- │    │    │    │    │    ├── values
- │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    └── tuple [type=tuple]
- │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │    │    │    └── aggregations [outer=(9)]
- │    │    │    │         └── bool-or [type=bool, outer=(9)]
- │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
- │    │    │    └── projections [outer=(10)]
- │    │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
- │    │    ├── values
- │    │    │    ├── columns: column1:8(bool)
- │    │    │    ├── outer: (11)
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(8)
- │    │    │    └── (case) [type=tuple{bool}, outer=(11)]
- │    │    └── true [type=bool]
+ │    │    ├── fd: ()-->(8)
+ │    │    └── inner-join-apply
+ │    │         ├── columns: column1:8(bool) case:11(bool)
+ │    │         ├── outer: (1)
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         ├── fd: ()-->(8,11)
+ │    │         ├── project
+ │    │         │    ├── columns: case:11(bool)
+ │    │         │    ├── outer: (1)
+ │    │         │    ├── cardinality: [0 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    ├── fd: ()-->(11)
+ │    │         │    ├── group-by
+ │    │         │    │    ├── columns: bool_or:10(bool)
+ │    │         │    │    ├── outer: (1)
+ │    │         │    │    ├── cardinality: [0 - 1]
+ │    │         │    │    ├── key: ()
+ │    │         │    │    ├── fd: ()-->(10)
+ │    │         │    │    ├── right-join
+ │    │         │    │    │    ├── columns: x:6(int) notnull:9(bool)
+ │    │         │    │    │    ├── outer: (1)
+ │    │         │    │    │    ├── key: (6)
+ │    │         │    │    │    ├── fd: (6)-->(9)
+ │    │         │    │    │    ├── project
+ │    │         │    │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
+ │    │         │    │    │    │    ├── key: (6)
+ │    │         │    │    │    │    ├── fd: (6)-->(9)
+ │    │         │    │    │    │    ├── select
+ │    │         │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │         │    │    │    │    │    ├── key: (6)
+ │    │         │    │    │    │    │    ├── fd: (6)-->(7)
+ │    │         │    │    │    │    │    ├── scan xy
+ │    │         │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │         │    │    │    │    │    │    ├── key: (6)
+ │    │         │    │    │    │    │    │    └── fd: (6)-->(7)
+ │    │         │    │    │    │    │    └── filters [type=bool, outer=(7)]
+ │    │         │    │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
+ │    │         │    │    │    │    └── projections [outer=(6,7)]
+ │    │         │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │         │    │    │    ├── values
+ │    │         │    │    │    │    ├── cardinality: [1 - 1]
+ │    │         │    │    │    │    ├── key: ()
+ │    │         │    │    │    │    └── tuple [type=tuple]
+ │    │         │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         │    │    └── aggregations [outer=(9)]
+ │    │         │    │         └── bool-or [type=bool, outer=(9)]
+ │    │         │    │              └── variable: notnull [type=bool, outer=(9)]
+ │    │         │    └── projections [outer=(10)]
+ │    │         │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
+ │    │         ├── values
+ │    │         │    ├── columns: column1:8(bool)
+ │    │         │    ├── outer: (11)
+ │    │         │    ├── cardinality: [1 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    ├── fd: ()-->(8)
+ │    │         │    └── (case) [type=tuple{bool}, outer=(11)]
+ │    │         └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]
       └── variable: column1 [type=bool, outer=(8)]

@@ -319,7 +319,7 @@ project
 opt
 SELECT count(*), sum(i) FROM a
 ----
-group-by
+scalar-group-by
  ├── columns: count:5(int) sum:6(decimal)
  ├── cardinality: [1 - 1]
  ├── key: ()
