@@ -595,7 +595,7 @@ opt
 SELECT k FROM a
 WHERE EXISTS
 (
-    SELECT * FROM xy FULL JOIN (SELECT u, u+1 AS plus FROM uv WHERE i=5) ON x=plus
+    SELECT * FROM xy LEFT JOIN (SELECT u, u+1 AS plus FROM uv WHERE i=5) ON x=plus
 )
 ----
 project
@@ -609,8 +609,8 @@ project
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── full-join
-      │    ├── columns: x:6(int) plus:10(int)
+      ├── left-join
+      │    ├── columns: x:6(int!null) plus:10(int)
       │    ├── outer: (2)
       │    ├── scan xy
       │    │    ├── columns: x:6(int!null)
@@ -625,6 +625,57 @@ project
       │    └── filters [type=bool, outer=(2,6,10), constraints=(/2: [/5 - /5]; /6: (/NULL - ]; /10: (/NULL - ]), fd=()-->(2), (6)==(10), (10)==(6)]
       │         ├── xy.x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      └── true [type=bool]
+
+# Don't decorrelate FULL JOIN case.
+opt
+SELECT k FROM a
+WHERE EXISTS
+(
+    SELECT * FROM xy FULL JOIN (SELECT u, u+1 AS plus FROM uv WHERE i=5) ON x=plus
+)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── semi-join-apply
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── full-join (merge)
+      │    ├── columns: x:6(int) plus:10(int)
+      │    ├── outer: (2)
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null)
+      │    │    ├── key: (6)
+      │    │    └── ordering: +6
+      │    ├── sort
+      │    │    ├── columns: plus:10(int)
+      │    │    ├── outer: (2)
+      │    │    ├── ordering: +10
+      │    │    └── project
+      │    │         ├── columns: plus:10(int)
+      │    │         ├── outer: (2)
+      │    │         ├── select
+      │    │         │    ├── columns: u:8(int!null)
+      │    │         │    ├── outer: (2)
+      │    │         │    ├── key: (8)
+      │    │         │    ├── scan uv
+      │    │         │    │    ├── columns: u:8(int!null)
+      │    │         │    │    └── key: (8)
+      │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      │    │         │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │         └── projections [outer=(8)]
+      │    │              └── uv.u + 1 [type=int, outer=(8)]
+      │    └── merge-on
+      │         ├── left ordering: +6
+      │         ├── right ordering: +10
+      │         └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+      │              └── xy.x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       └── true [type=bool]
 
 # --------------------------------------------------
