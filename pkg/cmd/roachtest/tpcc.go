@@ -133,8 +133,9 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 	}
 
 	r.Add(testSpec{
-		Name:  name,
-		Nodes: nodeCount,
+		Name:   name,
+		Nodes:  nodeCount,
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
