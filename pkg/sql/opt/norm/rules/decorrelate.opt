@@ -119,7 +119,7 @@
 # See the comment for TryDecorrelateSelect for an explanation of why the
 # DetectCycle and HighPriority tags are in use.
 [TryDecorrelateProjectSelect, Normalize, DetectCycle, HighPriority]
-(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+(LeftJoin | LeftJoinApply
     $left:*
     $right:(Project
         $projectInput:* &
