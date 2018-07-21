@@ -682,6 +682,34 @@ GROUP BY c.c_id, o.ship;
 1  CA    3  1
 2  CA    1  3
 
+# Customers with their orders (even if no orders), plus max of bill and ship
+# states for that customer (alphabetically).
+query IIT
+SELECT
+    c.c_id,
+    o.o_id,
+    (
+        SELECT MAX(CASE WHEN c2.bill > o2.ship THEN c2.bill ELSE o2.ship END)
+        FROM c AS c2, o AS o2
+        WHERE c2.c_id=o2.c_id AND c2.c_id=c.c_id
+    )
+FROM c
+LEFT JOIN o
+ON c.c_id=o.c_id
+ORDER BY c.c_id, o.o_id
+----
+1  10    CA
+1  20    CA
+1  30    CA
+2  40    TX
+2  50    TX
+2  60    TX
+3  NULL  NULL
+4  70    WY
+4  80    WY
+5  NULL  NULL
+6  90    WA
+
 # ConcatAgg prevents decorrelation.
 statement error could not decorrelate subquery
 SELECT (SELECT concat_agg(ship || ' ') FROM o WHERE o.c_id=c.c_id)
