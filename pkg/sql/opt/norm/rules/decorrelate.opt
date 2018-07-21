@@ -90,7 +90,7 @@
 #
 # Citations: [3] (see identity #4)
 [TryDecorrelateProject, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+(InnerJoin | InnerJoinApply
     $left:*
     $right:* &
         (HasOuterCols $right) &
