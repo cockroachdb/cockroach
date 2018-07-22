@@ -2642,7 +2642,6 @@ drop table customer, customerorder, lineitem, product
 # ------------------------------------------------------------------------------
 # Query #12
 #   org.hibernate.test.criteria.CriteriaQueryTest
-#   TODO(andyk): Need to map SemiJoinApply to InnerJoinApply for decorrelation.
 # ------------------------------------------------------------------------------
 exec-ddl
 CREATE TABLE student (
@@ -2708,45 +2707,63 @@ WHERE
         )
   );
 ----
-semi-join-apply
- ├── columns: studenti1_26_0_:1(int!null) name2_26_0_:2(string!null) address_3_26_0_:3(string) address_4_26_0_:4(string) preferre5_26_0_:5(string)
+group-by
+ ├── columns: studenti1_26_0_:1(int!null) name2_26_0_:2(string) address_3_26_0_:3(string) address_4_26_0_:4(string) preferre5_26_0_:5(string)
+ ├── grouping columns: student.studentid:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan student
- │    ├── columns: student.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
  ├── select
- │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null) y0_:14(int!null)
- │    ├── outer: (5)
- │    ├── key: (6,7)
- │    ├── fd: (6,7)-->(9,14), (9)==(14), (14)==(9)
+ │    ├── columns: student.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null) y0_:14(int!null)
+ │    ├── key: (1,6,7)
+ │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14), (9)==(14), (14)==(9)
  │    ├── group-by
- │    │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int) y0_:14(int)
- │    │    ├── grouping columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null)
- │    │    ├── outer: (5)
- │    │    ├── key: (6,7)
- │    │    ├── fd: (6,7)-->(9,14)
+ │    │    ├── columns: student.studentid:1(int!null) name:2(string) address_city:3(string) address_state:4(string) preferredcoursecode:5(string) enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int) y0_:14(int)
+ │    │    ├── grouping columns: student.studentid:1(int!null) enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null)
+ │    │    ├── key: (1,6,7)
+ │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14)
  │    │    ├── inner-join
- │    │    │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null) enrolment.coursecode:11(string!null) enrolment.year:13(int!null)
- │    │    │    ├── outer: (5)
- │    │    │    ├── fd: ()-->(11), (6,7)-->(9)
- │    │    │    ├── scan enrolment
- │    │    │    │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null)
- │    │    │    │    ├── key: (6,7)
- │    │    │    │    └── fd: (6,7)-->(9)
- │    │    │    ├── scan enrolment
- │    │    │    │    └── columns: enrolment.coursecode:11(string!null) enrolment.year:13(int!null)
+ │    │    │    ├── columns: student.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string!null) enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null) enrolment.coursecode:11(string!null) enrolment.year:13(int!null)
+ │    │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (5)==(11), (11)==(5)
+ │    │    │    ├── inner-join
+ │    │    │    │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null) enrolment.coursecode:11(string!null) enrolment.year:13(int!null)
+ │    │    │    │    ├── fd: (6,7)-->(9)
+ │    │    │    │    ├── scan enrolment
+ │    │    │    │    │    ├── columns: enrolment.studentid:6(int!null) enrolment.coursecode:7(string!null) enrolment.year:9(int!null)
+ │    │    │    │    │    ├── key: (6,7)
+ │    │    │    │    │    └── fd: (6,7)-->(9)
+ │    │    │    │    ├── scan enrolment
+ │    │    │    │    │    └── columns: enrolment.coursecode:11(string!null) enrolment.year:13(int!null)
+ │    │    │    │    └── true [type=bool]
+ │    │    │    ├── scan student
+ │    │    │    │    ├── columns: student.studentid:1(int!null) name:2(string!null) address_city:3(string) address_state:4(string) preferredcoursecode:5(string)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    └── filters [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
  │    │    │         └── student.preferredcoursecode = enrolment.coursecode [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ])]
- │    │    └── aggregations [outer=(9,13)]
+ │    │    └── aggregations [outer=(2-5,9,13)]
  │    │         ├── max [type=int, outer=(13)]
  │    │         │    └── variable: enrolment.year [type=int, outer=(13)]
- │    │         └── any-not-null [type=int, outer=(9)]
- │    │              └── variable: enrolment.year [type=int, outer=(9)]
+ │    │         ├── any-not-null [type=int, outer=(9)]
+ │    │         │    └── variable: enrolment.year [type=int, outer=(9)]
+ │    │         ├── any-not-null [type=string, outer=(2)]
+ │    │         │    └── variable: student.name [type=string, outer=(2)]
+ │    │         ├── any-not-null [type=string, outer=(3)]
+ │    │         │    └── variable: student.address_city [type=string, outer=(3)]
+ │    │         ├── any-not-null [type=string, outer=(4)]
+ │    │         │    └── variable: student.address_state [type=string, outer=(4)]
+ │    │         └── any-not-null [type=string, outer=(5)]
+ │    │              └── variable: student.preferredcoursecode [type=string, outer=(5)]
  │    └── filters [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
  │         └── enrolment.year = y0_ [type=bool, outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ])]
- └── true [type=bool]
+ └── aggregations [outer=(2-5)]
+      ├── any-not-null [type=string, outer=(2)]
+      │    └── variable: student.name [type=string, outer=(2)]
+      ├── any-not-null [type=string, outer=(3)]
+      │    └── variable: student.address_city [type=string, outer=(3)]
+      ├── any-not-null [type=string, outer=(4)]
+      │    └── variable: student.address_state [type=string, outer=(4)]
+      └── any-not-null [type=string, outer=(5)]
+           └── variable: student.preferredcoursecode [type=string, outer=(5)]
 
 exec-ddl
 drop table student, enrolment
