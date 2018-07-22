@@ -109,8 +109,15 @@ func listFailures(
 			return errors.Wrap(err, "failed to post issue")
 		}
 	} else {
-		for test := range failures {
-			log.Printf("failed test: %s", test)
+		for test, testEvents := range failures {
+			if split := strings.SplitN(test, "/", 2); len(split) == 2 {
+				parentTest, subTest := split[0], split[1]
+				log.Printf("consolidating failed subtest %q into parent test %q", subTest, parentTest)
+				failures[parentTest] = append(failures[parentTest], testEvents...)
+				delete(failures, test)
+			} else {
+				log.Printf("failed parent test %q", test)
+			}
 		}
 		for test, testEvents := range failures {
 			authorEmail, err := getAuthorEmail(ctx, packageName, test)
