@@ -22,6 +22,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/rubyist/circuitbreaker"
 )
 
@@ -92,6 +95,12 @@ func (s *Store) ForceReplicationScanAndProcess() {
 // may need to be GC'd.
 func (s *Store) ForceReplicaGCScanAndProcess() {
 	forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
+}
+
+// ForceMergeScanAndProcess iterates over all ranges and enqueues any that
+// may need to be merged.
+func (s *Store) ForceMergeScanAndProcess() {
+	forceScanAndProcess(s, s.mergeQueue.baseQueue)
 }
 
 // ForceSplitScanAndProcess iterates over all ranges and enqueues any that
@@ -512,4 +521,25 @@ func (nl *NodeLiveness) SetDecommissioningInternal(
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	return t.dialer.GetCircuitBreaker(nodeID)
+}
+
+func WriteRandomDataToRange(
+	t testing.TB, store *Store, rangeID roachpb.RangeID, keyPrefix []byte,
+) (midpoint []byte) {
+	src := rand.New(rand.NewSource(0))
+	for i := 0; i < 100; i++ {
+		key := append([]byte(nil), keyPrefix...)
+		key = append(key, randutil.RandBytes(src, int(src.Int31n(1<<7)))...)
+		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
+		pArgs := putArgs(key, val)
+		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+			RangeID: rangeID,
+		}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	// Return approximate midway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
+	midKey := append([]byte(nil), keyPrefix...)
+	midKey = append(midKey, []byte("Z")...)
+	return midKey
 }
