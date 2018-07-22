@@ -24,9 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -45,7 +46,7 @@ type worker struct {
 }
 
 type tpccTx interface {
-	run(config *tpcc, db *gosql.DB, wID int) (interface{}, error)
+	run(ctx context.Context, config *tpcc, db *gosql.DB, wID int) (interface{}, error)
 }
 
 type tx struct {
@@ -148,11 +149,15 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.doWaits {
 		warehouseID = rand.Intn(w.config.warehouses)
 	} else {
-		time.Sleep(time.Duration(t.keyingTime) * time.Second)
+		select {
+		case <-time.After(time.Duration(t.keyingTime) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	start := timeutil.Now()
-	if _, err := t.run(w.config, w.db, warehouseID); err != nil {
+	if _, err := t.run(ctx, w.config, w.db, warehouseID); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
 	w.hists.Get(t.name).Record(timeutil.Since(start))
@@ -166,7 +171,11 @@ func (w *worker) run(ctx context.Context) error {
 		if thinkTime > (t.thinkTime * 10) {
 			thinkTime = t.thinkTime * 10
 		}
-		time.Sleep(time.Duration(thinkTime) * time.Second)
+		select {
+		case <-time.After(time.Duration(thinkTime) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	return nil
 }

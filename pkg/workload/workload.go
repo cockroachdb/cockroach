@@ -101,9 +101,9 @@ type Hooks struct {
 	// loaded. It called after restoring a fixture. This, for example, is where
 	// creating foreign keys should go. Implementations should be idempotent.
 	PostLoad func(*gosql.DB) error
-	// PostRun is called after workload run has ended, with the start time of the
+	// PostRun is called after workload run has ended, with the duration of the
 	// run. This is where any post-run special printing or validation can be done.
-	PostRun func(time.Time) error
+	PostRun func(time.Duration) error
 	// CheckConsistency is called to run generator-specific consistency checks.
 	// These are expected to pass after the initial data load as well as after
 	// running queryload.

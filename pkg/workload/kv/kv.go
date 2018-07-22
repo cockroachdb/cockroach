@@ -203,7 +203,7 @@ func (o *kvOp) run(ctx context.Context) error {
 			args[i] = o.g.readKey()
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.Query(args...)
+		rows, err := o.readStmt.QueryContext(ctx, args...)
 		if err != nil {
 			return err
 		}
@@ -220,7 +220,7 @@ func (o *kvOp) run(ctx context.Context) error {
 		args[j+1] = randomBlock(o.config, o.g.rand())
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.Exec(args...)
+	_, err := o.writeStmt.ExecContext(ctx, args...)
 	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
 }
