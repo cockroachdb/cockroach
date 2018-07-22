@@ -369,6 +369,23 @@ func (txn *Txn) SetSystemConfigTrigger() error {
 	return nil
 }
 
+// DisablePipelining instructs the transaction not to pipeline requests. It
+// should rarely be necessary to call this method. It is only recommended for
+// transactions that need extremely precise control over the request ordering,
+// like the transaction that merges ranges together.
+//
+// DisablePipelining must be called before any operations are performed on the
+// transaction.
+func (txn *Txn) DisablePipelining() error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	if txn.mu.active {
+		return errors.Errorf("cannot disable pipelining on a running transaction")
+	}
+	txn.mu.sender.DisablePipelining()
+	return nil
+}
+
 // Proto returns the transactions underlying protocol buffer. It is not thread-safe,
 // only use if you know that no requests are executing concurrently.
 //
