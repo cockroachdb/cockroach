@@ -167,7 +167,7 @@
 )
 =>
 (Project
-    ((OpName)
+    (LeftJoinApply
         $left
         (Project
             ((OpName $join)
@@ -271,7 +271,7 @@
             $input
             (True)
         )
-        (AppendNonKeyCols $newLeft $aggregations)
+        (AppendAggregatedNonKeyCols $aggregations $newLeft)
         (GroupByUnionKey $newLeft $def)
     )
     $on
@@ -345,10 +345,36 @@
             $newRight:(EnsureNotNullIfCountRows $input $aggregations)
             (True)
         )
-        (AppendNonKeyCols $newLeft (TranslateCountRows $newRight $aggregations))
+        (AppendAggregatedNonKeyCols (TranslateCountRows $newRight $aggregations) $newLeft)
         (GroupByKey $newLeft)
     )
     $on
+)
+
+# TryDecorrelateSemiJoin maps a SemiJoin to an equivalent GroupBy/InnerJoin
+# complex in hopes of triggering further rules that will ultimately decorrelate
+# the query. Once this rule fires, a corresponding InnerJoin decorrelation rule
+# will match (i.e. TryDecorrelateGroupBy or TryDecorrelateProject).
+#
+# Citations: [5]
+[TryDecorrelateSemiJoin, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        ^(HasOneOrMoreRows $right) & # Let EliminateExistsGroupBy match instead.
+        (GroupBy | Project)
+    $on:*
+)
+=>
+(GroupBy
+    (InnerJoinApply
+        $newLeft:(EnsureKey $left)
+        $right
+        $on
+    )
+    (AggregateNonKeyCols $newLeft)
+    (GroupByKey $newLeft)
 )
 
 # HoistSelectExists extracts existential subqueries from Select filters,

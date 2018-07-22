@@ -302,6 +302,35 @@ WHERE
 2  TX
 4  TX
 
+# Customers that have a bill state equal to the max ship state of all their
+# orders (alphabetically).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT * FROM c WHERE bill=(SELECT max(ship) FROM o WHERE c_id=c2.c_id AND c_id=c.c_id)
+)
+----
+1  CA
+2  TX
+
+# Customers that have at least one order shipped to their billing state (or if
+# the ship state is null).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT *
+    FROM (SELECT c_id, coalesce(ship, bill) AS state FROM o WHERE c_id=c2.c_id) AS o
+    WHERE state=bill
+)
+----
+1  CA
+2  TX
+4  TX
+
 # Max1Row prevents decorrelation.
 statement error could not decorrelate subquery
 SELECT *
@@ -689,7 +718,7 @@ SELECT
     c.c_id,
     o.o_id,
     (
-        SELECT MAX(CASE WHEN c2.bill > o2.ship THEN c2.bill ELSE o2.ship END)
+        SELECT max(CASE WHEN c2.bill > o2.ship THEN c2.bill ELSE o2.ship END)
         FROM c AS c2, o AS o2
         WHERE c2.c_id=o2.c_id AND c2.c_id=c.c_id
     )
