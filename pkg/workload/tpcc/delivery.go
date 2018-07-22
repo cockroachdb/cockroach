@@ -49,7 +49,9 @@ type delivery struct{}
 
 var _ tpccTx = delivery{}
 
-func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (del delivery) run(
+	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
+) (interface{}, error) {
 	atomic.AddUint64(&config.auditor.deliveryTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -58,7 +60,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 	olDeliveryD := timeutil.Now()
 
 	err := crdb.ExecuteTx(
-		context.Background(),
+		ctx,
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
@@ -67,7 +69,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 			dIDolTotalPairs := make(map[int]float64)
 			for dID := 1; dID <= 10; dID++ {
 				var oID int
-				if err := tx.QueryRow(fmt.Sprintf(`
+				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 					SELECT no_o_id
 					FROM new_order
 					WHERE no_w_id = %d AND no_d_id = %d
@@ -84,7 +86,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 				dIDoIDPairs[dID] = oID
 
 				var olTotal float64
-				if err := tx.QueryRow(fmt.Sprintf(`
+				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 						SELECT sum(ol_amount) FROM order_line
 						WHERE ol_w_id = %d AND ol_d_id = %d AND ol_o_id = %d`,
 					wID, dID, oID)).Scan(&olTotal); err != nil {
@@ -94,7 +96,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 			}
 			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
 
-			rows, err := tx.Query(fmt.Sprintf(`
+			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 					UPDATE "order"
 					SET o_carrier_id = %d
 					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)
@@ -123,7 +125,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 			dIDcIDPairsStr := makeInTuples(dIDcIDPairs)
 			dIDToOlTotalStr := makeWhereCases(dIDolTotalPairs)
 
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE customer
 				SET c_delivery_cnt = c_delivery_cnt + 1,
 					c_balance = c_balance + CASE c_d_id %s END
@@ -131,13 +133,13 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 				dIDToOlTotalStr, wID, dIDcIDPairsStr)); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				DELETE FROM new_order
 				WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
 				wID, dIDoIDPairsStr)); err != nil {
 				return err
 			}
-			_, err = tx.Exec(fmt.Sprintf(`
+			_, err = tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE order_line
 				SET ol_delivery_d = '%s'
 				WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,

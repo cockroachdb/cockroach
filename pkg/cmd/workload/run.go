@@ -155,7 +155,8 @@ func setCmdDefaults(cmd *cobra.Command) *cobra.Command {
 var numOps uint64
 
 // workerRun is an infinite loop in which the worker continuously attempts to
-// read / write blocks of random data into a table in cockroach DB.
+// read / write blocks of random data into a table in cockroach DB. The function
+// returns only when the provided context is canceled.
 func workerRun(
 	ctx context.Context,
 	errCh chan<- error,
@@ -166,14 +167,24 @@ func workerRun(
 	defer wg.Done()
 
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
 			if err := limiter.Wait(ctx); err != nil {
+				if err == context.Canceled {
+					return
+				}
 				panic(err)
 			}
 		}
 
 		if err := workFn(ctx); err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return
+			}
 			errCh <- err
 			continue
 		}
@@ -259,19 +270,38 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			return err
 		}
 	}
-	rampDone := make(chan bool)
+
 	start := timeutil.Now()
 	errCh := make(chan error)
+	rampDone := make(chan struct{})
 	var wg sync.WaitGroup
-	sleepTime := *ramp / time.Duration(len(ops.WorkerFns))
 	wg.Add(len(ops.WorkerFns))
 	go func() {
-		for _, workFn := range ops.WorkerFns {
-			workFn := workFn
-			go workerRun(ctx, errCh, &wg, limiter, workFn)
-			time.Sleep(sleepTime)
+		// If a ramp period was specified, start all of the workers
+		// gradually with a new context.
+		if *ramp > 0 {
+			var rampWG sync.WaitGroup
+			rampWG.Add(len(ops.WorkerFns))
+			rampCtx, cancelRamp := context.WithCancel(ctx)
+			sleepTime := *ramp / time.Duration(len(ops.WorkerFns))
+			for _, workFn := range ops.WorkerFns {
+				go workerRun(rampCtx, errCh, &rampWG, limiter, workFn)
+				time.Sleep(sleepTime)
+			}
+
+			// Cancel the ramp context. This interupts all worker loops, which
+			// are restarted together below.
+			cancelRamp()
+			rampWG.Wait()
+
+			// Notify the process loop below to reset timers and histograms.
+			close(rampDone)
 		}
-		rampDone <- true
+
+		// Start all of the workers again, this time with the main context.
+		for _, workFn := range ops.WorkerFns {
+			go workerRun(ctx, errCh, &wg, limiter, workFn)
+		}
 	}()
 
 	var numErr int
@@ -333,9 +363,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					_ = jsonEnc.Encode(t.Snapshot())
 				}
 			})
-		// Once the load generator is fully ramped up, we reset the histogram and the start time, to
-		// throw away the stats for the the ramp up period.
+
+		// Once the load generator is fully ramped up, we reset the histogram
+		// and the start time to throw away the stats for the the ramp up period.
 		case <-rampDone:
+			rampDone = nil
 			start = timeutil.Now()
 			i = 0
 			reg.Tick(func(t workload.HistogramTick) {
@@ -388,7 +420,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(start); err != nil {
+					if err := h.Hooks().PostRun(startElapsed); err != nil {
 						fmt.Printf("failed post-run hook: %v\n", err)
 					}
 				}
