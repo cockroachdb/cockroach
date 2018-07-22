@@ -219,10 +219,9 @@ func (c *CustomFuncs) HasZeroOrOneRow(group memo.GroupID) bool {
 	return c.f.mem.GroupProperties(group).Relational.Cardinality.IsZeroOrOne()
 }
 
-// HasOneOrMoreRows returns true if the given group will always return at least
-// one row.
-func (c *CustomFuncs) HasOneOrMoreRows(group memo.GroupID) bool {
-	return !c.f.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
+// CanHaveZeroRows returns true if the given group might return zero rows.
+func (c *CustomFuncs) CanHaveZeroRows(group memo.GroupID) bool {
+	return c.f.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
 }
 
 // HasCorrelatedSubquery returns true if the given scalar group contains a
