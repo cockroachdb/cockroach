@@ -34,6 +34,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -10387,4 +10388,48 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
 		}
 	}
+}
+
+func TestRangeStatsRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	keyPrefix := roachpb.RKey("dummy-prefix")
+
+	// Write some random data to the range and verify that a RangeStatsRequest
+	// returns the same MVCC stats as the replica's in-memory state.
+	WriteRandomDataToRange(t, tc.store, tc.repl.RangeID, keyPrefix)
+	expMS := tc.repl.GetMVCCStats()
+	res, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
+		RangeID: tc.repl.RangeID,
+	}, &roachpb.RangeStatsRequest{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	resMS := res.(*roachpb.RangeStatsResponse).MVCCStats
+	require.Equal(t, expMS, resMS)
+
+	// Write another key to the range and verify that the MVCC stats returned
+	// by a RangeStatsRequest reflect the additional key.
+	key := append(keyPrefix, roachpb.RKey("123")...)
+	if err := tc.store.DB().Put(ctx, key, "123"); err != nil {
+		t.Fatal(err)
+	}
+	res, pErr = client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
+		RangeID: tc.repl.RangeID,
+	}, &roachpb.RangeStatsRequest{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	resMS = res.(*roachpb.RangeStatsResponse).MVCCStats
+	// Only verify the update is reflected in the key/value counts. Verifying
+	// the byte count would couple this test too tightly to our encoding scheme.
+	require.Equal(t, expMS.KeyCount+1, resMS.KeyCount)
+	require.Equal(t, expMS.ValCount+1, resMS.ValCount)
+	require.Equal(t, expMS.LiveCount+1, resMS.LiveCount)
 }
