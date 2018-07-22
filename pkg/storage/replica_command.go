@@ -416,6 +416,15 @@ func (r *Replica) AdminMerge(
 		// TODO(benesch): expose a proper API for preventing the fast path.
 		_ = txn.CommitTimestamp()
 
+		// Pipelining might send QueryIntent requests to the RHS after the RHS has
+		// noticed the merge and started blocking all traffic. This causes the merge
+		// transaction to deadlock. Just turn pipelining off; the structure of the
+		// merge transaction means pipelining provides no performance benefit
+		// anyway.
+		if err := txn.DisablePipelining(); err != nil {
+			return err
+		}
+
 		// Update the range descriptor for the receiving range.
 		{
 			b := txn.NewBatch()
