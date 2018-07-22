@@ -26,7 +26,7 @@ func registerElectionAfterRestart(r *registry) {
 	r.Add(testSpec{
 		Name:   "election-after-restart",
 		Nodes:  nodes(3),
-		Stable: false, // Introduced 2018-06-06
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("starting up")
 			c.Put(ctx, cockroach, "./cockroach")
