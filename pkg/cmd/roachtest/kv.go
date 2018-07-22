@@ -67,6 +67,7 @@ func registerKV(r *registry) {
 					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
 					MinVersion: minVersion,
 					Nodes:      nodes(n+1, cpu(8)),
+					Stable:     true, // DO NOT COPY to new tests
 					Run: func(ctx context.Context, t *test, c *cluster) {
 						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
 					},
