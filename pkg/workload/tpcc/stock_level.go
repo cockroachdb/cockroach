@@ -51,7 +51,9 @@ type stockLevel struct{}
 
 var _ tpccTx = stockLevel{}
 
-func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (s stockLevel) run(
+	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
+) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
@@ -62,7 +64,7 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 	}
 
 	if err := crdb.ExecuteTx(
-		context.Background(),
+		ctx,
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
@@ -73,7 +75,7 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 			}
 
 			var dNextOID int
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				SELECT d_next_o_id
 				FROM district
 				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
@@ -84,7 +86,7 @@ func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
-			return tx.QueryRow(fmt.Sprintf(`
+			return tx.QueryRowContext(ctx, fmt.Sprintf(`
 				SELECT count(DISTINCT(s_i_id))
 				FROM order_line
 				JOIN stock
