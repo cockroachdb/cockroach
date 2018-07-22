@@ -78,6 +78,11 @@ type TxnSender interface {
 	// if this method is invoked multiple times, the most recent callback
 	// is the only one which will be invoked.
 	OnFinish(func(error))
+	// DisablePipelining instructs the TxnSender not to pipeline requests. It
+	// should rarely be necessary to call this method. It is only recommended for
+	// transactions that need extremely precise control over the request ordering,
+	// like the transaction that merges ranges together.
+	DisablePipelining()
 }
 
 // TxnSenderFactory is the interface used to create new instances
@@ -128,6 +133,9 @@ func (f TxnSenderFunc) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { pani
 
 // OnFinish is part of the TxnSender interface.
 func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
+
+// DisablePipelining is part of the TxnSender interface.
+func (f TxnSenderFunc) DisablePipelining() { panic("unimplemented") }
 
 // TxnSenderFactoryFunc is an adapter to allow the use of ordinary functions
 // as TxnSenderFactories. This is a helper mechanism to facilitate testing.
