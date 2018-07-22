@@ -23,28 +23,8 @@ import (
 )
 
 func TestListFailures(t *testing.T) {
-	for key, value := range map[string]string{
-		pkgEnv: "github.com/cockroachdb/cockroach/pkg/storage",
-	} {
-		if val, ok := os.LookupEnv(key); ok {
-			defer func() {
-				if err := os.Setenv(key, val); err != nil {
-					t.Error(err)
-				}
-			}()
-		} else {
-			defer func() {
-				if err := os.Unsetenv(key); err != nil {
-					t.Error(err)
-				}
-			}()
-		}
-		if err := os.Setenv(key, value); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	testCases := []struct {
+		pkgEnv      string
 		fileName    string
 		packageName string
 		testName    string
@@ -52,6 +32,7 @@ func TestListFailures(t *testing.T) {
 		author      string
 	}{
 		{
+			pkgEnv:      "github.com/cockroachdb/cockroach/pkg/storage",
 			fileName:    "stress-failure.json",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "TestReplicateQueueRebalance",
@@ -59,6 +40,7 @@ func TestListFailures(t *testing.T) {
 			author:      "petermattis@gmail.com",
 		},
 		{
+			pkgEnv:      "github.com/cockroachdb/cockroach/pkg/storage",
 			fileName:    "stress-fatal.json",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "TestGossipHandlesReplacedNode",
@@ -66,15 +48,30 @@ func TestListFailures(t *testing.T) {
 			author:      "alexdwanerobinson@gmail.com",
 		},
 		{
+			pkgEnv:      "github.com/cockroachdb/cockroach/pkg/storage",
 			fileName:    "stress-unknown.json",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "(unknown)",
 			message:     "make: *** [bin/.submodules-initialized] Error 1",
 			author:      "",
 		},
+		{
+			pkgEnv:      "github.com/cockroachdb/cockroach/pkg/util/json",
+			fileName:    "stress-subtests.json",
+			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			testName:    "TestPretty",
+			message: `=== RUN   TestPretty/["hello",_["world"]]
+    --- FAIL: TestPretty/["hello",_["world"]] (0.00s)
+    	json_test.go:1656: injected failure`,
+			author: "justin@cockroachlabs.com",
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.fileName, func(t *testing.T) {
+			if err := os.Setenv("PKG", c.pkgEnv); err != nil {
+				t.Fatal(err)
+			}
+
 			file, err := os.Open(filepath.Join("testdata", c.fileName))
 			if err != nil {
 				t.Fatal(err)
