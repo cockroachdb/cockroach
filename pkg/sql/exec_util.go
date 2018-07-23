@@ -404,19 +404,24 @@ func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
 
 // waitForCacheState implements the dbCacheSubscriber interface.
 func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) (bool, error)) error {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
 	for {
-		done, err := cond(dc.mu.c)
+		// We don't want to hold dc.mu.Lock() when running the callback,
+		// since we don't know how long it's going to take.
+		cache := dc.getDatabaseCache()
+		done, err := cond(cache)
 		if err != nil {
 			return err
+		} else if done {
+			return nil
 		}
-		if done {
-			break
+
+		// Avoid losing a race condition by explicitly checking for new cache.
+		dc.mu.Lock()
+		for cache == dc.mu.c {
+			dc.mu.cv.Wait()
 		}
-		dc.mu.cv.Wait()
+		dc.mu.Unlock()
 	}
-	return nil
 }
 
 // databaseCacheHolder implements the dbCacheSubscriber interface.
