@@ -180,10 +180,10 @@ type aggregateWindowFunc struct {
 // NewAggregateWindowFunc creates a constructor of aggregateWindowFunc
 // with agg initialized by provided aggConstructor.
 func NewAggregateWindowFunc(
-	aggConstructor func(*tree.EvalContext) tree.AggregateFunc,
+	aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) func(*tree.EvalContext) tree.WindowFunc {
 	return func(evalCtx *tree.EvalContext) tree.WindowFunc {
-		return &aggregateWindowFunc{agg: aggConstructor(evalCtx)}
+		return &aggregateWindowFunc{agg: aggConstructor(evalCtx, nil /* arguments */)}
 	}
 }
 
@@ -233,12 +233,12 @@ func ShouldReset(w tree.WindowFunc) {
 // shouldReset indicates whether the resetting behavior is desired.
 type framableAggregateWindowFunc struct {
 	agg            *aggregateWindowFunc
-	aggConstructor func(*tree.EvalContext) tree.AggregateFunc
+	aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
 	shouldReset    bool
 }
 
 func newFramableAggregateWindow(
-	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext) tree.AggregateFunc,
+	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) tree.WindowFunc {
 	return &framableAggregateWindowFunc{agg: &aggregateWindowFunc{agg: agg}, aggConstructor: aggConstructor}
 }
@@ -257,7 +257,7 @@ func (w *framableAggregateWindowFunc) Compute(
 	// We should reset the aggregate, so we dispose of the old aggregate function
 	// and construct a new one for the computation.
 	w.agg.Close(ctx, evalCtx)
-	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx), tree.DNull}
+	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx, nil), tree.DNull}
 
 	// Accumulate all values in the window frame.
 	for i := wfr.FrameStartIdx(); i < wfr.FrameEndIdx(); i++ {
