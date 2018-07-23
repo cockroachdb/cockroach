@@ -798,15 +798,15 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 		TxnSenderFactoryFunc(func(_ TxnType) TxnSender { return nil }), clock)
 	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
 
-	if txn.deadline != nil {
-		t.Errorf("unexpected initial deadline: %s", txn.deadline)
+	if txn.deadline() != nil {
+		t.Errorf("unexpected initial deadline: %s", txn.deadline())
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
 	if !txn.UpdateDeadlineMaybe(context.TODO(), deadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
-	if d := *txn.deadline; d != deadline {
+	if d := *txn.deadline(); d != deadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 
@@ -814,7 +814,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	if txn.UpdateDeadlineMaybe(context.TODO(), futureDeadline) {
 		t.Errorf("expected no update, but update happened")
 	}
-	if d := *txn.deadline; d != deadline {
+	if d := *txn.deadline(); d != deadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 
@@ -822,7 +822,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	if !txn.UpdateDeadlineMaybe(context.TODO(), pastDeadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
-	if d := *txn.deadline; d != pastDeadline {
+	if d := *txn.deadline(); d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
 }
