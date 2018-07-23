@@ -17,9 +17,50 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+// srf represents an srf expression in an expression tree
+// after it has been type-checked and added to the memo.
+type srf struct {
+	// The resolved function expression.
+	*tree.FuncExpr
+
+	// cols contains the output columns of the srf.
+	cols []scopeColumn
+
+	// group is the top level memo GroupID of the srf.
+	group memo.GroupID
+}
+
+// Walk is part of the tree.Expr interface.
+func (s *srf) Walk(v tree.Visitor) tree.Expr {
+	return s
+}
+
+// TypeCheck is part of the tree.Expr interface.
+func (s *srf) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+	if ctx.Properties.Derived.SeenGenerator {
+		// This error happens if this srf struct is nested inside a raw srf that
+		// has not yet been replaced. This is possible since scope.replaceSRF first
+		// calls f.Walk(s) on the external raw srf, which replaces any internal
+		// raw srfs with srf structs. The next call to TypeCheck on the external
+		// raw srf triggers this error.
+		return nil, pgerror.UnimplementedWithIssueErrorf(26234, "nested set-returning functions")
+	}
+
+	return s, nil
+}
+
+// Eval is part of the tree.TypedExpr interface.
+func (s *srf) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic("srf must be replaced before evaluation")
+}
+
+var _ tree.Expr = &srf{}
+var _ tree.TypedExpr = &srf{}
 
 // buildZip builds a set of memo groups which represent a functional zip over
 // the given expressions.
@@ -33,11 +74,16 @@ import (
 func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
 
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("FROM",
+		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
+
 	// Build each of the provided expressions.
 	elems := make([]memo.GroupID, len(exprs))
 	for i, expr := range exprs {
-		b.assertNoAggregationOrWindowing(expr, "FROM")
-
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
@@ -45,13 +91,6 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		if err != nil {
 			panic(builderError{err})
 		}
-
-		// Set the flag to allow generator functions. It needs to be reset for each
-		// expression since it is set to false once an SRF is seen to disallow
-		// nested SRFs.
-		// TODO(rytaft): This is a temporary solution and will need to change once
-		// we support SRFs in the SELECT list.
-		inScope.allowGeneratorFunc = true
 
 		texpr := inScope.resolveType(expr, types.Any)
 		elems[i] = b.buildScalarHelper(texpr, label, inScope, outScope)
@@ -73,15 +112,56 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, group memo.GroupID, inScope, outScope *scope,
+	f *tree.FuncExpr, group memo.GroupID, columns int, label string, inScope, outScope *scope,
 ) (out memo.GroupID) {
-	typ := f.ResolvedType().(types.TTuple)
+	typ := f.ResolvedType()
 
-	// Add scope columns. Use the tuple labels in the SRF's return type as column
-	// labels.
-	for i := range typ.Types {
-		b.synthesizeColumn(outScope, typ.Labels[i], typ.Types[i], nil, group)
+	// Add scope columns.
+	if columns == 1 {
+		// Single-column return type.
+		b.synthesizeColumn(outScope, label, typ, f, group)
+	} else {
+		// Multi-column return type. Use the tuple labels in the SRF's return type
+		// as column labels.
+		tType := typ.(types.TTuple)
+		for i := range tType.Types {
+			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, group)
+		}
 	}
 
 	return group
+}
+
+// constructProjectSet constructs a lateral cross join between the given input
+// group and a Zip operation constructed from the given srfs.
+//
+// This function is called at most once per SELECT clause, and it is only
+// called if at least one SRF was discovered in the SELECT list. The apply join
+// is necessary in case some of the SRFs depend on the input. For example,
+// consider this query:
+//
+//   SELECT generate_series(t.a, t.a + 1) FROM t
+//
+// In this case, the inputs to generate_series depend on table t, so during
+// execution, generate_series will be called once for each row of t (hence the
+// apply join).
+//
+// If the SRFs do not depend on the input, then the optimizer will replace the
+// apply join with a regular inner join during optimization.
+func (b *Builder) constructProjectSet(in memo.GroupID, srfs []*srf) memo.GroupID {
+	// Get the output columns and GroupIDs of the Zip operation.
+	colList := make(opt.ColList, 0, len(srfs))
+	elems := make([]memo.GroupID, len(srfs))
+	for i, srf := range srfs {
+		for _, col := range srf.cols {
+			colList = append(colList, col.id)
+		}
+		elems[i] = srf.group
+	}
+
+	zip := b.factory.ConstructZip(
+		b.factory.InternList(elems), b.factory.InternColList(colList),
+	)
+
+	return b.factory.ConstructInnerJoinApply(in, zip, b.factory.ConstructTrue())
 }
