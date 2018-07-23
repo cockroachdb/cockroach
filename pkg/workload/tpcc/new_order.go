@@ -81,7 +81,9 @@ type newOrder struct{}
 
 var _ tpccTx = newOrder{}
 
-func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (n newOrder) run(
+	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
+) (interface{}, error) {
 	atomic.AddUint64(&config.auditor.newOrderTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -159,13 +161,13 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 	d.oEntryD = timeutil.Now()
 
 	err := crdb.ExecuteTx(
-		context.Background(),
+		ctx,
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				UPDATE district
 				SET d_next_o_id = d_next_o_id + 1
 				WHERE d_w_id = %[1]d AND d_id = %[2]d
@@ -177,7 +179,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			d.oID = dNextOID - 1
 
 			// Select the warehouse tax rate.
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
 				wID),
 			).Scan(&d.wTax); err != nil {
@@ -185,7 +187,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			}
 
 			// Select the customer's discount, last name and credit.
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				SELECT c_discount, c_last, c_credit
 				FROM customer
 				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
@@ -201,7 +203,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			for i, item := range d.items {
 				itemIDs[i] = fmt.Sprint(item.olIID)
 			}
-			rows, err := tx.Query(fmt.Sprintf(`
+			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 				SELECT i_price, i_name, i_data
 				FROM item
 				WHERE i_id IN (%[1]s)
@@ -247,7 +249,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			for i, item := range d.items {
 				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
 			}
-			rows, err = tx.Query(fmt.Sprintf(`
+			rows, err = tx.QueryContext(ctx, fmt.Sprintf(`
 				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 				FROM stock
 				WHERE (s_i_id, s_w_id) IN (%[2]s)
@@ -307,7 +309,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			rows.Close()
 
 			// Insert row into the orders and new orders table.
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
 				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, '%[5]s', %[6]d, %[7]d)`,
 				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
@@ -315,7 +317,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
 				VALUES (%[1]d, %[2]d, %[3]d)`,
 				d.oID, d.dID, d.wID)); err != nil {
@@ -323,7 +325,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 			}
 
 			// Update the stock table for each item.
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE stock
 				SET
 					s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
@@ -359,7 +361,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 					distInfos[i],     // ol_dist_info
 				)
 			}
-			if _, err := tx.Exec(fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
 				VALUES %s`,
 				strings.Join(olValsStrings, ", ")),
@@ -376,5 +378,4 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 		return d, nil
 	}
 	return d, err
-
 }

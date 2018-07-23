@@ -277,13 +277,13 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	start := timeutil.Now()
 	switch op {
 	case updateOp:
-		err = yw.updateRow()
+		err = yw.updateRow(ctx)
 	case readOp:
-		err = yw.readRow()
+		err = yw.readRow(ctx)
 	case insertOp:
-		err = yw.insertRow(yw.nextInsertKey(), true)
+		err = yw.insertRow(ctx, yw.nextInsertKey(), true)
 	case scanOp:
-		err = yw.scanRows()
+		err = yw.scanRows(ctx)
 	default:
 		return errors.Errorf(`unknown operation: %s`, op)
 	}
@@ -353,13 +353,13 @@ func (yw *ycsbWorker) randString(length int) string {
 	return string(str)
 }
 
-func (yw *ycsbWorker) insertRow(key string, increment bool) error {
+func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool) error {
 	args := make([]interface{}, numTableFields+1)
 	args[0] = key
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
 	}
-	if _, err := yw.insertStmt.Exec(args...); err != nil {
+	if _, err := yw.insertStmt.ExecContext(ctx, args...); err != nil {
 		return err
 	}
 
@@ -371,7 +371,7 @@ func (yw *ycsbWorker) insertRow(key string, increment bool) error {
 	return nil
 }
 
-func (yw *ycsbWorker) updateRow() error {
+func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 	var stmt *gosql.Stmt
 	args := make([]interface{}, 2)
 	args[0] = yw.nextReadKey()
@@ -384,15 +384,15 @@ func (yw *ycsbWorker) updateRow() error {
 		stmt = yw.updateStmts[fieldIdx]
 		args[1] = value
 	}
-	if _, err := stmt.Exec(args...); err != nil {
+	if _, err := stmt.ExecContext(ctx, args...); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (yw *ycsbWorker) readRow() error {
+func (yw *ycsbWorker) readRow(ctx context.Context) error {
 	key := yw.nextReadKey()
-	res, err := yw.readStmt.Query(key)
+	res, err := yw.readStmt.QueryContext(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -402,7 +402,7 @@ func (yw *ycsbWorker) readRow() error {
 	return res.Err()
 }
 
-func (yw *ycsbWorker) scanRows() error {
+func (yw *ycsbWorker) scanRows(ctx context.Context) error {
 	return errors.New("not implemented yet")
 }
 
