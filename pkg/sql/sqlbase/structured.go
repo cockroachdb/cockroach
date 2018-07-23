@@ -2330,6 +2330,10 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 				return ColumnType{}, err
 			}
 		}
+		ctyp.TupleLabels = make([]string, len(t.Types))
+		for i := range t.Labels {
+			ctyp.TupleLabels[i] = t.Labels[i]
+		}
 		return ctyp, nil
 	default:
 		semanticType, err := DatumTypeToColumnSemanticType(ptyp)
@@ -2402,10 +2406,14 @@ func (c *ColumnType) ToDatumType() types.T {
 		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
 	case ColumnType_TUPLE:
 		datums := types.TTuple{
-			Types: make([]types.T, len(c.TupleContents)),
+			Types:  make([]types.T, len(c.TupleContents)),
+			Labels: make([]string, len(c.TupleLabels)),
 		}
 		for i := range c.TupleContents {
 			datums.Types[i] = c.TupleContents[i].ToDatumType()
+		}
+		for i := range c.TupleLabels {
+			datums.Labels[i] = c.TupleLabels[i]
 		}
 		return datums
 	default:
