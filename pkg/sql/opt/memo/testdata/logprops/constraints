@@ -153,7 +153,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37.037037]
+ ├── stats: [rows=111.111111]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
@@ -175,7 +175,7 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37.037037]
+ ├── stats: [rows=333.333333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]

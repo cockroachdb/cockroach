@@ -408,13 +408,11 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 	//     TODO(rytaft): we may be able to get a more precise estimate than
 	//     1/3 for certain types of filters. For example, the selectivity of
 	//     x=y can be estimated as 1/(max(distinct(x), distinct(y)).
+
 	sb.s.Selectivity = 1
 	sel := func(constraintSet *constraint.Set, tight bool) {
 		if constraintSet != nil {
 			childSelectivity := sb.applyConstraintSet(constraintSet, &inputStatsBuilder)
-			if !tight && childSelectivity > unknownFilterSelectivity {
-				childSelectivity = unknownFilterSelectivity
-			}
 			sb.s.Selectivity *= childSelectivity
 		} else {
 			sb.s.Selectivity *= unknownFilterSelectivity
@@ -434,6 +432,11 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 			tight = child.Logical().Scalar.TightConstraints
 			sel(constraintSet, tight)
 		}
+	}
+
+	sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+	if !tight && sb.s.Selectivity > unknownFilterSelectivity {
+		sb.s.Selectivity *= unknownFilterSelectivity
 	}
 
 	sb.applySelectivity(inputStats.RowCount)
@@ -1128,8 +1131,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		}
 	}
 
-	selectivity = sb.selectivityFromDistinctCounts(inputStatsBuilder)
-	return selectivity * adjustedSelectivity
+	return adjustedSelectivity
 }
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
@@ -1260,12 +1262,34 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 	inputStatsBuilder *statisticsBuilder,
 ) (selectivity float64) {
+	fd := sb.props.FuncDeps
 	selectivity = 1.0
+	var seenCols []int
+OUTER:
 	for col, colStat := range sb.s.ColStats {
+		localSelectivity := 1.0
+		for _, c := range seenCols {
+			if c == int(col) {
+				//CHECK DOES THIS EVER GET HIT
+				continue OUTER
+			}
+		}
+		eqCols := fd.ComputeEquivClosure(colStat.Cols)
 		inputStat := inputStatsBuilder.colStat(util.MakeFastIntSet(int(col)))
 		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
-			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
+			localSelectivity *= colStat.DistinctCount / inputStat.DistinctCount
 		}
+		eqCols.ForEach(func(i int) {
+			seenCols = append(seenCols, i)
+			eqStat, ok := sb.s.ColStats[opt.ColumnID(i)]
+			if ok {
+				eqInputStat := inputStatsBuilder.colStat(util.MakeFastIntSet(i))
+				if eqInputStat.DistinctCount != 0 && eqStat.DistinctCount < eqInputStat.DistinctCount {
+					localSelectivity = min(localSelectivity, eqStat.DistinctCount/eqInputStat.DistinctCount)
+				}
+			}
+		})
+		selectivity *= localSelectivity
 	}
 
 	return selectivity

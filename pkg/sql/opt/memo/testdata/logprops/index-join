@@ -54,7 +54,7 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=0.476190476, distinct(3)=0.476190476]
+ ├── stats: [rows=1.42857143, distinct(3)=1]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2), (2,3)~~>(1,4)
  ├── index-join a
@@ -80,10 +80,10 @@ SELECT y FROM a WHERE s = 'foo' AND x + y = 10
 ----
 project
  ├── columns: y:2(int)
- ├── stats: [rows=0.476190476]
+ ├── stats: [rows=1.42857143]
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string!null)
-      ├── stats: [rows=0.476190476, distinct(3)=0.476190476]
+      ├── stats: [rows=1.42857143, distinct(3)=1]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2), (2,3)~~>(1)
       ├── index-join a
