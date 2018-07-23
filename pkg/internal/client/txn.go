@@ -53,9 +53,6 @@ type Txn struct {
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
-	// The txn has to be committed by this deadline. A nil value indicates no
-	// deadline.
-	deadline *hlc.Timestamp
 
 	// mu holds fields that need to be synchronized for concurrent request execution.
 	mu struct {
@@ -93,6 +90,9 @@ type Txn struct {
 		// sender is a stateful sender for use with transactions. A new sender is
 		// created on transaction restarts (not retries).
 		sender TxnSender
+		// The txn has to be committed by this deadline. A nil value indicates no
+		// deadline.
+		deadline *hlc.Timestamp
 	}
 }
 
@@ -570,7 +570,7 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
-	pErr := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline)
+	pErr := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline())
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
 			t()
@@ -617,7 +617,7 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.appendReqs(endTxnReq(true /* commit */, txn.deadline, txn.systemConfigTrigger))
+	b.appendReqs(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
 }
@@ -640,13 +640,13 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.deadline == nil || deadline.Less(*txn.deadline) {
+	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
 		if deadline.Less(txn.mu.Proto.OrigTimestamp) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s, txn: %s",
 				deadline, txn.Proto())
 		}
-		txn.deadline = &deadline
+		txn.mu.deadline = &deadline
 		return true
 	}
 	return false
@@ -654,7 +654,7 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
-	txn.deadline = nil
+	txn.mu.deadline = nil
 }
 
 // Rollback sends an EndTransactionRequest with Commit=false.
@@ -1405,4 +1405,10 @@ func (txn *Txn) IsSerializablePushAndRefreshNotPossible() bool {
 // Type returns the transaction's type.
 func (txn *Txn) Type() TxnType {
 	return txn.typ
+}
+
+func (txn *Txn) deadline() *hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.deadline
 }
