@@ -20,8 +20,10 @@ package distsqlrun
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"hash/crc32"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -29,13 +31,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 type router interface {
 	RowReceiver
 	startable
-	init(flowCtx *FlowCtx, types []sqlbase.ColumnType)
+	init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType)
 }
 
 // makeRouter creates a router. The router's init must be called before the
@@ -49,7 +54,7 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
 	}
 
 	var rb routerBase
-	rb.setupStreams(streams, spec.DisableBuffering)
+	rb.setupStreams(spec, streams)
 
 	switch spec.Type {
 	case OutputRouterSpec_BY_HASH:
@@ -70,8 +75,9 @@ const routerRowBufSize = rowChannelBufSize
 
 // routerOutput is the data associated with one router consumer.
 type routerOutput struct {
-	stream RowReceiver
-	mu     struct {
+	stream   RowReceiver
+	streamID StreamID
+	mu       struct {
 		syncutil.Mutex
 		// cond is signaled whenever the main router routine adds a metadata item, a
 		// row, or sets producerDone.
@@ -94,6 +100,12 @@ type routerOutput struct {
 	}
 	// TODO(radu): add padding of size sys.CacheLineSize to ensure there is no
 	// false-sharing?
+
+	stats RouterOutputStats
+
+	// memoryMonitor and diskMonitor are references to mu.rowContainer's monitors,
+	// used for stats extraction.
+	memoryMonitor, diskMonitor *mon.BytesMonitor
 }
 
 func (ro *routerOutput) addMetadataLocked(meta *ProducerMetadata) {
@@ -190,16 +202,18 @@ type routerBase struct {
 	// every semaphorePeriod rows. This count keeps track of how many rows we
 	// saw since the last time we took the semaphore.
 	semaphoreCount int32
+
+	statsCollectionEnabled bool
 }
 
 func (rb *routerBase) aggStatus() ConsumerStatus {
 	return ConsumerStatus(atomic.LoadUint32(&rb.aggregatedStatus))
 }
 
-func (rb *routerBase) setupStreams(streams []RowReceiver, disableBuffering bool) {
+func (rb *routerBase) setupStreams(spec *OutputRouterSpec, streams []RowReceiver) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
-	if disableBuffering {
+	if spec.DisableBuffering {
 		// By starting the semaphore at 1, the producer is blocked whenever one of
 		// the streams are blocked.
 		n = 1
@@ -211,26 +225,45 @@ func (rb *routerBase) setupStreams(streams []RowReceiver, disableBuffering bool)
 	for i := range rb.outputs {
 		ro := &rb.outputs[i]
 		ro.stream = streams[i]
+		ro.streamID = spec.Streams[i].StreamID
 		ro.mu.cond = sync.NewCond(&ro.mu.Mutex)
 		ro.mu.streamStatus = NeedMoreRows
 	}
 }
 
 // init must be called after setupStreams but before start.
-func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
+func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType) {
+	// Check if we're recording stats.
+	if s := opentracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
+		rb.statsCollectionEnabled = true
+	}
+
 	rb.types = types
 	for i := range rb.outputs {
 		// This method must be called before we start() so we don't need
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
+		memoryMonitor := evalCtx.Mon
+		diskMonitor := flowCtx.diskMonitor
+		if rb.statsCollectionEnabled {
+			// Start private monitors for stats collection.
+			memoryMonitorName := fmt.Sprintf("router-stat-mem-%d", rb.outputs[i].streamID)
+			memoryMonitor = newMonitor(ctx, memoryMonitor, memoryMonitorName)
+			diskMonitorName := fmt.Sprintf("router-stat-disk-%d", rb.outputs[i].streamID)
+			diskMonitor = newMonitor(ctx, diskMonitor, diskMonitorName)
+		}
+
 		rb.outputs[i].mu.rowContainer.init(
 			nil, /* ordering */
 			types,
 			evalCtx,
 			flowCtx.TempStorage,
-			evalCtx.Mon,
-			flowCtx.diskMonitor,
+			memoryMonitor,
+			diskMonitor,
 		)
+		rb.outputs[i].memoryMonitor = memoryMonitor
+		rb.outputs[i].diskMonitor = diskMonitor
+
 		// Initialize any outboxes.
 		if o, ok := rb.outputs[i].stream.(*outbox); ok {
 			o.init(types)
@@ -242,7 +275,13 @@ func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
 func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
-		go func(rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
+		go func(ctx context.Context, rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
+			var span opentracing.Span
+			if rb.statsCollectionEnabled {
+				ctx, span = processorSpan(ctx, "router output")
+				span.SetTag(streamIDTagKey, ro.streamID)
+			}
+
 			drain := false
 			rowBuf := make([]sqlbase.EncDatumRow, routerRowBufSize)
 			streamStatus := NeedMoreRows
@@ -286,6 +325,9 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 							rb.updateStreamState(&streamStatus, status)
 						}
 						<-rb.semaphore
+						if rb.statsCollectionEnabled {
+							ro.stats.NumRows += int64(len(rows))
+						}
 						ro.mu.Lock()
 						ro.mu.streamStatus = streamStatus
 						continue
@@ -294,6 +336,18 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 
 				// No rows or metadata buffered; see if the producer is done.
 				if ro.mu.producerDone {
+					if rb.statsCollectionEnabled {
+						ro.stats.MaxAllocatedMem = ro.memoryMonitor.MaximumBytes()
+						ro.stats.MaxAllocatedDisk = ro.diskMonitor.MaximumBytes()
+						tracing.SetSpanStats(span, &ro.stats)
+						tracing.FinishSpan(span)
+						if trace := getTraceData(ctx); trace != nil {
+							rb.semaphore <- struct{}{}
+							status := ro.stream.Push(nil, &ProducerMetadata{TraceData: trace})
+							rb.updateStreamState(&streamStatus, status)
+							<-rb.semaphore
+						}
+					}
 					ro.stream.ProducerDone()
 					break
 				}
@@ -303,8 +357,16 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			}
 			ro.mu.rowContainer.Close(ctx)
 			ro.mu.Unlock()
+
+			if rb.statsCollectionEnabled {
+				// Stats collection requires private BytesMonitors, so ensure that they
+				// are stopped.
+				ro.memoryMonitor.Stop(ctx)
+				ro.diskMonitor.Stop(ctx)
+			}
+
 			wg.Done()
-		}(rb, &rb.outputs[i], wg)
+		}(ctx, rb, &rb.outputs[i], wg)
 	}
 }
 
@@ -625,4 +687,24 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 		return -1
 	}
 	return int(rr.spans[i].Stream)
+}
+
+const routerOutputTagPrefix = "routeroutput."
+
+// Stats implements the SpanStats interface.
+func (ros *RouterOutputStats) Stats() map[string]string {
+	statsMap := make(map[string]string)
+	statsMap[routerOutputTagPrefix+"rows_routed"] = strconv.FormatInt(ros.NumRows, 10)
+	statsMap[routerOutputTagPrefix+maxMemoryTagSuffix] = strconv.FormatInt(ros.MaxAllocatedMem, 10)
+	statsMap[routerOutputTagPrefix+maxDiskTagSuffix] = strconv.FormatInt(ros.MaxAllocatedDisk, 10)
+	return statsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (ros *RouterOutputStats) StatsForQueryPlan() []string {
+	return []string{
+		fmt.Sprintf("rows routed: %d", ros.NumRows),
+		fmt.Sprintf("%s: %d", maxMemoryQueryPlanSuffix, ros.MaxAllocatedMem),
+		fmt.Sprintf("%s: %d", maxDiskQueryPlanSuffix, ros.MaxAllocatedDisk),
+	}
 }

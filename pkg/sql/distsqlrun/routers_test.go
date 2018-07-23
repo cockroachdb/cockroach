@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -37,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -53,10 +56,11 @@ func setupRouter(
 		t.Fatal(err)
 	}
 
+	ctx := context.TODO()
 	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: *evalCtx}
-	r.init(&flowCtx, inputTypes)
+	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.start(context.TODO(), wg, nil /* ctxCancel */)
+	r.start(ctx, wg, nil /* ctxCancel */)
 	return r, wg
 }
 
@@ -125,9 +129,11 @@ func TestRouters(t *testing.T) {
 		t.Run(tc.spec.Type.String(), func(t *testing.T) {
 			bufs := make([]*RowBuffer, tc.numBuckets)
 			recvs := make([]RowReceiver, tc.numBuckets)
+			tc.spec.Streams = make([]StreamEndpointSpec, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
+				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 			}
 
 			r, wg := setupRouter(t, evalCtx, tc.spec, types, recvs)
@@ -300,9 +306,11 @@ func TestConsumerStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			bufs := make([]*RowBuffer, 2)
 			recvs := make([]RowReceiver, 2)
+			tc.spec.Streams = make([]StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
+				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 			}
 
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
@@ -450,9 +458,11 @@ func TestMetadataIsForwarded(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
+			tc.spec.Streams = make([]StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
 				recvs[i] = &chans[i]
+				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 			}
 			router, wg := setupRouter(t, evalCtx, tc.spec, nil /* no columns */, recvs)
 
@@ -567,19 +577,22 @@ func TestRouterBlocks(t *testing.T) {
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
+			tc.spec.Streams = make([]StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
+				tc.spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 			}
 			router, err := makeRouter(&tc.spec, recvs)
 			if err != nil {
 				t.Fatal(err)
 			}
 			st := cluster.MakeTestingClusterSettings()
+			ctx := context.TODO()
 			flowCtx := FlowCtx{Settings: st, EvalCtx: tree.MakeTestingEvalContext(st)}
-			router.init(&flowCtx, colTypes)
+			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.start(context.TODO(), &wg, nil /* ctxCancel */)
+			router.start(ctx, &wg, nil /* ctxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
@@ -645,7 +658,8 @@ func TestRouterBlocks(t *testing.T) {
 }
 
 // TestRouterDiskSpill verifies that router outputs spill to disk when a memory
-// limit is reached.
+// limit is reached. It also verifies that stats are properly recorded in this
+// scenario.
 func TestRouterDiskSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -658,8 +672,13 @@ func TestRouterDiskSpill(t *testing.T) {
 		wg      sync.WaitGroup
 	)
 
+	// Enable stats recording.
+	tracer := tracing.NewTracer()
+	sp := tracer.StartSpan("root", tracing.Recordable)
+	tracing.StartRecording(sp, tracing.SnowballRecording)
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+
 	st := cluster.MakeTestingClusterSettings()
-	ctx := context.Background()
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -701,11 +720,13 @@ func TestRouterDiskSpill(t *testing.T) {
 	}
 	alloc := &sqlbase.DatumAlloc{}
 
+	var spec OutputRouterSpec
+	spec.Streams = make([]StreamEndpointSpec, 1)
 	// Initialize the RowChannel with the minimal buffer size so as to block
 	// writes to the channel (after the first one).
 	rowChan.initWithBufSizeAndNumSenders(oneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
-	rb.setupStreams([]RowReceiver{&rowChan}, false /* disableBuffering */)
-	rb.init(&flowCtx, oneIntCol)
+	rb.setupStreams(&spec, []RowReceiver{&rowChan})
+	rb.init(ctx, &flowCtx, oneIntCol)
 	rb.start(ctx, &wg, nil /* ctxCancel */)
 
 	rows := makeIntRows(numRows, numCols)
@@ -737,10 +758,43 @@ func TestRouterDiskSpill(t *testing.T) {
 		return nil
 	})
 
+	metaSeen := false
 	for i := 0; ; i++ {
 		row, meta := rowChan.Next()
 		if meta != nil {
-			t.Fatalf("unexpected meta: %v", meta)
+			// Check that router output stats were recorded as expected.
+			if metaSeen {
+				t.Fatal("expected only one meta, encountered multiple")
+			}
+			metaSeen = true
+			if len(meta.TraceData) != 1 {
+				t.Fatalf("expected one recorded span, found %d", len(meta.TraceData))
+			}
+			span := meta.TraceData[0]
+			getIntTagValue := func(key string) int {
+				strValue, ok := span.Tags[key]
+				if !ok {
+					t.Errorf("missing tag: %s", key)
+				}
+				intValue, err := strconv.Atoi(strValue)
+				if err != nil {
+					t.Error(err)
+				}
+				return intValue
+			}
+			rowsRouted := getIntTagValue("cockroach.stat.routeroutput.rows_routed")
+			memMax := getIntTagValue("cockroach.stat.routeroutput.mem.max")
+			diskMax := getIntTagValue("cockroach.stat.routeroutput.disk.max")
+			if rowsRouted != numRows {
+				t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
+			}
+			if memMax <= 0 {
+				t.Errorf("expected memMax > 0, got %d", memMax)
+			}
+			if diskMax <= 0 {
+				t.Errorf("expected memMax > 0, got %d", diskMax)
+			}
+			continue
 		}
 		if row == nil {
 			break
@@ -758,6 +812,9 @@ func TestRouterDiskSpill(t *testing.T) {
 				)
 			}
 		}
+	}
+	if !metaSeen {
+		t.Error("expected trace metadata, found none")
 	}
 
 	// Make sure the goroutine adding rows is done.
@@ -811,9 +868,11 @@ func TestRangeRouterInit(t *testing.T) {
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
+			spec.Streams = make([]StreamEndpointSpec, 2)
 			for i := 0; i < 2; i++ {
 				chans[i].initWithBufSizeAndNumSenders(colTypes, 1, 1)
 				recvs[i] = &chans[i]
+				spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 			}
 			_, err := makeRouter(&spec, recvs)
 			if !testutils.IsError(err, tc.err) {
@@ -854,6 +913,7 @@ func BenchmarkRouter(b *testing.B) {
 			for _, nOutputs := range []int{2, 4, 8} {
 				chans := make([]RowChannel, nOutputs)
 				recvs := make([]RowReceiver, nOutputs)
+				spec.Streams = make([]StreamEndpointSpec, nOutputs)
 				b.Run(fmt.Sprintf("outputs=%d", nOutputs), func(b *testing.B) {
 					b.SetBytes(int64(nOutputs * numCols * numRows * 8))
 					for i := 0; i < b.N; i++ {
@@ -861,6 +921,7 @@ func BenchmarkRouter(b *testing.B) {
 						for i := 0; i < nOutputs; i++ {
 							chans[i].InitWithNumSenders(colTypes, 1)
 							recvs[i] = &chans[i]
+							spec.Streams[i] = StreamEndpointSpec{StreamID: StreamID(i)}
 						}
 						r, wg := setupRouter(b, evalCtx, spec, colTypes, recvs)
 						for i := range chans {
