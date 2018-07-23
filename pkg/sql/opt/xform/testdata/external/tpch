@@ -2378,10 +2378,11 @@ limit
  │         │    │    ├── inner-join
  │         │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_nationkey:4(int!null) lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
  │         │    │    │    ├── fd: (1)-->(2,4), (1)==(10), (10)==(1)
- │         │    │    │    ├── semi-join
+ │         │    │    │    ├── semi-join (merge)
  │         │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
  │         │    │    │    │    ├── anti-join (merge)
  │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
+ │         │    │    │    │    │    ├── ordering: +8
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
  │         │    │    │    │    │    │    ├── ordering: +8
@@ -2411,10 +2412,14 @@ limit
  │         │    │    │    │    ├── scan lineitem
  │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:37(int!null) lineitem.l_partkey:38(int!null) lineitem.l_suppkey:39(int!null) lineitem.l_linenumber:40(int!null) lineitem.l_quantity:41(float) lineitem.l_extendedprice:42(float) lineitem.l_discount:43(float) lineitem.l_tax:44(float) lineitem.l_returnflag:45(string) lineitem.l_linestatus:46(string) lineitem.l_shipdate:47(date) lineitem.l_commitdate:48(date) lineitem.l_receiptdate:49(date) lineitem.l_shipinstruct:50(string) lineitem.l_shipmode:51(string) lineitem.l_comment:52(string)
  │         │    │    │    │    │    ├── key: (37,40)
- │         │    │    │    │    │    └── fd: (37,40)-->(38,39,41-52)
- │         │    │    │    │    └── filters [type=bool, outer=(8,10,37,39), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /37: (/NULL - ]; /39: (/NULL - ]), fd=(8)==(37), (37)==(8)]
- │         │    │    │    │         ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,37), constraints=(/8: (/NULL - ]; /37: (/NULL - ])]
- │         │    │    │    │         └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,39), constraints=(/10: (/NULL - ]; /39: (/NULL - ])]
+ │         │    │    │    │    │    ├── fd: (37,40)-->(38,39,41-52)
+ │         │    │    │    │    │    └── ordering: +37
+ │         │    │    │    │    └── merge-on
+ │         │    │    │    │         ├── left ordering: +8
+ │         │    │    │    │         ├── right ordering: +37
+ │         │    │    │    │         └── filters [type=bool, outer=(8,10,37,39), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /37: (/NULL - ]; /39: (/NULL - ]), fd=(8)==(37), (37)==(8)]
+ │         │    │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,37), constraints=(/8: (/NULL - ]; /37: (/NULL - ])]
+ │         │    │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,39), constraints=(/10: (/NULL - ]; /39: (/NULL - ])]
  │         │    │    │    ├── scan supplier
  │         │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_nationkey:4(int!null)
  │         │    │    │    │    ├── key: (1)
