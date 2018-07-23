@@ -4,11 +4,12 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import * as docsURL from "oss/src/util/docs";
 
 // TODO(vilterp): tooltips
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
 
   return [
     <LineGraph
@@ -105,6 +106,43 @@ export default function (props: GraphDashboardProps) {
             sources={[nid]}
           />
         ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Disk Capacity"
+      sources={storeSources}
+      tooltip={(
+        <div>
+          <dl>
+            <dt>Capacity</dt>
+            <dd>
+              Total disk space available {tooltipSelection} to CockroachDB.
+              {" "}
+              <em>
+                Control this value per node with the
+                {" "}
+                <code>
+                  <a href={docsURL.startFlags} target="_blank">
+                    --store
+                  </a>
+                </code>
+                {" "}
+                flag.
+              </em>
+            </dd>
+            <dt>Available</dt>
+            <dd>Free disk space available {tooltipSelection} to CockroachDB.</dd>
+            <dt>Used</dt>
+            <dd>Disk space used {tooltipSelection} by CockroachDB.</dd>
+          </dl>
+        </div>
+      )}
+    >
+      <Axis units={AxisUnits.Bytes} label="capacity">
+        <Metric name="cr.store.capacity" title="Capacity" />
+        <Metric name="cr.store.capacity.available" title="Available" />
+        <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
     </LineGraph>,
 
