@@ -31,6 +31,9 @@ func registerCDC(r *registry) {
 		if initialScan {
 			maxInitialScanAllowed = 30 * time.Minute
 		}
+		if warehouses >= 1000 {
+			maxLatencyAllowed = 10 * time.Minute
+		}
 
 		crdbNodes := c.Range(1, c.nodes-1)
 		workloadNode := c.Node(c.nodes)
@@ -180,11 +183,11 @@ func registerCDC(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   "cdc/w=100/nodes=3/init=false",
+		Name:   "cdc/w=1000/nodes=3/init=false",
 		Nodes:  nodes(4, cpu(16)),
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCDC(ctx, t, c, 100, false /* initialScan */)
+			runCDC(ctx, t, c, 1000, false /* initialScan */)
 		},
 	})
 	r.Add(testSpec{
