@@ -46,18 +46,16 @@ func registerInterleaved(r *registry) {
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes))
 
-		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration " + ifLocal("10s", "10m")
 
 			// Just to initialize the database
 			cmdInit := "./workload run interleavedpartitioned --init --east --sessions 0" +
-				" --insert-percent 0 --retrieve-percent 100 --update-percent 0 --delete-percent 0 --duration 3s {pgurl:4}"
+				" --insert-percent 0 --retrieve-percent 100 --update-percent 0 --delete-percent 0 --duration 5s {pgurl:4}"
 
 			cmdEast := fmt.Sprintf(
 				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:4-6}",
-				sessions,
 				customersPerSession,
 				devicesPerSession,
 				variantsPerSession,
@@ -73,7 +71,6 @@ func registerInterleaved(r *registry) {
 
 			cmdWest := fmt.Sprintf(
 				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:1-3}",
-				sessions,
 				customersPerSession,
 				devicesPerSession,
 				variantsPerSession,
@@ -92,12 +89,25 @@ func registerInterleaved(r *registry) {
 				deleteBatchSize,
 			)
 
+			t.Status("initializing database")
 			c.Run(ctx, c.Node(1), cmdInit)
 			var wg sync.WaitGroup
 			wg.Add(3)
-			go c.Run(ctx, c.Node(1), cmdWest)
-			go c.Run(ctx, c.Node(4), cmdEast)
-			go c.Run(ctx, c.Node(7), cmdCentral)
+			t.Status("running workload jobs")
+			go func() {
+				c.Run(ctx, c.Node(1), cmdWest)
+				wg.Done()
+			}()
+			go func() {
+				c.Run(ctx, c.Node(4), cmdEast)
+				wg.Done()
+			}()
+			go func() {
+				c.Run(ctx, c.Node(7), cmdCentral)
+				wg.Done()
+			}()
+
+			// This will only finish when all the workload jobs have finished.
 			wg.Wait()
 			return nil
 		})
