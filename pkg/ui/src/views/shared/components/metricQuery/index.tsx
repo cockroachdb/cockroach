@@ -43,6 +43,10 @@ export enum AxisUnits {
    * Units are durations expressed in nanoseconds.
    */
   Duration,
+  /**
+   * Units are percentages expressed as fractional values of 1 (1.0 = 100%).
+   */
+  Percentage,
 }
 
 /**
