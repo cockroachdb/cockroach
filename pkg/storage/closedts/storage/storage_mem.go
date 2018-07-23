@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,7 +38,9 @@ type memStorage struct {
 
 var _ SingleStorage = (*memStorage)(nil)
 
-// NewMemStorage initializes a SingleStorage backed by an in-memory slice.
+// NewMemStorage initializes a SingleStorage backed by an in-memory slice that
+// represents the given number of buckets, where the i-th bucket holds a closed
+// timestamp approximately 2^i*scale in the past.
 func NewMemStorage(scale time.Duration, buckets int) SingleStorage {
 	m := &memStorage{}
 	m.mu.buckets = make([]ctpb.Entry, buckets)
@@ -60,7 +63,7 @@ func (m *memStorage) String() string {
 	for i := range m.mu.buckets {
 		header[1+i] = m.mu.buckets[i].ClosedTimestamp.String() + "\nage=" + time.Duration(
 			m.mu.buckets[0].ClosedTimestamp.WallTime-m.mu.buckets[i].ClosedTimestamp.WallTime,
-		).String() + " (target ≤" + m.bucketMaxAge(i).String() + ")"
+		).String() + " (target ≤" + m.bucketMaxAge(i).String() + ")\nepoch=" + fmt.Sprintf("%d", m.mu.buckets[i].Epoch)
 		align[1+i] = tablewriter.ALIGN_RIGHT
 	}
 	tw.SetAutoFormatHeaders(false)
@@ -175,7 +178,8 @@ func merge(e, ee ctpb.Entry) ctpb.Entry {
 	// The result is full if either operand is.
 	re.Full = e.Full || ee.Full
 
-	// Use the larger of both timestamps with the union of the MLAIs.
+	// Use the larger of both timestamps with the union of the MLAIs, preferring larger
+	// ones on conflict.
 	re.ClosedTimestamp.Forward(ee.ClosedTimestamp)
 	for rangeID, mlai := range ee.MLAI {
 		if re.MLAI[rangeID] < mlai {

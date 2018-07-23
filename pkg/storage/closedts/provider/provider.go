@@ -52,6 +52,7 @@ type Provider struct {
 	mu struct {
 		syncutil.RWMutex
 		subscribers []*subscriber
+		draining    bool // tell subscribers to terminate
 	}
 	cond *sync.Cond
 
@@ -78,14 +79,37 @@ func (p *Provider) Start() {
 	p.cfg.Stopper.RunWorker(log.WithLogTagStr(context.Background(), "ct-closer", ""), p.runCloser)
 }
 
+func (p *Provider) drain() {
+	p.mu.Lock()
+	p.mu.draining = true
+	p.mu.Unlock()
+	for {
+		p.cond.Broadcast()
+		p.mu.Lock()
+		done := true
+		for _, sub := range p.mu.subscribers {
+			done = done && sub == nil
+		}
+		p.mu.Unlock()
+
+		if done {
+			return
+		}
+	}
+}
+
 func (p *Provider) runCloser(ctx context.Context) {
+	// This loop signals the subscribers, so it can't shut down until all the
+	// subscribers are gone.
+	defer p.drain()
 	// The local loop is driven as a notification for NodeID zero. This side-
 	// steps the need to plumb a getter for the NodeID (which is annoyingly
 	// determined fairly late for new servers).
 	ch := p.Notify(0)
 	defer close(ch)
 
-	t := timeutil.NewTimer()
+	var t timeutil.Timer
+	defer t.Stop()
 	for {
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
 		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
@@ -101,14 +125,13 @@ func (p *Provider) runCloser(ctx context.Context) {
 		}
 
 		next, epoch, err := p.cfg.Clock()
+
 		next.WallTime -= int64(targetDuration)
 		if err != nil {
 			if p.everyClockLog.ShouldLog() {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %s", err)
 			}
 		} else {
-			// TODO(tschottdorf): if the epoch changes, this needs to make sure to produce a
-			// full update.
 			closed, m := p.cfg.Close(next)
 
 			ch <- ctpb.Entry{
@@ -138,9 +161,8 @@ func (p *Provider) processNotification(nodeID roachpb.NodeID, entry ctpb.Entry) 
 // Notify implements closedts.Notifyee.
 func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
-	ctx := context.TODO()
 
-	p.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
+	p.cfg.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for entry := range ch {
 			p.processNotification(nodeID, entry)
 		}
@@ -162,6 +184,7 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	if i == len(p.mu.subscribers) {
 		p.mu.subscribers = append(p.mu.subscribers, sub)
 	}
+	draining := p.mu.draining
 	p.mu.Unlock()
 
 	defer func() {
@@ -170,6 +193,10 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 		p.mu.Unlock()
 		close(ch)
 	}()
+
+	if draining {
+		return
+	}
 
 	// The subscription is already active, so any storage snapshot from now on is
 	// going to fully catch up the subscriber without a gap.

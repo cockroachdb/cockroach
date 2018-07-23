@@ -281,7 +281,7 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config using certs for the container.User.
+// manager for a TLS config using certs for the config.User.
 func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {

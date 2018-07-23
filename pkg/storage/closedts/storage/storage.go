@@ -77,7 +77,9 @@ type entry struct {
 
 // MultiStorage implements the closedts.Storage interface.
 type MultiStorage struct {
-	f func() SingleStorage
+	// constructor creates a SingleStorage whenever one is initialized for a new
+	// NodeID.
+	constructor func() SingleStorage
 	// TODO(tschottdorf): clean up storages that haven't been used for extended
 	// periods of time.
 	m syncutil.IntMap
@@ -88,8 +90,8 @@ var _ closedts.Storage = (*MultiStorage)(nil)
 // NewMultiStorage sets up a MultiStorage which uses the given factory method
 // for setting up the SingleStorage used for each individual NodeID for which
 // operations are received.
-func NewMultiStorage(f func() SingleStorage) *MultiStorage {
-	return &MultiStorage{f: f}
+func NewMultiStorage(constructor func() SingleStorage) *MultiStorage {
+	return &MultiStorage{constructor: constructor}
 }
 
 func (ms *MultiStorage) getOrCreate(nodeID roachpb.NodeID) SingleStorage {
@@ -100,7 +102,7 @@ func (ms *MultiStorage) getOrCreate(nodeID roachpb.NodeID) SingleStorage {
 		return (*entry)(p).SingleStorage
 	}
 
-	ss := ms.f()
+	ss := ms.constructor()
 	p, _ = ms.m.LoadOrStore(key, unsafe.Pointer(&entry{ss}))
 	return (*entry)(p).SingleStorage
 }
@@ -140,7 +142,7 @@ func (ms *MultiStorage) String() string {
 	})
 	var buf bytes.Buffer
 	for i := range sl {
-		buf.WriteString(fmt.Sprintf("\n***** n%d *****\n", sl[i].NodeID))
+		buf.WriteString(fmt.Sprintf("***** n%d *****\n", sl[i].NodeID))
 		buf.WriteString(sl[i].SingleStorage.String())
 	}
 	return buf.String()

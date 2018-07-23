@@ -20,13 +20,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/pkg/errors"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func ExampleSingleStorage() {
@@ -125,8 +127,9 @@ func ExampleSingleStorage() {
 	// Output:
 	// The empty storage renders as below:
 	// +--+---------------------+----------------------+----------------------+----------------------+
-	//         0.000000000,0      0.000000000,0 age=0s   0.000000000,0 age=0s   0.000000000,0 age=0s
-	//      age=0s (target ≤0s)      (target ≤10s)          (target ≤20s)          (target ≤40s)
+	//         0.000000000,0         0.000000000,0          0.000000000,0          0.000000000,0
+	//      age=0s (target ≤0s)   age=0s (target ≤10s)   age=0s (target ≤20s)   age=0s (target ≤40s)
+	//            epoch=0               epoch=0                epoch=0                epoch=0
 	// +--+---------------------+----------------------+----------------------+----------------------+
 	// +--+---------------------+----------------------+----------------------+----------------------+
 	//
@@ -138,7 +141,8 @@ func ExampleSingleStorage() {
 	// the result is:
 	// +----+---------------------+------------------------+------------------------+------------------------+
 	//          123.000000000,0     0.000000000,0 age=2m3s   0.000000000,0 age=2m3s   0.000000000,0 age=2m3s
-	//        age=0s (target ≤0s)       (target ≤10s)            (target ≤20s)            (target ≤40s)
+	//        age=0s (target ≤0s)   (target ≤10s) epoch=0    (target ≤20s) epoch=0    (target ≤40s) epoch=0
+	//              epoch=0
 	// +----+---------------------+------------------------+------------------------+------------------------+
 	//   r1                  1000
 	//   r9                  2000
@@ -156,7 +160,8 @@ func ExampleSingleStorage() {
 	// give them identical copies of the second, but that's nonsense.
 	// +----+---------------------+----------------------+------------------------+------------------------+
 	//          125.000000000,0       123.000000000,0      0.000000000,0 age=2m5s   0.000000000,0 age=2m5s
-	//        age=0s (target ≤0s)   age=2s (target ≤10s)       (target ≤20s)            (target ≤40s)
+	//        age=0s (target ≤0s)   age=2s (target ≤10s)   (target ≤20s) epoch=0    (target ≤40s) epoch=0
+	//              epoch=0               epoch=0
 	// +----+---------------------+----------------------+------------------------+------------------------+
 	//   r1                  1001                   1000
 	//   r7                    12
@@ -173,7 +178,8 @@ func ExampleSingleStorage() {
 	// downgrade for r1; these can occur in practice.
 	// +----+---------------------+-----------------------+-------------------------+-------------------------+
 	//          133.000000000,0        123.000000000,0      0.000000000,0 age=2m13s   0.000000000,0 age=2m13s
-	//        age=0s (target ≤0s)   age=10s (target ≤10s)        (target ≤20s)             (target ≤40s)
+	//        age=0s (target ≤0s)   age=10s (target ≤10s)    (target ≤20s) epoch=0     (target ≤40s) epoch=0
+	//              epoch=0                epoch=0
 	// +----+---------------------+-----------------------+-------------------------+-------------------------+
 	//   r1                  1001                    1000
 	//   r7                    12
@@ -188,7 +194,8 @@ func ExampleSingleStorage() {
 	// Consequently we now see the third bucket fill up.
 	// +----+---------------------+-------------------------+-------------------------+---------------------------+
 	//          133.500000000,0         133.000000000,0           123.000000000,0       0.000000000,0 age=2m13.5s
-	//        age=0s (target ≤0s)   age=500ms (target ≤10s)   age=10.5s (target ≤20s)         (target ≤40s)
+	//        age=0s (target ≤0s)   age=500ms (target ≤10s)   age=10.5s (target ≤20s)     (target ≤40s) epoch=0
+	//              epoch=0                 epoch=0                   epoch=0
 	// +----+---------------------+-------------------------+-------------------------+---------------------------+
 	//   r1                  1001                      1001                      1000
 	//   r7                    17                        12
@@ -207,6 +214,7 @@ func ExampleSingleStorage() {
 	// +----+---------------------+-------------------------+-----------------------+-----------------------+
 	//          180.000000000,0         133.500000000,0          133.000000000,0         123.000000000,0
 	//        age=0s (target ≤0s)   age=46.5s (target ≤10s)   age=47s (target ≤20s)   age=57s (target ≤40s)
+	//              epoch=0                 epoch=0                  epoch=0                 epoch=0
 	// +----+---------------------+-------------------------+-----------------------+-----------------------+
 	//   r1                  1004                      1001                    1001                    1000
 	//   r2                929922
@@ -225,6 +233,7 @@ func ExampleSingleStorage() {
 	// +----+---------------------+----------------------+-------------------------+-----------------------+
 	//          185.000000000,0       180.000000000,0          133.500000000,0          133.000000000,0
 	//        age=0s (target ≤0s)   age=5s (target ≤10s)   age=51.5s (target ≤20s)   age=52s (target ≤40s)
+	//              epoch=0               epoch=0                  epoch=0                  epoch=0
 	// +----+---------------------+----------------------+-------------------------+-----------------------+
 	//   r1                  1004                   1004                      1001                    1001
 	//   r2                929922                 929922
@@ -235,7 +244,102 @@ func ExampleSingleStorage() {
 	// +----+---------------------+----------------------+-------------------------+-----------------------+
 }
 
+func ExampleMultiStorage_epoch() {
+	ms := NewMultiStorage(func() SingleStorage {
+		return NewMemStorage(time.Millisecond, 2)
+	})
+
+	e1 := ctpb.Entry{
+		Epoch:           10,
+		ClosedTimestamp: hlc.Timestamp{WallTime: 1E9},
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
+			9: 17,
+		},
+	}
+	fmt.Println("First, the following entry is added:")
+	fmt.Println(e1)
+	ms.Add(1, e1)
+	fmt.Println(ms)
+
+	fmt.Println("The epoch changes. It can only increase, for we receive Entries in a fixed order.")
+	e2 := ctpb.Entry{
+		Epoch:           11,
+		ClosedTimestamp: hlc.Timestamp{WallTime: 2E9},
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
+			9:  18,
+			10: 99,
+		},
+	}
+	ms.Add(1, e2)
+	fmt.Println(e2)
+	fmt.Println(ms)
+
+	fmt.Println("If it *did* decrease, a higher level component should trigger an assertion.")
+	fmt.Println("The storage itself will simply ignore such updates:")
+	e3 := ctpb.Entry{
+		Epoch:           8,
+		ClosedTimestamp: hlc.Timestamp{WallTime: 3E9},
+		MLAI: map[roachpb.RangeID]ctpb.LAI{
+			9:  19,
+			10: 199,
+		},
+	}
+	fmt.Println(e3)
+	ms.Add(1, e3)
+	fmt.Println(ms)
+
+	// Output:
+	// First, the following entry is added:
+	// CT: 1.000000000,0 @ Epoch 10
+	// Full: false
+	// MLAI: r9: 17
+	//
+	// ***** n1 *****
+	// +----+---------------------+----------------------+
+	//           1.000000000,0         0.000000000,0
+	//        age=0s (target ≤0s)   age=1s (target ≤1ms)
+	//             epoch=10               epoch=0
+	// +----+---------------------+----------------------+
+	//   r9                    17
+	// +----+---------------------+----------------------+
+	//
+	// The epoch changes. It can only increase, for we receive Entries in a fixed order.
+	// CT: 2.000000000,0 @ Epoch 11
+	// Full: false
+	// MLAI: r9: 18, r10: 99
+	//
+	// ***** n1 *****
+	// +-----+---------------------+----------------------+
+	//            2.000000000,0         1.000000000,0
+	//         age=0s (target ≤0s)   age=1s (target ≤1ms)
+	//              epoch=11               epoch=10
+	// +-----+---------------------+----------------------+
+	//   r9                     18                     17
+	//   r10                    99
+	// +-----+---------------------+----------------------+
+	//
+	// If it *did* decrease, a higher level component should trigger an assertion.
+	// The storage itself will simply ignore such updates:
+	// CT: 3.000000000,0 @ Epoch 8
+	// Full: false
+	// MLAI: r9: 19, r10: 199
+	//
+	// ***** n1 *****
+	// +-----+---------------------+----------------------+
+	//            2.000000000,0         2.000000000,0
+	//         age=0s (target ≤0s)   age=0s (target ≤1ms)
+	//              epoch=11               epoch=11
+	// +-----+---------------------+----------------------+
+	//   r9                     18                     18
+	//   r10                    99                     99
+	// +-----+---------------------+----------------------+
+}
+
+// TestConcurrent runs a very basic sanity check against a Storage, verifiying
+// that the bucketed Entries don't regress in obvious ways.
 func TestConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ms := NewMultiStorage(func() SingleStorage {
 		return NewMemStorage(time.Millisecond, 10)
 	})
@@ -253,31 +357,72 @@ func TestConcurrent(t *testing.T) {
 	// concurrently add and read from storage
 	// after add: needs to be visible to future read
 	// read ts never regresses
-	r, seed := randutil.NewPseudoRand()
+	globalRand, seed := randutil.NewPseudoRand()
 	t.Log("seed is", seed)
 
 	for i := 0; i < numWritersPerNode; i++ {
 		for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
 			for i := 0; i < iters; i++ {
-				r := rand.New(rand.NewSource(r.Int63()))
+				r := rand.New(rand.NewSource(globalRand.Int63()))
 				m := make(map[roachpb.RangeID]ctpb.LAI)
-				full := i == 0
 				for rangeID := roachpb.RangeID(1); rangeID < numRanges; rangeID++ {
-					if !full && r.Intn(2) == 0 {
+					if r.Intn(int(numRanges)) == 0 {
 						continue
 					}
 					m[rangeID] = ctpb.LAI(rand.Intn(100))
 				}
+				ct := hlc.Timestamp{WallTime: r.Int63n(100), Logical: r.Int31n(10)}
+				epo := ctpb.Epoch(r.Int63n(100))
 				g.Go(func() error {
+					<-time.After(time.Duration(rand.Intn(1E7)))
 					ms.Add(nodeID, ctpb.Entry{
-						Epoch:           ctpb.Epoch(r.Int63n(100)),
-						ClosedTimestamp: hlc.Timestamp{WallTime: r.Int63n(100), Logical: r.Int31n(10)},
+						Epoch:           epo,
+						ClosedTimestamp: ct,
 						MLAI:            m,
-						Full:            full,
 					})
 					return nil
 				})
 			}
 		}
+	}
+
+	for i := 0; i < numReadersPerNode; i++ {
+		for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+			nodeID := nodeID
+			g.Go(func() error {
+				epo := ctpb.Epoch(-1)
+				var ct hlc.Timestamp
+				var mlai map[roachpb.RangeID]ctpb.LAI
+				var err error
+				var n int
+				ms.VisitDescending(nodeID, func(e ctpb.Entry) bool {
+					n++
+					if n > 1 && e.Epoch > epo {
+						err = errors.Errorf("epoch regressed from %d to %d", epo, e.Epoch)
+						return true // done
+					}
+					if n > 1 && ct.Less(e.ClosedTimestamp) {
+						err = errors.Errorf("closed timestamp regressed from %s to %s", ct, e.ClosedTimestamp)
+						return true // done
+					}
+					for rangeID := roachpb.RangeID(1); rangeID <= numRanges; rangeID++ {
+						if l := mlai[rangeID]; l < e.MLAI[rangeID] && n > 1 {
+							err = errors.Errorf("MLAI for r%d regressed: %+v to %+v", rangeID, mlai, e.MLAI)
+							return true // done
+						}
+					}
+
+					epo = e.Epoch
+					ct = e.ClosedTimestamp
+					mlai = e.MLAI
+					return false // not done
+				})
+				return err
+			})
+		}
+	}
+
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -16,6 +16,7 @@ package container
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -56,11 +57,18 @@ type Container struct {
 	Clients  closedts.ClientRegistry
 }
 
+const (
+	// For each node, keep two historical buckets...
+	storageBucketNum = 2
+	// ... where the second bucket holds a closed timestamp this old.
+	storageBucketScale = 10 * time.Second
+)
+
 // NewContainer initializes a Container from the given Config. The Container
 // will need to be started separately.
 func NewContainer(cfg Config) *Container {
 	storage := storage.NewMultiStorage(func() storage.SingleStorage {
-		return storage.NewMemStorage(5*closedts.TargetDuration.Get(&cfg.Settings.SV), 2)
+		return storage.NewMemStorage(storageBucketScale, storageBucketNum)
 	})
 
 	tracker := minprop.NewTracker()
@@ -120,5 +128,4 @@ func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.
 // DialerAdapter turns a node dialer into a closedts.Dialer.
 func DialerAdapter(dialer *nodedialer.Dialer) closedts.Dialer {
 	return (*dialerAdapter)(dialer)
-
 }

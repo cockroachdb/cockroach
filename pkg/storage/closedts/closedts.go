@@ -16,7 +16,7 @@
 // various components of the closed timestamp subsystems.
 //
 // The following diagram illustrates how these components fit together. In
-// running operation, the components are grouped in a ctconfig.Container
+// running operation, the components are grouped in a container.Container
 // (intended as a pass-around per-instance Singleton).
 // Replicas proposing commands talk to the Tracker; replicas trying to serve
 // follower reads talk to the Provider, which receives closed timestamp updates
@@ -55,6 +55,17 @@ import (
 // additionally provides historical information about past state that it
 // "compacts" regularly, and which can be introspected via the VisitAscending
 // method.
+//
+// The data in a Storage is ephemeral, i.e. is lost during process restarts.
+// Introducing a persistent storage will require some design work to make
+// sure a) that the records in the storage are certifiably up to date (they
+// won't be naturally, unless we add a synchronous write to each proposal)
+// and b) that the proposal at each MLAI has actually been proposed. It's
+// unlikely that we'll ever find it useful to introduce persistence here
+// (though we want to persist historical information for recovery after
+// permanent loss of quorum, but there we only need some consistent on-
+// disk state; we don't need to bootstrap it into a new consistent state
+// that can be updated incrementally).
 type Storage interface {
 	fmt.Stringer
 	// VisitAscending visits the historical states contained within the Storage
