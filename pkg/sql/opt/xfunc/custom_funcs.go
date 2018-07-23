@@ -153,7 +153,22 @@ func (c *CustomFuncs) ExtractBoundConditions(list memo.ListID, group memo.GroupI
 	return lb.BuildList()
 }
 
-// ExtractUnboundConditions is the inverse of extractBoundConditions. Instead of
+// ExtractBoundConditions2 is a variant of ExtractBoundConditions which extracts
+// conditions that are fully bound by the union of columns produced by two
+// expressions.
+func (c *CustomFuncs) ExtractBoundConditions2(
+	list memo.ListID, group1, group2 memo.GroupID,
+) memo.ListID {
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(list) {
+		if c.IsBoundBy2(item, group1, group2) {
+			lb.AddItem(item)
+		}
+	}
+	return lb.BuildList()
+}
+
+// ExtractUnboundConditions is the inverse of ExtractBoundConditions. Instead of
 // extracting expressions that are bound by the given expression, it extracts
 // list expressions that have at least one outer reference that is *not* bound
 // by the given expression (i.e. it has a "free" variable).
