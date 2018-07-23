@@ -49,7 +49,7 @@ type Txn struct {
 	// They should be set before operating on the transaction.
 
 	// commitTriggers are run upon successful commit.
-	commitTriggers []func()
+	commitTriggers []func(ctx context.Context)
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
 	systemConfigTrigger bool
@@ -573,7 +573,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	pErr := txn.sendEndTxnReq(ctx, true /* commit */, txn.deadline())
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
-			t()
+			t(ctx)
 		}
 	}
 	return pErr.GoError()
@@ -710,7 +710,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 
 // AddCommitTrigger adds a closure to be executed on successful commit
 // of the transaction.
-func (txn *Txn) AddCommitTrigger(trigger func()) {
+func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
