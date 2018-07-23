@@ -95,7 +95,12 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 		return def.CanProvideOrdering(o.mem.Metadata(), required)
 
 	case opt.RowNumberOp:
-		def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
+		def := mexpr.Private(o.mem).(*memo.RowNumberDef)
+		return def.CanProvideOrdering(required)
+
+	case opt.MergeJoinOp:
+		mergeOn := o.mem.NormExpr(mexpr.ChildGroup(o.mem, 2))
+		def := mergeOn.Private(o.mem).(*memo.MergeOnDef)
 		return def.CanProvideOrdering(required)
 
 	case opt.LimitOp:
