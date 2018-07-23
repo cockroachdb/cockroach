@@ -33,7 +33,7 @@ type lookupJoinNode struct {
 	// are looking up into).
 	keyCols []int
 
-	// columns are the produced columns, namely the input clumns and and the
+	// columns are the produced columns, namely the input clumns and the
 	// columns in the table scanNode.
 	columns sqlbase.ResultColumns
 
@@ -75,6 +75,41 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(lj.input)},
 		plan: lj.input,
 	}
+
+	// The lookup side may not output all the index columns on which we are doing
+	// the lookup. We need them to be produced so that we can refer to them in the
+	// join predicate. So we find any such instances and adjust the scan node
+	// accordingly.
+	for i := range lj.keyCols {
+		colID := lj.table.index.ColumnIDs[i]
+		if _, ok := lj.table.colIdxMap[colID]; !ok {
+			// Tricky case: the lookup join doesn't output this column so we can't
+			// refer to it; we have to add it.
+			n := lj.table
+			colPos := len(n.cols)
+			var colDesc *sqlbase.ColumnDescriptor
+			for i := range n.desc.Columns {
+				if n.desc.Columns[i].ID == colID {
+					colDesc = &n.desc.Columns[i]
+					break
+				}
+			}
+			n.cols = append(n.cols, *colDesc)
+			n.resultColumns = append(
+				n.resultColumns,
+				leftSrc.info.SourceColumns[lj.keyCols[i]],
+			)
+			n.colIdxMap[colID] = colPos
+			n.valNeededForCol.Add(colPos)
+			n.run.row = make([]tree.Datum, len(n.cols))
+			n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
+			// startExec was already called for the node, run it again.
+			if err := n.startExec(params); err != nil {
+				return err
+			}
+		}
+	}
+
 	rightSrc := planDataSource{
 		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(lj.table)},
 		plan: lj.table,
@@ -87,9 +122,12 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 		return err
 	}
 
-	// TODO(radu): we are relying on the fact that the equality constraints
-	// (implied by keyCols) are still in the ON condition. We'd normally have to
-	// explicitly program the equalities.
+	// Program the equalities implied by keyCols.
+	for i := range lj.keyCols {
+		colID := lj.table.index.ColumnIDs[i]
+		pred.addEquality(leftSrc.info, lj.keyCols[i], rightSrc.info, lj.table.colIdxMap[colID])
+	}
+
 	onAndExprs := splitAndExpr(params.EvalContext(), lj.onCond, nil /* exprs */)
 	for _, e := range onAndExprs {
 		if e != tree.DBoolTrue && !pred.tryAddEqualityFilter(e, leftSrc.info, rightSrc.info) {
