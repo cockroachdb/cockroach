@@ -463,10 +463,10 @@ message AggregatorSpec {
     FINAL_VARIANCE = 16;
     FINAL_STDDEV = 17;
     ARRAY_AGG = 18;
-
     JSON_AGG = 19;
     // JSONB_AGG is an alias for JSON_AGG, they do the same thing.
     JSONB_AGG = 20;
+    STRING_AGG = 21;
   }
 
   enum Type {
@@ -503,6 +503,9 @@ message AggregatorSpec {
     // the filter clause, e.g.:
     //   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
     optional uint32 filter_col_idx = 4;
+
+    // Arguments are const expressions passed to aggregation functions.
+    repeated Expression arguments = 6 [(gogoproto.nullable) = false];
 
     reserved 3;
   }
