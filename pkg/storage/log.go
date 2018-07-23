@@ -56,13 +56,13 @@ func (s *Store) insertRangeLogEvent(
 	}
 
 	const insertEventTableStmt = `
-INSERT INTO system.rangelog (
-  timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
-)
-VALUES(
-  $1, $2, $3, $4, $5, $6
-)
-`
+	INSERT INTO system.rangelog (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6
+	)
+	`
 	args := []interface{}{
 		event.Timestamp,
 		event.RangeID,
@@ -116,7 +116,7 @@ func (s *Store) logSplit(
 		return nil
 	}
 	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
-		Timestamp:    selectEventTimestamp(s, txn.Proto().Timestamp),
+		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
 		RangeID:      updatedDesc.RangeID,
 		EventType:    RangeLogEventType_split,
 		StoreID:      s.StoreID(),
@@ -169,7 +169,7 @@ func (s *Store) logChange(
 	}
 
 	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
-		Timestamp: selectEventTimestamp(s, txn.Proto().Timestamp),
+		Timestamp: selectEventTimestamp(s, txn.OrigTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,
 		StoreID:   s.StoreID(),
