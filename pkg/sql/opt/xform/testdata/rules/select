@@ -139,11 +139,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 0.00
+ │         └── cost: 1.05
  ├── G2: (select G4 G5) (select G6 G8) (select G7 G8) (scan a@u,cols=(1,2),constrained) (scan a@u,rev,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 0.00
+ │         └── cost: 1.05
  ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a,rev,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@u,rev,cols=(1,2)) (scan a@v,cols=(1,2)) (scan a@v,rev,cols=(1,2))
  │    └── ""

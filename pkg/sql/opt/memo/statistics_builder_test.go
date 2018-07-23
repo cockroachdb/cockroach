@@ -56,12 +56,17 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		key.writeColSet(cols)
 		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 9900}
 
-		inputStatsBuilder := statisticsBuilder{s: &props.Statistics{
+		inputStatsBuilder := statisticsBuilder{props: &props.Relational{FuncDeps: props.FuncDepSet{}}, s: &props.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
 		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
+		if isContradiction {
+			sb.s.Selectivity = 0
+		}
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
@@ -85,12 +90,17 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		key.writeColSet(cols)
 		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 100}
 
-		inputStatsBuilder := statisticsBuilder{s: &props.Statistics{
+		inputStatsBuilder := statisticsBuilder{props: &props.Relational{FuncDeps: props.FuncDepSet{}}, s: &props.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
 		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
+		if isContradiction {
+			sb.s.Selectivity = 0
+		}
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
