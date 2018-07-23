@@ -103,7 +103,6 @@ TEST(LibroachCCL, DBOpen) {
 TEST(LibroachCCL, ReadOnly) {
   // We need a real directory.
   TempDirHandler dir;
-  ASSERT_TRUE(dir.Init());
 
   {
     // Write/read a single key.
@@ -163,7 +162,6 @@ TEST(LibroachCCL, ReadOnly) {
 TEST(LibroachCCL, EncryptionStats) {
   // We need a real directory.
   TempDirHandler dir;
-  ASSERT_TRUE(dir.Init());
 
   // Write a key.
   ASSERT_OK(WriteAES128KeyFile(rocksdb::Env::Default(), dir.Path("aes-128.key")));
