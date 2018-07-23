@@ -383,16 +383,15 @@ type Replica struct {
 		minLeaseProposedTS hlc.Timestamp
 		// Max bytes before split.
 		maxBytes int64
-		// proposals stores the Raft in-flight commands which
-		// originated at this Replica, i.e. all commands for which
-		// propose has been called, but which have not yet
-		// applied.
+		// localProposals stores the Raft in-flight commands which originated at
+		// this Replica, i.e. all commands for which propose has been called,
+		// but which have not yet applied.
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
 		// map must only be referenced while Replica.mu is held, except if the
 		// element is removed from the map first. The notable exception is the
 		// contained RaftCommand, which we treat as immutable.
-		proposals map[storagebase.CmdIDKey]*ProposalData
+		localProposals map[storagebase.CmdIDKey]*ProposalData
 		// remoteProposals is maintained by Raft leaders and stores in-flight
 		// commands that were forwarded to the leader during its current term.
 		// The set allows leaders to detect duplicate forwarded commands and
@@ -699,7 +698,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.cmdQMu.queues[spanset.SpanLocal] = NewCommandQueue(false /* optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.localProposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -848,7 +847,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
-	for _, p := range r.mu.proposals {
+	for _, p := range r.mu.localProposals {
 		resp := proposalResult{
 			Reply:         &roachpb.BatchResponse{},
 			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
@@ -856,7 +855,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 		}
 		p.finishRaftApplication(resp)
 	}
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.localProposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.remoteProposals = nil
 }
 
@@ -1786,7 +1785,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
-	ri.NumPending = uint64(len(r.mu.proposals))
+	ri.NumPending = uint64(len(r.mu.localProposals))
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
@@ -2979,11 +2978,11 @@ func (r *Replica) insertProposalLocked(
 			proposal.idKey, proposal.command.MaxLeaseIndex)
 	}
 
-	if _, ok := r.mu.proposals[proposal.idKey]; ok {
+	if _, ok := r.mu.localProposals[proposal.idKey]; ok {
 		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "pending command already exists for %s", proposal.idKey)
 	}
-	r.mu.proposals[proposal.idKey] = proposal
+	r.mu.localProposals[proposal.idKey] = proposal
 }
 
 func makeIDKey() storagebase.CmdIDKey {
@@ -3136,7 +3135,7 @@ func (r *Replica) propose(
 			Req:   ba,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
-			delete(r.mu.proposals, idKey)
+			delete(r.mu.localProposals, idKey)
 			return nil, nil, undoQuotaAcquisition, pErr
 		}
 	}
@@ -3147,11 +3146,11 @@ func (r *Replica) propose(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 	} else if err != nil {
-		delete(r.mu.proposals, proposal.idKey)
+		delete(r.mu.localProposals, proposal.idKey)
 		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 	// Must not use `proposal` in the closure below as a proposal which is not
-	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
+	// present in r.mu.localProposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
 	// command to Raft, ownership passes to the "below Raft" machinery. In
 	// particular, endCmds will be invoked when the command is applied. There are
@@ -3160,7 +3159,7 @@ func (r *Replica) propose(
 	// range.
 	tryAbandon := func() bool {
 		r.mu.Lock()
-		p, ok := r.mu.proposals[idKey]
+		p, ok := r.mu.localProposals[idKey]
 		if ok {
 			// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
 			// We'd need to make sure the span is finished eventually.
@@ -3172,7 +3171,7 @@ func (r *Replica) propose(
 	return proposal.doneCh, tryAbandon, undoQuotaAcquisition, nil
 }
 
-// submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
+// submitProposalLocked proposes or re-proposes a command in r.mu.localProposals.
 // The replica lock must be held.
 func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	p.proposedAtTicks = r.mu.ticks
@@ -3292,8 +3291,8 @@ func (r *Replica) quiesce() bool {
 
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	if len(r.mu.proposals) != 0 {
-		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+	if len(r.mu.localProposals) != 0 {
+		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.localProposals))
 		return false
 	}
 	if !r.mu.quiescent {
@@ -3975,7 +3974,7 @@ func (r *Replica) maybeTickQuiesced() bool {
 // not be sensitive enough.
 func (r *Replica) maybeQuiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals))
+	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.localProposals))
 	if !ok {
 		return false
 	}
@@ -4203,12 +4202,12 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
-	for idKey, p := range r.mu.proposals {
+	for idKey, p := range r.mu.localProposals {
 		if p.command.MaxLeaseIndex == 0 {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
-			delete(r.mu.proposals, idKey)
+			delete(r.mu.localProposals, idKey)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
 			p.finishRaftApplication(proposalResult{Err: roachpb.NewError(
@@ -4217,7 +4216,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
 		} else if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 			// The command's designated lease index slot was filled up. We got to
-			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
+			// LeaseAppliedIndex and p is still pending in r.mu.localProposals; generally
 			// this means that proposal p didn't commit, and it will be sent back to
 			// the proposer for a retry - the request needs to be re-evaluated and the
 			// command re-proposed with a new MaxLeaseIndex.
@@ -4226,7 +4225,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// reasonSnapshotApplied - in that case we don't know if p or some other
 			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
 			// applied, but we're not watching for every proposal when applying a
-			// snapshot, so nobody removed p from r.mu.proposals). In this ambiguous
+			// snapshot, so nobody removed p from r.mu.localProposals). In this ambiguous
 			// case, we'll also send the command back to the proposer for a retry, but
 			// the proposer needs to be aware that, if the retry fails, an
 			// AmbiguousResultError needs to be returned to the higher layers.
@@ -4240,7 +4239,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// little ahead), because a pending command is removed only as it
 			// applies. Thus we'd risk reproposing a command that has been committed
 			// but not yet applied.
-			delete(r.mu.proposals, idKey)
+			delete(r.mu.localProposals, idKey)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
 				p.finishRaftApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
@@ -4287,7 +4286,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
 	//
-	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should be a list/slice.
+	// TODO(tschottdorf): evaluate whether `r.mu.localProposals` should be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
@@ -4295,7 +4294,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// TODO(bdarnell): Handle ErrProposalDropped better.
 			// https://github.com/cockroachdb/cockroach/issues/21849
 		} else if err != nil {
-			delete(r.mu.proposals, p.idKey)
+			delete(r.mu.localProposals, p.idKey)
 			p.finishRaftApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
@@ -4655,14 +4654,14 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	proposal, proposedLocally := r.mu.proposals[idKey]
+	proposal, proposedLocally := r.mu.localProposals[idKey]
 
 	// TODO(tschottdorf): consider the Trace situation here.
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		proposal.ctx = nil // avoid confusion
-		delete(r.mu.proposals, idKey)
+		delete(r.mu.localProposals, idKey)
 	}
 
 	// Delete the entry for a forwarded proposal set.
