@@ -746,18 +746,24 @@ project
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(11)
- │    ├── right-join
+ │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) x:6(int) column10:10(int)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(10)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1(int!null)
+ │    │    │    ├── key: (1)
+ │    │    │    └── ordering: +1
  │    │    ├── project
  │    │    │    ├── columns: column10:10(int) x:6(int!null)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(10)
+ │    │    │    ├── ordering: +6
  │    │    │    ├── inner-join (merge)
  │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
  │    │    │    │    ├── key: (8)
  │    │    │    │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
+ │    │    │    │    ├── ordering: +(6|8)
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    ├── key: (6)
@@ -775,11 +781,11 @@ project
  │    │    │    │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  │    │    │    └── projections [outer=(6,7,9)]
  │    │    │         └── xy.y + uv.v [type=int, outer=(7,9)]
- │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null)
- │    │    │    └── key: (1)
- │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    └── merge-on
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +6
+ │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(10)]
  │         └── sum [type=decimal, outer=(10)]
  │              └── variable: column10 [type=int, outer=(10)]
@@ -797,16 +803,18 @@ WHERE EXISTS
     SELECT * FROM xy INNER JOIN uv ON x=u AND x=k
 )
 ----
-semi-join
+semi-join (merge)
  ├── columns: k:1(int!null)
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── key: (1)
+ │    ├── key: (1)
+ │    └── ordering: +1
  ├── inner-join (merge)
  │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
  │    ├── key: (8)
  │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
+ │    ├── ordering: +(6|8)
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -822,8 +830,11 @@ semi-join
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +6
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Anti-join as outer.
 opt
@@ -833,16 +844,18 @@ WHERE NOT EXISTS
     SELECT * FROM xy INNER JOIN uv ON x=u AND x=k
 )
 ----
-anti-join
+anti-join (merge)
  ├── columns: k:1(int!null)
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    └── key: (1)
+ │    ├── key: (1)
+ │    └── ordering: +1
  ├── inner-join (merge)
  │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
  │    ├── key: (8)
  │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
+ │    ├── ordering: +(6|8)
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -858,8 +871,11 @@ anti-join
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +6
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Right-join as outer.
 opt
@@ -884,14 +900,19 @@ project
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(10)
-      │    ├── right-join
+      │    ├── left-join (merge)
       │    │    ├── columns: k:1(int!null) x:6(int) u:8(int)
       │    │    ├── key: (1,8)
       │    │    ├── fd: (6)==(8), (8)==(6)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    └── ordering: +1
       │    │    ├── inner-join (merge)
       │    │    │    ├── columns: x:6(int!null) u:8(int!null)
       │    │    │    ├── key: (8)
       │    │    │    ├── fd: (6)==(8), (8)==(6)
+      │    │    │    ├── ordering: +(6|8)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:6(int!null)
       │    │    │    │    ├── key: (6)
@@ -905,11 +926,11 @@ project
       │    │    │         ├── right ordering: +8
       │    │    │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
       │    │    │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1(int!null)
-      │    │    │    └── key: (1)
-      │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    └── merge-on
+      │    │         ├── left ordering: +1
+      │    │         ├── right ordering: +6
+      │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    └── aggregations [outer=(6)]
       │         └── count [type=int, outer=(6)]
       │              └── variable: xy.x [type=int, outer=(6)]
@@ -1781,18 +1802,20 @@ select
 opt
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE EXISTS (SELECT * FROM uv WHERE x=u) AND x=k)
 ----
-semi-join
+semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5)
+ │    └── ordering: +1
  ├── semi-join (merge)
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
+ │    ├── ordering: +6
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
@@ -1808,8 +1831,11 @@ semi-join
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +6
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # HoistSelectNotExists
@@ -2344,11 +2370,12 @@ project
  │    ├── grouping columns: k:1(int!null) xy.x:7(int)
  │    ├── key: (1,7)
  │    ├── fd: (1,7)-->(21)
- │    ├── left-join
+ │    ├── left-join (merge)
  │    │    ├── columns: k:1(int!null) xy.x:7(int) xy.y:20(int)
  │    │    ├── left-join (merge)
  │    │    │    ├── columns: k:1(int!null) xy.x:7(int)
  │    │    │    ├── key: (1,7)
+ │    │    │    ├── ordering: +1
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null)
  │    │    │    │    ├── key: (1)
@@ -2362,10 +2389,16 @@ project
  │    │    │         ├── right ordering: +7
  │    │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    │    │              └── xy.x = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
- │    │    ├── scan xy
- │    │    │    └── columns: xy.y:20(int)
- │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
- │    │         └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
+ │    │    ├── sort
+ │    │    │    ├── columns: xy.y:20(int)
+ │    │    │    ├── ordering: +20
+ │    │    │    └── scan xy
+ │    │    │         └── columns: xy.y:20(int)
+ │    │    └── merge-on
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +20
+ │    │         └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
+ │    │              └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
  │    └── aggregations [outer=(20)]
  │         └── count [type=int, outer=(20)]
  │              └── variable: xy.y [type=int, outer=(20)]
