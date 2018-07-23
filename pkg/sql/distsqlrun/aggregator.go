@@ -21,6 +21,7 @@ import (
 
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -39,7 +40,7 @@ import (
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
-	aggregateConstructor func(*tree.EvalContext) tree.AggregateFunc,
+	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
@@ -71,8 +72,8 @@ func GetAggregateInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext) tree.AggregateFunc {
-				return b.AggregateFunc(datumTypes, evalCtx)
+			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return b.AggregateFunc(datumTypes, evalCtx, arguments)
 			}
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
@@ -83,7 +84,7 @@ func GetAggregateInfo(
 		}
 	}
 	return nil, sqlbase.ColumnType{}, errors.Errorf(
-		"no builtin aggregate for %s on %v", fn, inputTypes,
+		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
 }
 
@@ -194,19 +195,40 @@ func (ag *aggregatorBase) init(
 				)
 			}
 		}
-		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx))
-		for i, c := range aggInfo.ColIdx {
+		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
 			}
-			argTypes[i] = ag.inputTypes[c]
+			argTypes[j] = ag.inputTypes[c]
 		}
+
+		arguments := make(tree.Datums, len(aggInfo.Arguments))
+		for j, argument := range aggInfo.Arguments {
+			expr, err := parser.ParseExpr(argument.Expr)
+			if err != nil {
+				return err
+			}
+			typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{}, types.Any)
+			if err != nil {
+				return errors.Wrap(err, expr.String())
+			}
+			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(typedExpr.ResolvedType())
+			if err != nil {
+				return errors.Wrap(err, expr.String())
+			}
+			arguments[j], err = typedExpr.Eval(ag.evalCtx)
+			if err != nil {
+				return errors.Wrap(err, expr.String())
+			}
+		}
+
 		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, argTypes...)
 		if err != nil {
 			return err
 		}
 
-		ag.funcs[i] = ag.newAggregateFuncHolder(aggConstructor)
+		ag.funcs[i] = ag.newAggregateFuncHolder(aggConstructor, arguments)
 		if aggInfo.Distinct {
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
@@ -815,21 +837,23 @@ func (ag *orderedAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create func(*tree.EvalContext) tree.AggregateFunc
-	group  *aggregatorBase
-	seen   map[string]struct{}
-	arena  *stringarena.Arena
+	create    func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	arguments tree.Datums
+	group     *aggregatorBase
+	seen      map[string]struct{}
+	arena     *stringarena.Arena
 }
 
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
 
 func (ag *aggregatorBase) newAggregateFuncHolder(
-	create func(*tree.EvalContext) tree.AggregateFunc,
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc, arguments tree.Datums,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
-		create: create,
-		group:  ag,
-		arena:  &ag.arena,
+		create:    create,
+		group:     ag,
+		arena:     &ag.arena,
+		arguments: arguments,
 	}
 }
 
@@ -886,7 +910,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	for i, f := range ag.funcs {
 		// TODO(radu): we should account for the size of impl (this needs to be done
 		// in each aggregate constructor).
-		bucket[i] = f.create(ag.flowCtx.EvalCtx)
+		bucket[i] = f.create(ag.flowCtx.EvalCtx, f.arguments)
 	}
 	return bucket, nil
 }
