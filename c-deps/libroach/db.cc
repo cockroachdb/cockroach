@@ -40,17 +40,6 @@ using namespace cockroach;
 
 namespace cockroach {
 
-// DBOpenHook in OSS mode only verifies that no extra options are specified.
-__attribute__((weak)) rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log,
-                                                 const std::string& db_dir, const DBOptions opts,
-                                                 EnvManager* env_mgr) {
-  if (opts.extra_options.len != 0) {
-    return rocksdb::Status::InvalidArgument(
-        "DBOptions has extra_options, but OSS code cannot handle them");
-  }
-  return rocksdb::Status::OK();
-}
-
 DBKey ToDBKey(const rocksdb::Slice& s) {
   DBKey key;
   memset(&key, 0, sizeof(key));
@@ -143,6 +132,24 @@ DBIterState DBIterGetState(DBIterator* iter) {
 
 }  // namespace
 
+namespace cockroach {
+
+// DBOpenHookOSS mode only verifies that no extra options are specified.
+rocksdb::Status DBOpenHookOSS(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                              const DBOptions opts, EnvManager* env_mgr) {
+  if (opts.extra_options.len != 0) {
+    return rocksdb::Status::InvalidArgument(
+        "DBOptions has extra_options, but OSS code cannot handle them");
+  }
+  return rocksdb::Status::OK();
+}
+
+}  // namespace cockroach
+
+static DBOpenHook* db_open_hook = DBOpenHookOSS;
+
+void DBSetOpenHook(void* hook) { db_open_hook = (DBOpenHook*)hook; }
+
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
@@ -201,7 +208,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   // Call hooks to handle db_opts.extra_options.
-  auto hook_status = DBOpenHook(options.info_log, db_dir, db_opts, env_mgr.get());
+  auto hook_status = db_open_hook(options.info_log, db_dir, db_opts, env_mgr.get());
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }

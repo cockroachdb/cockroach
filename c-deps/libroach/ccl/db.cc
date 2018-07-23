@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-#include "../db.h"
+#include "db.h"
 #include <iostream>
 #include <libroachccl.h>
 #include <memory>
@@ -107,10 +107,10 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
   KeyManager* data_key_manager_;
 };
 
-// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
-// needed.
-rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
-                           const DBOptions db_opts, EnvManager* env_mgr) {
+// DBOpenHookCCL parses the extra_options field of DBOptions and initializes
+// encryption objects if needed.
+rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                              const DBOptions db_opts, EnvManager* env_mgr) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();
@@ -215,6 +215,8 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
 }
 
 }  // namespace cockroach
+
+void* DBOpenHookCCL = (void*)cockroach::DBOpenHookCCL;
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
                            MVCCStatsResult* stats) {

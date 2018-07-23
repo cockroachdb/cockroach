@@ -60,6 +60,7 @@ TempDirHandler::TempDirHandler() {
     err(1, "creating temporary directory %s", tmpl);
   }
   tmp_dir_ = tmpl;
+  delete[] tmpl;
 }
 
 TempDirHandler::~TempDirHandler() {

@@ -28,9 +28,11 @@ namespace cockroach {
 
 struct EnvManager;
 
-// DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
-                           const DBOptions opts, EnvManager* env_ctx);
+typedef rocksdb::Status(DBOpenHook)(std::shared_ptr<rocksdb::Logger> info_log,
+                                    const std::string& db_dir, const DBOptions opts,
+                                    EnvManager* env_mgr);
+
+DBOpenHook DBOpenHookOSS;
 
 // ToDBSlice returns a DBSlice from a rocksdb::Slice
 inline DBSlice ToDBSlice(const rocksdb::Slice& s) {
