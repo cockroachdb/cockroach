@@ -97,6 +97,12 @@ func (p *joinPredicate) tryAddEqualityFilter(
 		lhs, rhs = rhs, lhs
 	}
 
+	if !lhs.ResolvedType().Equivalent(rhs.ResolvedType()) {
+		// Issue #22519: we can't have two equality columns of mismatched types
+		// because the hash-joiner assumes the encodings are the same.
+		return false
+	}
+
 	// At this point we have an equality, so we can add it to the list
 	// of equality columns.
 
@@ -104,29 +110,25 @@ func (p *joinPredicate) tryAddEqualityFilter(
 	// IndexedVars, and the column indices at this point will refer to
 	// the full column set of the joinPredicate, including the
 	// merged columns.
-	leftColIdx := lhs.Idx
-	rightColIdx := rhs.Idx - len(left.SourceColumns)
+	p.addEquality(left, lhs.Idx, right, rhs.Idx-len(left.SourceColumns))
+	return true
+}
 
+func (p *joinPredicate) addEquality(
+	left *sqlbase.DataSourceInfo, leftColIdx int, right *sqlbase.DataSourceInfo, rightColIdx int,
+) {
 	// Also, we will want to avoid redundant equality checks.
 	for i := range p.leftEqualityIndices {
 		if p.leftEqualityIndices[i] == leftColIdx && p.rightEqualityIndices[i] == rightColIdx {
-			// The filter is already there; simply absorb it and say we succeeded.
-			return true
+			// The filter is already there.
+			return
 		}
-	}
-
-	if !lhs.ResolvedType().Equivalent(rhs.ResolvedType()) {
-		// Issue #22519: we can't have two equality columns of mismatched types
-		// because the hash-joiner assumes the encodings are the same.
-		return false
 	}
 
 	p.leftEqualityIndices = append(p.leftEqualityIndices, leftColIdx)
 	p.rightEqualityIndices = append(p.rightEqualityIndices, rightColIdx)
 	p.leftColNames = append(p.leftColNames, tree.Name(left.SourceColumns[leftColIdx].Name))
 	p.rightColNames = append(p.rightColNames, tree.Name(right.SourceColumns[rightColIdx].Name))
-
-	return true
 }
 
 // makePredicate constructs a joinPredicate object for joins. The join condition

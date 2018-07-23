@@ -1197,3 +1197,175 @@ New expression 1 of 1:
         └── abc.a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
 ----
 ----
+
+# --------------------------------------------------
+# PushJoinThroughIndexJoin
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE uvw
+(
+    u INT PRIMARY KEY,
+    v INT,
+    w INT,
+    INDEX v (v)
+)
+----
+TABLE uvw
+ ├── u int not null
+ ├── v int
+ ├── w int
+ ├── INDEX primary
+ │    └── u int not null
+ └── INDEX v
+      ├── v int
+      └── u int not null
+
+exploretrace rule=PushJoinThroughIndexJoin
+SELECT * FROM abc JOIN uvw ON a=u
+----
+----
+================================================================================
+PushJoinThroughIndexJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
+   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan uvw
+   │    ├── columns: u:5(int!null) v:6(int) w:7(int)
+   │    ├── key: (5)
+   │    └── fd: (5)-->(6,7)
+   └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup uvw)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
+   ├── key columns: [5] = [5]
+   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
+   ├── inner-join
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int)
+   │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
+   │    ├── scan abc
+   │    │    └── columns: a:1(int) b:2(int) c:3(int)
+   │    ├── scan uvw@v
+   │    │    ├── columns: u:5(int!null) v:6(int)
+   │    │    ├── key: (5)
+   │    │    └── fd: (5)-->(6)
+   │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+   │         └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+   └── true [type=bool]
+
+================================================================================
+PushJoinThroughIndexJoin
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
+   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan uvw
+   │    ├── columns: u:5(int!null) v:6(int) w:7(int)
+   │    ├── key: (5)
+   │    └── fd: (5)-->(6,7)
+   └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+New expression 1 of 1:
+  inner-join (lookup uvw)
+   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
+   ├── key columns: [5] = [5]
+   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
+   ├── inner-join
+   │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int)
+   │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
+   │    ├── scan abc
+   │    │    └── columns: a:1(int) b:2(int) c:3(int)
+   │    ├── scan uvw@v,rev
+   │    │    ├── columns: u:5(int!null) v:6(int)
+   │    │    ├── key: (5)
+   │    │    └── fd: (5)-->(6)
+   │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+   │         └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+   └── true [type=bool]
+----
+----
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE uvw INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+opt
+SELECT * FROM abc JOIN uvw ON a=v
+----
+inner-join (lookup uvw)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
+ ├── key columns: [5] = [5]
+ ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
+ ├── inner-join (lookup uvw@v)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
+ │    ├── key columns: [1] = [6]
+ │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
+ │    ├── scan abc
+ │    │    └── columns: a:1(int) b:2(int) c:3(int)
+ │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── abc.a = uvw.v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── true [type=bool]
+
+opt
+SELECT * FROM abc JOIN uvw ON a=v AND b+u>1
+----
+inner-join (lookup uvw)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
+ ├── key columns: [5] = [5]
+ ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
+ ├── inner-join (lookup uvw@v)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
+ │    ├── key columns: [1] = [6]
+ │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
+ │    ├── scan abc
+ │    │    └── columns: a:1(int) b:2(int) c:3(int)
+ │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         ├── abc.a = uvw.v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │         └── (abc.b + uvw.u) > 1 [type=bool, outer=(2,5)]
+ └── true [type=bool]
+
+opt
+SELECT * FROM abc JOIN uvw ON a=v WHERE b+w>1
+----
+inner-join (lookup uvw)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
+ ├── key columns: [5] = [5]
+ ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
+ ├── inner-join (lookup uvw@v)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
+ │    ├── key columns: [1] = [6]
+ │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
+ │    ├── scan abc
+ │    │    └── columns: a:1(int) b:2(int) c:3(int)
+ │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         └── abc.a = uvw.v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters [type=bool, outer=(2,7)]
+      └── (abc.b + uvw.w) > 1 [type=bool, outer=(2,7)]
