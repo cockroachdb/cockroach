@@ -15,6 +15,7 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -43,13 +44,14 @@ func TestClusterTimestampConversion(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return nil
-	})
+	senderFactory := client.MakeMockTxnSenderFactory(
+		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			panic("unused")
+		})
 	db := client.NewDB(
 		testutils.MakeAmbientCtx(),
-		factory,
+		senderFactory,
 		clock)
 
 	for _, d := range testData {

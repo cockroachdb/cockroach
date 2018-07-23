@@ -154,7 +154,6 @@
 		StoreNotFoundError
 		UnhandledRetryableError
 		HandledRetryableTxnError
-		TxnPrevAttemptError
 		TxnAlreadyEncounteredErrorError
 		IntegerOverflowError
 		MixedSuccessError

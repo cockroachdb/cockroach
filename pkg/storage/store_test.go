@@ -81,9 +81,15 @@ type testSenderFactory struct {
 }
 
 func (f *testSenderFactory) TransactionalSender(
-	typ client.TxnType, _ roachpb.TxnCoordMeta,
+	typ client.TxnType, coordMeta roachpb.TxnCoordMeta,
 ) client.TxnSender {
-	return &testSender{store: f.store}
+	return client.NewMockTransactionalSender(
+		func(
+			ctx context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			return f.store.Send(ctx, ba)
+		},
+		&coordMeta.Txn)
 }
 
 func (f *testSenderFactory) NonTransactionalSender() client.Sender {
@@ -107,14 +113,6 @@ func (f *testSenderFactory) setStore(s *Store) {
 type testSender struct {
 	store *Store
 }
-
-func (db *testSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
-
-func (db *testSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic("unimplemented") }
-
-func (db *testSender) OnFinish(func(error)) { panic("unimplemented") }
-
-func (db *testSender) DisablePipelining() { panic("unimplemented") }
 
 // Send forwards the call to the single store. This is a poor man's
 // version of kv.TxnCoordSender, but it serves the purposes of

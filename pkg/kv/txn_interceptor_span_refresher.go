@@ -93,8 +93,12 @@ func (sr *txnSpanRefresher) SendLocked(
 	}
 
 	maxAttempts := maxTxnRefreshAttempts
-	if knob := sr.knobs.MaxTxnRefreshAttempts; knob > 0 {
-		maxAttempts = knob
+	if knob := sr.knobs.MaxTxnRefreshAttempts; knob != 0 {
+		if knob == -1 {
+			maxAttempts = 0
+		} else {
+			maxAttempts = knob
+		}
 	}
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.

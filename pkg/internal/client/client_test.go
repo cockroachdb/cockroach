@@ -850,39 +850,6 @@ func TestReadConsistencyTypes(t *testing.T) {
 	}
 }
 
-// TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline. Read-only transactions have their EndTransaction elided, so the
-// enforcement of the deadline is done in the client.
-func TestReadOnlyTxnObeysDeadline(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
-	ctx := context.TODO()
-
-	if err := db.Put(ctx, "k", "v"); err != nil {
-		t.Fatal(err)
-	}
-
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-	// Only snapshot transactions can observe deadline errors; serializable ones
-	// get a restart error before the deadline check.
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set a deadline, then set a higher commit timestamp for the txn.
-	txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-	txn.Proto().Timestamp.Forward(s.Clock().Now())
-	if _, err := txn.Get(ctx, "k"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(ctx); !testutils.IsError(
-		err, "deadline exceeded before transaction finalization") {
-		t.Fatal(err)
-	}
-}
-
 // TestTxn_ReverseScan a simple test for Txn.ReverseScan
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -972,13 +939,10 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(
-			func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				return ba.CreateReply(), nil
-			},
-		)
-	})
+	factory := client.MakeMockTxnSenderFactory(
+		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return ba.CreateReply(), nil
+		})
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
@@ -1000,7 +964,8 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
 			txn := client.NewTxn(db, test.nodeID, test.typ)
-			if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+			ots := txn.Serialize().ObservedTimestamps
+			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 			}
 		})
@@ -1021,7 +986,8 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			}
 			if err := db.Txn(
 				ctx, func(_ context.Context, txn *client.Txn) error {
-					if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+					ots := txn.Serialize().ObservedTimestamps
+					if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 					}
 					return nil

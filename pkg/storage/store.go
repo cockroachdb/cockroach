@@ -763,6 +763,8 @@ type StoreTestingKnobs struct {
 	DisableTimeSeriesMaintenanceQueue bool
 	// DisableRaftSnapshotQueue disables the raft snapshot queue.
 	DisableRaftSnapshotQueue bool
+	// DisableConsistencyQueue disables the consistency checker.
+	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
@@ -1003,6 +1005,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableRaftSnapshotQueue {
 		s.setRaftSnapshotQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableConsistencyQueue {
+		s.setConsistencyQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
@@ -4395,6 +4400,9 @@ func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
 }
 func (s *Store) setRaftSnapshotQueueActive(active bool) {
 	s.raftSnapshotQueue.SetDisabled(!active)
+}
+func (s *Store) setConsistencyQueueActive(active bool) {
+	s.consistencyQueue.SetDisabled(!active)
 }
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
