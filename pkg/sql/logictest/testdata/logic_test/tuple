@@ -798,10 +798,6 @@ e  f  g
 
 subtest labeled_tuples_derived_from_relational_subquery_schema
 
-# Needed until #26627 is resolved.
-statement ok
-set distsql=off
-
 query IT
   SELECT (x).a, (x).b
     FROM (SELECT (ROW(a, b) AS a, b) AS x FROM (VALUES (1, 'one')) AS t(a, b))
@@ -821,9 +817,6 @@ ORDER BY 1
    LIMIT 1
 ----
 1 one
-
-statement ok
-set distsql=auto
 
 subtest labeled_column_access_from_table
 

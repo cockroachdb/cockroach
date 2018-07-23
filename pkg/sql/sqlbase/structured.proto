@@ -91,6 +91,7 @@ message ColumnType {
   optional SemanticType array_contents = 7;
   // Only used if the kind is TUPLE
   repeated ColumnType tuple_contents = 8 [(gogoproto.nullable) = false];
+  repeated string tuple_labels = 9;
 }
 
 enum ConstraintValidity {
