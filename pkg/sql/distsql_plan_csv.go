@@ -248,61 +248,63 @@ func LoadCSV(
 
 	details := job.Details().(jobspb.ImportDetails)
 	samples := details.Samples
-	var parsedTables map[sqlbase.ID]*sqlbase.TableDescriptor
 	if samples == nil {
 		var err error
-		samples, parsedTables, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
 	}
 
-	// If sampling returns parsed table definitions, we need to potentially assign
-	// them real IDs and re-key the samples with those IDs, then update the job
-	// details to record the tables and their matching samples.
-	if len(parsedTables) > 0 {
-		importing := to == "" // are we actually ingesting, or just transforming?
+	/*
+		TODO(dt): when we enable reading schemas during sampling, might do this:
+		// If sampling returns parsed table definitions, we need to potentially assign
+		// them real IDs and re-key the samples with those IDs, then update the job
+		// details to record the tables and their matching samples.
+			if len(parsedTables) > 0 {
+				importing := to == "" // are we actually ingesting, or just transforming?
 
-		rekeys := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(parsedTables))
+				rekeys := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(parsedTables))
 
-		// Update the tables map with the parsed tables and allocate them real IDs.
-		for _, parsed := range parsedTables {
-			name := parsed.Name
-			if existing, ok := tables[name]; ok && existing != nil {
-				return errors.Errorf("unexpected parsed table definition for %q", name)
-			}
-			tables[name] = parsed
+				// Update the tables map with the parsed tables and allocate them real IDs.
+				for _, parsed := range parsedTables {
+					name := parsed.Name
+					if existing, ok := tables[name]; ok && existing != nil {
+						return errors.Errorf("unexpected parsed table definition for %q", name)
+					}
+					tables[name] = parsed
 
-			// If we're actually importing, we'll need a real ID for this table.
-			if importing {
-				rekeys[parsed.ID] = parsed
-				parsed.ID, err = GenerateUniqueDescID(ctx, phs.ExecCfg().DB)
-				if err != nil {
-					return err
+					// If we're actually importing, we'll need a real ID for this table.
+					if importing {
+						rekeys[parsed.ID] = parsed
+						parsed.ID, err = GenerateUniqueDescID(ctx, phs.ExecCfg().DB)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				// The samples were created using the dummy IDs, but the IMPORT run will use
+				// the actual IDs, so we need to re-key the samples so that they actually
+				// act as splits in the IMPORTed key-space.
+				if importing {
+					kr, err := makeRewriter(rekeys)
+					if err != nil {
+						return err
+					}
+					for i := range samples {
+						var ok bool
+						samples[i], ok, err = kr.RewriteKey(samples[i])
+						if err != nil {
+							return err
+						}
+						if !ok {
+							return errors.Errorf("expected rewriter to rewrite key %v", samples[i])
+						}
+					}
 				}
 			}
-		}
-
-		// The samples were created using the dummy IDs, but the IMPORT run will use
-		// the actual IDs, so we need to re-key the samples so that they actually
-		// act as splits in the IMPORTed key-space.
-		if importing {
-			kr, err := makeRewriter(rekeys)
-			if err != nil {
-				return err
-			}
-			for i := range samples {
-				var ok bool
-				samples[i], ok, err = kr.RewriteKey(samples[i])
-				if err != nil {
-					return err
-				}
-				if !ok {
-					return errors.Errorf("expected rewriter to rewrite key %v", samples[i])
-				}
-			}
-		}
-	}
+	*/
 
 	if len(tables) == 0 {
 		return errors.Errorf("must specify table(s) to import")
@@ -438,12 +440,6 @@ func LoadCSV(
 
 			d := details.(*jobspb.Payload_Import).Import
 			d.Samples = samples
-			if len(parsedTables) > 0 {
-				d.Tables = make([]jobspb.ImportDetails_Table, 0, len(tables))
-				for _, tbl := range tables {
-					d.Tables = append(d.Tables, jobspb.ImportDetails_Table{Desc: tbl})
-				}
-			}
 			return prog.Completed()
 		},
 	); err != nil {
@@ -483,7 +479,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	planCtx *planningCtx,
 	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
-) ([][]byte, map[sqlbase.ID]*sqlbase.TableDescriptor, error) {
+) ([][]byte, error) {
 	// splitSize is the target number of bytes at which to create SST files. We
 	// attempt to do this by sampling, which is what the first DistSQL plan of this
 	// function does. CSV rows are converted into KVs. The total size of the KV is
@@ -501,7 +497,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	}
 	sampleSize := splitSize / oversample
 	if sampleSize > math.MaxInt32 {
-		return nil, nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
+		return nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
 	}
 
 	var p physicalPlan
@@ -530,7 +526,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		d.SamplingProgress = make([]float32, len(csvSpecs))
 		return d.Completed()
 	}); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// We only need the key during sorting.
@@ -558,23 +554,24 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	)
 
 	var samples [][]byte
-	parsedTables := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 
 	sampleCount := 0
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		key := roachpb.Key(*row[0].(*tree.DBytes))
 
-		if keys.IsDescriptorKey(key) {
-			kv := roachpb.KeyValue{Key: key}
-			kv.Value.RawBytes = []byte(*row[1].(*tree.DBytes))
-			var desc sqlbase.TableDescriptor
-			if err := kv.Value.GetProto(&desc); err != nil {
-				return err
+		/*
+			TODO(dt): when we enable reading schemas during sampling, might do this:
+			if keys.IsDescriptorKey(key) {
+				kv := roachpb.KeyValue{Key: key}
+				kv.Value.RawBytes = []byte(*row[1].(*tree.DBytes))
+				var desc sqlbase.TableDescriptor
+				if err := kv.Value.GetProto(&desc); err != nil {
+					return err
+				}
+				parsedTables[desc.ID] = &desc
+				return nil
 			}
-			parsedTables[desc.ID] = &desc
-			return nil
-		}
-
+		*/
 		sampleCount++
 		sampleCount = sampleCount % int(oversample)
 		if sampleCount == 0 {
@@ -606,10 +603,10 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	samples = nil
 	dsp.Run(planCtx, nil, &p, recv, evalCtx)
 	if err := rowResultWriter.Err(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Payload().Description)
 
-	return samples, parsedTables, nil
+	return samples, nil
 }
