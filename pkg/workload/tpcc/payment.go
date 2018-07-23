@@ -79,7 +79,9 @@ type payment struct{}
 
 var _ tpccTx = payment{}
 
-func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (p payment) run(
+	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
+) (interface{}, error) {
 	atomic.AddUint64(&config.auditor.paymentTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -118,13 +120,13 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	}
 
 	if err := crdb.ExecuteTx(
-		context.Background(),
+		ctx,
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				UPDATE warehouse
 				SET w_ytd = w_ytd + %[1]f
 				WHERE w_id = %[2]d
@@ -135,7 +137,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			}
 
 			// Update district with payment
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				UPDATE district
 				SET d_ytd = d_ytd + %[1]f
 				WHERE d_w_id = %[2]d AND d_id = %[3]d
@@ -153,7 +155,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 				if config.usePostgres {
 					indexStr = ""
 				}
-				rows, err := tx.Query(fmt.Sprintf(`
+				rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 					SELECT c_id
 					FROM customer%[1]s
 					WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_last = '%[4]s'
@@ -188,7 +190,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			// If the customer has bad credit, update the customer's C_DATA and return
 			// the first 200 characters of it, which is supposed to get displayed by
 			// the terminal. See 2.5.3.3 and 2.5.2.2.
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				UPDATE customer
 				SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =
 					(c_balance - %[1]f, c_ytd_payment + %[1]f, c_payment_cnt + 1,
@@ -210,7 +212,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			hData := fmt.Sprintf("%s    %s", wName, dName)
 
 			// Insert history line.
-			_, err := tx.Exec(fmt.Sprintf(`
+			_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
 				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, %[5]d, %[6]f, '%[7]s', '%[8]s')`,
 				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount,
@@ -221,5 +223,4 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 		return nil, err
 	}
 	return d, nil
-
 }

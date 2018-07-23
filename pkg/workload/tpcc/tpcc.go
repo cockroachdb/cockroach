@@ -220,11 +220,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 			return nil
 		},
-		PostRun: func(start time.Time) error {
+		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks()
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
-			startElapsed := timeutil.Since(start)
 
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t workload.HistogramTick) {
