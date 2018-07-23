@@ -16,7 +16,13 @@ package storage
 
 import (
 	"fmt"
+	"math/rand"
+	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
@@ -227,4 +233,51 @@ func ExampleSingleStorage() {
 	//   r8                   711                    711                       711
 	//   r9                  2020                   2020                      2020                    2020
 	// +----+---------------------+----------------------+-------------------------+-----------------------+
+}
+
+func TestConcurrent(t *testing.T) {
+	ms := NewMultiStorage(func() SingleStorage {
+		return NewMemStorage(time.Millisecond, 10)
+	})
+
+	var g errgroup.Group
+
+	const (
+		iters             = 10
+		numNodes          = roachpb.NodeID(2)
+		numRanges         = roachpb.RangeID(3)
+		numReadersPerNode = 3
+		numWritersPerNode = 3
+	)
+
+	// concurrently add and read from storage
+	// after add: needs to be visible to future read
+	// read ts never regresses
+	r, seed := randutil.NewPseudoRand()
+	t.Log("seed is", seed)
+
+	for i := 0; i < numWritersPerNode; i++ {
+		for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+			for i := 0; i < iters; i++ {
+				r := rand.New(rand.NewSource(r.Int63()))
+				m := make(map[roachpb.RangeID]ctpb.LAI)
+				full := i == 0
+				for rangeID := roachpb.RangeID(1); rangeID < numRanges; rangeID++ {
+					if !full && r.Intn(2) == 0 {
+						continue
+					}
+					m[rangeID] = ctpb.LAI(rand.Intn(100))
+				}
+				g.Go(func() error {
+					ms.Add(nodeID, ctpb.Entry{
+						Epoch:           ctpb.Epoch(r.Int63n(100)),
+						ClosedTimestamp: hlc.Timestamp{WallTime: r.Int63n(100), Logical: r.Int31n(10)},
+						MLAI:            m,
+						Full:            full,
+					})
+					return nil
+				})
+			}
+		}
+	}
 }
