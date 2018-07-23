@@ -259,6 +259,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	left, right exec.Node,
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	reqOrdering sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
 	p := ef.planner
 	leftSrc := asDataSource(left)
@@ -298,6 +299,11 @@ func (ef *execFactory) ConstructMergeJoin(
 		node.mergeJoinOrdering[i].ColIdx = i
 		node.mergeJoinOrdering[i].Direction = leftOrdering[i].Direction
 	}
+
+	// Set up node.props, which tells the distsql planner to maintain the
+	// resulting ordering (if needed).
+	node.props.ordering = reqOrdering
+
 	return node, nil
 }
 
