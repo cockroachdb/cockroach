@@ -452,7 +452,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(params.EvalContext())
+			aggregateFunc = f.create(params.EvalContext(), nil /* arguments */)
 		}
 		var err error
 		n.run.values[i], err = aggregateFunc.Result()
@@ -534,7 +534,7 @@ func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.
 		return nil
 	}
 	f := n.funcs[0]
-	impl := f.create(evalCtx)
+	impl := f.create(evalCtx, nil /* arguments */)
 	switch impl.(type) {
 	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
@@ -622,6 +622,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			v.preRender.render[groupIdx].ResolvedType(),
 			groupIdx,
 			builtins.NewAnyNotNullAggregate,
+			nil,
 			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 
@@ -632,18 +633,37 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 	case *tree.FuncExpr:
 		if agg := t.GetAggregateConstructor(); agg != nil {
 			var f *aggregateFuncHolder
-			switch len(t.Exprs) {
-			case 0:
+			if len(t.Exprs) == 0 {
 				// COUNT_ROWS has no arguments.
 				f = v.groupNode.newAggregateFuncHolder(
 					t.Func.String(),
 					t.ResolvedType(),
 					noRenderIdx,
 					agg,
+					nil,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
+			} else {
+				// Only the first argument can be an expression, all the following ones
+				// must be consts. So before we proceed, they must be checked.
+				arguments := make(tree.Datums, len(t.Exprs)-1)
+				if len(t.Exprs) > 1 {
+					evalContext := v.planner.EvalContext()
+					for i := 1; i < len(t.Exprs); i++ {
+						if !tree.IsConst(evalContext, t.Exprs[i]) {
+							v.err = pgerror.UnimplementedWithIssueError(28417, "aggregate functions with multiple non-constant expressions are not supported")
+							return false, expr
+						}
+						var err error
+						arguments[i-1], err = t.Exprs[i].(tree.TypedExpr).Eval(evalContext)
+						if err != nil {
+							v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
+								"programming error: can't evaluate %s - %v", t.Exprs[i].String(), err)
+							return false, expr
+						}
+					}
+				}
 
-			case 1:
 				argExpr := t.Exprs[0].(tree.TypedExpr)
 
 				// TODO(knz): it's really a shame that we need to recurse
@@ -672,13 +692,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					t.ResolvedType(),
 					argRenderIdx,
 					agg,
+					arguments,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
-
-			default:
-				// TODO: #10495
-				v.err = pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet")
-				return false, expr
 			}
 
 			if t.Type == tree.DistinctFuncType {
@@ -751,7 +767,11 @@ type aggregateFuncHolder struct {
 
 	// create instantiates the built-in execution context for the
 	// aggregation function.
-	create func(*tree.EvalContext) tree.AggregateFunc
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+
+	// arguments are constant expressions that can be optionally passed into an
+	// aggregator.
+	arguments tree.Datums
 
 	run aggregateFuncRun
 }
@@ -777,7 +797,8 @@ func (n *groupNode) newAggregateFuncHolder(
 	funcName string,
 	resultType types.T,
 	argRenderIdx int,
-	create func(*tree.EvalContext) tree.AggregateFunc,
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	arguments tree.Datums,
 	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
@@ -786,6 +807,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		argRenderIdx:    argRenderIdx,
 		filterRenderIdx: noRenderIdx,
 		create:          create,
+		arguments:       arguments,
 		run: aggregateFuncRun{
 			buckets:       make(map[string]tree.AggregateFunc),
 			bucketsMemAcc: acc,
@@ -854,7 +876,7 @@ func (a *aggregateFuncHolder) add(
 
 	impl, ok := a.run.buckets[string(bucket)]
 	if !ok {
-		impl = a.create(evalCtx)
+		impl = a.create(evalCtx, a.arguments)
 		a.run.buckets[string(bucket)] = impl
 	}
 
