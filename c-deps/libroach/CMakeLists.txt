@@ -154,7 +154,6 @@ foreach(tsrc ${tests})
     roach
     gtest_main
     pthread
-    stdc++fs
     ${ROCKSDB_LIB}
     ${PROTOBUF_LIB}
     ${JEMALLOC_LIB}
