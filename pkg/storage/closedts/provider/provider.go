@@ -138,15 +138,15 @@ func (p *Provider) runCloser(ctx context.Context) {
 			}
 
 			// Simulate a subscription to the local node, so that the new information
-			// is put on the storage (and thus becomes available to future subscribers
-			// as well, not only already existing ones).
+			// is added to the storage (and thus becomes available to future subscribers
+			// as well, not only to existing ones).
 			//
 			// TODO(tschottdorf): the transport should ignore connection requests from
 			// the node to itself. Those connections would pointlessly loop this around
 			// once more.
 			p.cfg.Storage.Add(p.cfg.NodeID, entry)
 
-			// Tell the existing subscribers.
+			// Notify existing subscribers.
 			p.mu.Lock()
 			for _, sub := range p.mu.subscribers {
 				sub.queue = append(sub.queue, entry)
