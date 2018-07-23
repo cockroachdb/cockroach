@@ -330,8 +330,8 @@ d
 			name: "mismatch cols",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE d.t (i int);
-				COPY d.t (s) FROM stdin;
+				CREATE TABLE t (i int);
+				COPY t (s) FROM stdin;
 				0
 				\.
 			`,
@@ -341,8 +341,8 @@ d
 			name: "missing COPY done",
 			typ:  "PGDUMP",
 			data: `
-				CREATE TABLE d.t (i int);
-				COPY d.t (i) FROM stdin;
+				CREATE TABLE t (i int);
+				COPY t (i) FROM stdin;
 0
 `,
 			err: `unexpected EOF`,
@@ -378,7 +378,7 @@ d
 			name: "not enough values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b) FROM stdin;
 1
@@ -390,7 +390,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many values",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b) FROM stdin;
 1	2	3
@@ -402,7 +402,7 @@ COPY t (a, b) FROM stdin;
 			name: "too many cols",
 			typ:  "PGDUMP",
 			data: `
-CREATE TABLE d.t (a INT, b INT);
+CREATE TABLE t (a INT, b INT);
 
 COPY t (a, b, c) FROM stdin;
 1	2	3
@@ -432,6 +432,55 @@ COPY t (a, b, c) FROM stdin;
 				// Verify the constraint is unvalidated.
 				`SHOW CONSTRAINTS FROM weather
 				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities (city)", "false"}},
+			},
+		},
+		{
+			name: "fk-circular",
+			typ:  "PGDUMP",
+			data: testPgdumpFkCircular,
+			query: map[string][][]string{
+				`SHOW TABLES`:        {{"a"}, {"b"}},
+				`SELECT i, k FROM a`: {{"2", "2"}},
+				`SELECT j FROM b`:    {{"2"}},
+
+				`SELECT dependson_name
+				FROM crdb_internal.backward_dependencies ORDER BY dependson_name`: {
+					{"a_i_fkey"},
+					{"a_k_fkey"},
+					{"b_j_fkey"},
+				},
+
+				`SELECT create_statement
+				FROM crdb_internal.create_statements
+				WHERE descriptor_name in ('a', 'b')
+				ORDER BY descriptor_name
+				`: {{
+					`CREATE TABLE a (
+	i INTEGER NOT NULL,
+	k INTEGER NULL,
+	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
+	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a (i),
+	INDEX a_auto_index_a_k_fkey (k ASC),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b (j),
+	FAMILY "primary" (i, k)
+)`}, {
+					`CREATE TABLE b (
+	j INTEGER NOT NULL,
+	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a (i),
+	FAMILY "primary" (j)
+)`,
+				}},
+
+				`SHOW CONSTRAINTS FROM a`: {
+					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b (j)", "false"},
+					{"a", "a_k_fkey", "FOREIGN KEY", "FOREIGN KEY (k) REFERENCES a (i)", "false"},
+					{"a", "a_pkey", "PRIMARY KEY", "PRIMARY KEY (i ASC)", "true"},
+				},
+				`SHOW CONSTRAINTS FROM b`: {
+					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a (i)", "false"},
+					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
+				},
 			},
 		},
 		{
@@ -480,6 +529,12 @@ COPY t (a, b, c) FROM stdin;
 				`SELECT nextval('i_seq')`:    {{"11"}},
 				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
 			},
+		},
+		{
+			name: "non-public schema",
+			typ:  "PGDUMP",
+			data: "create table s.t (i INT)",
+			err:  `non-public schemas unsupported: s`,
 		},
 
 		// Error
@@ -558,13 +613,13 @@ const (
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
 	testPgdumpFk = `
-CREATE TABLE cities (
+CREATE TABLE public.cities (
     city character varying(80) NOT NULL
 );
 
-ALTER TABLE cities OWNER TO postgres;
+ALTER TABLE public.cities OWNER TO postgres;
 
-CREATE TABLE weather (
+CREATE TABLE public.weather (
     city character varying(80),
     temp_lo integer,
     temp_hi integer,
@@ -572,21 +627,55 @@ CREATE TABLE weather (
     date date
 );
 
-ALTER TABLE weather OWNER TO postgres;
+ALTER TABLE public.weather OWNER TO postgres;
 
-COPY cities (city) FROM stdin;
+COPY public.cities (city) FROM stdin;
 Berkeley
 \.
 
-COPY weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
+COPY public.weather (city, temp_lo, temp_hi, prcp, date) FROM stdin;
 Berkeley	45	53	0	1994-11-28
 \.
 
-ALTER TABLE ONLY cities
+ALTER TABLE ONLY public.cities
     ADD CONSTRAINT cities_pkey PRIMARY KEY (city);
 
-ALTER TABLE ONLY weather
-    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities(city);
+ALTER TABLE ONLY public.weather
+    ADD CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city);
+`
+
+	testPgdumpFkCircular = `
+CREATE TABLE public.a (
+    i integer NOT NULL,
+    k integer
+);
+
+CREATE TABLE public.b (
+    j integer NOT NULL
+);
+
+COPY public.a (i, k) FROM stdin;
+2	2
+\.
+
+COPY public.b (j) FROM stdin;
+2
+\.
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_pkey PRIMARY KEY (i);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_pkey PRIMARY KEY (j);
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j);
+
+ALTER TABLE ONLY public.a
+    ADD CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i);
+
+ALTER TABLE ONLY public.b
+    ADD CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i);
 `
 )
 
