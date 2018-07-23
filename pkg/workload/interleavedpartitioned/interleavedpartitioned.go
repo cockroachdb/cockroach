@@ -216,6 +216,7 @@ type interleavedPartitioned struct {
 	retrieveLocalPercent int
 	updateLocalPercent   int
 
+	local           bool
 	deleteBatchSize int
 
 	sessionIDs []string
@@ -246,7 +247,8 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.updateLocalPercent, `update-local-percent`, 100, `Percentage of update operations that are local`)
 		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage (0-100) of operations that are delete queries`)
 		g.flags.IntVar(&g.deleteBatchSize, `delete-batch-size`, 100, `Number of rows per delete operation`)
-		g.flags.BoolVar(&g.east, `east`, true, `Is this location in the east (true) or the west (false)`)
+		g.flags.BoolVar(&g.east, `east`, false, `Is this location in the east (true) or the west (false)`)
+		g.flags.BoolVar(&g.local, `local`, false, `Are you running workload locally?`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -335,6 +337,7 @@ func (w *interleavedPartitioned) Ops(
 	ql := workload.QueryLoad{
 		SQLDatabase: sqlDatabase,
 	}
+
 	workerFn := func(ctx context.Context) error {
 		hists := reg.GetHandle()
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -519,7 +522,9 @@ func (w *interleavedPartitioned) Ops(
 func (w *interleavedPartitioned) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PreLoad: func(db *gosql.DB) error {
-			log.Info(context.TODO(), "Preload")
+			if w.local {
+				return nil
+			}
 			if _, err := db.Exec(zoneLocationsStmt); err != nil {
 				return err
 			}
@@ -532,6 +537,12 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 				"ALTER PARTITION east OF TABLE sessions EXPERIMENTAL CONFIGURE ZONE 'experimental_lease_preferences: [[+zone=us-east4-b]]'",
 			); err != nil {
 				return errors.Wrapf(err, "could not set zone for partition west")
+			}
+			return nil
+		},
+		Validate: func() error {
+			if w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent != 100 {
+				return errors.New("operation percents ({insert,retrieve,update,delete}-percent flags) must add up to 100")
 			}
 			return nil
 		},

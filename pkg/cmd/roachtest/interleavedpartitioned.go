@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 func registerInterleaved(r *registry) {
@@ -38,50 +39,66 @@ func registerInterleaved(r *registry) {
 		retrieveLocalPercent int,
 		updatePercent int,
 		updateLocalPercent int,
-		deletePercent int,
 		deleteBatchSize int,
 	) {
-		nodes := c.nodes - 1
+		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration " + ifLocal("10s", "10m")
+
+			// Just to initialize the database
+			cmdInit := "./workload run interleavedpartitioned --init --east --sessions 0" +
+				" --insert-percent 0 --retrieve-percent 100 --update-percent 0 --delete-percent 0 --duration 3s {pgurl:4}"
+
 			cmdEast := fmt.Sprintf(
-				"./workload run interleavedpartitioned --init --east --sessions %d --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d "+
-					"--insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent %d --delete-batch-size %d"+duration+" {pgurl:4-6} &",
+				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:4-6}",
 				sessions,
 				customersPerSession,
 				devicesPerSession,
 				variantsPerSession,
 				parametersPerSession,
+				queriesPerSession,
 				insertPercent,
 				insertLocalPercent,
 				retrievePercent,
 				retrieveLocalPercent,
 				updatePercent,
 				updateLocalPercent,
-				deletePercent,
-				deleteBatchSize,
 			)
 
 			cmdWest := fmt.Sprintf(
-				"./workload run interleavedpartitioned --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent %d --delete-batch-size %d"+duration+" {pgurl:1-3}",
+				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:1-3}",
+				sessions,
+				customersPerSession,
+				devicesPerSession,
+				variantsPerSession,
+				parametersPerSession,
+				queriesPerSession,
 				insertPercent,
 				insertLocalPercent,
 				retrievePercent,
 				retrieveLocalPercent,
 				updatePercent,
 				updateLocalPercent,
-				deletePercent,
+			)
+
+			cmdCentral := fmt.Sprintf(
+				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-batch-size %d"+duration+" {pgurl:7-9}",
 				deleteBatchSize,
 			)
 
-			c.Run(ctx, c.Node(nodes+1), cmdEast)
-			c.Run(ctx, c.Node(nodes+1), cmdWest)
+			c.Run(ctx, c.Node(1), cmdInit)
+			var wg sync.WaitGroup
+			wg.Add(3)
+			go c.Run(ctx, c.Node(1), cmdWest)
+			go c.Run(ctx, c.Node(4), cmdEast)
+			go c.Run(ctx, c.Node(7), cmdCentral)
+			wg.Wait()
 			return nil
 		})
 		m.Wait()
@@ -100,13 +117,12 @@ func registerInterleaved(r *registry) {
 				5,     /*variantsPerSession*/
 				1,     /*parametersPerSession*/
 				1,     /*queriesPerSession*/
-				40,    /*insertPercent*/
-				90,    /*insertLocalPercent*/
-				20,    /*retrievePercent*/
-				90,    /*retrieveLocalPercent*/
-				20,    /*updatePercent*/
-				90,    /*updateLocalPercent*/
-				20,    /*deletePercent*/
+				80,    /*insertPercent*/
+				100,   /*insertLocalPercent*/
+				10,    /*retrievePercent*/
+				100,   /*retrieveLocalPercent*/
+				10,    /*updatePercent*/
+				100,   /*updateLocalPercent*/
 				20,    /*deleteBatchSize*/
 			)
 		},
