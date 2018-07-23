@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1575,13 +1576,14 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 		defer ex.state.mu.Unlock()
 
 		// Sort the errors according to their importance.
-		curTxn := ex.state.mu.txn.Proto()
+		curTxnID := ex.state.mu.txn.ID()
+		curTxnEpoch := ex.state.mu.txn.Epoch()
 		sort.Slice(errs, func(i, j int) bool {
 			errPriority := func(err error) int {
 				switch t := err.(type) {
 				case *roachpb.HandledRetryableTxnError:
 					errTxn := t.Transaction
-					if errTxn.ID == curTxn.ID && errTxn.Epoch == curTxn.Epoch {
+					if errTxn.ID == curTxnID && errTxn.Epoch == curTxnEpoch {
 						// A retryable error for the current transaction
 						// incarnation is given the highest priority.
 						return 1
@@ -1590,9 +1592,6 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 				case *roachpb.TxnAlreadyEncounteredErrorError:
 					// Another parallel stmt got an error that caused this one.
 					return 5
-				case *roachpb.TxnPrevAttemptError:
-					// Symptom of concurrent retry.
-					return 3
 				default:
 					// Any other error. We sort these behind retryable errors
 					// and errors we know to be their symptoms because it is
@@ -1617,10 +1616,7 @@ func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
 			// these writes might have been performed at the wrong epoch). Note
 			// that we don't need to lock the client.Txn because we're synchronized.
 			// See #17197.
-			ex.state.mu.txn.BumpEpochAfterConcurrentRetryErrorLocked()
-		case *roachpb.TxnPrevAttemptError:
-			log.Fatalf(ctx, "found symptoms of a concurrent retry, but did "+
-				"not find the final retry error: %v", errs)
+			ex.state.mu.txn.ManualRestart(ctx, hlc.Timestamp{})
 		}
 		return bestErr
 	}

@@ -364,7 +364,7 @@ func (f *fkBatchChecker) runCheck(
 				}
 				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
-					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.Proto())
+					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
 			}
 		case CheckDeletes:
 			// If we're deleting, then there's a violation if the scan found something.

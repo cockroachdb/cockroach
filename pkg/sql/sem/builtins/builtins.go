@@ -2845,7 +2845,8 @@ may increase either contention or retry errors, or both.`,
 					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
+					return nil, ctx.Txn.GenerateForcedRetryableError(
+						ctx.Ctx(), "forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil
 			},
