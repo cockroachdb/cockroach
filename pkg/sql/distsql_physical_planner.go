@@ -1180,6 +1180,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	planCtx *PlanningCtx, p *PhysicalPlan, n *groupNode,
 ) error {
 	aggregations := make([]distsqlrun.AggregatorSpec_Aggregation, len(n.funcs))
+	aggregationsColumnTypes := make([][]sqlbase.ColumnType, len(n.funcs))
 	for i, fholder := range n.funcs {
 		// Convert the aggregate function to the enum value with the same string
 		// representation.
@@ -1196,6 +1197,19 @@ func (dsp *DistSQLPlanner) addAggregators(
 		if fholder.hasFilter() {
 			col := uint32(p.PlanToStreamColMap[fholder.filterRenderIdx])
 			aggregations[i].FilterColIdx = &col
+		}
+		aggregations[i].Arguments = make([]distsqlrun.Expression, len(fholder.arguments))
+		aggregationsColumnTypes[i] = make([]sqlbase.ColumnType, len(fholder.arguments))
+		for j, argument := range fholder.arguments {
+			var err error
+			aggregations[i].Arguments[j], err = distsqlplan.MakeExpression(argument, planCtx.EvalContext(), nil)
+			if err != nil {
+				return err
+			}
+			aggregationsColumnTypes[i][j], err = sqlbase.DatumTypeToColumnType(argument.ResolvedType())
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1625,9 +1639,12 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 	finalOutTypes := make([]sqlbase.ColumnType, len(aggregations))
 	for i, agg := range aggregations {
-		argTypes := make([]sqlbase.ColumnType, len(agg.ColIdx))
-		for i, c := range agg.ColIdx {
-			argTypes[i] = inputTypes[c]
+		argTypes := make([]sqlbase.ColumnType, len(agg.ColIdx)+len(agg.Arguments))
+		for j, c := range agg.ColIdx {
+			argTypes[j] = inputTypes[c]
+		}
+		for j, argumentColumnType := range aggregationsColumnTypes[i] {
+			argTypes[len(agg.ColIdx)+j] = argumentColumnType
 		}
 		var err error
 		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, argTypes...)

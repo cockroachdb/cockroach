@@ -359,6 +359,7 @@ func (ef *execFactory) constructGroupBy(
 			inputCols[idx].Typ,
 			int(idx),
 			builtins.NewAnyNotNullAggregate,
+			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
@@ -369,19 +370,19 @@ func (ef *execFactory) constructGroupBy(
 		agg := &aggregations[i]
 		builtin := agg.Builtin
 		var renderIdx int
-		var aggFn func(*tree.EvalContext) tree.AggregateFunc
+		var aggFn func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
 
 		switch len(agg.ArgCols) {
 		case 0:
 			renderIdx = noRenderIdx
-			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{}, evalCtx)
+			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{}, evalCtx, arguments)
 			}
 
 		case 1:
 			renderIdx = int(agg.ArgCols[0])
-			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx)
+			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
 			}
 
 		default:
@@ -393,6 +394,7 @@ func (ef *execFactory) constructGroupBy(
 			agg.ResultType,
 			renderIdx,
 			aggFn,
+			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		if agg.Distinct {
