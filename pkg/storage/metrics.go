@@ -294,6 +294,12 @@ var (
 	}
 
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
+	metaAverageQueriesPerSecond = metric.Metadata{
+		Name:        "rebalancing.queriespersecond",
+		Help:        "Number of kv-level requests received per second by the store, averaged over a large time period as used in rebalancing decisions",
+		Measurement: "Keys/Sec",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaAverageWritesPerSecond = metric.Metadata{
 		Name:        "rebalancing.writespersecond",
 		Help:        "Number of keys written (i.e. applied by raft) per second to the store, averaged over a large time period as used in rebalancing decisions",
@@ -994,7 +1000,8 @@ type StoreMetrics struct {
 	SysCount        *metric.Gauge
 
 	// Rebalancing metrics.
-	AverageWritesPerSecond *metric.GaugeFloat64
+	AverageQueriesPerSecond *metric.GaugeFloat64
+	AverageWritesPerSecond  *metric.GaugeFloat64
 
 	// RocksDB metrics.
 	RdbBlockCacheHits           *metric.Gauge
@@ -1197,7 +1204,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SysCount:        metric.NewGauge(metaSysCount),
 
 		// Rebalancing metrics.
-		AverageWritesPerSecond: metric.NewGaugeFloat64(metaAverageWritesPerSecond),
+		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
+		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
 
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),

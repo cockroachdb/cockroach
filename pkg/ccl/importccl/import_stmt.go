@@ -208,18 +208,25 @@ func MakeSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	// If the table had a FK, it was put into the ADD state and its references were marked as validated. We need to undo those changes.
-	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-	if err := tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
-		if idx.ForeignKey.IsSet() {
-			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
-		}
-		return nil
-	}); err != nil {
+	if err := fixDescriptorFKState(&tableDesc); err != nil {
 		return nil, err
 	}
 
 	return &tableDesc, nil
+}
+
+// fixDescriptorFKState repairs validity and table states set during descriptor
+// creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
+// and mark references an validated. This function sets the table to PUBLIC
+// and the FKs to unvalidated.
+func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
+	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+	return tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+		if idx.ForeignKey.IsSet() {
+			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+		}
+		return nil
+	})
 }
 
 var (
@@ -309,6 +316,9 @@ func (r fkResolver) ObjectLookupFlags(ctx context.Context, required bool) sql.Ob
 func (r fkResolver) LookupObject(
 	ctx context.Context, dbName, scName, obName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
+	if scName != "" {
+		obName = strings.TrimPrefix(obName, scName+".")
+	}
 	tbl, ok := r[obName]
 	if ok {
 		return true, tbl, nil

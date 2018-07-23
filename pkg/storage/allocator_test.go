@@ -748,8 +748,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	repl.mu.state.Stats = &enginepb.MVCCStats{}
 	repl.mu.Unlock()
 
-	rs := newReplicaStats(clock, nil)
-	repl.writeStats = rs
+	repl.leaseholderStats = newReplicaStats(clock, nil)
+	repl.writeStats = newReplicaStats(clock, nil)
 
 	desc := &roachpb.RangeDescriptor{
 		Replicas: replicas,

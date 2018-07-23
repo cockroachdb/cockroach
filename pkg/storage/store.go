@@ -381,10 +381,12 @@ type Store struct {
 	// gossip interval. Updated atomically.
 	gossipRangeCountdown int32
 	gossipLeaseCountdown int32
-	// gossipWritesPerSecondVal serves a similar purpose, but simply records
-	// the most recently gossiped value so that we can tell if a newly measured
-	// value differs by enough to justify re-gossiping the store.
-	gossipWritesPerSecondVal syncutil.AtomicFloat64
+	// gossipQueriesPerSecondVal and gossipWritesPerSecond serve similar
+	// purposes, but simply record the most recently gossiped value so that we
+	// can tell if a newly measured value differs by enough to justify
+	// re-gossiping the store.
+	gossipQueriesPerSecondVal syncutil.AtomicFloat64
+	gossipWritesPerSecondVal  syncutil.AtomicFloat64
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1711,6 +1713,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 
 	// Temporarily indicate that we're gossiping the store capacity to avoid
 	// recursively triggering a gossip of the store capacity.
+	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, -1)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
 
 	storeDesc, err := s.Descriptor(useCached)
@@ -1726,6 +1729,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
+	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
 	// Unique gossip key per store.
@@ -1776,18 +1780,36 @@ func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityCha
 	}
 }
 
-// recordNewWritesPerSecond takes a recently calculated value for the number
-// of key writes the store is handling and decides whether it has changed enough
-// to justify re-gossiping the store's capacity.
-func (s *Store) recordNewWritesPerSecond(newVal float64) {
-	oldVal := syncutil.LoadFloat64(&s.gossipWritesPerSecondVal)
-	if oldVal == -1 {
+// recordNewPerSecondStats takes recently calculated values for the number of
+// queries and key writes the store is handling and decides whether either has
+// changed enough to justify re-gossiping the store's capacity.
+func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
+	oldQPS := syncutil.LoadFloat64(&s.gossipQueriesPerSecondVal)
+	oldWPS := syncutil.LoadFloat64(&s.gossipWritesPerSecondVal)
+	if oldQPS == -1 || oldWPS == -1 {
 		// Gossiping of store capacity is already ongoing.
 		return
 	}
-	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
-		s.asyncGossipStore(context.TODO(), "writes-per-second change", false /* useCached */)
+
+	const minAbsoluteChange = 100
+	updateForQPS := (newQPS < oldQPS*.5 || newQPS > oldQPS*1.5) && math.Abs(newQPS-oldQPS) > minAbsoluteChange
+	updateForWPS := (newWPS < oldWPS*.5 || newWPS > oldWPS*1.5) && math.Abs(newWPS-oldWPS) > minAbsoluteChange
+
+	if !updateForQPS && !updateForWPS {
+		return
 	}
+
+	var message string
+	if updateForQPS && updateForWPS {
+		message = "queries-per-second and writes-per-second change"
+	} else if updateForQPS {
+		message = "queries-per-second change"
+	} else {
+		message = "writes-per-second change"
+	}
+	// TODO(a-robinson): Use the provided values to avoid having to recalculate
+	// them in GossipStore.
+	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
 }
 
 // GossipDeadReplicas broadcasts the store's dead replicas on the gossip
@@ -2681,6 +2703,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	var leaseCount int32
 	var rangeCount int32
 	var logicalBytes int64
+	var totalQueriesPerSecond float64
 	var totalWritesPerSecond float64
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
@@ -2693,22 +2716,28 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 		mvccStats := r.GetMVCCStats()
 		logicalBytes += mvccStats.Total()
 		bytesPerReplica = append(bytesPerReplica, float64(mvccStats.Total()))
-		// TODO(a-robinson): How dangerous is it that this number will be incorrectly
-		// low the first time or two it gets gossiped when a store starts? We can't
-		// easily have a countdown as its value changes like for leases/replicas.
-		if qps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
-			totalWritesPerSecond += qps
-			writesPerReplica = append(writesPerReplica, qps)
+		// TODO(a-robinson): How dangerous is it that these numbers will be
+		// incorrectly low the first time or two it gets gossiped when a store
+		// starts? We can't easily have a countdown as its value changes like for
+		// leases/replicas.
+		if qps, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+			totalQueriesPerSecond += qps
+			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
+		}
+		if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+			totalWritesPerSecond += wps
+			writesPerReplica = append(writesPerReplica, wps)
 		}
 		return true
 	})
 	capacity.RangeCount = rangeCount
 	capacity.LeaseCount = leaseCount
 	capacity.LogicalBytes = logicalBytes
+	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
-	s.recordNewWritesPerSecond(totalWritesPerSecond)
+	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
 
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.StoreCapacity = capacity
@@ -4112,6 +4141,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
+		averageQueriesPerSecond       float64
 		averageWritesPerSecond        float64
 
 		rangeCount                int64
@@ -4157,8 +4187,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.BehindCount
-		if qps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
-			averageWritesPerSecond += qps
+		if qps, dur := rep.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+			averageQueriesPerSecond += qps
+		}
+		if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
+			averageWritesPerSecond += wps
 		}
 		return true // more
 	})
@@ -4169,8 +4202,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.AverageQueriesPerSecond.Update(averageWritesPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
-	s.recordNewWritesPerSecond(averageWritesPerSecond)
+	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)

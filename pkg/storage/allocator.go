@@ -171,15 +171,19 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 // RangeInfo contains the information needed by the allocator to make
 // rebalancing decisions for a given range.
 type RangeInfo struct {
-	Desc            *roachpb.RangeDescriptor
-	LogicalBytes    int64
-	WritesPerSecond float64
+	Desc             *roachpb.RangeDescriptor
+	LogicalBytes     int64
+	QueriesPerSecond float64
+	WritesPerSecond  float64
 }
 
 func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 	info := RangeInfo{
 		Desc:         desc,
 		LogicalBytes: repl.GetMVCCStats().Total(),
+	}
+	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		info.QueriesPerSecond = queriesPerSecond
 	}
 	if writesPerSecond, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
 		info.WritesPerSecond = writesPerSecond

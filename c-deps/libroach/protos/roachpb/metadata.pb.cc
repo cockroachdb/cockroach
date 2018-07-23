@@ -1877,6 +1877,7 @@ const int StoreCapacity::kUsedFieldNumber;
 const int StoreCapacity::kLogicalBytesFieldNumber;
 const int StoreCapacity::kRangeCountFieldNumber;
 const int StoreCapacity::kLeaseCountFieldNumber;
+const int StoreCapacity::kQueriesPerSecondFieldNumber;
 const int StoreCapacity::kWritesPerSecondFieldNumber;
 const int StoreCapacity::kBytesPerReplicaFieldNumber;
 const int StoreCapacity::kWritesPerReplicaFieldNumber;
@@ -1905,15 +1906,15 @@ StoreCapacity::StoreCapacity(const StoreCapacity& from)
     writes_per_replica_ = NULL;
   }
   ::memcpy(&capacity_, &from.capacity_,
-    static_cast<size_t>(reinterpret_cast<char*>(&logical_bytes_) -
-    reinterpret_cast<char*>(&capacity_)) + sizeof(logical_bytes_));
+    static_cast<size_t>(reinterpret_cast<char*>(&queries_per_second_) -
+    reinterpret_cast<char*>(&capacity_)) + sizeof(queries_per_second_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.StoreCapacity)
 }
 
 void StoreCapacity::SharedCtor() {
   ::memset(&bytes_per_replica_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&logical_bytes_) -
-      reinterpret_cast<char*>(&bytes_per_replica_)) + sizeof(logical_bytes_));
+      reinterpret_cast<char*>(&queries_per_second_) -
+      reinterpret_cast<char*>(&bytes_per_replica_)) + sizeof(queries_per_second_));
 }
 
 StoreCapacity::~StoreCapacity() {
@@ -1957,7 +1958,11 @@ void StoreCapacity::Clear() {
         reinterpret_cast<char*>(&used_) -
         reinterpret_cast<char*>(&capacity_)) + sizeof(used_));
   }
-  logical_bytes_ = GOOGLE_LONGLONG(0);
+  if (cached_has_bits & 768u) {
+    ::memset(&logical_bytes_, 0, static_cast<size_t>(
+        reinterpret_cast<char*>(&queries_per_second_) -
+        reinterpret_cast<char*>(&logical_bytes_)) + sizeof(queries_per_second_));
+  }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
 }
@@ -2091,6 +2096,19 @@ bool StoreCapacity::MergePartialFromCodedStream(
         break;
       }
 
+      case 10: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(81u /* 81 & 0xFF */)) {
+          set_has_queries_per_second();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &queries_per_second_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2156,6 +2174,10 @@ void StoreCapacity::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(9, this->logical_bytes(), output);
   }
 
+  if (cached_has_bits & 0x00000200u) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(10, this->queries_per_second(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.StoreCapacity)
@@ -2215,12 +2237,18 @@ size_t StoreCapacity::ByteSizeLong() const {
     }
 
   }
-  if (has_logical_bytes()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int64Size(
-        this->logical_bytes());
-  }
+  if (_has_bits_[8 / 32] & 768u) {
+    if (has_logical_bytes()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->logical_bytes());
+    }
 
+    if (has_queries_per_second()) {
+      total_size += 1 + 8;
+    }
+
+  }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -2266,8 +2294,14 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
     }
     _has_bits_[0] |= cached_has_bits;
   }
-  if (cached_has_bits & 0x00000100u) {
-    set_logical_bytes(from.logical_bytes());
+  if (cached_has_bits & 768u) {
+    if (cached_has_bits & 0x00000100u) {
+      logical_bytes_ = from.logical_bytes_;
+    }
+    if (cached_has_bits & 0x00000200u) {
+      queries_per_second_ = from.queries_per_second_;
+    }
+    _has_bits_[0] |= cached_has_bits;
   }
 }
 
@@ -2297,6 +2331,7 @@ void StoreCapacity::InternalSwap(StoreCapacity* other) {
   swap(writes_per_second_, other->writes_per_second_);
   swap(used_, other->used_);
   swap(logical_bytes_, other->logical_bytes_);
+  swap(queries_per_second_, other->queries_per_second_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

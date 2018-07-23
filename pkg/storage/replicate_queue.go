@@ -561,10 +561,15 @@ func (rq *replicateQueue) transferLease(
 		if opts.dryRun {
 			return false, nil
 		}
+		avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
 		if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 		}
 		rq.lastLeaseTransfer.Store(timeutil.Now())
+		if qpsMeasurementDur >= MinStatsDuration {
+			rq.allocator.storePool.updateLocalStoresAfterLeaseTransfer(
+				repl.store.StoreID(), target.StoreID, avgQPS)
+		}
 		return true, nil
 	}
 	return false, nil

@@ -11,6 +11,7 @@ package importccl
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -216,11 +218,8 @@ func readPostgresCreateTable(
 	// we'd have to delete the index and row and modify the column family. This
 	// is much easier and probably safer too.
 	createTbl := make(map[string]*tree.CreateTable)
-	// We need to run MakeSimpleTableDescriptor on tables in the same order as
-	// seen in the SQL file to guarantee that dependencies exist before being used
-	// (for FKs and sequences).
-	var tableOrder []string
 	createSeq := make(map[string]*tree.CreateSequence)
+	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
 	ps := newPostgreStream(input, max)
 	for {
 		stmt, err := ps.Next()
@@ -243,17 +242,36 @@ func readPostgresCreateTable(
 				fks.resolver[desc.Name] = &desc
 				ret = append(ret, &desc)
 			}
-			for _, name := range tableOrder {
-				create := createTbl[name]
-				if create != nil {
-					removeDefaultRegclass(create)
-					id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-					desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
-					if err != nil {
+			backrefs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+			for _, create := range createTbl {
+				if create == nil {
+					continue
+				}
+				removeDefaultRegclass(create)
+				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
+				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
+				if err != nil {
+					return nil, err
+				}
+				fks.resolver[desc.Name] = desc
+				backrefs[desc.ID] = desc
+				ret = append(ret, desc)
+			}
+			for name, constraints := range tableFKs {
+				desc := fks.resolver[name]
+				if desc == nil {
+					continue
+				}
+				for _, constraint := range constraints {
+					if _, err := constraint.Table.Normalize(); err != nil {
 						return nil, err
 					}
-					fks.resolver[desc.Name] = desc
-					ret = append(ret, desc)
+					if err := sql.ResolveFK(evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sqlbase.ConstraintValidity_Validated); err != nil {
+						return nil, err
+					}
+				}
+				if err := fixDescriptorFKState(desc); err != nil {
+					return nil, err
 				}
 			}
 			if match != "" && len(ret) != 1 {
@@ -282,7 +300,6 @@ func readPostgresCreateTable(
 			} else {
 				createTbl[name] = stmt
 			}
-			tableOrder = append(tableOrder, name)
 		case *tree.CreateIndex:
 			name, err := getTableName(stmt.Table)
 			if err != nil {
@@ -316,8 +333,14 @@ func readPostgresCreateTable(
 			for _, cmd := range stmt.Cmds {
 				switch cmd := cmd.(type) {
 				case *tree.AlterTableAddConstraint:
-					create.Defs = append(create.Defs, cmd.ConstraintDef)
-					continue
+					switch con := cmd.ConstraintDef.(type) {
+					case *tree.ForeignKeyConstraintTableDef:
+						if !fks.skip {
+							tableFKs[name] = append(tableFKs[name], con)
+						}
+					default:
+						create.Defs = append(create.Defs, cmd.ConstraintDef)
+					}
 				case *tree.AlterTableSetDefault:
 					for i, def := range create.Defs {
 						def, ok := def.(*tree.ColumnTableDef)
@@ -347,6 +370,12 @@ func getTableName(n tree.NormalizableTableName) (string, error) {
 	tn, err := n.Normalize()
 	if err != nil {
 		return "", err
+	}
+	if sc := tn.Schema(); sc != "" && sc != "public" {
+		return "", pgerror.Unimplemented(
+			"import non-public schema",
+			fmt.Sprintf("non-public schemas unsupported: %s", sc),
+		)
 	}
 	return tn.Table(), nil
 }
