@@ -17,6 +17,7 @@ package batcheval
 import (
 	"bytes"
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -35,6 +36,7 @@ func VerifyTransaction(h roachpb.Header, args roachpb.Request) error {
 		return errors.Errorf("no transaction specified to %s", args.Method())
 	}
 	if !bytes.Equal(args.Header().Key, h.Txn.Key) {
+		debug.PrintStack()
 		return errors.Errorf("request key %s should match txn key %s", args.Header().Key, h.Txn.Key)
 	}
 	return nil

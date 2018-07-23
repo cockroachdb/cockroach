@@ -341,14 +341,6 @@ message HandledRetryableTxnError {
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
-// A TxnPrevAttemptError indicates a batch response for a request sent through
-// client Txn was found that was meant for a previous incarnation of the
-// transaction. This can happen in cases where concurrent requests are made
-// for a Transaction and one of the requests results in a Txn abort.
-message TxnPrevAttemptError {
-  option (gogoproto.equal) = true;
-}
-
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
 // happens, client.Txn rejects future requests.
@@ -407,7 +399,7 @@ message MergeInProgressError {
 message ErrorDetail {
   option (gogoproto.equal) = true;
 
-  reserved 25, 29;
+  reserved 25, 29, 30;
   oneof value {
     NotLeaseHolderError not_lease_holder = 1;
     RangeNotFoundError range_not_found = 2;
@@ -436,7 +428,6 @@ message ErrorDetail {
     // needs to be communicated from the TxnCoordSender and Txn to the upper
     // layers through the Sender interface.
     HandledRetryableTxnError handled_retryable_txn_error = 28;
-    TxnPrevAttemptError txn_aborted_async_err = 30;
     IntegerOverflowError integer_overflow = 31;
     UnsupportedRequestError unsupported_request = 32;
     MixedSuccessError mixed_success = 33;
