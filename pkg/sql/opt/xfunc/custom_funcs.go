@@ -120,6 +120,13 @@ func (c *CustomFuncs) IsBoundBy(src, dst memo.GroupID) bool {
 	return c.OuterCols(src).SubsetOf(c.OutputCols(dst))
 }
 
+// IsBoundBy2 returns true if all outer references in the source expression are
+// bound by one of the two destination expressions. This is a variation on the
+// IsBoundBy method.
+func (c *CustomFuncs) IsBoundBy2(src, dst1, dst2 memo.GroupID) bool {
+	return c.OuterCols(src).SubsetOf(c.OutputCols(dst1).Union(c.OutputCols(dst2)))
+}
+
 // ExtractBoundConditions returns a new list containing only those expressions
 // from the given list that are fully bound by the given expression (i.e. all
 // outer references are satisfied by it). For example:

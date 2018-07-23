@@ -90,7 +90,7 @@
 #
 # Citations: [3] (see identity #4)
 [TryDecorrelateProject, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+(InnerJoin | InnerJoinApply
     $left:*
     $right:* &
         (HasOuterCols $right) &
@@ -110,21 +110,22 @@
     $on
 )
 
-# TryDecorrelateProjectSelect tries to decorrelate a Select operator that sits
-# below a LeftJoin/Project operator combo. The Project operator itself can't be
-# reordered above the LeftJoin like it can in the InnerJoin case. However, the
-# Select filter can be merged with the LeftJoin filter, which is enough to
-# decorrelate in several useful cases.
+# TryDecorrelateProjectSelect tries to decorrelate by hoisting a Select operator
+# that sits below a LeftJoin/Project operator combo. The Project operator itself
+# can't be reordered above the LeftJoin like it can in the InnerJoin case.
+# However, the Select filter can be merged with the LeftJoin filter, which is
+# enough to decorrelate in several useful cases.
 #
 # See the comment for TryDecorrelateSelect for an explanation of why the
 # DetectCycle and HighPriority tags are in use.
 [TryDecorrelateProjectSelect, Normalize, DetectCycle, HighPriority]
-(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+(LeftJoinApply
     $left:*
     $right:(Project
-        $projectInput:* &
-            (HasOuterCols $projectInput) &
-            (Select $selectInput:* $filters:*)
+        (Select
+            $selectInput:*
+            $filters:* & ^(IsBoundBy $filters $selectInput)
+        )
         $projections:*
     )
     $on:*
@@ -138,6 +139,45 @@
             (ProjectColsFromBoth $projections $selectInput)
         )
         (ConcatFilters $on $filters)
+    )
+    (ProjectColsFromBoth $left $right)
+)
+
+# TryDecorrelateProjectInnerJoin tries to decorrelate by hoisting the filter of
+# an InnerJoin operator that sits below a LeftJoin/Project operator combo. The
+# Project operator itself can't be reordered above the LeftJoin like it can in
+# the InnerJoin case. However, the InnerJoin filter can be merged with the
+# LeftJoin filter, which is enough to decorrelate in several useful cases. This
+# rule works similarly to TryDecorrelateProjectSelect.
+#
+# See the comment for TryDecorrelateSelect for an explanation of why the
+# DetectCycle and HighPriority tags are in use.
+[TryDecorrelateProjectInnerJoin, Normalize, DetectCycle, HighPriority]
+(LeftJoinApply
+    $left:*
+    $right:(Project
+        $join:(InnerJoin | InnerJoinApply
+            $innerLeft:*
+            $innerRight:*
+            $innerOn:* & ^(IsBoundBy2 $innerOn $innerLeft $innerRight)
+        )
+        $projections:*
+    )
+    $on:*
+)
+=>
+(Project
+    (LeftJoinApply
+        $left
+        (Project
+            ((OpName $join)
+                $innerLeft
+                $innerRight
+                (True)
+            )
+            (ProjectColsFromBoth $projections $join)
+        )
+        (ConcatFilters $on $innerOn)
     )
     (ProjectColsFromBoth $left $right)
 )
@@ -231,7 +271,7 @@
             $input
             (True)
         )
-        (AppendNonKeyCols $newLeft $aggregations)
+        (AppendAggregatedNonKeyCols $aggregations $newLeft)
         (GroupByUnionKey $newLeft $def)
     )
     $on
@@ -305,10 +345,36 @@
             $newRight:(EnsureNotNullIfCountRows $input $aggregations)
             (True)
         )
-        (AppendNonKeyCols $newLeft (TranslateCountRows $newRight $aggregations))
+        (AppendAggregatedNonKeyCols (TranslateCountRows $newRight $aggregations) $newLeft)
         (GroupByKey $newLeft)
     )
     $on
+)
+
+# TryDecorrelateSemiJoin maps a SemiJoin to an equivalent GroupBy/InnerJoin
+# complex in hopes of triggering further rules that will ultimately decorrelate
+# the query. Once this rule fires, a corresponding InnerJoin decorrelation rule
+# will match (i.e. TryDecorrelateGroupBy or TryDecorrelateProject).
+#
+# Citations: [5]
+[TryDecorrelateSemiJoin, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (CanHaveZeroRows $right) & # Let EliminateExistsGroupBy match instead.
+        (GroupBy | Project)
+    $on:*
+)
+=>
+(GroupBy
+    (InnerJoinApply
+        $newLeft:(EnsureKey $left)
+        $right
+        $on
+    )
+    (AggregateNonKeyCols $newLeft)
+    (GroupByKey $newLeft)
 )
 
 # HoistSelectExists extracts existential subqueries from Select filters,
