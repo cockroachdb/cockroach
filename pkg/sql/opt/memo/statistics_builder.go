@@ -408,14 +408,16 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 	//     TODO(rytaft): we may be able to get a more precise estimate than
 	//     1/3 for certain types of filters. For example, the selectivity of
 	//     x=y can be estimated as 1/(max(distinct(x), distinct(y)).
+
 	sb.s.Selectivity = 1
+	numUnappliedConstraints := 0
 	sel := func(constraintSet *constraint.Set, tight bool) {
 		if constraintSet != nil {
-			childSelectivity := sb.applyConstraintSet(constraintSet, &inputStatsBuilder)
-			if !tight && childSelectivity > unknownFilterSelectivity {
-				childSelectivity = unknownFilterSelectivity
+			n, isContradiction := sb.applyConstraintSet(constraintSet, &inputStatsBuilder)
+			numUnappliedConstraints += n
+			if isContradiction {
+				sb.s.Selectivity *= 0
 			}
-			sb.s.Selectivity *= childSelectivity
 		} else {
 			sb.s.Selectivity *= unknownFilterSelectivity
 		}
@@ -435,6 +437,17 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 			sel(constraintSet, tight)
 		}
 	}
+
+	sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+	//TODO(madhavsuresh) this doesn't check if the constraints are not tight anymore,
+	// do we not need that?
+	//TODO(madhavsuresh): why don't we care about the tight constraints here.
+	// A: these are constraints which haven't been applied, regardless of whether
+	// they are tight are not, they should be applied.
+	// TODO(madhavsuresh): why does this check have to occur?
+	// that we want to check for unknownFilterSelectivity
+
+	sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 
 	sb.applySelectivity(inputStats.RowCount)
 }
@@ -1106,30 +1119,36 @@ func (sb *statisticsBuilder) applyConstraint(
 
 func (sb *statisticsBuilder) applyConstraintSet(
 	cs *constraint.Set, inputStatsBuilder *statisticsBuilder,
-) (selectivity float64) {
+) (numUnappliedConstraints int, isContradiction bool) {
 	if cs.IsUnconstrained() {
-		return 1 /* selectivity */
+		return 1, false /* numUnappliedConstraints, contradiction */
 	}
 
 	if cs == constraint.Contradiction {
 		// A contradiction results in 0 rows.
-		return 0 /* selectivity */
+		return 0, true /* numUnappliedConstraints, contradiction */
 	}
 
-	adjustedSelectivity := 1.0
+	numUnappliedConstraints = 0
 	for i := 0; i < cs.Length(); i++ {
 		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), inputStatsBuilder)
 		if !applied {
+			// TODO(madhavsuresh): fix this comment
 			// If a constraint cannot be applied, it probably represents an
 			// inequality like x < 1. As a result, distinctCounts does not fully
-			// represent the selectivity of the constraint set. Adjust the
-			// selectivity to account for this constraint.
-			adjustedSelectivity *= unknownFilterSelectivity
+			// represent the selectivity of the constraint set.
+			// We return the number of unapplied constraints to the caller
+			// function to be used for selectivity calculation.
+
+			// TODO(madhavsuresh): This could benefit from using a Histogram.
+			// If we had access to the more full statistics for the columns,
+			// we would be able to update the distinctCounts
+			//
+			numUnappliedConstraints++
 		}
 	}
 
-	selectivity = sb.selectivityFromDistinctCounts(inputStatsBuilder)
-	return selectivity * adjustedSelectivity
+	return numUnappliedConstraints, false
 }
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
@@ -1260,12 +1279,32 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 	inputStatsBuilder *statisticsBuilder,
 ) (selectivity float64) {
+	fd := sb.props.FuncDeps
 	selectivity = 1.0
+	var seenCols opt.ColSet
+
+OUTER:
 	for col, colStat := range sb.s.ColStats {
+		localSelectivity := 1.0
+		if seenCols.Contains(int(col)) {
+			continue OUTER
+		}
+		eqCols := fd.ComputeEquivClosure(colStat.Cols)
 		inputStat := inputStatsBuilder.colStat(util.MakeFastIntSet(int(col)))
 		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
-			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
+			localSelectivity *= colStat.DistinctCount / inputStat.DistinctCount
 		}
+		eqCols.ForEach(func(i int) {
+			eqStat, ok := sb.s.ColStats[opt.ColumnID(i)]
+			if ok {
+				eqInputStat := inputStatsBuilder.colStat(util.MakeFastIntSet(i))
+				if eqInputStat.DistinctCount != 0 && eqStat.DistinctCount < eqInputStat.DistinctCount {
+					localSelectivity = min(localSelectivity, eqStat.DistinctCount/eqInputStat.DistinctCount)
+				}
+			}
+		})
+		seenCols.UnionWith(eqCols)
+		selectivity *= localSelectivity
 	}
 
 	return selectivity
@@ -1322,4 +1361,8 @@ func (sb *statisticsBuilder) updateStatsFromContradiction() {
 	for i := range sb.s.MultiColStats {
 		sb.s.MultiColStats[i].DistinctCount = 0
 	}
+}
+
+func (sb *statisticsBuilder) selectivityFromUnappliedConstraints(numUnappliedConstraints int) (selectivity float64) {
+	return math.Pow(unknownFilterSelectivity, float64(numUnappliedConstraints))
 }
