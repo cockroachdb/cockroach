@@ -635,7 +635,7 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 		Scheme:   "https",
 		Host:     "cockroachdb.github.io",
 		Path:     "distsqlplan/decode.html",
-		RawQuery: compressed.String(),
+		Fragment: compressed.String(),
 	}
 	return jsonStr, url, nil
 }
