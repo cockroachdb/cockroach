@@ -216,7 +216,7 @@
 [SimplifyLeftJoin, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
-    $right:* & (HasOneOrMoreRows $right)
+    $right:* & ^(CanHaveZeroRows $right)
     $on:(True)
 )
 =>
@@ -234,7 +234,7 @@
 # present.
 [SimplifyRightJoin, Normalize]
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
-    $left:* & (HasOneOrMoreRows $left)
+    $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:(True)
 )
@@ -251,7 +251,7 @@
 [EliminateSemiJoin, Normalize]
 (SemiJoin | SemiJoinApply
     $left:*
-    $right:* & (HasOneOrMoreRows $right)
+    $right:* & ^(CanHaveZeroRows $right)
     (True)
 )
 =>

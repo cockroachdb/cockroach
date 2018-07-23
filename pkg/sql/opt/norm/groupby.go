@@ -52,23 +52,34 @@ func (c *CustomFuncs) AppendReducedGroupingCols(
 	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
 	fdset := c.LookupLogical(input).Relational.FuncDeps
 	appendCols := groupingCols.Difference(fdset.ReduceCols(groupingCols))
-	return c.AppendAnyNotNullCols(aggs, appendCols)
+	return c.appendAnyNotNullCols(aggs, appendCols)
 }
 
-// AppendAnyNotNullCols constructs a new Aggregations operator containing the
-// given aggregate functions. Appended to those are new AnyNotNull aggregates
-// that wrap the given set of appendCols. This method is useful when the
-// appendCols are known to have constant values within any group; therefore, a
-// value from any of the rows in the group can be used.
-func (c *CustomFuncs) AppendAnyNotNullCols(aggs memo.GroupID, appendCols opt.ColSet) memo.GroupID {
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	aggsColList := c.ExtractColList(aggsExpr.Cols())
+// appendAnyNotNullCols constructs a new Aggregations operator containing the
+// given aggregate functions plus new AnyNotNull aggregates that wrap the given
+// set of appendCols. If the aggregate group is 0, then the result contains only
+// the appended AnyNotNull aggregates.
+//
+// This method is useful when the appendCols are known to have constant values
+// within any group; therefore, a value from any of the rows in the group can be
+// used.
+func (c *CustomFuncs) appendAnyNotNullCols(aggs memo.GroupID, appendCols opt.ColSet) memo.GroupID {
+	var outElems []memo.GroupID
+	var outColList opt.ColList
 
-	outElems := make([]memo.GroupID, len(aggsElems), len(aggsElems)+appendCols.Len())
-	copy(outElems, aggsElems)
-	outColList := make(opt.ColList, len(outElems), cap(outElems))
-	copy(outColList, aggsColList)
+	if aggs == 0 {
+		outElems = make([]memo.GroupID, 0, appendCols.Len())
+		outColList = make(opt.ColList, 0, len(outElems))
+	} else {
+		aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+		aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+		aggsColList := c.ExtractColList(aggsExpr.Cols())
+
+		outElems = make([]memo.GroupID, len(aggsElems), len(aggsElems)+appendCols.Len())
+		copy(outElems, aggsElems)
+		outColList = make(opt.ColList, len(outElems), cap(outElems))
+		copy(outColList, aggsColList)
+	}
 
 	// Append AnyNotNull aggregate functions wrapping each appendCol.
 	for i, ok := appendCols.Next(0); ok; i, ok = appendCols.Next(i + 1) {

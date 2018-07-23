@@ -266,18 +266,51 @@ func (c *CustomFuncs) TranslateCountRows(in, aggs memo.GroupID) memo.GroupID {
 	return c.f.ConstructAggregations(c.f.InternList(outElems), aggsExpr.Cols())
 }
 
-// AppendNonKeyCols iterates over each non-key column from the input group,
-// appends an AnyNotNull aggregate function to the end of the given Aggregations
-// operator, and returns a new Aggregations operator.
+// AggregateNonKeyCols constructs a new Aggregations operator containing an
+// AnyNotNull aggregate function for each non-key column in the given group.
+// For example, if the group has output columns (1,2,3), with a key of (1),
+// then the following operator is returned:
 //
-// See the TryDecorrelateScalarGroupBy rule comment for more details.
-func (c *CustomFuncs) AppendNonKeyCols(in, aggs memo.GroupID) memo.GroupID {
+//   (Aggregations
+//     [(AnyNotNull (Variable 2)) (AnyNotNull (Variable 3))]
+//     [2,3]
+//   )
+//
+// This is used when grouping by key columns. Non-key columns are functionally
+// dependent on the key columns, and so are constant within each group (and
+// therefore can be aggregated using AnyNotNull). See the TryDecorrelateSemiJoin
+// rule.
+func (c *CustomFuncs) AggregateNonKeyCols(group memo.GroupID) memo.GroupID {
+	keyCols, ok := c.CandidateKey(group)
+	if !ok {
+		panic("expected input expression to have key")
+	}
+	nonKeyCols := c.OutputCols(group).Difference(keyCols)
+	return c.appendAnyNotNullCols(0, nonKeyCols)
+}
+
+// AppendAggregatedNonKeyCols constructs a new Aggregations operator containing
+// aggregate functions from the given Aggregations operator, plus an AnyNotNull
+// aggregate function for each non-key column in the given input group. For
+// example, if the group has output columns (1,2,3), with a key of (1), and an
+// existing SUM aggregate, then the following operator is returned:
+//
+//   (Aggregations
+//     [(Sum (Variable 4)) (AnyNotNull (Variable 2)) (AnyNotNull (Variable 3))]
+//     [4,2,3]
+//   )
+//
+// This is used when grouping by key columns. Non-key columns are functionally
+// dependent on the key columns, and so are constant within each group (and
+// therefore can be aggregated using AnyNotNull). See the
+// TryDecorrelateScalarGroupBy rule.
+func (c *CustomFuncs) AppendAggregatedNonKeyCols(aggs, in memo.GroupID) memo.GroupID {
 	keyCols, ok := c.CandidateKey(in)
 	if !ok {
 		panic("expected input expression to have key")
 	}
 	nonKeyCols := c.OutputCols(in).Difference(keyCols)
-	return c.AppendAnyNotNullCols(aggs, nonKeyCols)
+	return c.appendAnyNotNullCols(aggs, nonKeyCols)
 }
 
 // GroupByKey constructs a new unordered GroupByDef using the candidate key
