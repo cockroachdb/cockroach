@@ -85,9 +85,7 @@ type Storage interface {
 
 // A Notifyee is a sink for closed timestamp updates.
 type Notifyee interface {
-	// Notify returns a channel into which updates are written. As a special
-	// case, the local node is addressed via NodeID zero (this helps avoid
-	// complications regarding the late initialization of the NodeID).
+	// Notify returns a channel into which updates are written.
 	//
 	// In practice, the Notifyee will be a Provider.
 	Notify(roachpb.NodeID) chan<- ctpb.Entry
@@ -102,13 +100,22 @@ type Producer interface {
 }
 
 // Provider is the central coordinator in the closed timestamp subsystem and the
-// gatekeeper for the closed timestamp state for both local and remote nodes.
+// gatekeeper for the closed timestamp state for both local and remote nodes,
+// which it handles in a symmetric fashion. It has the following tasks:
 //
-// For the local node, a Provider periodically closes out new timestamp updates
-// and relays them to subscribers (corresponding to remote nodes). Entries
-// received from remote nodes are similarly collected and managed. Both source
-// of information are combined and callers can check if they they CanServe()
-// follower reads.
+// 1. it accepts subscriptions for closed timestamp updates sourced from the
+//    local node. Upon accepting a subscription, the subscriber first receives
+//    the aggregate closed timestamp snapshot of the local node and then periodic
+//    updates.
+// 2. it periodically closes out timestamps on the local node and passes the
+//    resulting entries to all of its subscribers.
+// 3. it accepts notifications from other nodes, passing these updates through
+//    to its local storage, so that
+// 4. the CanServe method determines via the the underlying storage whether a
+//    given read can be satisfied via follower reads.
+//
+// Note that a Provider has no duty to immediately persist the local closed
+// timestamps to the underlying storage.
 type Provider interface {
 	Producer
 	Notifyee

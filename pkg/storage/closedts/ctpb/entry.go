@@ -48,5 +48,12 @@ func (e Entry) String() string {
 	for _, rangeID := range rangeIDs {
 		sl = append(sl, fmt.Sprintf("r%d: %d", rangeID, e.MLAI[rangeID]))
 	}
+	if len(sl) == 0 {
+		sl = []string{"(empty)"}
+	}
 	return fmt.Sprintf("CT: %s @ Epoch %d\nFull: %t\nMLAI: %s\n", e.ClosedTimestamp, e.Epoch, e.Full, strings.Join(sl, ", "))
+}
+
+func (r Reaction) String() string {
+	return fmt.Sprintf("Refresh: %v", r.Requested)
 }

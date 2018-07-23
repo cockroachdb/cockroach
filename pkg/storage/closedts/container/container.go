@@ -35,6 +35,7 @@ import (
 // Config is a container that holds references to all of the components required
 // to set up a full closed timestamp subsystem.
 type Config struct {
+	NodeID   roachpb.NodeID
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
 	Clock    closedts.LiveClockFn
@@ -74,6 +75,7 @@ func NewContainer(cfg Config) *Container {
 	tracker := minprop.NewTracker()
 
 	pConf := provider.Config{
+		NodeID:   cfg.NodeID,
 		Settings: cfg.Settings,
 		Stopper:  cfg.Stopper,
 		Storage:  storage,

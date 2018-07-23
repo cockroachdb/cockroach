@@ -16,12 +16,10 @@ package ctpb
 
 import "context"
 
-// Client is the interface for closed timestamp update clients.
-type Client interface {
-	Send(*Reaction) error
-	Recv() (*Entry, error)
-	CloseSend() error
+type Server interface {
+	Send(*Entry) error
+	Recv() (*Reaction, error)
 	Context() context.Context
 }
 
-var _ Client = ClosedTimestamp_GetClient(nil)
+var _ Server = ClosedTimestamp_GetServer(nil)

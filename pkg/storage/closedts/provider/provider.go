@@ -32,6 +32,8 @@ import (
 
 // Config holds the information necessary to create a Provider.
 type Config struct {
+	// NodeID is the ID of the node on which the Provider is housed.
+	NodeID   roachpb.NodeID
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
 	Storage  closedts.Storage
@@ -99,14 +101,9 @@ func (p *Provider) drain() {
 }
 
 func (p *Provider) runCloser(ctx context.Context) {
-	// This loop signals the subscribers, so it can't shut down until all the
-	// subscribers are gone.
+	// The loop below signals the subscribers, so when it exits it needs to do
+	// extra work to help the subscribers terminate.
 	defer p.drain()
-	// The local loop is driven as a notification for NodeID zero. This side-
-	// steps the need to plumb a getter for the NodeID (which is annoyingly
-	// determined fairly late for new servers).
-	ch := p.Notify(0)
-	defer close(ch)
 
 	var t timeutil.Timer
 	defer t.Stop()
@@ -134,11 +131,27 @@ func (p *Provider) runCloser(ctx context.Context) {
 		} else {
 			closed, m := p.cfg.Close(next)
 
-			ch <- ctpb.Entry{
+			entry := ctpb.Entry{
 				Epoch:           epoch,
 				ClosedTimestamp: closed,
 				MLAI:            m,
 			}
+
+			// Simulate a subscription to the local node, so that the new information
+			// is put on the storage (and thus becomes available to future subscribers
+			// as well, not only already existing ones).
+			//
+			// TODO(tschottdorf): the transport should ignore connection requests from
+			// the node to itself. Those connections would pointlessly loop this around
+			// once more.
+			p.cfg.Storage.Add(p.cfg.NodeID, entry)
+
+			// Tell the existing subscribers.
+			p.mu.Lock()
+			for _, sub := range p.mu.subscribers {
+				sub.queue = append(sub.queue, entry)
+			}
+			p.mu.Unlock()
 		}
 
 		// Broadcast even if nothing new was queued, so that the subscribers
@@ -147,24 +160,14 @@ func (p *Provider) runCloser(ctx context.Context) {
 	}
 }
 
-func (p *Provider) processNotification(nodeID roachpb.NodeID, entry ctpb.Entry) {
-	p.cfg.Storage.Add(nodeID, entry)
-	if nodeID == 0 {
-		p.mu.Lock()
-		for _, sub := range p.mu.subscribers {
-			sub.queue = append(sub.queue, entry)
-		}
-		p.mu.Unlock()
-	}
-}
-
-// Notify implements closedts.Notifyee.
+// Notify implements closedts.Notifyee. It passes the incoming stream of Entries
+// to the local Storage.
 func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
 
 	p.cfg.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for entry := range ch {
-			p.processNotification(nodeID, entry)
+			p.cfg.Storage.Add(nodeID, entry)
 		}
 	})
 
@@ -226,7 +229,12 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 		var queue []ctpb.Entry
 		p.mu.RLock()
 		queue, p.mu.subscribers[i].queue = p.mu.subscribers[i].queue, nil
+		draining := p.mu.draining
 		p.mu.RUnlock()
+
+		if draining {
+			return
+		}
 
 		for _, entry := range queue {
 			select {

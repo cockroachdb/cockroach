@@ -46,6 +46,10 @@ var _ ctpb.ClosedTimestampServer = &Server{}
 
 // Get handles incoming client connections.
 func (s *Server) Get(client ctpb.ClosedTimestamp_GetServer) error {
+	return s.Handle(client)
+}
+
+func (s *Server) Handle(client ctpb.Server) error {
 	ctx := client.Context()
 	ch := make(chan ctpb.Entry, 10)
 

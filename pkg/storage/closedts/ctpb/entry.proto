@@ -58,6 +58,8 @@ message Entry {
 // fail. The Reaction mechanism serves to explicitly request the missing information
 // when that happens.
 message Reaction {
+  option (gogoproto.goproto_stringer) = false;
+
   repeated int32 Requested = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 }
 

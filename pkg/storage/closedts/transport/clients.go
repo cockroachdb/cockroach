@@ -58,7 +58,7 @@ type client struct {
 	mu struct {
 		syncutil.Mutex
 		started   bool
-		requested map[roachpb.RangeID]struct{}
+		requested map[roachpb.RangeID]struct{} // never nil
 	}
 }
 
@@ -71,9 +71,6 @@ type client struct {
 func (pr *Clients) Request(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
 	if cl := pr.getOrCreateClient(nodeID); cl != nil {
 		cl.mu.Lock()
-		if cl.mu.requested == nil {
-			cl.mu.requested = map[roachpb.RangeID]struct{}{}
-		}
 		cl.mu.requested[rangeID] = struct{}{}
 		cl.mu.Unlock()
 	}
@@ -97,8 +94,10 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 		return nil
 	}
 
-	// Slow path: create the client. Other inserter might race us to it.
+	// Slow path: create the client. Another inserter might race us to it.
 	cl = &client{}
+	cl.mu.requested = map[roachpb.RangeID]struct{}{}
+
 	if firstClient, loaded := pr.clients.LoadOrStore(int64(nodeID), unsafe.Pointer(cl)); loaded {
 		return (*client)(firstClient)
 	}
@@ -140,7 +139,8 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 			case ch <- *entry:
 			case <-ctx.Done():
 				return
-
+			case <-pr.cfg.Stopper.ShouldQuiesce():
+				return
 			}
 
 			var requested map[roachpb.RangeID]struct{}

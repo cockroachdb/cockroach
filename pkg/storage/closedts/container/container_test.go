@@ -83,6 +83,7 @@ func TestContainer(t *testing.T) {
 
 	cfg := container.Config{
 		Settings:   st,
+		NodeID:     1,
 		Stopper:    stopper,
 		Clock:      clock,
 		Refresh:    refresh,
