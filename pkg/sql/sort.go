@@ -205,7 +205,7 @@ func (p *planner) orderBy(
 	}
 
 	if p.semaCtx.Properties.Derived.SeenGenerator {
-		return nil, pgerror.Unimplemented("srf in order by", "generator functions are not yet supported in ORDER BY")
+		return nil, tree.NewInvalidFunctionUsageError(tree.GeneratorClass, "ORDER BY")
 	}
 
 	if ordering == nil {

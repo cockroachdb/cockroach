@@ -303,6 +303,16 @@ func (b *Builder) buildScalarHelper(
 		to := b.buildScalarHelper(t.TypedTo(), "", inScope, nil)
 		out = b.buildRangeCond(t.Not, t.Symmetric, input, from, to)
 
+	case *srf:
+		if len(t.cols) == 1 {
+			return b.finishBuildScalarRef(&t.cols[0], label, inScope, outScope)
+		}
+		list := make([]memo.GroupID, len(t.cols))
+		for i := range t.cols {
+			list[i] = b.buildScalarHelper(&t.cols[i], "", inScope, nil)
+		}
+		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
+
 	case *subquery:
 		out, _ = b.buildSingleRowSubquery(t, inScope)
 
@@ -406,7 +416,8 @@ func (b *Builder) buildFunction(
 	)
 
 	if isGenerator(def) {
-		return b.finishBuildGeneratorFunction(f, out, inScope, outScope)
+		columns := len(def.ReturnLabels)
+		return b.finishBuildGeneratorFunction(f, out, columns, label, inScope, outScope)
 	}
 
 	return b.finishBuildScalar(f, out, label, inScope, outScope)

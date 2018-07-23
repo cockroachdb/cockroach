@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -271,24 +270,9 @@ func renameSource(
 		if vg, ok := src.plan.(*projectSetNode); ok &&
 			isAnonymousTable && noColNameSpecified && len(vg.funcs) == 1 {
 			// And we only pluck the name if the projection is done over the
-			// unary table.
-			if _, ok := vg.source.(*unaryNode); ok {
-				shouldRename := false
-				isGenerator := vg.funcs[0] != nil
-				if isGenerator {
-					// And there is just one column in the result.
-					if tType, ok := vg.funcs[0].ResolvedType().(types.TTuple); ok &&
-						len(tType.Types) == 1 {
-						shouldRename = true
-					}
-				} else {
-					// It's also legal to select from a scalar function, and we can
-					// rename the column in that case as well.
-					shouldRename = true
-				}
-				if shouldRename {
-					colAlias = tree.NameList{as.Alias}
-				}
+			// unary table, and there is just one column in the result.
+			if _, ok := vg.source.(*unaryNode); ok && vg.numColsPerGen[0] == 1 {
+				colAlias = tree.NameList{as.Alias}
 			}
 		}
 

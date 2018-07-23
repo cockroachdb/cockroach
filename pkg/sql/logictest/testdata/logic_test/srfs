@@ -223,7 +223,7 @@ ascii
 subtest nested_SRF
 # See #20511
 
-query error pq: unimplemented: nested set-returning functions
+query error unimplemented: nested set-returning functions
 SELECT generate_series(generate_series(1, 3), 3)
 
 query I
@@ -708,7 +708,7 @@ generate_subscripts
 
 subtest srf_errors
 
-query error generator functions are not yet supported in ORDER BY
+query error generator functions are not allowed in ORDER BY
 SELECT * FROM t ORDER BY generate_series(1, 3)
 
 query error generator functions are not allowed in WHERE
@@ -943,3 +943,29 @@ subtest liquibase_example_query
 #          index_name,
 #          ordinal_position
 # ----
+
+subtest unnest_with_tuple_types
+
+query T colnames
+SELECT unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query error pq: type tuple{int, int} is not composite
+SELECT (unnest(ARRAY[(1,2),(3,4)])).*
+
+query T colnames
+SELECT * FROM unnest(ARRAY[(1,2),(3,4)])
+----
+unnest
+(1,2)
+(3,4)
+
+query T colnames
+SELECT t.* FROM unnest(ARRAY[(1,2),(3,4)]) AS t
+----
+t
+(1,2)
+(3,4)

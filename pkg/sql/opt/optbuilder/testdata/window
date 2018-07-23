@@ -27,4 +27,4 @@ error (42803): aggregate function calls cannot contain window function calls
 build
 SELECT * FROM kv GROUP BY v, count(w) OVER ()
 ----
-error (42P20): window functions are not allowed in GROUP BY
+error: count(): window functions are not allowed in GROUP BY
