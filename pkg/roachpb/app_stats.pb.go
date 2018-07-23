@@ -19,6 +19,8 @@ var _ = math.Inf
 type StatementStatistics struct {
 	// Count is the total number of times this statement was executed
 	// since the begin of the reporting period.
+	// When transmitted to the reporting server, this value gets
+	// quantized into buckets (few <10, dozens 10+, 100 or more).
 	Count int64 `protobuf:"varint,1,opt,name=count" json:"count"`
 	// FirstAttemptCount collects the total number of times a first
 	// attempt was executed (either the one time in explicitly committed
@@ -28,9 +30,15 @@ type StatementStatistics struct {
 	// can be computed as FirstAttemptCount / Count.
 	// The cumulative number of retries can be computed with
 	// Count - FirstAttemptCount.
+	//
+	// When transmitted to the reporting server, this value gets
+	// simplified so that the proportion of statements that could be
+	// executed without retry remains as FirstAttemptCount / Count.
 	FirstAttemptCount int64 `protobuf:"varint,2,opt,name=first_attempt_count,json=firstAttemptCount" json:"first_attempt_count"`
 	// MaxRetries collects the maximum observed number of automatic
 	// retries in the reporting period.
+	// When transmitted to the reporting server, this value gets
+	// quantized into buckets (few <10, dozens 10+, 100 or more).
 	MaxRetries int64 `protobuf:"varint,3,opt,name=max_retries,json=maxRetries" json:"max_retries"`
 	// LastErr collects the last error encountered.
 	LastErr string `protobuf:"bytes,4,opt,name=last_err,json=lastErr" json:"last_err"`
