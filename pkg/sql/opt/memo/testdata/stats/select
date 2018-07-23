@@ -390,3 +390,223 @@ project
                 │    ├── variable: tab0.col0 [type=int, outer=(2)]
                 │    └── const: 1 [type=int]
                 └── variable: case [type=bool, outer=(27)]
+
+
+exec-ddl
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING, state STRING)
+----
+TABLE customers
+ ├── id int not null
+ ├── name string
+ ├── state string
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+CREATE TABLE order_history (order_id INT, item_id INT, customer_id INT, year INT)
+----
+TABLE order_history
+ ├── order_id int
+ ├── item_id int
+ ├── customer_id int
+ ├── year int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+{
+  "columns": ["name"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 400
+},
+{
+  "columns": ["id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 600
+}
+]'
+----
+
+# The following two tests cases are paired together The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# After the join we expect cardinality 1111111,
+# then we expect selectivity 1/400 on the filter.
+# 1/2 FD-equality-select tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ ├── stats: [rows=2777.77778, distinct(2)=1]
+ ├── fd: ()-->(2), (1)-->(3), (1)==(6), (6)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ │    ├── stats: [rows=1111111.11, distinct(2)=400]
+ │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
+ │         ├── stats: [rows=1111111.11, distinct(2)=400]
+ │         ├── key: (8)
+ │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
+ │         ├── inner-join
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    ├── stats: [rows=10000000, distinct(2)=400]
+ │         │    ├── key: (1,8)
+ │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
+ │         │    │    ├── stats: [rows=10000, distinct(2)=400]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2,3)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(4-7)
+ │         │    └── true [type=bool]
+ │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │                   ├── variable: customers.id [type=int, outer=(1)]
+ │                   └── variable: order_history.customer_id [type=int, outer=(6)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight)]
+           ├── variable: customers.name [type=string, outer=(2)]
+           └── const: 'andy' [type=string]
+
+# The previous tests case and the following are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# After the join we expect cardinality 1111111,
+# then we expect selectivity 1/600 on the filter.
+# 2/2 FD-equality-select tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE id = 1 AND name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ ├── stats: [rows=1851.85185, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1-3,6), (1)==(6), (6)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ │    ├── stats: [rows=1111111.11, distinct(1)=600, distinct(2)=400]
+ │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
+ │         ├── stats: [rows=1111111.11, distinct(1)=600, distinct(2)=400]
+ │         ├── key: (8)
+ │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
+ │         ├── inner-join
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    ├── stats: [rows=10000000, distinct(1)=600, distinct(2)=400]
+ │         │    ├── key: (1,8)
+ │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=600, distinct(2)=400]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2,3)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(4-7)
+ │         │    └── true [type=bool]
+ │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │                   ├── variable: customers.id [type=int, outer=(1)]
+ │                   └── variable: order_history.customer_id [type=int, outer=(6)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+      └── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight)]
+           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           │    ├── variable: customers.id [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           └── eq [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight)]
+                ├── variable: customers.name [type=string, outer=(2)]
+                └── const: 'andy' [type=string]
+
+build
+SELECT max(state) FROM (SELECT * FROM (SELECT * FROM customers, order_history
+ WHERE id = customer_id)
+WHERE year > 2004 AND year < 2008 AND id < 10 AND id > 0) GROUP BY item_id
+----
+project
+ ├── columns: max:9(string)
+ ├── stats: [rows=67.9071874]
+ └── group-by
+      ├── columns: item_id:5(int) max:9(string)
+      ├── grouping columns: item_id:5(int)
+      ├── stats: [rows=67.9071874, distinct(5)=67.9071874]
+      ├── key: (5)
+      ├── fd: (5)-->(9)
+      ├── project
+      │    ├── columns: state:3(string) item_id:5(int)
+      │    ├── stats: [rows=71.4285714, distinct(5)=67.9071874]
+      │    └── select
+      │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int!null)
+      │         ├── stats: [rows=71.4285714, distinct(1)=9, distinct(5)=67.9071874, distinct(7)=3]
+      │         ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+      │         ├── project
+      │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+      │         │    ├── stats: [rows=1111111.11, distinct(1)=600, distinct(5)=700, distinct(7)=700]
+      │         │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+      │         │    └── select
+      │         │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
+      │         │         ├── stats: [rows=1111111.11, distinct(1)=600, distinct(5)=700, distinct(7)=700]
+      │         │         ├── key: (8)
+      │         │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
+      │         │         ├── inner-join
+      │         │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+      │         │         │    ├── stats: [rows=10000000, distinct(1)=600, distinct(5)=700, distinct(7)=700]
+      │         │         │    ├── key: (1,8)
+      │         │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
+      │         │         │    ├── scan customers
+      │         │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
+      │         │         │    │    ├── stats: [rows=10000, distinct(1)=600]
+      │         │         │    │    ├── key: (1)
+      │         │         │    │    └── fd: (1)-->(2,3)
+      │         │         │    ├── scan order_history
+      │         │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+      │         │         │    │    ├── stats: [rows=1000, distinct(5)=700, distinct(7)=700]
+      │         │         │    │    ├── key: (8)
+      │         │         │    │    └── fd: (8)-->(4-7)
+      │         │         │    └── true [type=bool]
+      │         │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │         │                   ├── variable: customers.id [type=int, outer=(1)]
+      │         │                   └── variable: order_history.customer_id [type=int, outer=(6)]
+      │         └── filters [type=bool, outer=(1,7), constraints=(/1: [/1 - /9]; /7: [/2005 - /2007]; tight)]
+      │              └── and [type=bool, outer=(1,7), constraints=(/1: [/1 - /9]; /7: [/2005 - /2007]; tight)]
+      │                   ├── and [type=bool, outer=(1,7), constraints=(/1: (/NULL - /9]; /7: [/2005 - /2007]; tight)]
+      │                   │    ├── and [type=bool, outer=(7), constraints=(/7: [/2005 - /2007]; tight)]
+      │                   │    │    ├── gt [type=bool, outer=(7), constraints=(/7: [/2005 - ]; tight)]
+      │                   │    │    │    ├── variable: order_history.year [type=int, outer=(7)]
+      │                   │    │    │    └── const: 2004 [type=int]
+      │                   │    │    └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /2007]; tight)]
+      │                   │    │         ├── variable: order_history.year [type=int, outer=(7)]
+      │                   │    │         └── const: 2008 [type=int]
+      │                   │    └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+      │                   │         ├── variable: customers.id [type=int, outer=(1)]
+      │                   │         └── const: 10 [type=int]
+      │                   └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+      │                        ├── variable: customers.id [type=int, outer=(1)]
+      │                        └── const: 0 [type=int]
+      └── aggregations [outer=(3)]
+           └── max [type=string, outer=(3)]
+                └── variable: customers.state [type=string, outer=(3)]
