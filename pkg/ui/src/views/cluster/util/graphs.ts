@@ -89,7 +89,9 @@ const countIncrementTable = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8,
 //
 // "Human-friendly" increments are taken from the supplied countIncrementTable,
 // which should include decimal values between 0 and 1.
-function computeNormalizedIncrement(range: number) {
+function computeNormalizedIncrement(
+  range: number, incrementTbl: number[] = countIncrementTable,
+) {
   if (range === 0) {
     throw new Error("cannot compute tick increment with zero range");
   }
@@ -101,8 +103,8 @@ function computeNormalizedIncrement(range: number) {
     x++;
     rawIncrement = rawIncrement / 10;
   }
-  const normalizedIncrementIdx = _.sortedIndex(countIncrementTable, rawIncrement);
-  return countIncrementTable[normalizedIncrementIdx] * Math.pow(10, x);
+  const normalizedIncrementIdx = _.sortedIndex(incrementTbl, rawIncrement);
+  return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
 function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
@@ -173,6 +175,20 @@ function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
+const percentIncrementTable = [0.25, 0.5, 0.75, 1.0];
+
+function ComputePercentageAxisDomain(
+  min: number, max: number,
+) {
+  const range = max - min;
+  const increment = computeNormalizedIncrement(range, percentIncrementTable);
+  const axisDomain = new AxisDomain([min, max], increment);
+  axisDomain.label = "percentage";
+  axisDomain.tickFormat = d3.format(".0%");
+  axisDomain.guideFormat = d3.format(".2%");
+  return axisDomain;
+}
+
 const timeIncrementDurations = [
   moment.duration(1, "m"),
   moment.duration(5, "m"),
@@ -236,6 +252,8 @@ function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomai
       return ComputeByteAxisDomain(yExtent);
     case AxisUnits.Duration:
       return ComputeDurationAxisDomain(yExtent);
+    case AxisUnits.Percentage:
+      return ComputePercentageAxisDomain(yExtent[0], yExtent[1]);
     default:
       return ComputeCountAxisDomain(yExtent);
   }
