@@ -7456,7 +7456,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if len(tc.repl.mu.proposals) == 0 {
+		if len(tc.repl.mu.localProposals) == 0 {
 			t.Fatal("expected non-empty proposals map")
 		}
 	}()
@@ -8011,7 +8011,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 
 		tc.repl.mu.Lock()
-		for _, p := range tc.repl.mu.proposals {
+		for _, p := range tc.repl.mu.localProposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 			}
@@ -8043,13 +8043,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
-	nonePending := len(tc.repl.mu.proposals) == 0
+	nonePending := len(tc.repl.mu.localProposals) == 0
 	c := int(tc.repl.mu.lastAssignedLeaseIndex) - int(tc.repl.mu.state.LeaseAppliedIndex)
 	if nonePending && c > 0 {
 		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
 	if !nonePending {
-		t.Fatalf("still pending commands: %+v", tc.repl.mu.proposals)
+		t.Fatalf("still pending commands: %+v", tc.repl.mu.localProposals)
 	}
 }
 
@@ -8142,8 +8142,14 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
+	// Only followers refresh pending commands during tick events. Change the
+	// replica that the range thinks is the leader so that the replica thinks
+	// it's a follower.
+	r.mu.Lock()
+	r.mu.leaderID = 2
+	r.mu.Unlock()
 
+	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
 		// starting with a value of 0 (modulo electionTicks). Move the replica into
@@ -8201,7 +8207,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		}
 		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
-		for id, p := range r.mu.proposals {
+		for id, p := range r.mu.localProposals {
 			m[id] = p.proposedAtTicks
 		}
 		r.mu.Unlock()
