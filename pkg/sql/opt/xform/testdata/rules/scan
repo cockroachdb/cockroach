@@ -458,11 +458,11 @@ memo (optimized)
  ├── G7: (scan a@s_idx,cols=(1,4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
- │         └── cost: 1.51
+ │         └── cost: 1060.00
  ├── G8: (scan a@s_idx,rev,cols=(1,4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,rev,cols=(1,4),constrained)
- │         └── cost: 1.60
+ │         └── cost: 1120.00
  ├── G9: (scan a@s_idx,cols=(1,4))
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,4))

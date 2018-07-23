@@ -231,11 +231,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.05
+ │         └── cost: 1050.00
  ├── G2: (select G4 G5) (select G6 G8) (select G7 G8)
  │    └── ""
- │         ├── best: (select G6 G8)
- │         └── cost: 1.05
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1050.00
  ├── G3: (projections a.x)
  ├── G4: (scan a) (scan a,rev)
  │    └── ""
@@ -245,11 +245,11 @@ memo (optimized)
  ├── G6: (scan a,constrained)
  │    └── ""
  │         ├── best: (scan a,constrained)
- │         └── cost: 1.04
+ │         └── cost: 1040.00
  ├── G7: (scan a,rev,constrained)
  │    └── ""
  │         ├── best: (scan a,rev,constrained)
- │         └── cost: 1.08
+ │         └── cost: 1080.00
  ├── G8: (filters G10)
  ├── G9: (eq G13 G12)
  ├── G10: (eq G11 G12)
@@ -277,23 +277,23 @@ memo (optimized)
  ├── G9: (filters G4 G7)
  ├── G10: (select G1 G9) (select G15 G14) (select G16 G14)
  │    └── ""
- │         ├── best: (select G15 G14)
- │         └── cost: 1.05
+ │         ├── best: (select G1 G9)
+ │         └── cost: 1050.00
  ├── G11: (projections a.x)
  ├── G12: (project G10 G11)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G10 G11)
- │         └── cost: 1.05
+ │         └── cost: 1050.00
  ├── G13: (true)
  ├── G14: (filters G7)
  ├── G15: (scan a,constrained)
  │    └── ""
  │         ├── best: (scan a,constrained)
- │         └── cost: 1.04
+ │         └── cost: 1040.00
  └── G16: (scan a,rev,constrained)
       └── ""
            ├── best: (scan a,rev,constrained)
-           └── cost: 1.08
+           └── cost: 1080.00
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
