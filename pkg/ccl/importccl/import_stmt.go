@@ -833,7 +833,7 @@ func importPlanHook(
 			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
 		}
 
-		telemetry.CountBucketed("import.files", len(files))
+		telemetry.CountBucketed("import.files", int64(len(files)))
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
@@ -1136,9 +1136,9 @@ func (r *importResumer) OnTerminal(
 	}
 
 	if status == jobs.StatusSucceeded {
-		telemetry.CountBucketed("import.rows", int(r.res.Rows))
+		telemetry.CountBucketed("import.rows", r.res.Rows)
 		const mb = 1 << 20
-		telemetry.CountBucketed("import.size-mb", int(r.res.DataSize/mb))
+		telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
 
 		resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*job.ID())),

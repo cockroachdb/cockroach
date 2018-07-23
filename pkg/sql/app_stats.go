@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -340,12 +341,39 @@ func (s *sqlStats) getStmtStats(
 					// to report as-in though.
 					data.LastErr = "scrubbed"
 				}
+
+				// Quantize the counts to avoid leaking information that way.
+				quantizeCounts(&data)
+
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}
 		}
 		a.Unlock()
 	}
 	return ret
+}
+
+// quantizeCounts ensures that the counts are bucketed into "simple" values.
+func quantizeCounts(d *roachpb.StatementStatistics) {
+	oldCount := d.Count
+	newCount := telemetry.Bucket10(oldCount)
+	d.Count = newCount
+	// The SquaredDiffs values are meant to enable computing the variance
+	// via the formula variance = squareddiffs / (count - 1).
+	// Since we're adjusting the count, we must re-compute a value
+	// for SquaredDiffs that keeps the same variance with the new count.
+	oldCountMinusOne := float64(oldCount - 1)
+	newCountMinusOne := float64(newCount - 1)
+	d.NumRows.SquaredDiffs = (d.NumRows.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ParseLat.SquaredDiffs = (d.ParseLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.PlanLat.SquaredDiffs = (d.PlanLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.RunLat.SquaredDiffs = (d.RunLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ServiceLat.SquaredDiffs = (d.ServiceLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.OverheadLat.SquaredDiffs = (d.OverheadLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+
+	d.MaxRetries = telemetry.Bucket10(d.MaxRetries)
+
+	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
 }
 
 // FailedHashedValue is used as a default return value for when HashForReporting

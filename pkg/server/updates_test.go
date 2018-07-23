@@ -104,6 +104,89 @@ func TestCheckVersion(t *testing.T) {
 	})
 }
 
+func TestUsageQuantization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r := makeMockRecorder(t)
+	defer stubURL(&reportingURL, r.url)()
+	defer r.Close()
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.TODO()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer s.Stopper().Stop(ctx)
+	ts := s.(*TestServer)
+
+	if _, err := db.Exec(`SET application_name = 'test'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Issue some queries against the test app name.
+	for i := 0; i < 8; i++ {
+		if _, err := db.Exec(`SELECT 1`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Between 10 and 100 queries is quantized to 10.
+	for i := 0; i < 30; i++ {
+		if _, err := db.Exec(`SELECT 1,2`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Between 100 and 10000 gets quantized to 100.
+	for i := 0; i < 200; i++ {
+		if _, err := db.Exec(`SELECT 1,2,3`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Above 10000 gets quantized to 10000.
+	for i := 0; i < 10010; i++ {
+		if _, err := db.Exec(`SHOW application_name`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Collect a round of statistics.
+	ts.reportDiagnostics(ctx, 0)
+
+	// The stats "hide" the application name by hashing it. To find the
+	// test app name, we need to hash the ref string too prior to the
+	// comparison.
+	clusterSecret := sql.ClusterSecret.Get(&st.SV)
+	hashedAppName := sql.HashForReporting(clusterSecret, "test")
+	if hashedAppName == sql.FailedHashedValue {
+		t.Fatalf("expected hashedAppName to not be 'unknown'")
+	}
+
+	testData := []struct {
+		query         string
+		expectedCount int64
+	}{
+		{`SELECT _`, 8},
+		{`SELECT _, _`, 10},
+		{`SELECT _, _, _`, 100},
+		{`SHOW application_name`, 10000},
+	}
+
+	for _, test := range testData {
+		found := false
+		for _, s := range r.last.SqlStats {
+			if s.Key.App == hashedAppName && s.Key.Query == test.query {
+				if s.Stats.Count != test.expectedCount {
+					t.Errorf("quantization incorrect for query %q: expected %d, got %d",
+						test.query, test.expectedCount, s.Stats.Count)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("query %q missing from stats", test.query)
+		}
+	}
+}
+
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
