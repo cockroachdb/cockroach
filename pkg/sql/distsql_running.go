@@ -119,13 +119,6 @@ func (dsp *DistSQLPlanner) Run(
 	var txnCoordMeta *roachpb.TxnCoordMeta
 	if txn != nil {
 		meta := txn.GetStrippedTxnCoordMeta()
-		// The txn proto in the TxnCoordSender can get out of sync with the
-		// txn proto held in client.Txn. We want to make sure all of the
-		// information makes it into the TxnCoordMeta, so update the proto
-		// accordingly.
-		// TODO(andrei): Without this a few tests fail. Remove this hack
-		// once we merge the txn protos.
-		meta.Txn = *txn.Proto()
 		txnCoordMeta = &meta
 	}
 

@@ -1662,7 +1662,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 
 	// Verify that the txn's safe timestamp was set.
-	if txnOld.Proto().RefreshedTimestamp == (hlc.Timestamp{}) {
+	if txnOld.Serialize().RefreshedTimestamp == (hlc.Timestamp{}) {
 		t.Fatal("expected non-zero refreshed timestamp")
 	}
 
@@ -2442,7 +2442,8 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}
-				txnKey = keys.TransactionKey(txn.Proto().Key, txn.Proto().ID)
+				proto := txn.Serialize()
+				txnKey = keys.TransactionKey(proto.Key, proto.ID)
 				// If force=true, we're force-aborting the txn out from underneath.
 				// This simulates txn deadlock or a max priority txn aborting a
 				// normal or min priority txn.
@@ -2451,10 +2452,10 @@ func TestDistributedTxnCleanup(t *testing.T) {
 					ba.RangeID = lhs.RangeID
 					ba.Add(&roachpb.PushTxnRequest{
 						RequestHeader: roachpb.RequestHeader{
-							Key: txn.Proto().Key,
+							Key: proto.Key,
 						},
 						Now:       store.Clock().Now(),
-						PusheeTxn: txn.Proto().TxnMeta,
+						PusheeTxn: proto.TxnMeta,
 						PushType:  roachpb.PUSH_ABORT,
 						Force:     true,
 					})
