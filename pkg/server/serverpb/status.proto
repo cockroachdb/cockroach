@@ -46,6 +46,8 @@ message CertificateDetails {
   enum CertificateType {
     CA = 0;
     NODE = 1;
+    CLIENT_CA = 2;
+    CLIENT = 3;
   }
 
   message Fields {

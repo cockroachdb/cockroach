@@ -655,8 +655,8 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We expect two certificates: CA and node.
-	if a, e := len(response.Certificates), 2; a != e {
+	// We expect 4 certificates: CA, node, and client certs for root, testuser.
+	if a, e := len(response.Certificates), 4; a != e {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
