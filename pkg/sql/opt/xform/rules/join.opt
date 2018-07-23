@@ -56,7 +56,7 @@
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for both inner and left join).
 [GenerateLookupJoinWithFilter, Explore]
-(InnerJoin | LeftJoin 
+(InnerJoin | LeftJoin
     $left:*
     (Select
         (Scan $scanDef:*)
@@ -66,3 +66,66 @@
 )
 =>
 (ConstructLookupJoin (OpName) $left $scanDef (ConcatFilters $on $filter))
+
+# PushJoinThroughIndexJoin takes an expression which does an index join followed
+# by a join and produces an expression which first does the join and then joins
+# with the index. This can be advantageous when the join has fewer results than
+# the right input; in particular, the new join can be converted to a lookup join
+# by other rules.
+#
+# The IndexJoin needs to change into a more general LookupJoin because the
+# other's side columns need to be "plumbed" through.
+#
+#     Join                            LookupJoin
+#     /   \                               |
+#    /     \              ->            Join
+#  Left  IndexJoin                      /   \
+#           |                          /     \
+#         Right                      Left  Right
+#
+# The rule can only be applied when the ON condition doesn't depend on columns
+# added by the index join.
+[PushJoinThroughIndexJoin, Explore]
+(InnerJoin | LeftJoin
+    $left:*
+    (IndexJoin $right:* $indexJoinDef:*)
+    $on:* & (IsBoundBy2 $on $left $right)
+)
+=>
+(PushJoinThroughIndexJoin
+   ((OpName) $left $right $on)
+   (OpName)
+   $indexJoinDef
+   (True)
+)
+
+# PushJoinThroughIndexJoinWithExtraFilter is a specialization of the previous
+# rule for the case of an inner join where only part of the ON condition can be
+# evaluated before the index join.
+#
+# This case is particularly important because any filters on the results of an
+# inner join get pushed into the ON condition; so simply adding a WHERE clause
+# can stop the previous rule from running.
+[PushJoinThroughIndexJoinWithExtraFilter, Explore]
+(InnerJoin
+    $left:*
+    (IndexJoin $right:* $indexJoinDef:*)
+    $on:* & ^(IsBoundBy2 $on $left $right) & (Filters
+        $onList: [
+            ...
+            $condition:* & (IsBoundBy2 $condition $left $right)
+            ...
+        ]
+    )
+)
+=>
+(PushJoinThroughIndexJoin
+    $newJoin:(InnerJoin
+        $left
+        $right
+        (Filters (ExtractBoundConditions2 $onList $left $right))
+    )
+    (OpName)
+    $indexJoinDef
+    (Filters (ExtractUnboundConditions $onList $newJoin))
+)

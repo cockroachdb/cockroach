@@ -621,6 +621,56 @@ func (c *CustomFuncs) ConstructLookupJoin(
 	return c.e.exprs
 }
 
+// PushJoinThroughIndexJoin builds a lookup join expression that performs an
+// index join that is "pulled up" through a join. See the
+// PushJoinThroughIndexJoin rule for more information.
+func (c *CustomFuncs) PushJoinThroughIndexJoin(
+	newJoin memo.GroupID,
+	joinType opt.Operator,
+	indexJoinDefID memo.PrivateID,
+	remainingOn memo.GroupID,
+) []memo.Expr {
+	indexJoinDef := c.e.mem.LookupPrivate(indexJoinDefID).(*memo.IndexJoinDef)
+	inputCols := c.e.mem.GroupProperties(newJoin).Relational.OutputCols
+	md := c.e.mem.Metadata()
+
+	pkIndex := md.Table(indexJoinDef.Table).Index(opt.PrimaryIndex)
+	numPKCols := pkIndex.KeyColumnCount()
+
+	// Create the lookup join expression.
+	//
+	// The key columns are the PK columns.
+	//
+	// The lookup columns are the lookup columns in the original index join,
+	// without any columns that are already available in its input. Note that the
+	// lookup join "sees" column IDs from the table on both "sides", but there is
+	// no overlap.
+	//
+	// We support inner and left join. For left join, the lookup join node must
+	// pass-through NULL PKs that come from "outer" (null-extended) rows and
+	// return a row of NULLs. Because we know that all other rows will have a
+	// match in the primary index, we can achieve this by making the lookup join a
+	// left join as well.
+	lookupJoinDef := memo.LookupJoinDef{
+		JoinType:   joinType,
+		Table:      indexJoinDef.Table,
+		Index:      opt.PrimaryIndex,
+		KeyCols:    make(opt.ColList, numPKCols),
+		LookupCols: indexJoinDef.Cols.Difference(inputCols),
+	}
+	for i := 0; i < numPKCols; i++ {
+		lookupJoinDef.KeyCols[i] = md.TableColumn(indexJoinDef.Table, pkIndex.Column(i).Ordinal)
+		if !inputCols.Contains(int(lookupJoinDef.KeyCols[i])) {
+			panic("index join input doesn't have PK")
+		}
+	}
+	lookupJoin := memo.MakeLookupJoinExpr(
+		newJoin, remainingOn, c.e.mem.InternLookupJoinDef(&lookupJoinDef),
+	)
+	c.e.exprs = append(c.e.exprs[:0], memo.Expr(lookupJoin))
+	return c.e.exprs
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules
