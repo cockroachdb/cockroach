@@ -161,13 +161,13 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if txn.Proto().Epoch == 0 {
+		if txn.Epoch() == 0 {
 			close(start) // let someone write into our future
 			// When they're done writing, increment.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto().Epoch > 1 {
+		} else if txn.Epoch() > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -181,19 +181,21 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		// before anything else happened in the concurrent writer
 		// goroutine). The second iteration of the txn should read the
 		// correct value and commit.
-		if txn.Proto().Epoch == 0 && !txn.Proto().OrigTimestamp.Less(txn.Proto().Timestamp) {
-			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto())
+		proto := txn.Serialize()
+		if txn.Epoch() == 0 && !proto.OrigTimestamp.Less(proto.Timestamp) {
+			t.Fatalf("expected orig timestamp less than timestamp: %s", proto)
 		}
 		ir, err := txn.Inc(ctx, key, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if vi := ir.ValueInt(); vi != int64(txn.Proto().Epoch+1) {
-			t.Errorf("expected %d; got %d", txn.Proto().Epoch+1, vi)
+		proto = txn.Serialize()
+		if vi := ir.ValueInt(); vi != int64(proto.Epoch+1) {
+			t.Errorf("expected %d; got %d", proto.Epoch+1, vi)
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
-			t.Fatalf("expected write too old=%t; got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
+		if (txn.Epoch() == 0) != proto.WriteTooOld {
+			t.Fatalf("expected write too old=%t; got %t", (proto.Epoch == 0), proto.WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -233,13 +235,13 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if txn.Proto().Epoch == 0 {
+		if txn.Epoch() == 0 {
 			close(start) // let someone write into our future
 			// When they're done, write based on what we read.
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
-		} else if txn.Proto().Epoch > 1 {
+		} else if txn.Epoch() > 1 {
 			t.Fatal("should experience just one restart")
 		}
 
@@ -253,8 +255,9 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 			}
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		if (txn.Proto().Epoch == 0) != txn.Proto().WriteTooOld {
-			t.Fatalf("expected write too old set (%t): got %t", (txn.Proto().Epoch == 0), txn.Proto().WriteTooOld)
+		proto := txn.Serialize()
+		if (txn.Epoch() == 0) != proto.WriteTooOld {
+			t.Fatalf("expected write too old set (%t): got %t", (txn.Epoch() == 0), proto.WriteTooOld)
 		}
 		return nil
 	}); err != nil {
@@ -325,7 +328,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 				if iteration == 1 {
 					// Verify our priority has ratcheted to one less than the pusher's priority
 					expPri := int32(roachpb.MaxTxnPriority - 1)
-					if pri := txn.Proto().Priority; pri != expPri {
+					if pri := txn.Serialize().Priority; pri != expPri {
 						t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 					}
 					return nil

@@ -608,16 +608,6 @@ func (e *StoreNotFoundError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &StoreNotFoundError{}
 
-func (e *TxnPrevAttemptError) Error() string {
-	return e.message(nil)
-}
-
-func (*TxnPrevAttemptError) message(_ *Error) string {
-	return "response meant for previous incarnation of transaction"
-}
-
-var _ ErrorDetailInterface = &TxnPrevAttemptError{}
-
 func (e *TxnAlreadyEncounteredErrorError) Error() string {
 	return e.message(nil)
 }

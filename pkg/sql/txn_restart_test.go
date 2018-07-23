@@ -775,6 +775,7 @@ func assureTxnAborted(t *testing.T, s serverutils.TestServerInterface, txn *roac
 	push.PusherTxn.Priority = roachpb.MaxTxnPriority
 	abortBa.Add(push)
 	if _, pErr := s.DistSender().Send(context.Background(), abortBa); pErr != nil {
+		// !!! can't do t.Fatal here
 		t.Fatalf("failed to abort transaction: %v", pErr)
 	}
 }
