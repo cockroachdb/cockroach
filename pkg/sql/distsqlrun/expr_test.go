@@ -43,7 +43,8 @@ func TestProcessExpression(t *testing.T) {
 
 	e := Expression{Expr: "@1 * (@2 + @3) + @1"}
 	h := tree.MakeIndexedVarHelper(testVarContainer{}, 4)
-	expr, err := processExpression(e, &h)
+	semaCtx := tree.MakeSemaContext(false)
+	expr, err := processExpression(e, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}
