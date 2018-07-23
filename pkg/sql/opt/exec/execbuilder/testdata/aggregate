@@ -941,3 +941,18 @@ group           ·            ·             (array_agg)  ·
       └── scan  ·            ·             (k, s)       ·
 ·               table        kv@primary    ·            ·
 ·               spans        ALL           ·            ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
+----
+group                ·            ·                 (string_agg)                    ·
+ │                   aggregate 0  string_agg(s)     ·                               ·
+ │                   scalar       ·                 ·                               ·
+ └── nosort          ·            ·                 (s)                             ·
+      │              order        +k                ·                               ·
+      └── render     ·            ·                 (s, k)                          k!=NULL; key(k); +k
+           │         render 0     test.public.kv.s  ·                               ·
+           │         render 1     test.public.kv.k  ·                               ·
+           └── scan  ·            ·                 (k, v[omitted], w[omitted], s)  k!=NULL; key(k); +k
+·                    table        kv@primary        ·                               ·
+·                    spans        ALL               ·                               ·
