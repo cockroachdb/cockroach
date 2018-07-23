@@ -675,8 +675,8 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/4]
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
- ├── cost: 0.00648979592
+ ├── stats: [rows=1.42857143, distinct(2)=1.42857143, distinct(3)=1]
+ ├── cost: 1.51428571
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
@@ -688,8 +688,8 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
- ├── cost: 0.00648979592
+ ├── stats: [rows=1.42857143, distinct(2)=1, distinct(3)=1.42857143]
+ ├── cost: 1.51428571
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
@@ -714,8 +714,8 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/4]
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
- ├── cost: 0.00648979592
+ ├── stats: [rows=1.42857143, distinct(2)=1.42857143, distinct(3)=1]
+ ├── cost: 1.51428571
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
@@ -727,8 +727,8 @@ SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
 scan c@v
  ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
  ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
- ├── cost: 0.00648979592
+ ├── stats: [rows=1.42857143, distinct(2)=1, distinct(3)=1.42857143]
+ ├── cost: 1.51428571
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
@@ -874,7 +874,7 @@ SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
 ----
 select
  ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── stats: [rows=1.42857143, distinct(2)=1, distinct(3)=1.42857143]
  ├── cost: 1070
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
@@ -909,7 +909,7 @@ SELECT * FROM d WHERE (p, q) IN ((2, 1), (3, 1), (4, 1))
 ----
 select
  ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
- ├── stats: [rows=0.00612244898, distinct(2)=0.00612244898, distinct(3)=0.00612244898]
+ ├── stats: [rows=1.42857143, distinct(2)=1.42857143, distinct(3)=1]
  ├── cost: 1070
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)

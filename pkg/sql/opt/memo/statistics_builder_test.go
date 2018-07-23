@@ -61,7 +61,12 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}}
 		sb := &statisticsBuilder{}
 		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
+		if isContradiction {
+			sb.s.Selectivity = 0
+		}
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
@@ -90,7 +95,12 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}}
 		sb := &statisticsBuilder{}
 		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
+		if isContradiction {
+			sb.s.Selectivity = 0
+		}
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
