@@ -16,6 +16,8 @@ package security_test
 
 import (
 	"context"
+	gosql "database/sql"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -147,7 +149,11 @@ func TestGenerateNodeCerts(t *testing.T) {
 	}
 }
 
-func generateAllCerts(certsDir string) error {
+// Generate basic certs:
+// ca.crt: CA certificate
+// node.crt: dual-purpose node certificate
+// client.root.crt: client certificate for the root user.
+func generateBaseCerts(certsDir string) error {
 	if err := security.CreateCAPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
 		512, time.Hour*96, true, true,
@@ -164,6 +170,51 @@ func generateAllCerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, true, security.RootUser,
+	); err != nil {
+		return errors.Errorf("could not generate Client pair: %v", err)
+	}
+
+	return nil
+}
+
+// Generate certificates with separate CAs:
+// ca.crt: CA certificate
+// ca-client.crt: CA certificate to verify client certs
+// node.crt: node server cert: signed by ca.crt
+// client.node.crt: node client cert: signed by ca-client.crt
+// client.root.crt: root client cert: signed by ca-client.crt
+func generateSplitCACerts(certsDir string) error {
+	if err := security.CreateCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Errorf("could not generate CA pair: %v", err)
+	}
+
+	if err := security.CreateNodePair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, time.Hour*48, true, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Errorf("could not generate Node pair: %v", err)
+	}
+
+	if err := security.CreateClientCAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		512, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Errorf("could not generate CA pair: %v", err)
+	}
+
+	if err := security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
+		512, time.Hour*48, true, security.NodeUser,
+	); err != nil {
+		return errors.Errorf("could not generate Client pair: %v", err)
+	}
+
+	if err := security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		512, time.Hour*48, true, security.RootUser,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
@@ -189,12 +240,13 @@ func TestUseCerts(t *testing.T) {
 		}
 	}()
 
-	if err := generateAllCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
 	if _, err := security.LoadServerTLSConfig(
+		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedCACert),
 		filepath.Join(certsDir, security.EmbeddedNodeCert),
 		filepath.Join(certsDir, security.EmbeddedNodeKey),
@@ -218,7 +270,7 @@ func TestUseCerts(t *testing.T) {
 		SSLCertsDir:                     certsDir,
 		DisableWebSessionAuthentication: true,
 	}
-	s, _, _ := serverutils.StartServer(t, params)
+	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	// Insecure mode.
@@ -259,4 +311,231 @@ func TestUseCerts(t *testing.T) {
 		body, _ := ioutil.ReadAll(resp.Body)
 		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
 	}
+
+	// Check KV connection.
+	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+		t.Error(err)
+	}
+}
+
+func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) string {
+	return fmt.Sprintf("postgresql://%s@%s/?sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
+		user, addr,
+		filepath.Join(certsDir, caName),
+		filepath.Join(certsDir, certName),
+		filepath.Join(certsDir, keyName))
+}
+
+// This is a fairly high-level test of CA and node certificates.
+// We construct SSL server and clients and use the generated certs.
+func TestUseSplitCACerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if err := generateSplitCACerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a test server and override certs.
+	// We use a real context since we want generated certs.
+	// Web session authentication is disabled in order to avoid the need to
+	// authenticate the individual clients being instantiated (session auth has
+	// no effect on what is being tested here).
+	params := base.TestServerArgs{
+		SSLCertsDir:                     certsDir,
+		DisableWebSessionAuthentication: true,
+	}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Insecure mode.
+	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext.Insecure = true
+	httpClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected SSL error, got success: %s", body)
+	}
+
+	// New client. With certs this time.
+	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	httpClient, err = clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected OK, got %q with body: %s", resp.Status, body)
+	}
+
+	// Check KV connection.
+	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+		t.Error(err)
+	}
+
+	// Test a SQL client with various certificates.
+	testCases := []struct {
+		user, caName, certPrefix string
+		expectedError            string
+	}{
+		// Success, but "node" is not a sql user.
+		{"node", security.EmbeddedCACert, "client.node", "pq: user node does not exist"},
+		// Success!
+		{"root", security.EmbeddedCACert, "client.root", ""},
+		// Bad server CA: can't verify server certificate.
+		{"root", security.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
+		// Bad client cert: we're using the node cert but it's not signed by the client CA.
+		{"node", security.EmbeddedCACert, "node", "tls: bad certificate"},
+	}
+
+	for i, tc := range testCases {
+		pgUrl := makeSecurePGUrl(s.ServingAddr(), tc.user, certsDir, tc.caName, tc.certPrefix+".crt", tc.certPrefix+".key")
+		goDB, err := gosql.Open("postgres", pgUrl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer goDB.Close()
+
+		_, err = goDB.Exec("SELECT 1")
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+		}
+	}
+}
+
+// This is a fairly high-level test of CA and node certificates.
+// We construct SSL server and clients and use the generated certs.
+func TestUseWrongSplitCACerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if err := generateSplitCACerts(certsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete the ca-client.crt before starting the node.
+	// This will make the server fall back on using ca.crt.
+	if err := os.Remove(filepath.Join(certsDir, "ca-client.crt")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a test server and override certs.
+	// We use a real context since we want generated certs.
+	// Web session authentication is disabled in order to avoid the need to
+	// authenticate the individual clients being instantiated (session auth has
+	// no effect on what is being tested here).
+	params := base.TestServerArgs{
+		SSLCertsDir:                     certsDir,
+		DisableWebSessionAuthentication: true,
+	}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Insecure mode.
+	clientContext := testutils.NewNodeTestBaseContext()
+	clientContext.Insecure = true
+	httpClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("Expected SSL error, got success: %s", body)
+	}
+
+	// New client. With certs this time.
+	clientContext = testutils.NewNodeTestBaseContext()
+	clientContext.SSLCertsDir = certsDir
+	httpClient, err = clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatalf("Expected success, got %v", err)
+	}
+	req, err = http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	// TODO(mberhault): this will succeed once the UI TLSConfig does not
+	// check client certificates.
+	_, err = httpClient.Do(req)
+	if expected := "tls: bad certificate"; !testutils.IsError(err, expected) {
+		t.Errorf("expected error %v, got %v", expected, err)
+	}
+
+	// Check KV connection.
+	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+		t.Error(err)
+	}
+
+	// Try with various certificates.
+	testCases := []struct {
+		user, caName, certPrefix string
+		expectedError            string
+	}{
+		// Certificate signed by wrong client CA.
+		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
+		{"node", security.EmbeddedCACert, "node", "pq: user node does not exist"},
+	}
+
+	for i, tc := range testCases {
+		pgUrl := makeSecurePGUrl(s.ServingAddr(), tc.user, certsDir, tc.caName, tc.certPrefix+".crt", tc.certPrefix+".key")
+		goDB, err := gosql.Open("postgres", pgUrl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer goDB.Close()
+
+		_, err = goDB.Exec("SELECT 1")
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+		}
+	}
+
 }

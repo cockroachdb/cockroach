@@ -470,11 +470,12 @@ func (s *statusServer) Certificates(
 		switch cert.FileUsage {
 		case security.CAPem:
 			details.Type = serverpb.CertificateDetails_CA
+		case security.ClientCAPem:
+			details.Type = serverpb.CertificateDetails_CLIENT_CA
 		case security.NodePem:
 			details.Type = serverpb.CertificateDetails_NODE
 		case security.ClientPem:
-			// Ignore client certificates for now.
-			continue
+			details.Type = serverpb.CertificateDetails_CLIENT
 		default:
 			return nil, errors.Errorf("unknown certificate type %v for file %s", cert.FileUsage, cert.Filename)
 		}

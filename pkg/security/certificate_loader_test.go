@@ -37,6 +37,55 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+func TestCertNomenclature(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're just testing nomenclature parsing, all files exist and contain a valid PEM block.
+
+	testCases := []struct {
+		filename      string
+		expectedError string
+		usage         security.PemUsage
+		name          string
+	}{
+		// Test valid names.
+		{"ca.crt", "", security.CAPem, ""},
+		{"ca-client.crt", "", security.ClientCAPem, ""},
+		{"node.crt", "", security.NodePem, ""},
+		{"client.root.crt", "", security.ClientPem, "root"},
+		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
+		{"client....foo.bar.baz.how.many.dots.do.you.need...really....crt", "", security.ClientPem, "...foo.bar.baz.how.many.dots.do.you.need...really..."},
+
+		// Bad names. This function is only called on filenames ending with '.crt'.
+		{"crt", "not enough parts found", 0, ""},
+		{".crt", "unknown prefix", 0, ""},
+		{"ca2.crt", "unknown prefix \"ca2\"", 0, ""},
+		{"ca.client.crt", "CA certificate filename should match ca.crt", 0, ""},
+		{"node2.crt", "unknown prefix \"node2\"", 0, ""},
+		{"node.foo.crt", "node certificate filename should match node.crt", 0, ""},
+		{"client2.crt", "unknown prefix \"client2\"", 0, ""},
+		{"client.crt", "client certificate filename should match client.<user>.crt", 0, ""},
+		{"root.crt", "unknown prefix \"root\"", 0, ""},
+	}
+
+	for i, tc := range testCases {
+		ci, err := security.CertInfoFromFilename(tc.filename)
+		if !testutils.IsError(err, tc.expectedError) {
+			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		if ci.FileUsage != tc.usage {
+			t.Errorf("#%d: expected file usage %v, got %v", i, tc.usage, ci.FileUsage)
+		}
+		if ci.Name != tc.name {
+			t.Errorf("#%d: expected name %v, got %v", i, tc.name, ci.Name)
+		}
+	}
+}
+
 func TestLoadEmbeddedCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cl := security.NewCertificateLoader(security.EmbeddedCertsDir)
@@ -245,18 +294,18 @@ func TestNamingScheme(t *testing.T) {
 			},
 		},
 		{
-			// Bad CommonName.
+			// Bad CommonName: this is checked later in the CertificateManager.
 			files: []testFile{
 				{"node.crt", 0777, badUserNodeCert},
-				{"node.key", 0700, []byte{}},
+				{"node.key", 0700, []byte("node.key")},
 				{"client.root.crt", 0777, notRootCert},
 				{"client.root.key", 0700, []byte{}},
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
 					Error: errors.New("client certificate has Subject \"CN=notroot\", expected \"CN=root")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate has Subject \"CN=notnode\", expected \"CN=node")},
+				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
+					FileContents: badUserNodeCert, KeyFileContents: []byte("node.key")},
 			},
 		},
 		{
@@ -267,22 +316,22 @@ func TestNamingScheme(t *testing.T) {
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=false, ClientAuth=true, but both are needed")},
+					Error: errors.New("node certificate extended key usage missing ServerAuth")},
 			},
 		},
 		{
-			// No ClientAuth key usage.
+			// No ClientAuth key usage: this is checked later by the CertificateManager.
 			files: []testFile{
 				{"node.crt", 0777, noClientAuthNodeCert},
-				{"node.key", 0700, []byte{}},
+				{"node.key", 0700, []byte("node.key")},
 				{"client.root.crt", 0777, noClientAuthRootCert},
 				{"client.root.key", 0700, []byte{}},
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
 					Error: errors.New("client certificate does not have ClientAuth extended key usage")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=true, ClientAuth=false, but both are needed")},
+				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
+					FileContents: noClientAuthNodeCert, KeyFileContents: []byte("node.key")},
 			},
 		},
 		{
@@ -293,7 +342,7 @@ func TestNamingScheme(t *testing.T) {
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usages: ServerAuth=false, ClientAuth=false, but both are needed")},
+					Error: errors.New("node certificate extended key usage missing ServerAuth")},
 			},
 		},
 		{

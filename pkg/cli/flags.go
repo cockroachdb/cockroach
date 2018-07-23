@@ -245,7 +245,7 @@ func init() {
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
 
-	for _, cmd := range []*cobra.Command{createCACertCmd} {
+	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
 		f := cmd.Flags()
 		// CA certificates have a longer expiration time.
 		DurationFlag(f, &caCertificateLifetime, cliflags.CertificateLifetime, defaultCALifetime)
@@ -259,7 +259,7 @@ func init() {
 	}
 
 	// The remaining flags are shared between all cert-generating functions.
-	for _, cmd := range []*cobra.Command{createCACertCmd, createNodeCertCmd, createClientCertCmd} {
+	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd, createNodeCertCmd, createClientCertCmd} {
 		f := cmd.Flags()
 		StringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
 		IntFlag(f, &keySize, cliflags.KeySize, defaultKeySize)

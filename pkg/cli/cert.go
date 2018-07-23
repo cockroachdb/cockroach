@@ -69,6 +69,44 @@ func runCreateCACert(cmd *cobra.Command, args []string) error {
 		"failed to generate CA cert and key")
 }
 
+// A createClientCACert command generates a client CA certificate and stores it
+// in the cert directory.
+var createClientCACertCmd = &cobra.Command{
+	Use:   "create-client-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-client-ca-key>",
+	Short: "create client CA certificate and key",
+	Long: `
+Generate a client CA certificate "<certs-dir>/ca-client.crt" and CA key "<client-ca-key>".
+The certs directory is created if it does not exist.
+
+If the CA key exists and --allow-ca-key-reuse is true, the key is used.
+If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
+
+The client CA is optional and should only be used when separate CAs are desired for server certificates
+and client certificates.
+
+If the client CA exists, a client.node.crt client certificate must be created using:
+  cockroach cert create-client node
+
+Once the client.node.crt exists, all client certificates will be verified using the client CA.
+`,
+	Args: cobra.NoArgs,
+	RunE: MaybeDecorateGRPCError(runCreateClientCACert),
+}
+
+// runCreateClientCACert generates a key and CA certificate and writes them
+// to their corresponding files.
+func runCreateClientCACert(cmd *cobra.Command, args []string) error {
+	return errors.Wrap(
+		security.CreateClientCAPair(
+			baseCfg.SSLCertsDir,
+			baseCfg.SSLCAKey,
+			keySize,
+			caCertificateLifetime,
+			allowCAKeyReuse,
+			overwriteFiles),
+		"failed to generate client CA cert and key")
+}
+
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
@@ -137,7 +175,8 @@ Creation fails if the CA expiration time is before the desired certificate expir
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	var err error
 	var username string
-	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
+	// We intentionally allow the `node` user to have a cert.
+	if username, err = sql.NormalizeAndValidateUsernameNoBlacklist(args[0]); err != nil {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 
@@ -200,6 +239,14 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, notes)
 	}
 
+	if cert := cm.ClientCACert(); cert != nil {
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
+	}
+
 	if cert := cm.NodeCert(); cert != nil {
 		var addresses []string
 		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
@@ -230,6 +277,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 var certCmds = []*cobra.Command{
 	createCACertCmd,
+	createClientCACertCmd,
 	createNodeCertCmd,
 	createClientCertCmd,
 	listCertsCmd,
