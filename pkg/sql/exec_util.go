@@ -402,21 +402,27 @@ func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
 	return dc.mu.c
 }
 
-// waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) (bool, error)) error {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-	for {
-		done, err := cond(dc.mu.c)
-		if err != nil {
-			return err
+// subscribe implements the dbCacheSubscriber interface
+func (dc *databaseCacheHolder) subscribe(ctx context.Context) <-chan *databaseCache {
+	// We want a buffered channel here so that a slow subscriber
+	// will not unduly block the cache holder.
+	ch := make(chan *databaseCache, 1024)
+	go func() {
+		defer close(ch)
+		dc.mu.Lock()
+		defer dc.mu.Unlock()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- dc.mu.c:
+				dc.mu.cv.Wait()
+			case <-time.After(time.Minute):
+				panic("subscriber is not draining notifications")
+			}
 		}
-		if done {
-			break
-		}
-		dc.mu.cv.Wait()
-	}
-	return nil
+	}()
+	return ch
 }
 
 // databaseCacheHolder implements the dbCacheSubscriber interface.
