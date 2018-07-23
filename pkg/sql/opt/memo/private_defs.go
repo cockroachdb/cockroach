@@ -317,18 +317,37 @@ type MergeOnDef struct {
 	// Examples of valid settings for abc JOIN def ON a=d,b=e:
 	//   LeftEq: a+,b+   RightEq: d+,e+
 	//   LeftEq: b-,a+   RightEq: e-,d+
-	//
-	// TODO(radu): we may want one of the orderings to cover more than the
-	// equality columns (to guarantee a certain output ordering). In the example
-	// above, if we can get ordering a+,b+,c+ on the left side and ordering d+,e+
-	// on the right side, we can guarantee a+,b+,c+ on the merge join results.
 	LeftEq  opt.Ordering
 	RightEq opt.Ordering
 
 	// LeftOrdering and RightOrdering are "simplified" versions of LeftEq/RightEq,
-	// taking into account functional dependencies. We need both versions because
-	// we need to configure execution with specific equality columns and
-	// orderings.
+	// taking into account the functional dependencies of each side. We need both
+	// versions because we need to configure execution with specific equality
+	// columns and orderings.
 	LeftOrdering  props.OrderingChoice
 	RightOrdering props.OrderingChoice
+}
+
+// CanProvideOrdering returns true if the MergeJoin operator returns rows that
+// satisfy the given required ordering.
+func (m *MergeOnDef) CanProvideOrdering(required *props.OrderingChoice) bool {
+	// TODO(radu): in principle, we could pass through an ordering that covers
+	// more than the equality columns. For example, if we have a merge join
+	// with left ordering a+,b+ and right ordering x+,y+ we could guarantee
+	// a+,b+,c+ if we pass that requirement through to the left side. However,
+	// this requires a specific contract on the execution side on which side's
+	// ordering is preserved when multiple rows match on the equality columns.
+	switch m.JoinType {
+	case opt.InnerJoinOp:
+		return m.LeftOrdering.SubsetOf(required) || m.RightOrdering.SubsetOf(required)
+
+	case opt.LeftJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
+		return m.LeftOrdering.SubsetOf(required)
+
+	case opt.RightJoinOp:
+		return m.RightOrdering.SubsetOf(required)
+
+	default:
+		return false
+	}
 }

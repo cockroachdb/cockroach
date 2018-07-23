@@ -416,3 +416,223 @@ memo (optimized)
       └── ""
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
+
+# --------------------------------------------------
+# Merge Join
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      └── c int not null
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y, z))
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int not null
+ ├── z int not null
+ └── INDEX primary
+      ├── x int not null
+      ├── y int not null
+      └── z int not null
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x ORDER BY a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +(1|4)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── filters [type=bool]
+           └── abc.a = xyz.x [type=bool]
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x ORDER BY x
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +(1|4)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── filters [type=bool]
+           └── abc.a = xyz.x [type=bool]
+
+# A left join guarantees an ordering on the left side.
+opt
+SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY a
+----
+left-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── filters [type=bool]
+           └── abc.a = xyz.x [type=bool]
+
+# A left join doesn't guarantee an ordering on x (some rows will have NULLs).
+opt
+SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY x
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+ ├── ordering: +4
+ └── left-join (merge)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1
+      ├── scan xyz
+      │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │    └── ordering: +4
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +4
+           └── filters [type=bool]
+                └── abc.a = xyz.x [type=bool]
+
+# A right join doesn't guarantee an ordering on a (some rows will have NULLs).
+opt
+SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY a
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +1
+ └── right-join (merge)
+      ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1
+      ├── scan xyz
+      │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │    └── ordering: +4
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +4
+           └── filters [type=bool]
+                └── abc.a = xyz.x [type=bool]
+
+opt
+SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
+----
+right-join (merge)
+ ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +4
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── filters [type=bool]
+           └── abc.a = xyz.x [type=bool]
+
+opt
+SELECT * FROM abc FULL OUTER JOIN xyz ON a=x ORDER BY a
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int) x:4(int) y:5(int) z:6(int)
+ ├── ordering: +1
+ └── full-join (merge)
+      ├── columns: a:1(int) b:2(int) c:3(int) x:4(int) y:5(int) z:6(int)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1
+      ├── scan xyz
+      │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+      │    └── ordering: +4
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +4
+           └── filters [type=bool]
+                └── abc.a = xyz.x [type=bool]
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +(1|4)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4,+5
+ └── merge-on
+      ├── left ordering: +1,+2
+      ├── right ordering: +4,+5
+      └── filters [type=bool]
+           ├── abc.a = xyz.x [type=bool]
+           └── abc.b = xyz.y [type=bool]
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, b
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +(1|4),+(2|5)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4,+5
+ └── merge-on
+      ├── left ordering: +1,+2
+      ├── right ordering: +4,+5
+      └── filters [type=bool]
+           ├── abc.a = xyz.x [type=bool]
+           └── abc.b = xyz.y [type=bool]
+
+opt
+SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, y
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── ordering: +(1|4),+(2|5)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4,+5
+ └── merge-on
+      ├── left ordering: +1,+2
+      ├── right ordering: +4,+5
+      └── filters [type=bool]
+           ├── abc.a = xyz.x [type=bool]
+           └── abc.b = xyz.y [type=bool]

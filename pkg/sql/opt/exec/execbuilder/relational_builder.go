@@ -401,8 +401,9 @@ func (b *Builder) buildMergeJoin(ev memo.ExprView) (execPlan, error) {
 	leftOrd := b.makeSQLOrdering(left, def.LeftEq)
 	rightOrd := b.makeSQLOrdering(right, def.RightEq)
 	ep := execPlan{outputCols: outputCols}
+	reqOrd := b.makeSQLOrderingFromChoice(ep, &ev.Physical().Ordering)
 	ep.root, err = b.factory.ConstructMergeJoin(
-		joinType, left.root, right.root, onExpr, leftOrd, rightOrd,
+		joinType, left.root, right.root, onExpr, leftOrd, rightOrd, reqOrd,
 	)
 	if err != nil {
 		return execPlan{}, err
