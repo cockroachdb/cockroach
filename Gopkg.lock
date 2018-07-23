@@ -1018,6 +1018,16 @@
   revision = "836a144573533ea4da4e6929c235fd348aed1c80"
 
 [[projects]]
+  name = "github.com/shirou/gopsutil"
+  packages = [
+    "disk",
+    "internal/common",
+    "net",
+  ]
+  revision = "4a180b209f5f494e5923cfce81ea30ba23915877"
+  version = "v2.18.06"
+
+[[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   revision = "f006c2ac4710855cf0f916dd6b77acf6b048dc6e"
@@ -1308,6 +1318,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b827f3b21201b3e823cb4ad015a30496788510cf54dfdb3533cc8b79b0ea553f"
+  inputs-digest = "7356b2f481042b2b79a78bd5541e8c7d40e8073cbb5d6c6f0854c9dcfd9455b0"
   solver-name = "gps-cdcl"
   solver-version = 1

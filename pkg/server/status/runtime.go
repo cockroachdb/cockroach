@@ -27,59 +27,184 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/net"
 )
 
 var (
 	metaCgoCalls = metric.Metadata{
-		Name: "sys.cgocalls", Help: "Total number of cgo calls", Measurement: "cgo Calls", Unit: metric.Unit_COUNT,
+		Name:        "sys.cgocalls",
+		Help:        "Total number of cgo calls",
+		Measurement: "cgo Calls",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaGoroutines = metric.Metadata{
-		Name: "sys.goroutines", Help: "Current number of goroutines", Measurement: "goroutines", Unit: metric.Unit_COUNT,
+		Name:        "sys.goroutines",
+		Help:        "Current number of goroutines",
+		Measurement: "goroutines",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaGoAllocBytes = metric.Metadata{
-		Name: "sys.go.allocbytes", Help: "Current bytes of memory allocated by go", Measurement: "Memory", Unit: metric.Unit_BYTES,
+		Name:        "sys.go.allocbytes",
+		Help:        "Current bytes of memory allocated by go",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaGoTotalBytes = metric.Metadata{
-		Name: "sys.go.totalbytes", Help: "Total bytes of memory allocated by go, but not released", Measurement: "Memory", Unit: metric.Unit_BYTES,
+		Name:        "sys.go.totalbytes",
+		Help:        "Total bytes of memory allocated by go, but not released",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaCgoAllocBytes = metric.Metadata{
-		Name: "sys.cgo.allocbytes", Help: "Current bytes of memory allocated by cgo", Measurement: "Memory", Unit: metric.Unit_BYTES,
+		Name:        "sys.cgo.allocbytes",
+		Help:        "Current bytes of memory allocated by cgo",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaCgoTotalBytes = metric.Metadata{
-		Name: "sys.cgo.totalbytes", Help: "Total bytes of memory allocated by cgo, but not released", Measurement: "Memory", Unit: metric.Unit_BYTES,
+		Name:        "sys.cgo.totalbytes",
+		Help:        "Total bytes of memory allocated by cgo, but not released",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaGCCount = metric.Metadata{
-		Name: "sys.gc.count", Help: "Total number of GC runs", Measurement: "GC Runs", Unit: metric.Unit_COUNT,
+		Name:        "sys.gc.count",
+		Help:        "Total number of GC runs",
+		Measurement: "GC Runs",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaGCPauseNS = metric.Metadata{
-		Name: "sys.gc.pause.ns", Help: "Total GC pause", Measurement: "GC Pause", Unit: metric.Unit_NANOSECONDS,
+		Name:        "sys.gc.pause.ns",
+		Help:        "Total GC pause",
+		Measurement: "GC Pause",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaGCPausePercent = metric.Metadata{
-		Name: "sys.gc.pause.percent", Help: "Current GC pause percentage", Measurement: "GC Pause", Unit: metric.Unit_PERCENT,
+		Name:        "sys.gc.pause.percent",
+		Help:        "Current GC pause percentage",
+		Measurement: "GC Pause",
+		Unit:        metric.Unit_PERCENT,
 	}
 	metaCPUUserNS = metric.Metadata{
-		Name: "sys.cpu.user.ns", Help: "Total user cpu time", Measurement: "CPU Time", Unit: metric.Unit_NANOSECONDS,
+		Name:        "sys.cpu.user.ns",
+		Help:        "Total user cpu time",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaCPUUserPercent = metric.Metadata{
-		Name: "sys.cpu.user.percent", Help: "Current user cpu percentage", Measurement: "CPU Time", Unit: metric.Unit_PERCENT,
+		Name:        "sys.cpu.user.percent",
+		Help:        "Current user cpu percentage",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
 	}
 	metaCPUSysNS = metric.Metadata{
-		Name: "sys.cpu.sys.ns", Help: "Total system cpu time", Measurement: "CPU Time", Unit: metric.Unit_NANOSECONDS,
+		Name:        "sys.cpu.sys.ns",
+		Help:        "Total system cpu time",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaCPUSysPercent = metric.Metadata{
-		Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage", Measurement: "CPU Time", Unit: metric.Unit_PERCENT,
+		Name:        "sys.cpu.sys.percent",
+		Help:        "Current system cpu percentage",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
 	}
 	metaRSS = metric.Metadata{
-		Name: "sys.rss", Help: "Current process RSS", Measurement: "RSS", Unit: metric.Unit_BYTES,
+		Name:        "sys.rss",
+		Help:        "Current process RSS",
+		Measurement: "RSS",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaFDOpen = metric.Metadata{
-		Name: "sys.fd.open", Help: "Process open file descriptors", Measurement: "File Descriptors", Unit: metric.Unit_COUNT,
+		Name:        "sys.fd.open",
+		Help:        "Process open file descriptors",
+		Measurement: "File Descriptors",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaFDSoftLimit = metric.Metadata{
-		Name: "sys.fd.softlimit", Help: "Process open FD soft limit", Measurement: "File Descriptors", Unit: metric.Unit_COUNT,
+		Name:        "sys.fd.softlimit",
+		Help:        "Process open FD soft limit",
+		Measurement: "File Descriptors",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaUptime = metric.Metadata{
-		Name: "sys.uptime", Help: "Process uptime", Measurement: "Uptime", Unit: metric.Unit_SECONDS,
+		Name:        "sys.uptime",
+		Help:        "Process uptime",
+		Measurement: "Uptime",
+		Unit:        metric.Unit_SECONDS,
+	}
+
+	// These disk and network stats are counters of the number of operations, packets, bytes, and
+	// cumulative time of the disk and net IO that has been done across the whole host *since this
+	// Cockroach process started up*. By taking the derivatives of these metrics, we can see the
+	// IO throughput.
+	metaHostDiskReadCount = metric.Metadata{
+		Name:        "sys.host.disk.read.count",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Disk read operations across all disks since this process started",
+	}
+	metaHostDiskReadTime = metric.Metadata{
+		Name:        "sys.host.disk.read.time",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+		Measurement: "Disk time",
+		Help:        "Time spent reading from all disks since this process started",
+	}
+	metaHostDiskReadBytes = metric.Metadata{
+		Name:        "sys.host.disk.read.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes read from all disks since this process started",
+	}
+
+	metaHostDiskWriteCount = metric.Metadata{
+		Name:        "sys.host.disk.write.count",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Disk write operations across all disks since this process started",
+	}
+	metaHostDiskWriteTime = metric.Metadata{
+		Name:        "sys.host.disk.write.time",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+		Measurement: "Disk time",
+		Help:        "Time spent writing to all disks since this process started",
+	}
+	metaHostDiskWriteBytes = metric.Metadata{
+		Name:        "sys.host.disk.write.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes written to all disks since this process started",
+	}
+	metaHostIopsInProgress = metric.Metadata{
+		Name:        "sys.host.disk.iopsinprogress",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "IO operations currently in progress on this host",
+	}
+	metaHostNetRecvBytes = metric.Metadata{
+		Name:        "sys.host.net.recv.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes received on all network interfaces since this process started",
+	}
+	metaHostNetRecvPackets = metric.Metadata{
+		Name:        "sys.host.net.recv.packets",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Packets received on all network interfaces since this process started",
+	}
+	metaHostNetSendBytes = metric.Metadata{
+		Name:        "sys.host.net.send.bytes",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Bytes",
+		Help:        "Bytes sent on all network interfaces since this process started",
+	}
+	metaHostNetSendPackets = metric.Metadata{
+		Name:        "sys.host.net.send.packets",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Packets sent on all network interfaces since this process started",
 	}
 )
 
@@ -108,10 +233,14 @@ type RuntimeStatSampler struct {
 	lastCgoCall   int64
 	lastNumGC     uint32
 
+	initialDiskCounters disk.IOCountersStat
+	initialNetCounters  net.IOCountersStat
+
 	// Only show "not implemented" errors once, we don't need the log spam.
 	fdUsageNotImplemented bool
 
 	// Metric gauges maintained by the sampler.
+	// Go runtime stats.
 	CgoCalls       *metric.Gauge
 	Goroutines     *metric.Gauge
 	GoAllocBytes   *metric.Gauge
@@ -121,31 +250,50 @@ type RuntimeStatSampler struct {
 	GcCount        *metric.Gauge
 	GcPauseNS      *metric.Gauge
 	GcPausePercent *metric.GaugeFloat64
+	// CPU stats.
 	CPUUserNS      *metric.Gauge
 	CPUUserPercent *metric.GaugeFloat64
 	CPUSysNS       *metric.Gauge
 	CPUSysPercent  *metric.GaugeFloat64
-	Rss            *metric.Gauge
-	FDOpen         *metric.Gauge
-	FDSoftLimit    *metric.Gauge
+	// Memory stats.
+	Rss *metric.Gauge
+	// File descriptor stats.
+	FDOpen      *metric.Gauge
+	FDSoftLimit *metric.Gauge
+	// Disk and network stats.
+	HostDiskReadBytes  *metric.Gauge
+	HostDiskReadTime   *metric.Gauge
+	HostDiskReadCount  *metric.Gauge
+	HostDiskWriteBytes *metric.Gauge
+	HostDiskWriteTime  *metric.Gauge
+	HostDiskWriteCount *metric.Gauge
+	IopsInProgress     *metric.Gauge // not collected on macOS.
+	HostNetRecvBytes   *metric.Gauge
+	HostNetRecvPackets *metric.Gauge
+	HostNetSendBytes   *metric.Gauge
+	HostNetSendPackets *metric.Gauge
+	// Uptime and build.
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
 	BuildTimestamp *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
+func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSampler {
 	// Construct the build info metric. It is constant.
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
 	timestamp, err := info.Timestamp()
 	if err != nil {
 		// We can't panic here, tests don't have a build timestamp.
-		log.Warningf(context.TODO(), "Could not parse build timestamp: %v", err)
+		log.Warningf(ctx, "Could not parse build timestamp: %v", err)
 	}
 
 	// Build information.
 	metaBuildTimestamp := metric.Metadata{
-		Name: "build.timestamp", Help: "Build information", Measurement: "Build Time", Unit: metric.Unit_TIMESTAMP_SEC,
+		Name:        "build.timestamp",
+		Help:        "Build information",
+		Measurement: "Build Time",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
@@ -153,27 +301,49 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
 	buildTimestamp.Update(timestamp)
 
+	diskCounters, err := getSummedDiskCounters(ctx)
+	if err != nil {
+		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+	}
+	netCounters, err := getSummedNetStats(ctx)
+	if err != nil {
+		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+	}
+
 	return RuntimeStatSampler{
-		clock:          clock,
-		startTimeNanos: clock.PhysicalNow(),
-		CgoCalls:       metric.NewGauge(metaCgoCalls),
-		Goroutines:     metric.NewGauge(metaGoroutines),
-		GoAllocBytes:   metric.NewGauge(metaGoAllocBytes),
-		GoTotalBytes:   metric.NewGauge(metaGoTotalBytes),
-		CgoAllocBytes:  metric.NewGauge(metaCgoAllocBytes),
-		CgoTotalBytes:  metric.NewGauge(metaCgoTotalBytes),
-		GcCount:        metric.NewGauge(metaGCCount),
-		GcPauseNS:      metric.NewGauge(metaGCPauseNS),
-		GcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
-		CPUUserNS:      metric.NewGauge(metaCPUUserNS),
-		CPUUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
-		CPUSysNS:       metric.NewGauge(metaCPUSysNS),
-		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
-		Rss:            metric.NewGauge(metaRSS),
-		FDOpen:         metric.NewGauge(metaFDOpen),
-		FDSoftLimit:    metric.NewGauge(metaFDSoftLimit),
-		Uptime:         metric.NewGauge(metaUptime),
-		BuildTimestamp: buildTimestamp,
+		clock:               clock,
+		startTimeNanos:      clock.PhysicalNow(),
+		initialNetCounters:  netCounters,
+		initialDiskCounters: diskCounters,
+		CgoCalls:            metric.NewGauge(metaCgoCalls),
+		Goroutines:          metric.NewGauge(metaGoroutines),
+		GoAllocBytes:        metric.NewGauge(metaGoAllocBytes),
+		GoTotalBytes:        metric.NewGauge(metaGoTotalBytes),
+		CgoAllocBytes:       metric.NewGauge(metaCgoAllocBytes),
+		CgoTotalBytes:       metric.NewGauge(metaCgoTotalBytes),
+		GcCount:             metric.NewGauge(metaGCCount),
+		GcPauseNS:           metric.NewGauge(metaGCPauseNS),
+		GcPausePercent:      metric.NewGaugeFloat64(metaGCPausePercent),
+		CPUUserNS:           metric.NewGauge(metaCPUUserNS),
+		CPUUserPercent:      metric.NewGaugeFloat64(metaCPUUserPercent),
+		CPUSysNS:            metric.NewGauge(metaCPUSysNS),
+		CPUSysPercent:       metric.NewGaugeFloat64(metaCPUSysPercent),
+		Rss:                 metric.NewGauge(metaRSS),
+		HostDiskReadBytes:   metric.NewGauge(metaHostDiskReadBytes),
+		HostDiskReadTime:    metric.NewGauge(metaHostDiskReadTime),
+		HostDiskReadCount:   metric.NewGauge(metaHostDiskReadCount),
+		HostDiskWriteBytes:  metric.NewGauge(metaHostDiskWriteBytes),
+		HostDiskWriteTime:   metric.NewGauge(metaHostDiskWriteTime),
+		HostDiskWriteCount:  metric.NewGauge(metaHostDiskWriteCount),
+		IopsInProgress:      metric.NewGauge(metaHostIopsInProgress),
+		HostNetRecvBytes:    metric.NewGauge(metaHostNetRecvBytes),
+		HostNetRecvPackets:  metric.NewGauge(metaHostNetRecvPackets),
+		HostNetSendBytes:    metric.NewGauge(metaHostNetSendBytes),
+		HostNetSendPackets:  metric.NewGauge(metaHostNetSendPackets),
+		FDOpen:              metric.NewGauge(metaFDOpen),
+		FDSoftLimit:         metric.NewGauge(metaFDSoftLimit),
+		Uptime:              metric.NewGauge(metaUptime),
+		BuildTimestamp:      buildTimestamp,
 	}
 }
 
@@ -205,8 +375,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	if err := mem.Get(pid); err != nil {
 		log.Errorf(ctx, "unable to get mem usage: %v", err)
 	}
-	cpu := gosigar.ProcTime{}
-	if err := cpu.Get(pid); err != nil {
+	cpuTime := gosigar.ProcTime{}
+	if err := cpuTime.Get(pid); err != nil {
 		log.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
 
@@ -227,9 +397,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	// if calculated later using downsampled time series data.
 	now := rsr.clock.PhysicalNow()
 	dur := float64(now - rsr.lastNow)
-	// cpu.{User,Sys} are in milliseconds, convert to nanoseconds.
-	newUtime := int64(cpu.User) * 1e6
-	newStime := int64(cpu.Sys) * 1e6
+	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
+	newUtime := int64(cpuTime.User) * 1e6
+	newStime := int64(cpuTime.Sys) * 1e6
 	uPerc := float64(newUtime-rsr.lastUtime) / dur
 	sPerc := float64(newStime-rsr.lastStime) / dur
 	pausePerc := float64(ms.PauseTotalNs-rsr.lastPauseTime) / dur
@@ -243,7 +413,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		var err error
 		cgoAllocated, cgoTotal, err = getCgoMemStats(ctx)
 		if err != nil {
-			log.Warningf(ctx, "problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
+			log.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
 		}
 	}
 
@@ -280,4 +450,118 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.Rss.Update(int64(mem.Resident))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
+
+	if err := rsr.sampleDiskStats(ctx); err != nil {
+		log.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
+	}
+	if err := rsr.sampleNetStats(ctx); err != nil {
+		log.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+	}
+}
+
+func getSummedDiskCounters(ctx context.Context) (disk.IOCountersStat, error) {
+	ioCounters, err := disk.IOCountersWithContext(ctx)
+	if err != nil {
+		return disk.IOCountersStat{}, err
+	}
+
+	return sumDiskCounters(ioCounters), nil
+}
+
+func (rsr *RuntimeStatSampler) sampleDiskStats(ctx context.Context) error {
+	summedDiskCounters, err := getSummedDiskCounters(ctx)
+	if err != nil {
+		return err
+	}
+
+	subtractDiskCounters(&summedDiskCounters, rsr.initialDiskCounters)
+
+	rsr.HostDiskReadBytes.Update(int64(summedDiskCounters.ReadBytes))
+	rsr.HostDiskReadTime.Update(int64(summedDiskCounters.ReadTime) * 1e6) // ms to ns
+	rsr.HostDiskReadCount.Update(int64(summedDiskCounters.ReadCount))
+	rsr.HostDiskWriteBytes.Update(int64(summedDiskCounters.WriteBytes))
+	rsr.HostDiskWriteTime.Update(int64(summedDiskCounters.WriteTime) * 1e6) // ms to ns
+	rsr.HostDiskWriteCount.Update(int64(summedDiskCounters.WriteCount))
+	rsr.IopsInProgress.Update(int64(summedDiskCounters.IopsInProgress))
+
+	return nil
+}
+
+func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
+	netCounters, err := net.IOCountersWithContext(ctx, true /* idk what this bool means */)
+	if err != nil {
+		return net.IOCountersStat{}, err
+	}
+
+	return sumNetworkCounters(netCounters), nil
+}
+
+func (rsr *RuntimeStatSampler) sampleNetStats(ctx context.Context) error {
+	summedNetCounters, err := getSummedNetStats(ctx)
+	if err != nil {
+		return err
+	}
+
+	subtractNetworkCounters(&summedNetCounters, rsr.initialNetCounters)
+
+	rsr.HostNetSendBytes.Update(int64(summedNetCounters.BytesSent))
+	rsr.HostNetSendPackets.Update(int64(summedNetCounters.PacketsSent))
+	rsr.HostNetRecvBytes.Update(int64(summedNetCounters.BytesRecv))
+	rsr.HostNetRecvPackets.Update(int64(summedNetCounters.PacketsRecv))
+
+	return nil
+}
+
+// sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
+// values in the slice of disk.IOCountersStats passed in.
+func sumDiskCounters(disksStats map[string]disk.IOCountersStat) disk.IOCountersStat {
+	output := disk.IOCountersStat{}
+	for _, stats := range disksStats {
+		output.ReadBytes += stats.ReadBytes
+		output.ReadTime += stats.ReadTime
+		output.ReadCount += stats.ReadCount
+
+		output.WriteBytes += stats.WriteBytes
+		output.WriteTime += stats.WriteTime
+		output.WriteCount += stats.WriteCount
+
+		output.IopsInProgress += stats.IopsInProgress
+	}
+	return output
+}
+
+// subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
+// saving the results in `from`.
+func subtractDiskCounters(from *disk.IOCountersStat, sub disk.IOCountersStat) {
+	from.WriteCount -= sub.WriteCount
+	from.WriteTime -= sub.WriteTime
+	from.WriteBytes -= sub.WriteBytes
+
+	from.ReadCount -= sub.ReadCount
+	from.ReadTime -= sub.ReadTime
+	from.ReadBytes -= sub.ReadBytes
+
+	from.IopsInProgress -= sub.IopsInProgress
+}
+
+// sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the
+// values in the slice of net.IOCountersStats passed in.
+func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
+	output := net.IOCountersStat{}
+	for _, counter := range netCounters {
+		output.BytesRecv += counter.BytesRecv
+		output.BytesSent += counter.BytesSent
+		output.PacketsRecv += counter.PacketsRecv
+		output.PacketsSent += counter.PacketsSent
+	}
+	return output
+}
+
+// subtractNetworkCounters subtracts the counters in `sub` from the counters in `from`,
+// saving the results in `from`.
+func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
+	from.BytesRecv -= sub.BytesRecv
+	from.BytesSent -= sub.BytesSent
+	from.PacketsRecv -= sub.PacketsRecv
+	from.PacketsSent -= sub.PacketsSent
 }
