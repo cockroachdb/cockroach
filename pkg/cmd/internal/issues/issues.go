@@ -246,8 +246,6 @@ func (p *poster) init() {
 func (p *poster) post(
 	ctx context.Context, detail, packageName, testName, message, authorEmail string,
 ) error {
-	packageName = cockroachPkgPrefix + packageName
-
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
 Parameters:%[2]s
@@ -275,7 +273,7 @@ Failed test: %[3]s`
 		}
 	}
 
-	newIssueComment := func(packageName, testName string) *github.IssueComment {
+	newIssueComment := func(testName string) *github.IssueComment {
 		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL())
 		return &github.IssueComment{Body: &body}
 	}
@@ -315,7 +313,7 @@ Failed test: %[3]s`
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(packageName, testName)
+		comment := newIssueComment(testName)
 		if _, _, err := p.createComment(
 			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",

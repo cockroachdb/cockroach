@@ -38,6 +38,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -180,14 +181,19 @@ func MakeExportStorage(
 ) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
+		telemetry.Count("external-io.nodelocal")
 		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
+		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExportStorageProvider_S3:
+		telemetry.Count("external-io.s3")
 		return makeS3Storage(ctx, dest.S3Config, settings)
 	case roachpb.ExportStorageProvider_GoogleCloud:
+		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
 	case roachpb.ExportStorageProvider_Azure:
+		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())

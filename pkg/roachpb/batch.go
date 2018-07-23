@@ -158,6 +158,16 @@ func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
 	return false
 }
 
+// IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
+// request, and that request is a HeartbeatTxn.
+func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*HeartbeatTxnRequest)
+		return ok
+	}
+	return false
+}
+
 // IsSingleEndTransactionRequest returns true iff the batch contains a single
 // request, and that request is an EndTransactionRequest.
 func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
