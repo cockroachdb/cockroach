@@ -246,8 +246,6 @@ func (p *poster) init() {
 func (p *poster) post(
 	ctx context.Context, detail, packageName, testName, message, authorEmail string,
 ) error {
-	packageName = cockroachPkgPrefix + packageName
-
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
 Parameters:%[2]s
