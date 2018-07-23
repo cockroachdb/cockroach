@@ -33,6 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+// NewTestContainer sets up an environment suitable for black box testing the
+// transport subsystem. The returned test container contains most notably a
+// Clients and Server set up to communicate to each other via a Dialer (which
+// keeps a transcript that can be verified).
 func NewTestContainer() *TestContainer {
 	stopper := stop.NewStopper()
 
@@ -151,6 +155,23 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 		}
 		return checkTranscript(t, container.Dialer.transcript(nodeID), expectedTranscript)
 	})
+
+	// And again, but only after Request() is called (which should be reflected in the transcript).
+	const rangeID = 7
+	container.Clients.Request(nodeID, rangeID)
+	e2 := ctpb.Entry{ClosedTimestamp: hlc.Timestamp{WallTime: 2E9}, Epoch: 13, MLAI: map[roachpb.RangeID]ctpb.LAI{13: 8}}
+	container.Producer.sendAll(e2)
+	testutils.SucceedsSoon(t, func() error {
+		expectedTranscript := []interface{}{
+			&ctpb.Reaction{},
+			&e1,
+			&ctpb.Reaction{},
+			&e2,
+			&ctpb.Reaction{Requested: []roachpb.RangeID{rangeID}},
+		}
+		return checkTranscript(t, container.Dialer.transcript(nodeID), expectedTranscript)
+	})
+
 }
 
 func checkTranscript(t *testing.T, actI, expI []interface{}) error {

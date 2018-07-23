@@ -57,7 +57,6 @@ func NewClients(cfg Config) *Clients {
 type client struct {
 	mu struct {
 		syncutil.Mutex
-		started   bool
 		requested map[roachpb.RangeID]struct{} // never nil
 	}
 }
@@ -118,16 +117,12 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 
 		ctx = c.Context()
 
-		cl.mu.Lock()
-		cl.mu.started = true
-		cl.mu.Unlock()
-
 		ch := pr.cfg.Sink.Notify(nodeID)
 		defer close(ch)
 
-		reaction := ctpb.Reaction{}
+		reaction := &ctpb.Reaction{}
 		for {
-			if err := c.Send(&reaction); err != nil {
+			if err := c.Send(reaction); err != nil {
 				return
 			}
 			entry, err := c.Recv()
@@ -145,14 +140,14 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 
 			var requested map[roachpb.RangeID]struct{}
 			cl.mu.Lock()
-			requested, cl.mu.requested = cl.mu.requested, nil
+			requested, cl.mu.requested = cl.mu.requested, map[roachpb.RangeID]struct{}{}
 			cl.mu.Unlock()
 
 			slice := make([]roachpb.RangeID, 0, len(requested))
 			for rangeID := range requested {
 				slice = append(slice, rangeID)
 			}
-			reaction = ctpb.Reaction{
+			reaction = &ctpb.Reaction{
 				Requested: slice,
 			}
 		}

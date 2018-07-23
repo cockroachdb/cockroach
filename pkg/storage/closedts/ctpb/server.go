@@ -16,6 +16,8 @@ package ctpb
 
 import "context"
 
+// Server is an interface that narrows CLosedTimestamp_GetServer down to what's
+// actually required.
 type Server interface {
 	Send(*Entry) error
 	Recv() (*Reaction, error)
