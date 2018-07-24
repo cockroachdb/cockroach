@@ -234,7 +234,7 @@ func TestIndexKey(t *testing.T) {
 
 			for j, value := range values {
 				testValue := testValues[colMap[index.ColumnIDs[j]]]
-				if value.Compare(evalCtx, testValue) != 0 {
+				if tree.Distinct(evalCtx, value, testValue) {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
 			}
@@ -365,7 +365,7 @@ func TestArrayEncoding(t *testing.T) {
 				t.Fatal(err)
 			}
 			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			if d.Compare(evalContext, &test.datum) != 0 {
+			if tree.Distinct(evalContext, d, &test.datum) {
 				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
 			}
 		})
@@ -1463,6 +1463,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 func TestDecodeTableValue(t *testing.T) {
 	a := &DatumAlloc{}
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range []struct {
 		in  tree.Datum
 		typ types.T
@@ -1489,7 +1490,7 @@ func TestDecodeTableValue(t *testing.T) {
 			} else if err != nil {
 				return
 			}
-			if tc.in.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
+			if tree.Distinct(evalCtx, tc.in, d) {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})

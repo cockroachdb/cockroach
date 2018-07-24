@@ -52,11 +52,11 @@ func verifyRows(
 		if err != nil {
 			return err
 		}
-		if cmp, err := compareRows(
+		if cmp, err := distinctRows(
 			oneIntCol, row, expectedRows[0], evalCtx, &sqlbase.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
-		} else if cmp != 0 {
+		} else if cmp {
 			return fmt.Errorf("unexpected row %v, expected %v", row, expectedRows[0])
 		}
 		expectedRows = expectedRows[1:]

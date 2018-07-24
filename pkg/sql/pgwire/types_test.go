@@ -139,7 +139,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	if got.Compare(evalCtx, d) != 0 {
+	if tree.Distinct(evalCtx, got, d) {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
@@ -177,7 +177,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					}
 					evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 					defer evalCtx.Stop(context.Background())
-					if got.Compare(evalCtx, d) != 0 {
+					if tree.Distinct(evalCtx, got, d) {
 						t.Fatalf("expected %s, got %s", d, got)
 					}
 				})
@@ -427,7 +427,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		defer evalCtx.Stop(context.Background())
 		if err != nil {
 			b.Fatal(err)
-		} else if got.Compare(evalCtx, expected) != 0 {
+		} else if tree.Distinct(evalCtx, got, expected) {
 			b.Fatalf("expected %s, got %s", expected, got)
 		}
 	}

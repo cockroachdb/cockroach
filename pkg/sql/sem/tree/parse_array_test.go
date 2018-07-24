@@ -94,7 +94,7 @@ lo}`, coltypes.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
-			if actual.Compare(evalContext, expected) != 0 {
+			if Distinct(evalContext, actual, expected) {
 				t.Fatalf("ARRAY %s: got %s, expected %s", td.str, actual, expected)
 			}
 		})

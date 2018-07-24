@@ -143,7 +143,7 @@ func CompareEncDatumRowForMerge(
 			}
 			continue
 		}
-		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
+		cmp, err := lhs[lIdx].TotalOrderCompare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
 		if err != nil {
 			return 0, err
 		}

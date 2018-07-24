@@ -2039,6 +2039,19 @@ func init() {
 	}
 }
 
+func cmpOpScalarEQFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return scalarCompare(ctx, left, right, EQ), nil
+}
+func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return scalarCompare(ctx, left, right, LT), nil
+}
+func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return scalarCompare(ctx, left, right, LE), nil
+}
+func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return scalarCompare(ctx, left, right, IsNotDistinctFrom), nil
+}
+
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	switch op {
 	case EQ, IsNotDistinctFrom:
@@ -2050,37 +2063,6 @@ func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	default:
 		panic(fmt.Sprintf("unexpected ComparisonOperator in boolFromCmp: %v", op))
 	}
-}
-
-func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) Datum {
-	// Before deferring to the Datum.Compare method, check for values that should
-	// be handled differently during SQL comparison evaluation than they should when
-	// ordering Datum values.
-	if left == DNull || right == DNull {
-		switch op {
-		case IsNotDistinctFrom:
-			return MakeDBool((left == DNull) == (right == DNull))
-
-		default:
-			// If either Datum is NULL, the result of the comparison is NULL.
-			return DNull
-		}
-	}
-	cmp := left.Compare(ctx, right)
-	return boolFromCmp(cmp, op)
-}
-
-func cmpOpScalarEQFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, EQ), nil
-}
-func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, LT), nil
-}
-func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, LE), nil
-}
-func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, IsNotDistinctFrom), nil
 }
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
@@ -2115,7 +2097,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 				return DNull
 			}
 		} else {
-			cmp = leftElem.Compare(ctx, rightElem)
+			cmp = leftElem.internalCompare(ctx, rightElem)
 			if cmp != 0 {
 				break
 			}
@@ -2166,7 +2148,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 				for _, val := range vtuple.D {
 					if val == DNull {
 						sawNull = true
-					} else if val.Compare(ctx, arg) == 0 {
+					} else if val.internalCompare(ctx, arg) == 0 {
 						return DBoolTrue, nil
 					}
 				}
@@ -4030,7 +4012,7 @@ func foldComparisonExpr(
 		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
 		return RegIMatch, left, right, false, true
 	case IsDistinctFrom:
-		// IsDistinctFrom(left, right) is implemented as !IsNotDistinctFrom(left, right)
+		// Distinct(left, right) is implemented as !IsNotDistinctFrom(left, right)
 		// Note: this seems backwards, but IS NOT DISTINCT FROM is an extended
 		// version of IS and IS DISTINCT FROM is an extended version of IS NOT.
 		return IsNotDistinctFrom, left, right, false, true

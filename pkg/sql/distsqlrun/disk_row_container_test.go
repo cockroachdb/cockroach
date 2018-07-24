@@ -38,27 +38,24 @@ import (
 // l < r, 0 if l == r, and 1 if l > r. If an error is returned the int returned
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
-func compareRows(
+func distinctRows(
 	lTypes []sqlbase.ColumnType,
 	l, r sqlbase.EncDatumRow,
 	e *tree.EvalContext,
 	d *sqlbase.DatumAlloc,
 	ordering sqlbase.ColumnOrdering,
-) (int, error) {
+) (bool, error) {
 	for _, orderInfo := range ordering {
 		col := orderInfo.ColIdx
-		cmp, err := l[col].Compare(&lTypes[col], d, e, &r[orderInfo.ColIdx])
+		cmp, err := l[col].Distinct(&lTypes[col], d, e, &r[orderInfo.ColIdx])
 		if err != nil {
-			return 0, err
+			return false, err
 		}
-		if cmp != 0 {
-			if orderInfo.Direction == encoding.Descending {
-				cmp = -cmp
-			}
-			return cmp, nil
+		if cmp {
+			return true, nil
 		}
 	}
-	return 0, nil
+	return false, nil
 }
 
 func TestDiskRowContainer(t *testing.T) {
@@ -160,9 +157,9 @@ func TestDiskRowContainer(t *testing.T) {
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readRow[i].Compare(&types[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readRow[i].Distinct(&types[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
-						} else if cmp != 0 {
+						} else if cmp {
 							t.Fatalf("encoded %s but decoded %s", row.String(types), readRow.String(types))
 						}
 					}
@@ -222,13 +219,13 @@ func TestDiskRowContainer(t *testing.T) {
 					}
 
 					// Check sorted order.
-					if cmp, err := compareRows(
+					if cmp, err := distinctRows(
 						types, sortedRows.EncRow(numKeysRead), row, &evalCtx, &d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
-					} else if cmp != 0 {
+					} else if cmp {
 						t.Fatalf(
-							"expected %s to be equal to %s",
+							"expected %s to be not distinct from %s",
 							row.String(types),
 							sortedRows.EncRow(numKeysRead).String(types),
 						)
@@ -322,9 +319,9 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	// checkEqual checks that the given row is equal to otherRow.
 	checkEqual := func(row sqlbase.EncDatumRow, otherRow sqlbase.EncDatumRow) error {
 		for j, c := range row {
-			if cmp, err := c.Compare(&intType, alloc, &evalCtx, &otherRow[j]); err != nil {
+			if cmp, err := c.Distinct(&intType, alloc, &evalCtx, &otherRow[j]); err != nil {
 				return err
-			} else if cmp != 0 {
+			} else if cmp {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
 					row.String(oneIntCol),

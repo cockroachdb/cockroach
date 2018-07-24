@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -163,10 +163,10 @@ func (d *Distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	for _, colIdx := range d.orderedCols {
-		res, err := d.lastGroupKey[colIdx].Compare(
+		cmp, err := d.lastGroupKey[colIdx].Distinct(
 			&d.types[colIdx], &d.datumAlloc, d.evalCtx, &row[colIdx],
 		)
-		if res != 0 || err != nil {
+		if cmp || err != nil {
 			return false, err
 		}
 	}
