@@ -30,8 +30,8 @@ message DataKeysRegistry {
   // Map of key_id to SecretKey (raw key is included).
   map<string, SecretKey> data_keys = 2;
   // Active key IDs. Empty means no keys loaded yet.
-  string active_store_key = 3;
-  string active_data_key = 4;
+  string active_store_key_id = 3;
+  string active_data_key_id = 4;
 }
 
 // KeyInfo contains information about the key, but not the key itself.

@@ -18,6 +18,7 @@
 #include "../comparator.h"
 #include "../encoding.h"
 #include "../env_manager.h"
+#include "../options.h"
 #include "../rocksdbutils/env_encryption.h"
 #include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
@@ -116,26 +117,24 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
     return rocksdb::Status::OK();
   }
 
+  // We use a logger at V(0) for encryption status instead of the existing info_log.
+  // This should only be used to occasional logging (eg: key loading and rotation).
+  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(0));
+
   // We have encryption options. Check whether the AES instruction set is supported.
   if (!UsesAESNI()) {
-    // Shout loudly on standard out.
-    std::cerr << std::endl
-              << "*** WARNING ***" << std::endl
-              << "Encryption requested, but no AES instruction set detected" << std::endl
-              << "Expect significant performance degradation!" << std::endl
-              << std::endl;
+    rocksdb::Warn(
+        logger, "*** WARNING*** Encryption requested, but no AES instruction set detected: expect "
+                "significant performance degradation!");
   }
 
   // Attempt to disable core dumps.
   auto status = DisableCoreFile();
   if (!status.ok()) {
-    // Shout loudly on standard out.
-    std::cerr << std::endl
-              << "*** WARNING ***" << std::endl
-              << "Encryption requested, but could not disable core dumps: " << status.getState()
-              << std::endl
-              << "Keys may be leaked in core dumps!" << std::endl
-              << std::endl;
+    rocksdb::Warn(logger,
+                  "*** WARNING*** Encryption requested, but could not disable core dumps: %s. Keys "
+                  "may be leaked in core dumps!",
+                  status.getState());
   }
 
   // The Go code sets the "file_registry" storage version if we specified encryption flags,
@@ -158,7 +157,7 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
   // Initialize store key manager.
   // NOTE: FileKeyManager uses the default env as the MemEnv can never have pre-populated files.
   FileKeyManager* store_key_manager = new FileKeyManager(
-      rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key());
+      rocksdb::Env::Default(), logger, opts.key_files().current_key(), opts.key_files().old_key());
   status = store_key_manager->LoadKeys();
   if (!status.ok()) {
     delete store_key_manager;
@@ -177,7 +176,7 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
 
   // Initialize data key manager using the stored-keyed-env.
   DataKeyManager* data_key_manager = new DataKeyManager(
-      store_keyed_env, db_dir, opts.data_key_rotation_period(), db_opts.read_only);
+      store_keyed_env, logger, db_dir, opts.data_key_rotation_period(), db_opts.read_only);
   status = data_key_manager->LoadKeys();
   if (!status.ok()) {
     delete data_key_manager;

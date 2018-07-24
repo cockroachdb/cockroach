@@ -26,7 +26,7 @@
 extern "C" {
 // Tests are run in plain C++, we need a symbol for rocksDBLog, normally
 // implemented on the Go side.
-void __attribute__((weak)) rocksDBLog(char*, int) {}
+void __attribute__((weak)) rocksDBLog(int, char*, int) {}
 }  // extern "C"
 
 namespace testutils {
