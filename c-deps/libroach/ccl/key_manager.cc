@@ -329,12 +329,27 @@ std::unique_ptr<enginepbccl::SecretKey> DataKeyManager::GetKey(const std::string
   return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(key->second));
 }
 
+std::unique_ptr<enginepbccl::KeyInfo> DataKeyManager::GetActiveStoreKeyInfo() {
+  std::unique_lock<std::mutex> l(mu_);
+
+  assert(registry_ != nullptr);
+  if (registry_->active_store_key_id() == "") {
+    return nullptr;
+  }
+
+  auto iter = registry_->store_keys().find(registry_->active_store_key_id());
+
+  // Any modification of the registry should have called Validate.
+  assert(iter != registry_->store_keys().cend());
+  return std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(iter->second));
+}
+
 rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
   assert(registry_ != nullptr);
 
   if (registry_->active_store_key_id() == "" || registry_->active_data_key_id() == "") {
     return rocksdb::Status::InvalidArgument(
-        "MaybeRotateKey called before SetActiveStoreKey: there is no key to rotate");
+        "MaybeRotateKey called before SetActiveStoreKeyInfo: there is no key to rotate");
   }
 
   auto active_key = CurrentKeyLocked();
@@ -379,7 +394,7 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
 }
 
 rocksdb::Status
-DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::KeyInfo> store_info) {
+DataKeyManager::SetActiveStoreKeyInfo(std::unique_ptr<enginepbccl::KeyInfo> store_info) {
   std::unique_lock<std::mutex> l(mu_);
 
   assert(registry_ != nullptr);

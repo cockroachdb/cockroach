@@ -112,7 +112,7 @@ class DataKeyManager : public KeyManager {
   // `env` is owned by the caller and should be an encrypted Env.
   // `db_dir` is the rocksdb directory.
   // If read-only is true, the DataKeyManager can be used to lookup keys but cannot
-  // change any keys (eg: SetActiveStoreKey will fail).
+  // change any keys (eg: SetActiveStoreKeyInfo will fail).
   explicit DataKeyManager(rocksdb::Env* env, std::shared_ptr<rocksdb::Logger> logger,
                           const std::string& db_dir, int64_t rotation_period, bool read_only);
 
@@ -122,9 +122,15 @@ class DataKeyManager : public KeyManager {
   // On error, existing keys held by the object are not overwritten.
   rocksdb::Status LoadKeys();
 
-  // SetActiveStoreKey takes the KeyInfo of the active store key
+  // SetActiveStoreKeyInfo takes the KeyInfo of the active store key
   // and adds it to the registry. A new data key is generated if needed.
-  rocksdb::Status SetActiveStoreKey(std::unique_ptr<enginepbccl::KeyInfo> store_key);
+  rocksdb::Status SetActiveStoreKeyInfo(std::unique_ptr<enginepbccl::KeyInfo> store_key);
+
+  // GetActiveStoreKeyInfo returns the KeyInfo for the active store key.
+  // The data key registry keeps the active store key information (but not the key) from
+  // the first time the active key was seen. Fields like creation_time will only
+  // be accurate here.
+  std::unique_ptr<enginepbccl::KeyInfo> GetActiveStoreKeyInfo();
 
   virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
   virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
