@@ -107,6 +107,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 
 	var t timeutil.Timer
 	defer t.Stop()
+	var lastEpoch ctpb.Epoch
 	for {
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
 		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
@@ -130,12 +131,18 @@ func (p *Provider) runCloser(ctx context.Context) {
 			}
 		} else {
 			closed, m := p.cfg.Close(next)
-
+			if log.V(1) {
+				log.Infof(ctx, "closed ts=%s with %+v, next closed timestamp should be %s", closed, m, next)
+			}
 			entry := ctpb.Entry{
-				Epoch:           epoch,
+				Epoch:           lastEpoch,
 				ClosedTimestamp: closed,
 				MLAI:            m,
 			}
+			// TODO(tschottdorf): this one-off between the epoch is awkward. Clock() gives us the epoch for `next`
+			// but the entry wants the epoch for the current closed timestamp. Better to pass both into Close and
+			// to get both back from it as well.
+			lastEpoch = epoch
 
 			// Simulate a subscription to the local node, so that the new information
 			// is added to the storage (and thus becomes available to future subscribers
@@ -201,10 +208,14 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 		return
 	}
 
+	if log.V(1) {
+		log.Info(ctx, "new subscriber connected")
+	}
+
 	// The subscription is already active, so any storage snapshot from now on is
 	// going to fully catch up the subscriber without a gap.
 	{
-		p.cfg.Storage.VisitAscending(0 /* TODO: NodeID */, func(e ctpb.Entry) (done bool) {
+		p.cfg.Storage.VisitAscending(p.cfg.NodeID, func(e ctpb.Entry) (done bool) {
 			select {
 			case ch <- e:
 			case <-ctx.Done():
@@ -264,7 +275,9 @@ func (p *Provider) CanServe(
 
 		// We're done either if we proved that the read is possible, or if we're
 		// already done looking at closed timestamps large enough to satisfy it.
-		return ok || !ctOK
+		done := ok || !ctOK
+		return done
 	})
+
 	return ok
 }

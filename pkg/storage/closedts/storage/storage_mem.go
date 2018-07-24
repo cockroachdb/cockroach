@@ -139,7 +139,12 @@ func (m *memStorage) VisitAscending(f func(ctpb.Entry) (done bool)) {
 	defer m.mu.RUnlock()
 
 	for i := len(m.mu.buckets) - 1; i >= 0; i-- {
-		if f(m.mu.buckets[i]) {
+		entry := m.mu.buckets[i]
+		if entry.Epoch == 0 {
+			// Skip empty buckets.
+			continue
+		}
+		if f(entry) {
 			return
 		}
 	}
@@ -150,7 +155,10 @@ func (m *memStorage) VisitDescending(f func(ctpb.Entry) (done bool)) {
 	defer m.mu.RUnlock()
 
 	for l, i := len(m.mu.buckets), 0; i < l; i++ {
-		if f(m.mu.buckets[i]) {
+		entry := m.mu.buckets[i]
+		// Stop once we hit an empty bucket (which implies that all further buckets
+		// are also empty), or once the visitor is satisfied.
+		if entry.Epoch == 0 || f(entry) {
 			return
 		}
 	}

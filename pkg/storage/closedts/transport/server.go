@@ -42,15 +42,15 @@ func NewServer(stopper *stop.Stopper, p closedts.Producer, refresh closedts.Refr
 	}
 }
 
-var _ ctpb.ClosedTimestampServer = &Server{}
+var _ ctpb.Server = (*Server)(nil)
 
 // Get handles incoming client connections.
-func (s *Server) Get(client ctpb.ClosedTimestamp_GetServer) error {
-	return s.Handle(client)
-}
-
-// Handle is like Get, but uses a narrower interface.
-func (s *Server) Handle(client ctpb.Server) error {
+func (s *Server) Get(client ctpb.InboundClient) error {
+	// TODO(tschottdorf): the InboundClient API isn't great since it
+	// is blocking. How can we eagerly terminate these connections when
+	// the server shuts down? I think we need to inject a cancellation
+	// into the context, but grpc hands that to us.
+	// This problem has likely been solved somewhere in our codebase.
 	ctx := client.Context()
 	ch := make(chan ctpb.Entry, 10)
 

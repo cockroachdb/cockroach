@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -29,7 +28,7 @@ import (
 // directly via a channel to a Server.
 type ChanDialer struct {
 	stopper *stop.Stopper
-	server  *transport.Server
+	server  ctpb.Server
 
 	mu struct {
 		syncutil.Mutex
@@ -38,7 +37,7 @@ type ChanDialer struct {
 }
 
 // NewChanDialer sets up a ChanDialer.
-func NewChanDialer(stopper *stop.Stopper, server *transport.Server) *ChanDialer {
+func NewChanDialer(stopper *stop.Stopper, server ctpb.Server) *ChanDialer {
 	d := &ChanDialer{
 		stopper: stopper,
 		server:  server,
@@ -72,7 +71,7 @@ func (d *ChanDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Clie
 	}
 
 	d.stopper.RunWorker(ctx, func(ctx context.Context) {
-		_ = d.server.Handle((*incomingClient)(c))
+		_ = d.server.Get((*incomingClient)(c))
 	})
 	return c, nil
 

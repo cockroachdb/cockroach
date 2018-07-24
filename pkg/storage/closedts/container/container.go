@@ -54,22 +54,31 @@ type Container struct {
 	Tracker  *minprop.Tracker
 	Storage  closedts.Storage
 	Provider closedts.Provider
-	Server   ctpb.ClosedTimestampServer
+	Server   ctpb.Server
 	Clients  closedts.ClientRegistry
 }
 
 const (
-	// For each node, keep two historical buckets...
+	// For each node, keep two historical buckets (i.e. one recent one, and one that
+	// lagging followers can still satisfy some reads from).
 	storageBucketNum = 2
-	// ... where the second bucket holds a closed timestamp this old.
-	storageBucketScale = 10 * time.Second
+	// StorageBucketScale determines the (exponential) spacing of storage buckets.
+	// For example, a scale of 5s means that the second bucket will attempt to hold
+	// a closed timestamp 5s in the past from the first, and the third 5*5=25s from
+	// the first, etc.
+	//
+	// TODO(tschottdorf): it's straightforward to make this dynamic. It should track
+	// the interval at which timestamps are closed out, ideally being a little shorter.
+	// The effect of that would be that the most recent closed timestamp and the previous
+	// one can be queried against separately.
+	StorageBucketScale = 10 * time.Second
 )
 
 // NewContainer initializes a Container from the given Config. The Container
 // will need to be started separately.
 func NewContainer(cfg Config) *Container {
 	storage := storage.NewMultiStorage(func() storage.SingleStorage {
-		return storage.NewMemStorage(storageBucketScale, storageBucketNum)
+		return storage.NewMemStorage(StorageBucketScale, storageBucketNum)
 	})
 
 	tracker := minprop.NewTracker()
@@ -87,7 +96,7 @@ func NewContainer(cfg Config) *Container {
 	server := transport.NewServer(cfg.Stopper, provider, cfg.Refresh)
 
 	if cfg.GRPCServer != nil {
-		ctpb.RegisterClosedTimestampServer(cfg.GRPCServer, server)
+		ctpb.RegisterClosedTimestampServer(cfg.GRPCServer, ctpb.ServerShim{Server: server})
 	}
 
 	rConf := transport.Config{
