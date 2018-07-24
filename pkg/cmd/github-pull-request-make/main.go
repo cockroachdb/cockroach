@@ -153,6 +153,19 @@ func findPullRequest(
 	}
 }
 
+func ghClient(ctx context.Context) *github.Client {
+	var httpClient *http.Client
+	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
+		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		))
+	} else {
+		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
+	}
+	client := github.NewClient(httpClient)
+	return client
+}
+
 func main() {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -173,16 +186,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-
-	var httpClient *http.Client
-	if token, ok := os.LookupEnv(githubAPITokenEnv); ok {
-		httpClient = oauth2.NewClient(ctx, oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: token},
-		))
-	} else {
-		log.Printf("GitHub API token environment variable %s is not set", githubAPITokenEnv)
-	}
-	client := github.NewClient(httpClient)
+	client := ghClient(ctx)
 
 	currentPull := findPullRequest(ctx, client, org, repo, sha)
 	if currentPull == nil {
