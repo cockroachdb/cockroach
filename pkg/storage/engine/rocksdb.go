@@ -87,8 +87,8 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 const debugIteratorLeak = false
 
 //export rocksDBLog
-func rocksDBLog(s *C.char, n C.int) {
-	if log.V(3) {
+func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
+	if log.V(int32(logLevel)) {
 		ctx := log.WithLogTagStr(context.Background(), "rocksdb", "")
 		log.Info(ctx, C.GoStringN(s, n))
 	}

@@ -83,9 +83,8 @@ class KeyManager {
 class FileKeyManager : public KeyManager {
  public:
   // `env` is owned by the caller.
-  explicit FileKeyManager(rocksdb::Env* env, const std::string& active_key_path,
-                          const std::string& old_key_path)
-      : env_(env), active_key_path_(active_key_path), old_key_path_(old_key_path) {}
+  explicit FileKeyManager(rocksdb::Env* env, std::shared_ptr<rocksdb::Logger> logger,
+                          const std::string& active_key_path, const std::string& old_key_path);
 
   virtual ~FileKeyManager();
 
@@ -98,6 +97,7 @@ class FileKeyManager : public KeyManager {
 
  private:
   rocksdb::Env* env_;
+  std::shared_ptr<rocksdb::Logger> logger_;
   std::string active_key_path_;
   std::string old_key_path_;
   // TODO(mberhault): protect keys by a mutex if we allow reload.
@@ -113,8 +113,8 @@ class DataKeyManager : public KeyManager {
   // `db_dir` is the rocksdb directory.
   // If read-only is true, the DataKeyManager can be used to lookup keys but cannot
   // change any keys (eg: SetActiveStoreKey will fail).
-  explicit DataKeyManager(rocksdb::Env* env, const std::string& db_dir, int64_t rotation_period,
-                          bool read_only);
+  explicit DataKeyManager(rocksdb::Env* env, std::shared_ptr<rocksdb::Logger> logger,
+                          const std::string& db_dir, int64_t rotation_period, bool read_only);
 
   virtual ~DataKeyManager();
 
@@ -138,6 +138,7 @@ class DataKeyManager : public KeyManager {
 
   // These do not change after initialization. env_ is thread safe.
   rocksdb::Env* env_;
+  std::shared_ptr<rocksdb::Logger> logger_;
   std::string registry_path_;
   int64_t rotation_period_;
   bool read_only_;
