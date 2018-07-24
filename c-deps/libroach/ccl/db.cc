@@ -32,31 +32,24 @@ namespace cockroach {
 
 class CCLEnvStatsHandler : public EnvStatsHandler {
  public:
-  explicit CCLEnvStatsHandler(KeyManager* store_key_manager, KeyManager* data_key_manager)
-      : store_key_manager_(store_key_manager), data_key_manager_(data_key_manager) {}
+  explicit CCLEnvStatsHandler(DataKeyManager* data_key_manager)
+      : data_key_manager_(data_key_manager) {}
   virtual ~CCLEnvStatsHandler() {}
 
   virtual rocksdb::Status GetEncryptionStats(std::string* serialized_stats) override {
-    enginepbccl::EncryptionStatus enc_status;
-
-    bool has_stats = false;
-    if (store_key_manager_ != nullptr) {
-      has_stats = true;
-      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
-      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
-      enc_status.set_allocated_active_store_key(store_key_manager_->CurrentKeyInfo().release());
-    }
-
-    if (data_key_manager_ != nullptr) {
-      has_stats = true;
-      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
-      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
-      enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
-    }
-
-    if (!has_stats) {
+    if (data_key_manager_ == nullptr) {
       return rocksdb::Status::OK();
     }
+
+    enginepbccl::EncryptionStatus enc_status;
+
+    // GetActiveStoreKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+    // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
+    enc_status.set_allocated_active_store_key(data_key_manager_->GetActiveStoreKeyInfo().release());
+
+    // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+    // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
+    enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
 
     if (!enc_status.SerializeToString(serialized_stats)) {
       return rocksdb::Status::InvalidArgument("failed to serialize encryption status");
@@ -102,10 +95,9 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
   }
 
  private:
-  // KeyManagers are needed to get key information but are not owned by the StatsHandler.
-  KeyManager* store_key_manager_;
-  KeyManager* data_key_manager_;
-};
+  // The DataKeyManager is needed to get key information but is not owned by the StatsHandler.
+  DataKeyManager* data_key_manager_;
+};  // namespace cockroach
 
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
@@ -202,14 +194,14 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   if (!db_opts.read_only) {
     // Generate a new data key if needed by giving the active store key info to the data key
     // manager.
-    status = data_key_manager->SetActiveStoreKey(std::move(store_key));
+    status = data_key_manager->SetActiveStoreKeyInfo(std::move(store_key));
     if (!status.ok()) {
       return status;
     }
   }
 
   // Everything's ok: initialize a stats handler.
-  env_mgr->SetStatsHandler(new CCLEnvStatsHandler(store_key_manager, data_key_manager));
+  env_mgr->SetStatsHandler(new CCLEnvStatsHandler(data_key_manager));
 
   return rocksdb::Status::OK();
 }
