@@ -339,7 +339,6 @@ func (sc *SchemaChanger) getJobIDForMutation(
 ) (int64, error) {
 	var jobID int64
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
@@ -348,15 +347,8 @@ func (sc *SchemaChanger) getJobIDForMutation(
 			return makeErrTableVersionMismatch(tableDesc.Version, version)
 		}
 
-		if len(tableDesc.MutationJobs) > 0 {
-			for _, job := range tableDesc.MutationJobs {
-				if job.MutationID == mutationID {
-					jobID = job.JobID
-					break
-				}
-			}
-		}
-		return nil
+		jobID, err = sc.getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
+		return err
 	})
 	return jobID, err
 }
@@ -366,15 +358,13 @@ func (sc *SchemaChanger) getJobIDForMutation(
 func (sc *SchemaChanger) getJobIDForMutationWithDescriptor(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) (int64, error) {
-	if len(tableDesc.MutationJobs) > 0 {
-		for _, job := range tableDesc.MutationJobs {
-			if job.MutationID == mutationID {
-				return job.JobID, nil
-			}
+	for _, job := range tableDesc.MutationJobs {
+		if job.MutationID == mutationID {
+			return job.JobID, nil
 		}
 	}
 
-	return 0, errors.Errorf("mutation id not found %v", mutationID)
+	return 0, errors.Errorf("job not found for table id %d, mutation %d", sc.tableID, mutationID)
 }
 
 // nRanges returns the number of ranges that cover a set of spans.
