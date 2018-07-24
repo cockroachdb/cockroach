@@ -47,7 +47,7 @@ func registerCDC(r *registry) {
 
 		t.Status("loading initial data")
 		c.Run(ctx, workloadNode, fmt.Sprintf(
-			`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, warehouses,
+			`./workload fixtures load tpcc --warehouses=%d --checks=false {pgurl:1}`, warehouses,
 		))
 
 		// Run compactions on the data so TimeBoundIterator works. This can be
