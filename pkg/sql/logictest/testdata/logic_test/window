@@ -591,6 +591,43 @@ NULL  NULL
 10    NULL
 12    20
 
+query R
+SELECT f::DECIMAL + round(max(k) * w * avg(d) OVER wind) + (lead(f, 2, 17::FLOAT) OVER wind::DECIMAL / d * row_number() OVER wind) FROM kv GROUP BY k, w, f, d WINDOW wind AS (ORDER BY k) ORDER BY k
+----
+13.9
+71.10
+-2590.156074766355140186916
+-1376.87272727272727272728
+-822.2405063291139240505
+-753.9999999999999999998
+
+query R
+SELECT round(max(w) * w * avg(w) OVER wind) + (lead(w, 2, 17) OVER wind::DECIMAL / w * row_number() OVER wind) FROM kv GROUP BY w WINDOW wind AS (PARTITION BY w) ORDER BY 1
+----
+16.5
+32.6666666666666666667
+128.4
+
+query IRRIRIR
+SELECT k, avg(d) OVER w1, avg(d) OVER w2, row_number() OVER w2, sum(f) OVER w1, row_number() OVER w1, sum(f) OVER w2 FROM kv WINDOW w1 AS (ORDER BY k), w2 AS (ORDER BY w, k) ORDER BY k
+----
+1  1       3.9666666666666666667  3  1     1  10
+3  4.5     4.86                   5  3     2  16.4
+5  -104    -49.45                 6  12.9  3  26.299999999999997
+6  -76.9   4.075                  4  17.3  4  14.4
+7  -59.94  7.9                    1  23.3  5  6
+8  -49.45  5.45                   2  26.3  6  9
+
+query R
+SELECT round((avg(d) OVER wind) * max(k) + (lag(d, 1, 42.0) OVER wind) * max(d)) FROM kv GROUP BY d, k WINDOW wind AS (ORDER BY k) ORDER BY k
+----
+43
+22
+-3088
+-1874
+-385
+-372
+
 statement OK
 INSERT INTO kv VALUES
 (9, 2, 9, .1, DEFAULT, DEFAULT, DEFAULT),

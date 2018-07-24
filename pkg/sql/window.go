@@ -47,11 +47,9 @@ type windowNode struct {
 	// an entire column in windowValues for each windowFuncHolder, in order.
 	funcs []*windowFuncHolder
 
-	// colContainer and aggContainer are IndexedVarContainers that provide indirection
+	// colAndAggContainer is an IndexedVarContainer that provides indirection
 	// to migrate IndexedVars and aggregate functions below the windowing level.
-	colContainer windowNodeColContainer
-	aggContainer windowNodeAggContainer
-	ivarHelper   *tree.IndexedVarHelper
+	colAndAggContainer windowNodeColAndAggContainer
 
 	// numRendersNotToBeReused indicates the number of renders that are being used
 	// as arguments to window functions plus (possibly) some columns that are simply
@@ -464,22 +462,16 @@ func constructWindowDef(
 //    window plan's renders: [nil, nil, @5 + @6 + first_value(@3) OVER (PARTITION BY @4)]
 //
 func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
-	n.colContainer = windowNodeColContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
-		sourceInfo:              s.sourceInfo[0],
-	}
-	ivarHelper := tree.MakeIndexedVarHelper(&n.colContainer, s.ivarHelper.NumVars())
-	n.ivarHelper = &ivarHelper
+	n.colAndAggContainer = makeWindowNodeColAndAggContainer(&n.run, s.sourceInfo[0], s.ivarHelper.NumVars())
 
-	n.aggContainer = windowNodeAggContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
-		aggFuncs:                make(map[int]*tree.FuncExpr),
-	}
-	// The number of aggregation functions that need to be replaced with IndexedVars
-	// is unknown, so we collect them here and bind them to an IndexedVarHelper later.
-	// We use a map indexed by render index to leverage addOrReuseRender's deduplication
-	// of identical aggregate functions.
-	aggIVars := make(map[int]*tree.IndexedVar)
+	// The number of aggregation functions that need to be replaced with
+	// IndexedVars is unknown, so we collect them here and bind them to
+	// an IndexedVarHelper later. Consequently, we cannot yet create
+	// that IndexedVarHelper, so we collect new unbounded IndexedVars
+	// that replace existing IndexedVars and similarly bind them later.
+	// We use a map indexed by render index to leverage addOrReuseRender's
+	// deduplication of identical IndexedVars and aggregate functions.
+	iVars := make(map[int]*tree.IndexedVar)
 
 	for i, render := range n.windowRender {
 		if render == nil {
@@ -495,8 +487,19 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					Typ:  t.ResolvedType(),
 				}
 				colIdx := s.addOrReuseRenderStartingFromIdx(col, t, true, n.numRendersNotToBeReused)
-				n.colContainer.idxMap[t.Idx] = colIdx
-				return nil, false, ivarHelper.IndexedVar(t.Idx)
+
+				if iVar, ok := iVars[colIdx]; ok {
+					// If we have already created an IndexedVar for this
+					// IndexedVar, return it.
+					return nil, false, iVar
+				}
+
+				// Create a new IndexedVar with index t.Idx.
+				colIVar := tree.NewIndexedVar(t.Idx)
+				iVars[colIdx] = colIVar
+				n.colAndAggContainer.idxMap[t.Idx] = colIdx
+				return nil, false, colIVar
+
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
 				// windowFuncHolders at this point, so if we see an aggregate
@@ -507,18 +510,19 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
 					colIdx := s.addOrReuseRender(col, t, true)
 
-					if iVar, ok := aggIVars[colIdx]; ok {
+					if iVar, ok := iVars[colIdx]; ok {
 						// If we have already created an IndexedVar for this aggregate
 						// function, return it.
 						return nil, false, iVar
 					}
 
 					// Create a new IndexedVar with the next available index.
-					idx := len(n.aggContainer.idxMap)
+					idx := n.colAndAggContainer.startAggIdx + n.colAndAggContainer.numAggFuncs
+					n.colAndAggContainer.numAggFuncs++
 					aggIVar := tree.NewIndexedVar(idx)
-					aggIVars[colIdx] = aggIVar
-					n.aggContainer.idxMap[idx] = colIdx
-					n.aggContainer.aggFuncs[idx] = t
+					iVars[colIdx] = aggIVar
+					n.colAndAggContainer.idxMap[idx] = colIdx
+					n.colAndAggContainer.aggFuncs[idx] = t
 					return nil, false, aggIVar
 				}
 				return nil, true, expr
@@ -533,20 +537,15 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 		n.windowRender[i] = expr.(tree.TypedExpr)
 	}
 
-	if len(aggIVars) > 0 {
-		// Now that we know how many aggregate functions there were, we can create
-		// an IndexedVarHelper and bind each of the corresponding IndexedVars to
-		// the helper.
-		aggHelper := tree.MakeIndexedVarHelper(&n.aggContainer, len(aggIVars))
-		for _, ivar := range aggIVars {
-			// The ivars above have been created with a nil container, and
-			// therefore they are guaranteed to be modified in-place by
-			// BindIfUnbound().
-			if newIvar, err := aggHelper.BindIfUnbound(ivar); err != nil {
-				panic(err)
-			} else if newIvar != ivar {
-				panic(fmt.Sprintf("unexpected binding: %v, expected: %v", newIvar, ivar))
-			}
+	colAggHelper := tree.MakeIndexedVarHelper(&n.colAndAggContainer, s.ivarHelper.NumVars()+n.colAndAggContainer.numAggFuncs)
+	for _, ivar := range iVars {
+		// The ivars above have been created with a nil container, and
+		// therefore they are guaranteed to be modified in-place by
+		// BindIfUnbound().
+		if newIvar, err := colAggHelper.BindIfUnbound(ivar); err != nil {
+			panic(err)
+		} else if newIvar != ivar {
+			panic(fmt.Sprintf("unexpected binding: %v, expected: %v", newIvar, ivar))
 		}
 	}
 }
@@ -855,7 +854,7 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
-				evalCtx.PushIVarContainer(&n.colContainer)
+				evalCtx.PushIVarContainer(&n.colAndAggContainer)
 				res, err := curWindowRender.Eval(evalCtx)
 				evalCtx.PopIVarContainer()
 				if err != nil {
@@ -1012,74 +1011,63 @@ func (w *windowFuncHolder) ResolvedType() types.T {
 	return w.expr.ResolvedType()
 }
 
-// windowNodeIvarContainer is an abstract implementation of the
-// tree.IndexedVarContainer interface. It handles evaluation of IndexedVars,
-// but needs to be extended to handle formatting and type introspection
-// for its IndexedVars.
-type windowNodeIvarContainer struct {
+func makeWindowNodeColAndAggContainer(
+	n *windowRun, sourceInfo *sqlbase.DataSourceInfo, numColVars int,
+) windowNodeColAndAggContainer {
+	return windowNodeColAndAggContainer{
+		n:           n,
+		idxMap:      make(map[int]int),
+		sourceInfo:  sourceInfo,
+		aggFuncs:    make(map[int]*tree.FuncExpr),
+		startAggIdx: numColVars,
+	}
+}
+
+// windowNodeColContainer is an IndexedVarContainer providing indirection for
+// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
+type windowNodeColAndAggContainer struct {
 	n *windowRun
 
 	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
 	// to the index their corresponding results in this container. It permits us to
 	// add a single render to the source plan per unique expression.
 	idxMap map[int]int
+	// sourceInfo contains information on the IndexedVars from the
+	// source plan where they were originally created.
+	sourceInfo *sqlbase.DataSourceInfo
+	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
+	aggFuncs map[int]*tree.FuncExpr
+	// startAggIdx indicates the smallest index to be used by an IndexedVar replacing
+	// an aggregate function. We don't want to mix these IndexedVars with those
+	// that replace "original" IndexedVars.
+	startAggIdx int
+	numAggFuncs int
 }
 
-func makeWindowNodeIvarContainer(n *windowRun) windowNodeIvarContainer {
-	return windowNodeIvarContainer{
-		n:      n,
-		idxMap: make(map[int]int),
-	}
-}
-
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (ic *windowNodeIvarContainer) IndexedVarEval(
+func (c *windowNodeColAndAggContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
 	// Determine which row in the buffered values to evaluate.
-	curRow := ic.n.wrappedRenderVals.At(ic.n.curRowIdx)
+	curRow := c.n.wrappedRenderVals.At(c.n.curRowIdx)
 	// Determine which value in that row to evaluate.
-	curVal := curRow[ic.idxMap[idx]]
+	curVal := curRow[c.idxMap[idx]]
 	return curVal.Eval(ctx)
 }
 
-// windowNodeColContainer is a IndexedVarContainer providing indirection for
-// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
-type windowNodeColContainer struct {
-	windowNodeIvarContainer
-
-	// sourceInfo contains information on the for the IndexedVars from the
-	// source plan where they were originally created.
-	sourceInfo *sqlbase.DataSourceInfo
-}
-
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) types.T {
-	return cc.sourceInfo.SourceColumns[idx].Typ
+func (c *windowNodeColAndAggContainer) IndexedVarResolvedType(idx int) types.T {
+	if idx >= c.startAggIdx {
+		return c.aggFuncs[idx].ResolvedType()
+	}
+	return c.sourceInfo.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+func (c *windowNodeColAndAggContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	if idx >= c.startAggIdx {
+		// Avoid duplicating the type annotation by calling .Format directly.
+		return c.aggFuncs[idx]
+	}
 	// Avoid duplicating the type annotation by calling .Format directly.
-	return cc.sourceInfo.NodeFormatter(idx)
-}
-
-// windowNodeAggContainer is a IndexedVarContainer providing indirection for
-// aggregate functions found above the windowing level. See replaceIndexVarsAndAggFuncs.
-type windowNodeAggContainer struct {
-	windowNodeIvarContainer
-
-	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
-	aggFuncs map[int]*tree.FuncExpr
-}
-
-// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) types.T {
-	return ac.aggFuncs[idx].ResolvedType()
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	// Avoid duplicating the type annotation by calling .Format directly.
-	return ac.aggFuncs[idx]
+	return c.sourceInfo.NodeFormatter(idx)
 }
