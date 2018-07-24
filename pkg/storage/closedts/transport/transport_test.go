@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
+	transporttestutils "github.com/cockroachdb/cockroach/pkg/storage/closedts/transport/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,7 +46,7 @@ func NewTestContainer() *TestContainer {
 	sink := newTestNotifyee(stopper)
 	refreshed := &RefreshTracker{}
 	s := transport.NewServer(stopper, p, refreshed.Add)
-	dialer := &Dialer{stopper: stopper, server: s}
+	dialer := transporttestutils.NewChanDialer(stopper, s)
 	c := transport.NewClients(transport.Config{
 		Settings: st,
 		Stopper:  stopper,
@@ -137,7 +138,7 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 		expectedTranscript := []interface{}{
 			&ctpb.Reaction{},
 		}
-		return checkTranscript(t, container.Dialer.transcript(nodeID), expectedTranscript)
+		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
 	})
 
 	// Now the producer (to which the server should maintain a subscription for this client, and
@@ -153,7 +154,7 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 			&e1,
 			&ctpb.Reaction{},
 		}
-		return checkTranscript(t, container.Dialer.transcript(nodeID), expectedTranscript)
+		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
 	})
 
 	// And again, but only after Request() is called (which should be reflected in the transcript).
@@ -169,7 +170,7 @@ func TestTransportClientReceivesEntries(t *testing.T) {
 			&e2,
 			&ctpb.Reaction{Requested: []roachpb.RangeID{rangeID}},
 		}
-		return checkTranscript(t, container.Dialer.transcript(nodeID), expectedTranscript)
+		return checkTranscript(t, container.Dialer.Transcript(nodeID), expectedTranscript)
 	})
 
 }
