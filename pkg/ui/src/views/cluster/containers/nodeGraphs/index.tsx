@@ -22,39 +22,27 @@ import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
-import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
 import {
-  GraphDashboardProps, storeIDsForNode,
+  storeIDsForNode,
 } from "./dashboards/dashboardUtils";
-
-import overviewDashboard from "./dashboards/overview";
-import runtimeDashboard from "./dashboards/runtime";
-import sqlDashboard from "./dashboards/sql";
-import storageDashboard from "./dashboards/storage";
-import replicationDashboard from "./dashboards/replication";
-import distributedDashboard from "./dashboards/distributed";
-import queuesDashboard from "./dashboards/queues";
-import requestsDashboard from "./dashboards/requests";
-import hardwareDashboard from "./dashboards/hardware";
 
 import { DashboardsPage } from "src/views/metrics";
 
 interface GraphDashboard {
   label: string;
-  component: (props: GraphDashboardProps) => React.ReactElement<any>[];
 }
 
 const dashboards: {[key: string]: GraphDashboard} = {
-  "overview" : { label: "Overview", component: overviewDashboard },
-  "hardware": { label: "Hardware", component: hardwareDashboard },
-  "runtime" : { label: "Runtime", component: runtimeDashboard },
-  "sql": { label: "SQL", component: sqlDashboard },
-  "storage": { label: "Storage", component: storageDashboard },
-  "replication": { label: "Replication", component: replicationDashboard },
-  "distributed": { label: "Distributed", component: distributedDashboard },
-  "queues": { label: "Queues", component: queuesDashboard },
-  "requests": { label: "Slow Requests", component: requestsDashboard },
+  "overview" : { label: "Overview" },
+  "hardware": { label: "Hardware" },
+  "runtime" : { label: "Runtime" },
+  "sql": { label: "SQL" },
+  "storage": { label: "Storage" },
+  "replication": { label: "Replication" },
+  "distributed": { label: "Distributed" },
+  "queues": { label: "Queues" },
+  "requests": { label: "Slow Requests" },
 };
 
 const defaultDashboard = "overview";
@@ -125,7 +113,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     }
   }
 
-  setClusterPath(nodeID: string, dashboardName: string, aggregationLevel: AggregationLevel) {
+  setClusterPath(nodeID: string, dashboardName: string, aggregationLevel?: AggregationLevel) {
     if (!_.isString(nodeID) || nodeID === "") {
       const query = aggregationLevel && aggregationLevel !== AggregationLevel.Cluster ? `?agg=${aggregationLevel}` : "";
       this.context.router.push(`/metrics/${dashboardName}/cluster${query}`);
@@ -179,15 +167,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
                               ? `on node ${nodeSources[0]}`
                               : "across all nodes";
 
-    const dashboardProps: GraphDashboardProps = {
-      nodeIDs,
-      nodesSummary,
-      nodeSources,
-      storeSources,
-      tooltipSelection,
-      aggregationLevel,
-    };
-
     const forwardProps = {
       hoverOn: this.props.hoverOn,
       hoverOff: this.props.hoverOff,
@@ -200,6 +179,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         aggregationLevel={aggregationLevel}
         nodeSources={nodeIDs}
         nodesSummary={nodesSummary}
+        storeSources={storeSources}
+        tooltipSelection={tooltipSelection}
         forwardProps={forwardProps}
       />
     );
@@ -230,7 +211,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
           {
             nodeSources ? null : (
               <PageConfigItem>
-                <AggregationSelector aggregationLevel={aggregationLevel} />
+                <AggregationSelector />
               </PageConfigItem>
             )
           }

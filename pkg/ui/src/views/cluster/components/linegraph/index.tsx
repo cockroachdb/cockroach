@@ -16,7 +16,7 @@ import { MetricsDataComponentProps } from "src/views/shared/components/metricQue
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
 
-interface LineGraphProps extends MetricsDataComponentProps {
+export interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
   subtitle?: string;
   legend?: boolean;

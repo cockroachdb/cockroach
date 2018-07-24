@@ -3,7 +3,6 @@ import React from "react";
 import { LineGraph, LineGraphProps } from "src/views/cluster/components/linegraph";
 import { nodeDisplayName, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
-import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { AggregationLevel } from "src/redux/aggregationLevel";
 import { NodesSummary } from "src/redux/nodes";
@@ -16,6 +15,8 @@ interface DashboardsPageProps {
   aggregationLevel: AggregationLevel;
   nodeSources: string[];
   nodesSummary: NodesSummary;
+  storeSources: string[];
+  tooltipSelection: string;
   forwardProps: Partial<LineGraphProps>;
 }
 
