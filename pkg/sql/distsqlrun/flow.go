@@ -457,13 +457,16 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	return nil
 }
 
-// Start starts the flow (each processor runs in their own goroutine).
+// Start starts the flow. Each processor runs in their own goroutine unless
+// block is specified. If it is, the last processor is run from the main
+// goroutine. Note that Wait() still needs to be called to not call Cleanup()
+// prematurely.
 //
 // Generally if errors are encountered during the setup part, they're returned.
 // But if the flow is a synchronous one, then no error is returned; instead the
 // setup error is pushed to the syncFlowConsumer. In this case, a subsequent
 // call to f.Wait() will not block.
-func (f *Flow) Start(ctx context.Context, doneFn func()) error {
+func (f *Flow) Start(ctx context.Context, block bool, doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -498,10 +501,20 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	for _, s := range f.startables {
 		s.start(ctx, &f.waitGroup, f.ctxCancel)
 	}
-	for _, p := range f.processors {
+	for i := 0; i < len(f.processors)-1; i++ {
 		f.waitGroup.Add(1)
-		go p.Run(ctx, &f.waitGroup)
+		go f.processors[i].Run(ctx, &f.waitGroup)
 	}
+	if len(f.processors) > 0 {
+		p := f.processors[len(f.processors)-1]
+		if block {
+			p.Run(ctx, nil)
+		} else {
+			f.waitGroup.Add(1)
+			go p.Run(ctx, &f.waitGroup)
+		}
+	}
+
 	return nil
 }
 
