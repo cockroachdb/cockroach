@@ -101,7 +101,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			continue
 		}
 
-		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
+		cmp, err := s.curGroup[0].TotalOrderCompare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
 		if err != nil {
 			return nil, &ProducerMetadata{Err: err}
 		}

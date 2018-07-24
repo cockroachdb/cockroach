@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -501,9 +501,9 @@ func (s *sortChunksProcessor) chunkCompleted(
 	types := s.input.OutputTypes()
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
-		cmp, err := nextChunkRow[col].Compare(&types[col], &s.alloc, s.evalCtx, &prefix[col])
-		if cmp != 0 || err != nil {
-			return true, err
+		isDistinct, err := nextChunkRow[col].Distinct(&types[col], &s.alloc, s.evalCtx, &prefix[col])
+		if isDistinct || err != nil {
+			return isDistinct, err
 		}
 	}
 	return false, nil

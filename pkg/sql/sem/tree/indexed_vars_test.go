@@ -101,7 +101,7 @@ func TestIndexedVars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Compare(evalCtx, NewDInt(3+5*6)) != 0 {
+	if Distinct(evalCtx, d, NewDInt(3+5*6)) {
 		t.Errorf("invalid result %s (expected %d)", d, 3+5*6)
 	}
 }

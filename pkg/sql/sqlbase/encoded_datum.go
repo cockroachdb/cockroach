@@ -267,11 +267,11 @@ func (ed *EncDatum) Encode(
 	}
 }
 
-// Compare returns:
-//    -1 if the receiver is less than rhs,
-//    0  if the receiver is equal to rhs,
-//    +1 if the receiver is greater than rhs.
-func (ed *EncDatum) Compare(
+// TotalOrderCompare returns:
+//    -1 if the receiver sorts before rhs,
+//    0  if the receiver sorts at the same place as rhs,
+//    +1 if the receiver sorts after rhs.
+func (ed *EncDatum) TotalOrderCompare(
 	typ *ColumnType, a *DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
@@ -282,6 +282,9 @@ func (ed *EncDatum) Compare(
 			return bytes.Compare(ed.encoded, rhs.encoded), nil
 		case DatumEncoding_DESCENDING_KEY:
 			return bytes.Compare(rhs.encoded, ed.encoded), nil
+		default:
+			// unknown / value encoding: we can't do anything with the
+			// bytes. Use the slow path.
 		}
 	}
 	if err := ed.EnsureDecoded(typ, a); err != nil {
@@ -290,7 +293,32 @@ func (ed *EncDatum) Compare(
 	if err := rhs.EnsureDecoded(typ, a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.Compare(evalCtx, rhs.Datum), nil
+	return tree.TotalOrderCompare(evalCtx, ed.Datum, rhs.Datum), nil
+}
+
+// Distinct returns true if and only if the receiver is distinct
+// from rhs.
+func (ed *EncDatum) Distinct(
+	typ *ColumnType, a *DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
+) (bool, error) {
+	// TODO(radu): if we have both the Datum and a key encoding available, which
+	// one would be faster to use?
+	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
+		switch ed.encoding {
+		case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
+			return !bytes.Equal(ed.encoded, rhs.encoded), nil
+		default:
+			// unknown / value encoding: we can't do anything with the
+			// bytes. Use the slow path.
+		}
+	}
+	if err := ed.EnsureDecoded(typ, a); err != nil {
+		return false, err
+	}
+	if err := rhs.EnsureDecoded(typ, a); err != nil {
+		return false, err
+	}
+	return tree.Distinct(evalCtx, ed.Datum, rhs.Datum), nil
 }
 
 // GetInt decodes an EncDatum that is known to be of integer type and returns
@@ -409,7 +437,34 @@ func EncDatumRowToDatums(
 	return nil
 }
 
-// Compare returns the relative ordering of two EncDatumRows according to a
+// Distinct determines whether the two EncDatumRows are distinct
+// according to a ColumnOrdering.
+//
+// Note that a return value of true does not (in general) imply that
+// the rows are distinct (or the other way around); for example, rows
+// [1 1 5] and [1 1 6] are non-distinct when compared against ordering
+// {{0, asc}, {1, asc}} (i.e. ordered by first column and then by
+// second column, but the 3rd column doesn't matter).
+func (r EncDatumRow) Distinct(
+	types []ColumnType,
+	a *DatumAlloc,
+	ordering ColumnOrdering,
+	evalCtx *tree.EvalContext,
+	rhs EncDatumRow,
+) (bool, error) {
+	if len(r) != len(types) || len(rhs) != len(types) {
+		panic(fmt.Sprintf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
+	}
+	for _, c := range ordering {
+		isDistinct, err := r[c.ColIdx].Distinct(&types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])
+		if isDistinct || err != nil {
+			return isDistinct, err
+		}
+	}
+	return false, nil
+}
+
+// TotalOrderCompare returns the relative ordering of two EncDatumRows according to a
 // ColumnOrdering:
 //   -1 if the receiver comes before the rhs in the ordering,
 //   +1 if the receiver comes after the rhs in the ordering,
@@ -420,7 +475,7 @@ func EncDatumRowToDatums(
 // equal; for example, rows [1 1 5] and [1 1 6] when compared against ordering
 // {{0, asc}, {1, asc}} (i.e. ordered by first column and then by second
 // column).
-func (r EncDatumRow) Compare(
+func (r EncDatumRow) TotalOrderCompare(
 	types []ColumnType,
 	a *DatumAlloc,
 	ordering ColumnOrdering,
@@ -431,7 +486,7 @@ func (r EncDatumRow) Compare(
 		panic(fmt.Sprintf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
 	}
 	for _, c := range ordering {
-		cmp, err := r[c.ColIdx].Compare(&types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].TotalOrderCompare(&types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}
@@ -445,27 +500,27 @@ func (r EncDatumRow) Compare(
 	return 0, nil
 }
 
-// CompareToDatums is a version of Compare which compares against decoded Datums.
-func (r EncDatumRow) CompareToDatums(
+// LessThanDatums is a specialization of TotalOrderCompare compares for
+// strict order inequality against decoded Datums.
+func (r EncDatumRow) LessThanDatums(
 	types []ColumnType,
 	a *DatumAlloc,
 	ordering ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs tree.Datums,
-) (int, error) {
+) (bool, error) {
 	for _, c := range ordering {
 		if err := r[c.ColIdx].EnsureDecoded(&types[c.ColIdx], a); err != nil {
-			return 0, err
+			return false, err
 		}
-		cmp := r[c.ColIdx].Datum.Compare(evalCtx, rhs[c.ColIdx])
-		if cmp != 0 {
+		if cmp := tree.TotalOrderCompare(evalCtx, r[c.ColIdx].Datum, rhs[c.ColIdx]); cmp != 0 {
 			if c.Direction == encoding.Descending {
 				cmp = -cmp
 			}
-			return cmp, nil
+			return cmp < 0, nil
 		}
 	}
-	return 0, nil
+	return false, nil
 }
 
 // EncDatumRows is a slice of EncDatumRows having the same schema.

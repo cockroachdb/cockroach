@@ -51,7 +51,7 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 		wfr.EndBoundOffset = offset
 		min := &slidingWindowFunc{}
 		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
-			return -a.Compare(evalCtx, b)
+			return -tree.TotalOrderCompare(evalCtx, a, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
 			res, err := min.Compute(evalCtx.Ctx(), evalCtx, wfr)
@@ -86,7 +86,7 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 		wfr.EndBoundOffset = offset
 		max := &slidingWindowFunc{}
 		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
-			return a.Compare(evalCtx, b)
+			return tree.TotalOrderCompare(evalCtx, a, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
 			res, err := max.Compute(evalCtx.Ctx(), evalCtx, wfr)
@@ -221,7 +221,7 @@ func testRingBuffer(t *testing.T, count int) {
 
 		for pos, iv := range naiveBuffer {
 			res := ring.get(pos)
-			if res.idx != iv.idx || res.value.Compare(evalCtx, iv.value) != 0 {
+			if res.idx != iv.idx || tree.Distinct(evalCtx, res.value, iv.value) {
 				t.Errorf("Ring buffer returned incorrect value: expected %+v, found %+v", iv, res)
 				panic("")
 			}

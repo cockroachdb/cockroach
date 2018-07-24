@@ -291,7 +291,7 @@ func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 	if a == b {
 		return 0
 	}
-	cmp := a.Compare(c.EvalCtx, b)
+	cmp := tree.TotalOrderCompare(c.EvalCtx, a, b)
 	if c.Columns.Get(colIdx).Descending() {
 		cmp = -cmp
 	}
