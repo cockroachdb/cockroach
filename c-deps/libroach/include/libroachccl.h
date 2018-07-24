@@ -19,6 +19,8 @@ extern "C" {
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
                            MVCCStatsResult* stats);
 
+extern void* DBOpenHookCCL;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

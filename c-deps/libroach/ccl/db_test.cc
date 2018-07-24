@@ -14,6 +14,7 @@
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
 #include "ctr_stream.h"
+#include "db.h"
 #include "testutils.h"
 
 using namespace cockroach;
@@ -21,27 +22,35 @@ using namespace testutils;
 
 namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
-TEST(LibroachCCL, DBOpenHook) {
+#include <libroach.h>
+#include "db.h"
+class CCLTest : public testing::Test {
+ protected:
+  void SetUp() override { DBSetOpenHook((void*)DBOpenHookCCL); }
+  void TearDown() override { DBSetOpenHook((void*)DBOpenHookOSS); }
+};
+
+TEST_F(CCLTest, DBOpenHook) {
   DBOptions db_opts;
   db_opts.use_file_registry = false;
 
   // Try an empty extra_options.
   db_opts.extra_options = ToDBSlice("");
-  EXPECT_OK(DBOpenHook(nullptr, "", db_opts, nullptr));
+  EXPECT_OK(DBOpenHookCCL(nullptr, "", db_opts, nullptr));
 
   // Try without file registry enabled and bogus options. We should fail
   // because encryption options without file registry is not allowed.
   db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(nullptr, "", db_opts, nullptr),
+  EXPECT_ERR(DBOpenHookCCL(nullptr, "", db_opts, nullptr),
              "on-disk version does not support encryption, but we found encryption flags");
 
   db_opts.use_file_registry = true;
   // Try with file registry but bogus encryption flags.
   db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(nullptr, "", db_opts, nullptr), "failed to parse extra options");
+  EXPECT_ERR(DBOpenHookCCL(nullptr, "", db_opts, nullptr), "failed to parse extra options");
 }
 
-TEST(LibroachCCL, DBOpen) {
+TEST_F(CCLTest, DBOpen) {
   {
     // Empty options: no encryption.
     DBOptions db_opts = defaultDBOptions();
@@ -100,10 +109,9 @@ TEST(LibroachCCL, DBOpen) {
   }
 }
 
-TEST(LibroachCCL, ReadOnly) {
+TEST_F(CCLTest, ReadOnly) {
   // We need a real directory.
   TempDirHandler dir;
-  ASSERT_TRUE(dir.Init());
 
   {
     // Write/read a single key.
@@ -160,10 +168,9 @@ TEST(LibroachCCL, ReadOnly) {
   }
 }
 
-TEST(LibroachCCL, EncryptionStats) {
+TEST_F(CCLTest, EncryptionStats) {
   // We need a real directory.
   TempDirHandler dir;
-  ASSERT_TRUE(dir.Init());
 
   // Write a key.
   ASSERT_OK(WriteAES128KeyFile(rocksdb::Env::Default(), dir.Path("aes-128.key")));
