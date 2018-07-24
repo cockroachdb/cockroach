@@ -377,6 +377,11 @@ func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 		return nil, errors.Errorf("subquery input with multiple columns")
 	}
 
+	// We cannot execute correlated subqueries.
+	if !input.Logical().Relational.OuterCols.Empty() {
+		return nil, b.decorrelationError()
+	}
+
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
 	root, err := b.build(input)
