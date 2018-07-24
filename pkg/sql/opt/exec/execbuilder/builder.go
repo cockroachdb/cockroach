@@ -70,3 +70,7 @@ func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error
 	}
 	return b.buildScalar(&ctx, b.ev)
 }
+
+func (b *Builder) decorrelationError() error {
+	return errors.Errorf("could not decorrelate subquery")
+}

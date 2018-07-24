@@ -144,7 +144,7 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 				ep, err = b.buildProjectSet(ev)
 				break
 			}
-			return execPlan{}, errors.Errorf("could not decorrelate subquery")
+			return execPlan{}, b.decorrelationError()
 		}
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
