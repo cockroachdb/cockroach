@@ -502,7 +502,7 @@ TEST(DataKeyManager, SetStoreKey) {
     // Set new active store key.
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
-    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    auto status = dkm.SetActiveStoreKeyInfo(std::move(store_info));
     EXPECT_ERR(status, t.error);
     if (status.ok()) {
       // New key generated. Check active data key.
@@ -559,7 +559,7 @@ TEST(DataKeyManager, RotateKey) {
 
   struct TestCase {
     testKey store_info;    // Active store key info.
-    int64_t current_time;  // We update the fake env time before the call to SetActiveStoreKey.
+    int64_t current_time;  // We update the fake env time before the call to SetActiveStoreKeyInfo.
     testKey active_key;    // We call compareNonRandomKeyInfo against the active data key.
   };
 
@@ -611,7 +611,7 @@ TEST(DataKeyManager, RotateKey) {
     // Set new active store key.
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
-    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    auto status = dkm.SetActiveStoreKeyInfo(std::move(store_info));
     ASSERT_OK(status);
 
     auto active_info = dkm.CurrentKey();
@@ -633,7 +633,7 @@ TEST(DataKeyManager, RotateKey) {
     env->SetCurrentTime(tc.current_time + 100);
     auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
         new enginepbccl::KeyInfo(keyInfoFromTestKey(tc.store_info)));
-    EXPECT_ERR(ro_dkm.SetActiveStoreKey(std::move(store_info)),
+    EXPECT_ERR(ro_dkm.SetActiveStoreKeyInfo(std::move(store_info)),
                "key manager is read-only, keys cannot be rotated");
     active_info = ro_dkm.CurrentKey();
     ASSERT_NE(active_info, nullptr);
