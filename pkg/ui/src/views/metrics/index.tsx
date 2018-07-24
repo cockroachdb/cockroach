@@ -60,11 +60,27 @@ export class DashboardsPage extends React.Component<DashboardsPageProps> {
     if (this.props.aggregationLevel === AggregationLevel.Cluster) {
       // tslint:disable-next-line:variable-name
       const Tooltip = chart.tooltip;
+      const rendered = (<Tooltip selection={this.props.tooltipSelection} />);
+      const tooltip = chart.metrics.length < 2 ? rendered : (
+        <React.Fragment>
+          { rendered }
+          <dl>
+            {
+              chart.metrics.map((metric) => (
+                <React.Fragment>
+                  <dt>{ metric.title }</dt>
+                  <dd>{ metric.tooltip }</dd>
+                </React.Fragment>
+              ))
+            }
+          </dl>
+        </React.Fragment>
+      );
 
       return (
         <ChartGroup
           title={chart.title}
-          tooltip={<Tooltip selection={this.props.tooltipSelection} />}
+          tooltip={tooltip}
         >
           <MetricsDataProvider id={key}>
             <LineGraph

@@ -8,8 +8,7 @@ export const overviewDashboard: Dashboard = {
       title: "Statements",
       tooltip: (props: TooltipProps) => (
         <React.Fragment>
-          A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
-          started per second {props.selection}.
+          A ten-second moving average of statements completed per second {props.selection}.
         </React.Fragment>
       ),
       axis: {
@@ -19,13 +18,13 @@ export const overviewDashboard: Dashboard = {
         {
           title: "Reads",
           name: "cr.node.sql.select.count",
-          tooltip: "Just the SELECTS...",
+          tooltip: "The SELECT statements.",
           nonNegativeRate: true,
         },
         {
           title: "Updates",
           name: "cr.node.sql.update.count",
-          tooltip: "Just the UPDATES...",
+          tooltip: "The UPDATE statements.",
           nonNegativeRate: true,
         },
       ],
@@ -62,10 +61,12 @@ export const overviewDashboard: Dashboard = {
         {
           title: "Total",
           name: "cr.store.replicas",
+          tooltip: "The total number of replicas",
         },
         {
           title: "Quiescent",
           name: "cr.store.replicas.quiescent",
+          tooltip: "Replicas that are not currently heartbeating.",
         },
       ],
     },
