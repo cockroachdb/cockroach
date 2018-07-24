@@ -182,3 +182,18 @@ root                        ·          ·                         (generate_ser
                 └── scan    ·          ·                         (x, y)             ·
 ·                           table      xy@primary                ·                  ·
 ·                           spans      ALL                       ·                  ·
+
+# Regression test for #24676.
+statement ok
+CREATE TABLE groups(
+  id SERIAL,
+  data jsonb,
+  primary key (id)
+)
+
+query error could not decorrelate subquery
+EXPLAIN (VERBOSE) SELECT
+  g.data->>'name' AS group_name,
+  jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
+FROM
+  groups g
