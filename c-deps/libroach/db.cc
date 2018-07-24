@@ -484,7 +484,9 @@ DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) { return db->EnvDeleteFile(
 
 DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir) { return db->EnvDeleteDirAndFiles(dir); }
 
-DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) { return db->EnvLinkFile(oldname, newname); }
+DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
+  return db->EnvLinkFile(oldname, newname);
+}
 
 DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options) {
   return db->NewIter(iter_options);
@@ -599,9 +601,7 @@ DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
   return DBIterGetState(iter);
 }
 
-void DBIterSetUpperBound(DBIterator* iter, DBKey key) {
-  iter->SetUpperBound(key);
-}
+void DBIterSetUpperBound(DBIterator* iter, DBKey key) { iter->SetUpperBound(key); }
 
 DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool full_merge) {
   new_value->len = 0;
@@ -622,15 +622,13 @@ DBStatus DBMerge(DBSlice existing, DBSlice update, DBString* new_value, bool ful
   return MergeResult(&meta, new_value);
 }
 
-
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
-   return DBMerge(existing, update, new_value, true);
+  return DBMerge(existing, update, new_value, true);
 }
 
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   return DBMerge(existing, update, new_value, false);
 }
-
 
 // DBGetStats queries the given DBEngine for various operational stats and
 // write them to the provided DBStatsResult instance.

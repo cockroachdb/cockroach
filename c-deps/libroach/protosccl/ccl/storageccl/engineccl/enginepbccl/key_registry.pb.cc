@@ -201,8 +201,8 @@ void DataKeysRegistry::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int DataKeysRegistry::kStoreKeysFieldNumber;
 const int DataKeysRegistry::kDataKeysFieldNumber;
-const int DataKeysRegistry::kActiveStoreKeyFieldNumber;
-const int DataKeysRegistry::kActiveDataKeyFieldNumber;
+const int DataKeysRegistry::kActiveStoreKeyIdFieldNumber;
+const int DataKeysRegistry::kActiveDataKeyIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 DataKeysRegistry::DataKeysRegistry()
@@ -218,20 +218,20 @@ DataKeysRegistry::DataKeysRegistry(const DataKeysRegistry& from)
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   store_keys_.MergeFrom(from.store_keys_);
   data_keys_.MergeFrom(from.data_keys_);
-  active_store_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.active_store_key().size() > 0) {
-    active_store_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_);
+  active_store_key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.active_store_key_id().size() > 0) {
+    active_store_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_id_);
   }
-  active_data_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.active_data_key().size() > 0) {
-    active_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_);
+  active_data_key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.active_data_key_id().size() > 0) {
+    active_data_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_id_);
   }
   // @@protoc_insertion_point(copy_constructor:cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry)
 }
 
 void DataKeysRegistry::SharedCtor() {
-  active_store_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  active_data_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_store_key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_data_key_id_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 DataKeysRegistry::~DataKeysRegistry() {
@@ -240,8 +240,8 @@ DataKeysRegistry::~DataKeysRegistry() {
 }
 
 void DataKeysRegistry::SharedDtor() {
-  active_store_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  active_data_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_store_key_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_data_key_id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
 void DataKeysRegistry::SetCachedSize(int size) const {
@@ -261,8 +261,8 @@ void DataKeysRegistry::Clear() {
 
   store_keys_.Clear();
   data_keys_.Clear();
-  active_store_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  active_data_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_store_key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  active_data_key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   _internal_metadata_.Clear();
 }
 
@@ -328,32 +328,32 @@ bool DataKeysRegistry::MergePartialFromCodedStream(
         break;
       }
 
-      // string active_store_key = 3;
+      // string active_store_key_id = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-                input, this->mutable_active_store_key()));
+                input, this->mutable_active_store_key_id()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            this->active_store_key().data(), static_cast<int>(this->active_store_key().length()),
+            this->active_store_key_id().data(), static_cast<int>(this->active_store_key_id().length()),
             ::google::protobuf::internal::WireFormatLite::PARSE,
-            "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key"));
+            "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id"));
         } else {
           goto handle_unusual;
         }
         break;
       }
 
-      // string active_data_key = 4;
+      // string active_data_key_id = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-                input, this->mutable_active_data_key()));
+                input, this->mutable_active_data_key_id()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            this->active_data_key().data(), static_cast<int>(this->active_data_key().length()),
+            this->active_data_key_id().data(), static_cast<int>(this->active_data_key_id().length()),
             ::google::protobuf::internal::WireFormatLite::PARSE,
-            "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key"));
+            "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id"));
         } else {
           goto handle_unusual;
         }
@@ -484,24 +484,24 @@ void DataKeysRegistry::SerializeWithCachedSizes(
     }
   }
 
-  // string active_store_key = 3;
-  if (this->active_store_key().size() > 0) {
+  // string active_store_key_id = 3;
+  if (this->active_store_key_id().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-      this->active_store_key().data(), static_cast<int>(this->active_store_key().length()),
+      this->active_store_key_id().data(), static_cast<int>(this->active_store_key_id().length()),
       ::google::protobuf::internal::WireFormatLite::SERIALIZE,
-      "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key");
+      "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_store_key_id");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
-      3, this->active_store_key(), output);
+      3, this->active_store_key_id(), output);
   }
 
-  // string active_data_key = 4;
-  if (this->active_data_key().size() > 0) {
+  // string active_data_key_id = 4;
+  if (this->active_data_key_id().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-      this->active_data_key().data(), static_cast<int>(this->active_data_key().length()),
+      this->active_data_key_id().data(), static_cast<int>(this->active_data_key_id().length()),
       ::google::protobuf::internal::WireFormatLite::SERIALIZE,
-      "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key");
+      "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.active_data_key_id");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
-      4, this->active_data_key(), output);
+      4, this->active_data_key_id(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -543,18 +543,18 @@ size_t DataKeysRegistry::ByteSizeLong() const {
     }
   }
 
-  // string active_store_key = 3;
-  if (this->active_store_key().size() > 0) {
+  // string active_store_key_id = 3;
+  if (this->active_store_key_id().size() > 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::StringSize(
-        this->active_store_key());
+        this->active_store_key_id());
   }
 
-  // string active_data_key = 4;
-  if (this->active_data_key().size() > 0) {
+  // string active_data_key_id = 4;
+  if (this->active_data_key_id().size() > 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::StringSize(
-        this->active_data_key());
+        this->active_data_key_id());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -576,13 +576,13 @@ void DataKeysRegistry::MergeFrom(const DataKeysRegistry& from) {
 
   store_keys_.MergeFrom(from.store_keys_);
   data_keys_.MergeFrom(from.data_keys_);
-  if (from.active_store_key().size() > 0) {
+  if (from.active_store_key_id().size() > 0) {
 
-    active_store_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_);
+    active_store_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_store_key_id_);
   }
-  if (from.active_data_key().size() > 0) {
+  if (from.active_data_key_id().size() > 0) {
 
-    active_data_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_);
+    active_data_key_id_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.active_data_key_id_);
   }
 }
 
@@ -605,9 +605,9 @@ void DataKeysRegistry::InternalSwap(DataKeysRegistry* other) {
   using std::swap;
   store_keys_.Swap(&other->store_keys_);
   data_keys_.Swap(&other->data_keys_);
-  active_store_key_.Swap(&other->active_store_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  active_store_key_id_.Swap(&other->active_store_key_id_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
-  active_data_key_.Swap(&other->active_data_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  active_data_key_id_.Swap(&other->active_data_key_id_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
