@@ -15,8 +15,6 @@
 package distsqlrun
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -189,30 +187,6 @@ func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
 	default:
 		return true
 	}
-}
-
-// maybeEmitUnmatchedRow is used for rows that don't match anything in the
-// other table; we emit them if it's called for given the type of join,
-// otherwise we discard them.
-//
-// Returns false if no more rows are needed. Also returns any error occurring
-// when emitting the row (i.e. filtering or rendering errors). If false or an
-// error are returned, the inputs still need to be drained and closed and the
-// output needs to be closed. If an error is returned, it is the caller's
-// responsibility to pushed the error to the output.
-func (jb *joinerBase) maybeEmitUnmatchedRow(
-	ctx context.Context, row sqlbase.EncDatumRow, side joinSide,
-) (bool, error) {
-	if !shouldEmitUnmatchedRow(side, jb.joinType) {
-		return true, nil
-	}
-
-	renderedRow := jb.renderUnmatchedRow(row, side)
-	consumerStatus, err := jb.out.EmitRow(ctx, renderedRow)
-	if err != nil {
-		return false, err
-	}
-	return consumerStatus == NeedMoreRows, nil
 }
 
 // render constructs a row with columns from both sides. The ON condition is
