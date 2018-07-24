@@ -334,7 +334,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				expectedDatum := parseFuncs[availType](t, test.c.RawString())
 				evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 				defer evalCtx.Stop(context.Background())
-				if res.Compare(evalCtx, expectedDatum) != 0 {
+				if tree.IsDistinct(evalCtx, res, expectedDatum) {
 					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
 						", found %v",
 						i, availType, test.c, expectedDatum, res)

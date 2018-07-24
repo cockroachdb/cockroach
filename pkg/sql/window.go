@@ -545,27 +545,39 @@ type partitionSorter struct {
 }
 
 // partitionSorter implements the sort.Interface interface.
-func (n *partitionSorter) Len() int           { return len(n.rows) }
-func (n *partitionSorter) Swap(i, j int)      { n.rows[i], n.rows[j] = n.rows[j], n.rows[i] }
-func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
-
-// partitionSorter implements the peerGroupChecker interface.
-func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
-
-func (n *partitionSorter) Compare(i, j int) int {
+func (n *partitionSorter) Len() int      { return len(n.rows) }
+func (n *partitionSorter) Swap(i, j int) { n.rows[i], n.rows[j] = n.rows[j], n.rows[i] }
+func (n *partitionSorter) Less(i, j int) bool {
 	ra, rb := n.rows[i], n.rows[j]
 	defa, defb := n.windowDefVals.At(ra.Idx), n.windowDefVals.At(rb.Idx)
 	for _, o := range n.ordering {
 		da := defa[o.ColIdx]
 		db := defb[o.ColIdx]
-		if c := da.Compare(n.evalCtx, db); c != 0 {
-			if o.Direction != encoding.Ascending {
-				return -c
+		if o.Direction == encoding.Ascending {
+			if tree.IsLowerOrdered(n.evalCtx, da, db) {
+				return true
 			}
-			return c
+		} else {
+			if tree.IsLowerOrdered(n.evalCtx, db, da) {
+				return true
+			}
 		}
 	}
-	return 0
+	return false
+}
+
+// partitionSorter implements the peerGroupChecker interface.
+func (n *partitionSorter) InSameGroup(i, j int) bool {
+	ra, rb := n.rows[i], n.rows[j]
+	defa, defb := n.windowDefVals.At(ra.Idx), n.windowDefVals.At(rb.Idx)
+	for _, o := range n.ordering {
+		da := defa[o.ColIdx]
+		db := defb[o.ColIdx]
+		if tree.IsDistinct(n.evalCtx, da, db) {
+			return false
+		}
+	}
+	return true
 }
 
 type allPeers struct{}

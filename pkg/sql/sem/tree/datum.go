@@ -76,9 +76,13 @@ type Datum interface {
 	// fmtFlags.disambiguateDatumTypes.
 	AmbiguousFormat() bool
 
-	// Compare returns -1 if the receiver is less than other, 0 if receiver is
-	// equal to other and +1 if receiver is greater than other.
-	Compare(ctx *EvalContext, other Datum) int
+	// TotallyBrokenCompare returns -1 if the receiver sorts before other, 0 if receiver is
+	// not distinct to other, +1 if receiver sorts after other.
+	//
+	// This interface is broken! Do not use. Use instead the functions
+	// in compare.go.
+	// TODO(knz): un-export this and make it better.
+	TotallyBrokenCompare(ctx *EvalContext, other Datum) int
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
 	// The previous datum satisfies the following definition: if the receiver is
@@ -89,9 +93,9 @@ type Datum interface {
 	//
 	// TODO(#12022): for DTuple, the contract is actually that "x < b" (SQL order,
 	// where NULL < x is unknown for all x) is true only if "x <= a"
-	// (.Compare/encoding order, where NULL <= x is true for all x) is true. This
+	// (TotalOrderComparison/encoding order, where NULL <= x is true for all x) is true. This
 	// is okay for now: the returned datum is used only to construct a span, which
-	// uses .Compare/encoding order and is guaranteed to be large enough by this
+	// uses TotalOrderComparison/encoding order and is guaranteed to be large enough by this
 	// weaker contract. The original filter expression is left in place to catch
 	// false positives.
 	Prev(ctx *EvalContext) (Datum, bool)
@@ -109,9 +113,9 @@ type Datum interface {
 	//
 	// TODO(#12022): for DTuple, the contract is actually that "x > a" (SQL order,
 	// where x > NULL is unknown for all x) is true only if "x >= b"
-	// (.Compare/encoding order, where x >= NULL is true for all x) is true. This
+	// (TotalOrderComparison/encoding order, where x >= NULL is true for all x) is true. This
 	// is okay for now: the returned datum is used only to construct a span, which
-	// uses .Compare/encoding order and is guaranteed to be large enough by this
+	// uses TotalOrderComparison/encoding order and is guaranteed to be large enough by this
 	// weaker contract. The original filter expression is left in place to catch
 	// false positives.
 	Next(ctx *EvalContext) (Datum, bool)
@@ -169,14 +173,8 @@ func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
 		return true
 	}
 	for i, val := range d {
-		if val == DNull {
-			if other[i] != DNull {
-				return true
-			}
-		} else {
-			if val.Compare(evalCtx, other[i]) != 0 {
-				return true
-			}
+		if IsDistinct(evalCtx, val, other[i]) {
+			return true
 		}
 	}
 	return false
@@ -355,8 +353,8 @@ func (*DBool) ResolvedType() types.T {
 	return types.Bool
 }
 
-// Compare implements the Datum interface.
-func (d *DBool) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DBool) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -464,8 +462,8 @@ func (*DInt) ResolvedType() types.T {
 	return types.Int
 }
 
-// Compare implements the Datum interface.
-func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DInt) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -475,7 +473,7 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 	case *DInt:
 		v = *t
 	case *DFloat, *DDecimal:
-		return -t.Compare(ctx, d)
+		return -t.TotallyBrokenCompare(ctx, d)
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -567,8 +565,8 @@ func (*DFloat) ResolvedType() types.T {
 	return types.Float
 }
 
-// Compare implements the Datum interface.
-func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DFloat) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -580,7 +578,7 @@ func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 	case *DInt:
 		v = DFloat(MustBeDInt(t))
 	case *DDecimal:
-		return -t.Compare(ctx, d)
+		return -t.TotallyBrokenCompare(ctx, d)
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -720,8 +718,8 @@ func (*DDecimal) ResolvedType() types.T {
 	return types.Decimal
 }
 
-// Compare implements the Datum interface.
-func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DDecimal) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -861,8 +859,8 @@ func (*DString) ResolvedType() types.T {
 	return types.String
 }
 
-// Compare implements the Datum interface.
-func (d *DString) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DString) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1003,8 +1001,8 @@ func (d *DCollatedString) ResolvedType() types.T {
 	return types.TCollatedString{Locale: d.Locale}
 }
 
-// Compare implements the Datum interface.
-func (d *DCollatedString) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DCollatedString) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1090,8 +1088,8 @@ func (*DBytes) ResolvedType() types.T {
 	return types.Bytes
 }
 
-// Compare implements the Datum interface.
-func (d *DBytes) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DBytes) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1192,8 +1190,8 @@ func (*DUuid) ResolvedType() types.T {
 	return types.UUID
 }
 
-// Compare implements the Datum interface.
-func (d *DUuid) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DUuid) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1308,8 +1306,8 @@ func (*DIPAddr) ResolvedType() types.T {
 	return types.INet
 }
 
-// Compare implements the Datum interface.
-func (d *DIPAddr) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DIPAddr) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1462,8 +1460,8 @@ func (*DDate) ResolvedType() types.T {
 	return types.Date
 }
 
-// Compare implements the Datum interface.
-func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DDate) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1564,8 +1562,8 @@ func (*DTime) ResolvedType() types.T {
 	return types.Time
 }
 
-// Compare implements the Datum interface.
-func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DTime) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1667,8 +1665,8 @@ func (*DTimeTZ) ResolvedType() types.T {
 	return types.TimeTZ
 }
 
-// Compare implements the Datum interface.
-func (d *DTimeTZ) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DTimeTZ) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -1914,8 +1912,8 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 	return 0
 }
 
-// Compare implements the Datum interface.
-func (d *DTimestamp) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DTimestamp) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2013,8 +2011,8 @@ func (*DTimestampTZ) ResolvedType() types.T {
 	return types.TimestampTZ
 }
 
-// Compare implements the Datum interface.
-func (d *DTimestampTZ) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DTimestampTZ) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2206,8 +2204,8 @@ func (*DInterval) ResolvedType() types.T {
 	return types.Interval
 }
 
-// Compare implements the Datum interface.
-func (d *DInterval) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DInterval) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2398,8 +2396,8 @@ func (*DJSON) ResolvedType() types.T {
 	return types.JSON
 }
 
-// Compare implements the Datum interface.
-func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DJSON) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2410,7 +2408,7 @@ func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
 	}
 	// No avenue for us to pass up this error here at the moment, but Compare
 	// only errors for invalid encoded data.
-	// TODO(justin): modify Compare to allow passing up errors.
+	// TODO(justin): modify TotallyBrokenCompare to allow passing up errors.
 	c, err := d.JSON.Compare(v.JSON)
 	if err != nil {
 		panic(err)
@@ -2530,8 +2528,8 @@ func (d *DTuple) ResolvedType() types.T {
 	return d.typ
 }
 
-// Compare implements the Datum interface.
-func (d *DTuple) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DTuple) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2545,7 +2543,7 @@ func (d *DTuple) Compare(ctx *EvalContext, other Datum) int {
 		n = len(v.D)
 	}
 	for i := 0; i < n; i++ {
-		c := d.D[i].Compare(ctx, v.D[i])
+		c := d.D[i].TotallyBrokenCompare(ctx, v.D[i])
 		if c != 0 {
 			return c
 		}
@@ -2711,16 +2709,10 @@ func (d *DTuple) AssertSorted() {
 // be
 func (d *DTuple) SearchSorted(ctx *EvalContext, target Datum) (int, bool) {
 	d.AssertSorted()
-	if target == DNull {
-		panic(fmt.Sprintf("NULL target (d: %s)", d))
-	}
-	if t, ok := target.(*DTuple); ok && t.ContainsNull() {
-		panic(fmt.Sprintf("target containing NULLs: %#v (d: %s)", target, d))
-	}
 	i := sort.Search(len(d.D), func(i int) bool {
-		return d.D[i].Compare(ctx, target) >= 0
+		return IsLowerOrdered(ctx, target, d.D[i])
 	})
-	found := i < len(d.D) && d.D[i].Compare(ctx, target) == 0
+	found := i < len(d.D) && !IsDistinct(ctx, d.D[i], target)
 	return i, found
 }
 
@@ -2733,7 +2725,7 @@ func (d *DTuple) Normalize(ctx *EvalContext) {
 func (d *DTuple) sort(ctx *EvalContext) {
 	if !d.sorted {
 		sort.Slice(d.D, func(i, j int) bool {
-			return d.D[i].Compare(ctx, d.D[j]) < 0
+			return IsLowerOrdered(ctx, d.D[i], d.D[j])
 		})
 		d.SetSorted()
 	}
@@ -2742,7 +2734,7 @@ func (d *DTuple) sort(ctx *EvalContext) {
 func (d *DTuple) makeUnique(ctx *EvalContext) {
 	n := 0
 	for i := 0; i < len(d.D); i++ {
-		if n == 0 || d.D[n-1].Compare(ctx, d.D[i]) < 0 {
+		if n == 0 || IsLowerOrdered(ctx, d.D[n-1], d.D[i]) {
 			d.D[n] = d.D[i]
 			n++
 		}
@@ -2786,8 +2778,8 @@ func (dNull) ResolvedType() types.T {
 	return types.Unknown
 }
 
-// Compare implements the Datum interface.
-func (d dNull) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d dNull) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		return 0
 	}
@@ -2881,8 +2873,8 @@ func (d *DArray) ResolvedType() types.T {
 	return types.TArray{Typ: d.ParamTyp}
 }
 
-// Compare implements the Datum interface.
-func (d *DArray) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DArray) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -2896,7 +2888,7 @@ func (d *DArray) Compare(ctx *EvalContext, other Datum) int {
 		n = v.Len()
 	}
 	for i := 0; i < n; i++ {
-		c := d.Array[i].Compare(ctx, v.Array[i])
+		c := d.Array[i].TotallyBrokenCompare(ctx, v.Array[i])
 		if c != 0 {
 			return c
 		}
@@ -3060,8 +3052,8 @@ func (d *DOid) AsRegProc(name string) *DOid {
 // AmbiguousFormat implements the Datum interface.
 func (*DOid) AmbiguousFormat() bool { return true }
 
-// Compare implements the Datum interface.
-func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DOid) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
@@ -3205,16 +3197,16 @@ func (d *DOidWrapper) ResolvedType() types.T {
 	return types.WrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
 }
 
-// Compare implements the Datum interface.
-func (d *DOidWrapper) Compare(ctx *EvalContext, other Datum) int {
+// TotallyBrokenCompare implements the Datum interface.
+func (d *DOidWrapper) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
 	if v, ok := other.(*DOidWrapper); ok {
-		return d.Wrapped.Compare(ctx, v.Wrapped)
+		return d.Wrapped.TotallyBrokenCompare(ctx, v.Wrapped)
 	}
-	return d.Wrapped.Compare(ctx, other)
+	return d.Wrapped.TotallyBrokenCompare(ctx, other)
 }
 
 // Prev implements the Datum interface.
@@ -3284,9 +3276,9 @@ func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
 	return out
 }
 
-// Compare implements the Datum interface.
-func (d *Placeholder) Compare(ctx *EvalContext, other Datum) int {
-	return d.mustGetValue(ctx).Compare(ctx, other)
+// TotallyBrokenCompare implements the Datum interface.
+func (d *Placeholder) TotallyBrokenCompare(ctx *EvalContext, other Datum) int {
+	return d.mustGetValue(ctx).TotallyBrokenCompare(ctx, other)
 }
 
 // Prev implements the Datum interface.

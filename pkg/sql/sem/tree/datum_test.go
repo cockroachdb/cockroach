@@ -317,7 +317,7 @@ func TestDFloatCompare(t *testing.T) {
 			}
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			got := x.Compare(evalCtx, y)
+			got := tree.TotalOrderComparison(evalCtx, x, y)
 			if got != expected {
 				t.Errorf("comparing DFloats %s and %s: expected %d, got %d", x, y, expected, got)
 			}
@@ -367,7 +367,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		if tree.IsDistinct(evalCtx, expected, actual) {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
 		}
 	}
@@ -408,7 +408,7 @@ func TestParseDDate(t *testing.T) {
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		if tree.IsDistinct(evalCtx, expected, actual) {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
 		}
 	}
@@ -619,7 +619,8 @@ func TestMakeDJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	if !tree.IsLowerOrdered(evalCtx, j1, j2) {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }

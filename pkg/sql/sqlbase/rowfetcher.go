@@ -1196,7 +1196,9 @@ func (rf *RowFetcher) checkKeyOrdering(ctx context.Context) error {
 	evalCtx := tree.EvalContext{}
 	for i, id := range rf.rowReadyTable.index.ColumnIDs {
 		idx := rf.rowReadyTable.colIdxMap[id]
-		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
+		result := tree.TotalOrderComparison(&evalCtx,
+			rf.rowReadyTable.decodedRow[idx],
+			rf.rowReadyTable.lastDatums[idx])
 		expectedDirection := rf.rowReadyTable.index.ColumnDirections[i]
 		if rf.reverse && expectedDirection == IndexDescriptor_ASC {
 			expectedDirection = IndexDescriptor_DESC

@@ -375,7 +375,7 @@ func simplifyOneAndExpr(
 
 	ldatum := lcmpRight.(tree.Datum)
 	rdatum := rcmpRight.(tree.Datum)
-	cmp := ldatum.Compare(evalCtx, rdatum)
+	cmp := ldatum.TotallyBrokenCompare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
 	// is valid as a return value but their types are different. The reason
@@ -916,7 +916,7 @@ func simplifyOneOrExpr(
 
 	ldatum := lcmpRight.(tree.Datum)
 	rdatum := rcmpRight.(tree.Datum)
-	cmp := ldatum.Compare(evalCtx, rdatum)
+	cmp := ldatum.TotallyBrokenCompare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
 	// is valid as a return value but their types are different. The reason
@@ -1334,7 +1334,7 @@ func simplifyOneOrInExpr(
 				}
 			case tree.LE:
 				if i == len(ltuple.D) ||
-					(i == len(ltuple.D)-1 && ltuple.D[i].Compare(evalCtx, datum) == 0) {
+					(i == len(ltuple.D)-1 && ltuple.D[i].TotallyBrokenCompare(evalCtx, datum) == 0) {
 					// datum >= ltuple.D[len(ltuple.D)-1]
 					return right, nil
 				}
@@ -1516,7 +1516,7 @@ func mergeSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
 			r = append(r, a...)
 			break
 		}
-		switch a[0].Compare(evalCtx, b[0]) {
+		switch tree.TotalOrderComparison(evalCtx, a[0], b[0]) {
 		case -1:
 			r = append(r, a[0])
 			a = a[1:]
@@ -1539,7 +1539,7 @@ func intersectSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
 	}
 	r := make(tree.Datums, 0, n)
 	for len(a) > 0 && len(b) > 0 {
-		switch a[0].Compare(evalCtx, b[0]) {
+		switch tree.TotalOrderComparison(evalCtx, a[0], b[0]) {
 		case -1:
 			a = a[1:]
 		case 0:

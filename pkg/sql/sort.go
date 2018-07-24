@@ -759,7 +759,7 @@ func (n *sortValues) Len() int {
 // ValuesLess returns the comparison result between the two provided
 // Datums slices in the context of the sortValues ordering.
 func (n *sortValues) ValuesLess(ra, rb tree.Datums) bool {
-	return sqlbase.CompareDatums(n.ordering, n.evalCtx, ra, rb) < 0
+	return sqlbase.LessDatums(n.ordering, false, n.evalCtx, ra, rb)
 }
 
 // Less implements the sort.Interface interface.

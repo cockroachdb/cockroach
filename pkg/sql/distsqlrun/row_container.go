@@ -140,11 +140,8 @@ func (mc *memRowContainer) initWithMon(
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *memRowContainer) Less(i, j int) bool {
-	cmp := sqlbase.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
-	if mc.invertSorting {
-		cmp = -cmp
-	}
-	return cmp < 0
+	ra, rb := mc.At(i), mc.At(j)
+	return sqlbase.LessDatums(mc.ordering, mc.invertSorting, mc.evalCtx, ra, rb)
 }
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused

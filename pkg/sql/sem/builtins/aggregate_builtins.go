@@ -325,13 +325,13 @@ func makeAggOverloadWithReturnType(
 			case *MinAggregate:
 				min := &slidingWindowFunc{}
 				min.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
-					return -a.Compare(evalCtx, b)
+					return -tree.TotalOrderComparison(evalCtx, a, b)
 				})
 				return min
 			case *MaxAggregate:
 				max := &slidingWindowFunc{}
 				max.sw = makeSlidingWindow(evalCtx, func(evalCtx *tree.EvalContext, a, b tree.Datum) int {
-					return a.Compare(evalCtx, b)
+					return tree.TotalOrderComparison(evalCtx, a, b)
 				})
 				return max
 			case *intSumAggregate:
@@ -681,8 +681,7 @@ func (a *MaxAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum)
 		a.max = datum
 		return nil
 	}
-	c := a.max.Compare(a.evalCtx, datum)
-	if c < 0 {
+	if tree.IsLowerOrdered(a.evalCtx, a.max, datum) {
 		a.max = datum
 	}
 	return nil
@@ -718,8 +717,7 @@ func (a *MinAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum)
 		a.min = datum
 		return nil
 	}
-	c := a.min.Compare(a.evalCtx, datum)
-	if c > 0 {
+	if tree.IsLowerOrdered(a.evalCtx, datum, a.min) {
 		a.min = datum
 	}
 	return nil

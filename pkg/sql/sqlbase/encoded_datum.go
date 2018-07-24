@@ -290,7 +290,7 @@ func (ed *EncDatum) Compare(
 	if err := rhs.EnsureDecoded(typ, a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.Compare(evalCtx, rhs.Datum), nil
+	return ed.Datum.TotallyBrokenCompare(evalCtx, rhs.Datum), nil
 }
 
 // GetInt decodes an EncDatum that is known to be of integer type and returns
@@ -457,7 +457,7 @@ func (r EncDatumRow) CompareToDatums(
 		if err := r[c.ColIdx].EnsureDecoded(&types[c.ColIdx], a); err != nil {
 			return 0, err
 		}
-		cmp := r[c.ColIdx].Datum.Compare(evalCtx, rhs[c.ColIdx])
+		cmp := r[c.ColIdx].Datum.TotallyBrokenCompare(evalCtx, rhs[c.ColIdx])
 		if cmp != 0 {
 			if c.Direction == encoding.Descending {
 				cmp = -cmp

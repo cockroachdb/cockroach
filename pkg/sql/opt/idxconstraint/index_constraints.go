@@ -885,7 +885,9 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Cons
 		j := 0
 		// Find the longest prefix of equal values.
 		for ; j < sp.StartKey().Length() && j < sp.EndKey().Length(); j++ {
-			if sp.StartKey().Value(j).Compare(c.evalCtx, sp.EndKey().Value(j)) != 0 {
+			// FIXME(radu): are we happy about this if the span or the filter contains
+			// comparisons with NULLs?
+			if tree.IsDistinct(c.evalCtx, sp.StartKey().Value(j), sp.EndKey().Value(j)) {
 				break
 			}
 		}

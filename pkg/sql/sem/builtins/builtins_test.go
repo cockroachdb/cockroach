@@ -107,7 +107,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 			}
 
 			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			if result.Compare(evalContext, expectedArray) != 0 {
+			if tree.IsDistinct(evalContext, result, expectedArray) {
 				t.Errorf("expected %v, got %v", tc.expected, result)
 			}
 

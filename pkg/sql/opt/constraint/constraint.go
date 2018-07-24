@@ -436,12 +436,12 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 				return col
 			}
 			startVal := sp.start.Value(col)
-			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
+			if tree.IsDistinct(evalCtx, startVal, sp.end.Value(col)) {
 				return col
 			}
 			if i == 0 {
 				val = startVal
-			} else if startVal.Compare(evalCtx, val) != 0 {
+			} else if tree.IsDistinct(evalCtx, startVal, val) {
 				return col
 			}
 		}
@@ -465,7 +465,7 @@ func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
 			start := sp.StartKey()
 			end := sp.EndKey()
 			if start.Length() <= prefix || end.Length() <= prefix ||
-				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+				tree.IsDistinct(evalCtx, start.Value(prefix), end.Value(prefix)) {
 				return prefix
 			}
 		}

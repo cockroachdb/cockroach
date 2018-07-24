@@ -81,8 +81,8 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, x.Datum); cmp != 0 {
-		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	if tree.IsDistinct(x.Datum, y.Datum) {
+		t.Errorf("Datums should not be distinct: %v vs %v", x.Datum, y.Datum)
 	}
 
 	enc2, err := y.Encode(&typeInt, a, DatumEncoding_DESCENDING_KEY, nil)
@@ -107,8 +107,8 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, z.Datum); cmp != 0 {
-		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	if tree.IsDistinct(y.Datum, z.Datum) {
+		t.Errorf("Datums should not be distinct: %v vs %v", y.Datum, z.Datum)
 	}
 	y.UnsetDatum()
 	if !y.IsUnset() {
@@ -231,7 +231,7 @@ func TestEncDatumCompare(t *testing.T) {
 		for {
 			d1 = RandDatum(rng, typ, false)
 			d2 = RandDatum(rng, typ, false)
-			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
+			if tree.IsLowerOrdered(evalCtx, d1, d2) {
 				break
 			}
 		}
@@ -318,8 +318,8 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
-				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
+			if tree.IsDistinct(evalCtx, decoded.Datum, ed[i].Datum) {
+				t.Errorf("decoded datum %s is distinct from original %s", decoded.Datum, ed[i].Datum)
 			}
 		}
 		if len(b) != 0 {
@@ -479,8 +479,8 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 			for i := 0; i < rows; i++ {
 				for j := 0; j < cols; j++ {
-					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(evalCtx, b) != 0 {
-						t.Errorf("copied datum %s doesn't equal original %s", b, a)
+					if a, b := in[i][j].Datum, out[i][j].Datum; tree.IsDistinct(evalCtx, a, b) {
+						t.Errorf("copied datum %s distinct from original %s", b, a)
 					}
 				}
 			}
@@ -527,8 +527,8 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
-				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
+			if tree.IsDistinct(&tree.EvalContext, decodedTuple, test) {
+				t.Fatalf("seed %d: encoded %+v, decoded %+v are distinct", seed, test, decodedTuple)
 			}
 		default:
 			if test == tree.DNull {

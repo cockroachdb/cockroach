@@ -44,7 +44,7 @@ func EquiDepthHistogram(
 		}
 	}
 	sort.Slice(samples, func(i, j int) bool {
-		return samples[i].Compare(evalCtx, samples[j]) < 0
+		return tree.IsLowerOrdered(evalCtx, samples[i], samples[j])
 	})
 	numBuckets := maxBuckets
 	if maxBuckets > numSamples {
@@ -69,15 +69,15 @@ func EquiDepthHistogram(
 		// numLess is the number of samples less than upper (in this bucket).
 		numLess := 0
 		for ; numLess < num-1; numLess++ {
-			if c := samples[i+numLess].Compare(evalCtx, upper); c == 0 {
+			if c := tree.TotalOrderComparison(evalCtx, samples[i+numLess], upper); c == 0 {
 				break
 			} else if c > 0 {
 				panic("samples not sorted")
 			}
 		}
-		// Advance the boundary of the bucket to cover all samples equal to upper.
+		// Advance the boundary of the bucket to cover all samples order-equal to upper.
 		for ; i+num < numSamples; num++ {
-			if samples[i+num].Compare(evalCtx, upper) != 0 {
+			if tree.IsDistinct(evalCtx, samples[i+num], upper) {
 				break
 			}
 		}

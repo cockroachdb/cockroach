@@ -46,22 +46,21 @@ func (a ColumnOrdering) IsPrefixOf(b ColumnOrdering) bool {
 	return true
 }
 
-// CompareDatums compares two datum rows according to a column ordering. Returns:
-//  - 0 if lhs and rhs are equal on the ordering columns;
-//  - less than 0 if lhs comes first;
-//  - greater than 0 if rhs comes first.
-func CompareDatums(ordering ColumnOrdering, evalCtx *tree.EvalContext, lhs, rhs tree.Datums) int {
+// LessDatums compares two datum rows according to a column ordering. Returns true
+// if lhs sorts before rhs, false otherwise.
+func LessDatums(
+	ordering ColumnOrdering, invertSort bool, evalCtx *tree.EvalContext, lhs, rhs tree.Datums,
+) bool {
 	for _, c := range ordering {
-		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
-		// not sure this always holds as `CASE` expressions can return different
-		// types for a column for different rows. Investigate how other RDBMs
-		// handle this.
-		if cmp := lhs[c.ColIdx].Compare(evalCtx, rhs[c.ColIdx]); cmp != 0 {
-			if c.Direction == encoding.Descending {
-				cmp = -cmp
+		if invertSort != (c.Direction == encoding.Ascending) {
+			if tree.IsLowerOrdered(evalCtx, lhs[c.ColIdx], rhs[c.ColIdx]) {
+				return true
 			}
-			return cmp
+		} else {
+			if tree.IsLowerOrdered(evalCtx, rhs[c.ColIdx], lhs[c.ColIdx]) {
+				return true
+			}
 		}
 	}
-	return 0
+	return false
 }

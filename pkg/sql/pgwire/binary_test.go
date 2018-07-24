@@ -90,7 +90,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 					t.Fatalf("unable to decode %v: %s", got[4:], err)
 				}
 
-				if d.Compare(evalCtx, datum) != 0 {
+				if tree.IsDistinct(evalCtx, d, datum) != 0 {
 					t.Errorf("expected %s, got %s", d, datum)
 				}
 			}()
@@ -249,7 +249,7 @@ func TestBinaryIntArray(t *testing.T) {
 	}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	if got.Compare(evalCtx, d) != 0 {
+	if tree.IsDistinct(evalCtx, got, d) {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }

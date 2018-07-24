@@ -2464,7 +2464,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) != 0 {
+					if tree.IsDistinct(ctx, e, args[1]) {
 						if err := result.Append(e); err != nil {
 							return nil, err
 						}
@@ -2486,7 +2486,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					if !tree.IsDistinct(ctx, e, args[1]) {
 						if err := result.Append(args[2]); err != nil {
 							return nil, err
 						}
@@ -2511,7 +2511,7 @@ may increase either contention or retry errors, or both.`,
 					return tree.DNull, nil
 				}
 				for i, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					if !tree.IsDistinct(ctx, e, args[1]) {
 						return tree.NewDInt(tree.DInt(i + 1)), nil
 					}
 				}
@@ -2531,7 +2531,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				result := tree.NewDArray(types.Int)
 				for i, e := range tree.MustBeDArray(args[0]).Array {
-					if e.Compare(ctx, args[1]) == 0 {
+					if !tree.IsDistinct(ctx, e, args[1]) {
 						if err := result.Append(tree.NewDInt(tree.DInt(i + 1))); err != nil {
 							return nil, err
 						}

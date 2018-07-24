@@ -1189,7 +1189,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			}
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
-			if startVal.Compare(sb.evalCtx, endVal) != 0 {
+			if tree.IsDistinct(sb.evalCtx, startVal, endVal) {
 				// TODO(rytaft): are there other types we should handle here
 				// besides int?
 				if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
@@ -1211,7 +1211,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 				}
 			}
 			if i != 0 {
-				compare := startVal.Compare(sb.evalCtx, val)
+				compare := tree.TotalOrderComparison(sb.evalCtx, startVal, val)
 				ascending := c.Columns.Get(col).Ascending()
 				if (compare > 0 && ascending) || (compare < 0 && !ascending) {
 					// This check is needed to ensure that we calculate the correct distinct

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -101,7 +102,7 @@ func TestIndexedVars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Compare(evalCtx, NewDInt(3+5*6)) != 0 {
+	if tree.IsDistinct(evalCtx, d, NewDInt(3+5*6)) {
 		t.Errorf("invalid result %s (expected %d)", d, 3+5*6)
 	}
 }
