@@ -206,6 +206,7 @@ func readMysqlCreateTable(
 	tokens.SkipSpecialComments = true
 
 	var ret []*sqlbase.TableDescriptor
+	var fkDefs []delayedFK
 	var found []string
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
@@ -215,6 +216,9 @@ func readMysqlCreateTable(
 			}
 			if ret == nil {
 				return nil, errors.Errorf("no table definition found")
+			}
+			if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
+				return nil, err
 			}
 			return ret, nil
 		}
@@ -231,10 +235,11 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := sqlbase.ID(int(startingID) + len(ret))
-			tbl, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks)
 			if err != nil {
 				return nil, err
 			}
+			fkDefs = append(fkDefs, moreFKs...)
 			if match == name {
 				return []*sqlbase.TableDescriptor{tbl}, nil
 			}
@@ -256,9 +261,9 @@ func mysqlTableToCockroach(
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
-) (*sqlbase.TableDescriptor, error) {
+) (*sqlbase.TableDescriptor, []delayedFK, error) {
 	if in == nil {
-		return nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
+		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
 	}
 
 	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
@@ -270,11 +275,11 @@ func mysqlTableToCockroach(
 	for _, raw := range in.Columns {
 		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, evalCtx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		desc.AddColumn(*col)
 		colNames[raw.Name.String()] = col.Name
@@ -287,22 +292,22 @@ func mysqlTableToCockroach(
 		}
 		idx := sqlbase.IndexDescriptor{Name: raw.Info.Name.String(), Unique: raw.Info.Unique}
 		if err := idx.FillColumns(elems); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := desc.AddIndex(idx, raw.Info.Primary); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if err := desc.AllocateIDs(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
+	var fkDefs []delayedFK
 	for _, raw := range in.Constraints {
 		switch i := raw.Details.(type) {
 		case *mysql.ForeignKeyDefinition:
 			if !fks.allowed {
-				return nil, errors.Errorf("foreign keys not supported: %s", mysql.String(raw))
+				return nil, nil, errors.Errorf("foreign keys not supported: %s", mysql.String(raw))
 			}
 			if fks.skip {
 				continue
@@ -318,22 +323,32 @@ func mysqlTableToCockroach(
 				ToCols:   toNameList(toCols),
 			}
 			d.Table.TableNameReference = &toTable
-			if err := sql.ResolveFK(
-				ctx, nil, fks.resolver, &desc, d, map[sqlbase.ID]*sqlbase.TableDescriptor{}, sqlbase.ConstraintValidity_Validated,
-			); err != nil {
-				return nil, err
-			}
-			if err := fixDescriptorFKState(&desc); err != nil {
-				return nil, err
-			}
+			fkDefs = append(fkDefs, delayedFK{&desc, d})
 		}
 	}
+	return &desc, fkDefs, nil
+}
 
-	if err := desc.AllocateIDs(); err != nil {
-		return nil, err
+type delayedFK struct {
+	tbl *sqlbase.TableDescriptor
+	def *tree.ForeignKeyConstraintTableDef
+}
+
+func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
+	for _, def := range defs {
+		if err := sql.ResolveFK(
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.TableDescriptor{}, sqlbase.ConstraintValidity_Validated,
+		); err != nil {
+			return err
+		}
+		if err := fixDescriptorFKState(def.tbl); err != nil {
+			return err
+		}
+		if err := def.tbl.AllocateIDs(); err != nil {
+			return err
+		}
 	}
-
-	return &desc, nil
+	return nil
 }
 
 func toNameList(cols mysql.Columns) tree.NameList {
