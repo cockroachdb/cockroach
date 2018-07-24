@@ -1,11 +1,17 @@
-import { Dashboard, Units, SourceLevel } from "./interface";
+import React from "react";
+import { Dashboard, Units, SourceLevel, TooltipProps } from "./interface";
 
 export const overviewDashboard: Dashboard = {
   title: "Overview",
   charts: [
     {
       title: "Statements",
-      tooltip: "A ten-second moving average...",
+      tooltip: (props: TooltipProps) => (
+        <React.Fragment>
+          A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
+          started per second {props.selection}.
+        </React.Fragment>
+      ),
       axis: {
         label: "queries",
       },
@@ -26,7 +32,12 @@ export const overviewDashboard: Dashboard = {
     },
     {
       title: "Service Latency",
-      tooltip: "The time taken to parse, plan, and execute statements",
+      tooltip: (props: TooltipProps) => (
+        <React.Fragment>
+          Over the last minute, 99% of queries ${props.selection} were executed within this time.&nbsp;
+          <em>This time does not include network latency between the node and client.</em>
+        </React.Fragment>
+      ),
       axis: {
         units: Units.Duration,
         label: "latency",
@@ -42,7 +53,7 @@ export const overviewDashboard: Dashboard = {
     },
     {
       title: "Replicas",
-      tooltip: "Range replicas per node...",
+      tooltip: (_props: TooltipProps) => (<div>"Range replicas per node..."</div>),
       axis: {
         label: "replicas",
       },
@@ -60,7 +71,7 @@ export const overviewDashboard: Dashboard = {
     },
     {
       title: "Capacity",
-      tooltip: "The disk space available/used...",
+      tooltip: (_props: TooltipProps) => (<div>"The disk space available/used..."</div>),
       axis: {
         units: Units.Bytes,
         label: "capacity",

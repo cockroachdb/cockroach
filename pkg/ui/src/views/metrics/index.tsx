@@ -15,7 +15,6 @@ interface DashboardsPageProps {
   aggregationLevel: AggregationLevel;
   nodeSources: string[];
   nodesSummary: NodesSummary;
-  storeSources: string[];
   tooltipSelection: string;
   forwardProps: Partial<LineGraphProps>;
 }
@@ -58,12 +57,15 @@ export class DashboardsPage extends React.Component<DashboardsPageProps> {
   renderChart = (chart: Chart, idx: number) => {
     const key = `nodes.${this.props.dashboard}.${idx}.${this.props.aggregationLevel}`;
     if (this.props.aggregationLevel === AggregationLevel.Cluster) {
+      // tslint:disable-next-line:variable-name
+      const Tooltip = chart.tooltip;
+
       return (
         <MetricsDataProvider id={key}>
           <LineGraph
             sources={this.getSources(chart.sourceLevel)}
             title={chart.title}
-            tooltip={chart.tooltip}
+            tooltip={<Tooltip selection={this.props.tooltipSelection} />}
             {...this.props.forwardProps}
           >
             <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>

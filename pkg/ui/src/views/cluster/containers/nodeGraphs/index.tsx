@@ -23,10 +23,6 @@ import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hov
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 
-import {
-  storeIDsForNode,
-} from "./dashboards/dashboardUtils";
-
 import { DashboardsPage } from "src/views/metrics";
 
 interface GraphDashboard {
@@ -155,11 +151,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     // only for the selected node.
     const nodeIDs = nodeSources ? nodeSources : nodesSummary.nodeIDs;
 
-    // If a single node is selected, we need to restrict the set of stores
-    // queried for per-store metrics (only stores that belong to that node will
-    // be queried).
-    const storeSources = nodeSources ? storeIDsForNode(nodesSummary, nodeSources[0]) : null;
-
     // tooltipSelection is a string used in tooltips to reference the currently
     // selected nodes. This is a prepositional phrase, currently either "across
     // all nodes" or "on node X".
@@ -172,18 +163,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       hoverOff: this.props.hoverOff,
       hoverState: this.props.hoverState,
     };
-
-    const graphComponents = (
-      <DashboardsPage
-        dashboard="overview"
-        aggregationLevel={aggregationLevel}
-        nodeSources={nodeIDs}
-        nodesSummary={nodesSummary}
-        storeSources={storeSources}
-        tooltipSelection={tooltipSelection}
-        forwardProps={forwardProps}
-      />
-    );
 
     return (
       <div>
@@ -222,7 +201,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         <section className="section">
           <div className="l-columns">
             <div className="chart-group l-columns__left">
-              { graphComponents }
+              <DashboardsPage
+                dashboard="overview"
+                aggregationLevel={aggregationLevel}
+                nodeSources={nodeIDs}
+                nodesSummary={nodesSummary}
+                tooltipSelection={tooltipSelection}
+                forwardProps={forwardProps}
+              />
             </div>
             <div className="l-columns__right">
               <Alerts />

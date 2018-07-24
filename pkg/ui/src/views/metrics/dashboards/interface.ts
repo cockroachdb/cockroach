@@ -1,3 +1,5 @@
+import { ComponentType } from "react";
+
 export interface Dashboard {
   title: string;
   charts: Chart[];
@@ -5,7 +7,7 @@ export interface Dashboard {
 
 export interface Chart {
   title: string;
-  tooltip: string;
+  tooltip: ComponentType<TooltipProps>;
   axis: Axis;
   sourceLevel?: SourceLevel;
   metrics: Metric[];
@@ -34,4 +36,8 @@ export interface Metric {
   nonNegativeRate?: boolean;
   downsampleMax?: boolean;
   aggregateAvg?: boolean;
+}
+
+export interface TooltipProps {
+  selection: string;
 }
