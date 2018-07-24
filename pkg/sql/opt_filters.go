@@ -922,3 +922,18 @@ func mergeConj(left, right tree.TypedExpr) tree.TypedExpr {
 func isFilterTrue(expr tree.TypedExpr) bool {
 	return expr == nil || expr == tree.DBoolTrue
 }
+
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
+//
+//   a AND b AND c AND d -> [a, b, c, d]
+func splitAndExpr(
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
+	switch t := e.(type) {
+	case *tree.AndExpr:
+		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
+	}
+	return append(exprs, e)
+}
