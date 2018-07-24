@@ -99,6 +99,14 @@ void DBReleaseCache(DBCache* cache);
 // exist.
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
+// Set a callback to be invoked during DBOpen that can make changes to RocksDB
+// initialization. Used by CCL code to install additional features.
+//
+// The callback must be a pointer to a C++ function of type DBOpenHook. The type
+// is declared in db.cc. It cannot be part of the public C API as it refers to
+// C++ types.
+void DBSetOpenHook(void* hook);
+
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
 DBStatus DBDestroy(DBSlice dir);

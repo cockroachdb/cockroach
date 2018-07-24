@@ -33,6 +33,10 @@ import (
 // #include <libroachccl.h>
 import "C"
 
+func init() {
+	engine.SetRocksDBOpenHook(C.DBOpenHookCCL)
+}
+
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
 func VerifyBatchRepr(

@@ -137,7 +137,6 @@ TEST(EncryptedEnv, FileOps) {
   auto stream = new CTRCipherStreamCreator(key_manager, enginepb::Data);
 
   auto tmpdir = std::unique_ptr<TempDirHandler>(new TempDirHandler());
-  ASSERT_TRUE(tmpdir->Init());
 
   auto file_registry =
       std::unique_ptr<FileRegistry>(new FileRegistry(env, tmpdir->Path(""), false /* read-only */));
