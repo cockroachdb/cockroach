@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/net"
 )
 
@@ -233,7 +232,7 @@ type RuntimeStatSampler struct {
 	lastCgoCall   int64
 	lastNumGC     uint32
 
-	initialDiskCounters disk.IOCountersStat
+	initialDiskCounters diskStats
 	initialNetCounters  net.IOCountersStat
 
 	// Only show "not implemented" errors once, we don't need the log spam.
@@ -459,13 +458,25 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	}
 }
 
-func getSummedDiskCounters(ctx context.Context) (disk.IOCountersStat, error) {
-	ioCounters, err := disk.IOCountersWithContext(ctx)
+type diskStats struct {
+	readBytes  int64
+	readTimeMs int64
+	readCount  int64
+
+	writeBytes  int64
+	writeTimeMs int64
+	writeCount  int64
+
+	iopsInProgress int64
+}
+
+func getSummedDiskCounters(ctx context.Context) (diskStats, error) {
+	diskCounters, err := getDiskCounters(ctx)
 	if err != nil {
-		return disk.IOCountersStat{}, err
+		return diskStats{}, err
 	}
 
-	return sumDiskCounters(ioCounters), nil
+	return sumDiskCounters(diskCounters), nil
 }
 
 func (rsr *RuntimeStatSampler) sampleDiskStats(ctx context.Context) error {
@@ -476,13 +487,13 @@ func (rsr *RuntimeStatSampler) sampleDiskStats(ctx context.Context) error {
 
 	subtractDiskCounters(&summedDiskCounters, rsr.initialDiskCounters)
 
-	rsr.HostDiskReadBytes.Update(int64(summedDiskCounters.ReadBytes))
-	rsr.HostDiskReadTime.Update(int64(summedDiskCounters.ReadTime) * 1e6) // ms to ns
-	rsr.HostDiskReadCount.Update(int64(summedDiskCounters.ReadCount))
-	rsr.HostDiskWriteBytes.Update(int64(summedDiskCounters.WriteBytes))
-	rsr.HostDiskWriteTime.Update(int64(summedDiskCounters.WriteTime) * 1e6) // ms to ns
-	rsr.HostDiskWriteCount.Update(int64(summedDiskCounters.WriteCount))
-	rsr.IopsInProgress.Update(int64(summedDiskCounters.IopsInProgress))
+	rsr.HostDiskReadBytes.Update(summedDiskCounters.readBytes)
+	rsr.HostDiskReadTime.Update(summedDiskCounters.readTimeMs * 1e6) // ms to ns
+	rsr.HostDiskReadCount.Update(summedDiskCounters.readCount)
+	rsr.HostDiskWriteBytes.Update(summedDiskCounters.writeBytes)
+	rsr.HostDiskWriteTime.Update(summedDiskCounters.writeTimeMs * 1e6) // ms to ns
+	rsr.HostDiskWriteCount.Update(summedDiskCounters.writeCount)
+	rsr.IopsInProgress.Update(summedDiskCounters.iopsInProgress)
 
 	return nil
 }
@@ -514,34 +525,34 @@ func (rsr *RuntimeStatSampler) sampleNetStats(ctx context.Context) error {
 
 // sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
 // values in the slice of disk.IOCountersStats passed in.
-func sumDiskCounters(disksStats map[string]disk.IOCountersStat) disk.IOCountersStat {
-	output := disk.IOCountersStat{}
+func sumDiskCounters(disksStats []diskStats) diskStats {
+	output := diskStats{}
 	for _, stats := range disksStats {
-		output.ReadBytes += stats.ReadBytes
-		output.ReadTime += stats.ReadTime
-		output.ReadCount += stats.ReadCount
+		output.readBytes += stats.readBytes
+		output.readTimeMs += stats.readTimeMs
+		output.readCount += stats.readCount
 
-		output.WriteBytes += stats.WriteBytes
-		output.WriteTime += stats.WriteTime
-		output.WriteCount += stats.WriteCount
+		output.writeBytes += stats.writeBytes
+		output.writeTimeMs += stats.writeTimeMs
+		output.writeCount += stats.writeCount
 
-		output.IopsInProgress += stats.IopsInProgress
+		output.iopsInProgress += stats.iopsInProgress
 	}
 	return output
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
 // saving the results in `from`.
-func subtractDiskCounters(from *disk.IOCountersStat, sub disk.IOCountersStat) {
-	from.WriteCount -= sub.WriteCount
-	from.WriteTime -= sub.WriteTime
-	from.WriteBytes -= sub.WriteBytes
+func subtractDiskCounters(from *diskStats, sub diskStats) {
+	from.writeCount -= sub.writeCount
+	from.writeTimeMs -= sub.writeTimeMs
+	from.writeBytes -= sub.writeBytes
 
-	from.ReadCount -= sub.ReadCount
-	from.ReadTime -= sub.ReadTime
-	from.ReadBytes -= sub.ReadBytes
+	from.readCount -= sub.readCount
+	from.readTimeMs -= sub.readTimeMs
+	from.readBytes -= sub.readBytes
 
-	from.IopsInProgress -= sub.IopsInProgress
+	from.iopsInProgress -= sub.iopsInProgress
 }
 
 // sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the
