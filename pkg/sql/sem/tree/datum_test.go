@@ -317,7 +317,7 @@ func TestDFloatCompare(t *testing.T) {
 			}
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			got := x.Compare(evalCtx, y)
+			got := tree.TotalOrderCompare(evalCtx, x, y)
 			if got != expected {
 				t.Errorf("comparing DFloats %s and %s: expected %d, got %d", x, y, expected, got)
 			}
@@ -367,7 +367,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		if tree.Distinct(evalCtx, expected, actual) {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
 		}
 	}
@@ -408,7 +408,7 @@ func TestParseDDate(t *testing.T) {
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		if tree.Distinct(evalCtx, expected, actual) {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
 		}
 	}
@@ -619,12 +619,13 @@ func TestMakeDJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	if !tree.TotalOrderLess(evalCtx, j1, j2) {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }
 
-func TestIsDistinctFrom(t *testing.T) {
+func TestDistinct(t *testing.T) {
 	testData := []struct {
 		a        string // comma separated list of strings, `NULL` is converted to a NULL
 		b        string // same as a
@@ -709,7 +710,7 @@ func TestIsDistinctFrom(t *testing.T) {
 		t.Run(fmt.Sprintf("%s to %s", td.a, td.b), func(t *testing.T) {
 			datumsA := convert(td.a)
 			datumsB := convert(td.b)
-			if e, a := td.expected, datumsA.IsDistinctFrom(&tree.EvalContext{}, datumsB); e != a {
+			if e, a := td.expected, datumsA.Distinct(&tree.EvalContext{}, datumsB); e != a {
 				if e {
 					t.Errorf("expected %s to be distinct from %s, but got %t", datumsA, datumsB, e)
 				} else {

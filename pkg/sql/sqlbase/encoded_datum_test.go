@@ -81,8 +81,8 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, x.Datum); cmp != 0 {
-		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	if tree.Distinct(evalCtx, x.Datum, y.Datum) {
+		t.Errorf("Datums should not be distinct: %v vs %v", x.Datum, y.Datum)
 	}
 
 	enc2, err := y.Encode(&typeInt, a, DatumEncoding_DESCENDING_KEY, nil)
@@ -107,8 +107,8 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, z.Datum); cmp != 0 {
-		t.Errorf("Datums should be equal, cmp = %d", cmp)
+	if tree.Distinct(evalCtx, y.Datum, z.Datum) {
+		t.Errorf("Datums should not be distinct: %v vs %v", y.Datum, z.Datum)
 	}
 	y.UnsetDatum()
 	if !y.IsUnset() {
@@ -182,7 +182,7 @@ func checkEncDatumCmp(
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	if val, err := dec1.Compare(&typ, a, evalCtx, &dec2); err != nil {
+	if val, err := dec1.TotalOrderCompare(&typ, a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
 	} else if val != expectedCmp {
 		t.Errorf("comparing %s (%s), %s (%s) resulted in %d, expected %d",
@@ -231,14 +231,14 @@ func TestEncDatumCompare(t *testing.T) {
 		for {
 			d1 = RandDatum(rng, typ, false)
 			d2 = RandDatum(rng, typ, false)
-			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
+			if tree.TotalOrderLess(evalCtx, d1, d2) {
 				break
 			}
 		}
 		v1 := DatumToEncDatum(typ, d1)
 		v2 := DatumToEncDatum(typ, d2)
 
-		if val, err := v1.Compare(&typ, a, evalCtx, &v2); err != nil {
+		if val, err := v1.TotalOrderCompare(&typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
 		} else if val != -1 {
 			t.Errorf("compare(1, 2) = %d", val)
@@ -318,8 +318,8 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
-				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
+			if tree.Distinct(evalCtx, decoded.Datum, ed[i].Datum) {
+				t.Errorf("decoded datum %s is distinct from original %s", decoded.Datum, ed[i].Datum)
 			}
 		}
 		if len(b) != 0 {
@@ -433,7 +433,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 		for i := range types {
 			types[i] = typeInt
 		}
-		cmp, err := c.row1.Compare(types, a, c.ord, evalCtx, c.row2)
+		cmp, err := c.row1.TotalOrderCompare(types, a, c.ord, evalCtx, c.row2)
 		if err != nil {
 			t.Error(err)
 		} else if cmp != c.cmp {
@@ -479,8 +479,8 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 			for i := 0; i < rows; i++ {
 				for j := 0; j < cols; j++ {
-					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(evalCtx, b) != 0 {
-						t.Errorf("copied datum %s doesn't equal original %s", b, a)
+					if a, b := in[i][j].Datum, out[i][j].Datum; tree.Distinct(evalCtx, a, b) {
+						t.Errorf("copied datum %s distinct from original %s", b, a)
 					}
 				}
 			}
@@ -504,8 +504,9 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		tests[i] = RandDatum(rng, colTypes[i], true)
 	}
 
-	for i, test := range tests {
+	evalCtx := &tree.EvalContext{}
 
+	for i, test := range tests {
 		switch typedTest := test.(type) {
 		case *tree.DTuple:
 
@@ -527,8 +528,8 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
-				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
+			if tree.Distinct(evalCtx, decodedTuple, test) {
+				t.Fatalf("seed %d: encoded %+v, decoded %+v are distinct", seed, test, decodedTuple)
 			}
 		default:
 			if test == tree.DNull {

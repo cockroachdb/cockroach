@@ -833,7 +833,7 @@ func (c *cascader) updateRows(
 				}
 
 				// Is there something to update?  If not, skip it.
-				if !rowToUpdate.IsDistinctFrom(c.evalCtx, updateRow) {
+				if !rowToUpdate.Distinct(c.evalCtx, updateRow) {
 					continue
 				}
 
@@ -1166,7 +1166,7 @@ func (c *cascader) cascadeAll(
 				if _, exists := skipList[j]; exists {
 					continue
 				}
-				if !originalRows.At(j).IsDistinctFrom(c.evalCtx, finalRow) {
+				if !originalRows.At(j).Distinct(c.evalCtx, finalRow) {
 					// The row has been updated again.
 					finalRow = updatedRows.At(j)
 					skipList[j] = struct{}{}

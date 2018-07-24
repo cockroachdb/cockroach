@@ -81,7 +81,7 @@ func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) (memo.ListID, 
 	// Remove duplicates from the list.
 	n := 0
 	for i := 0; i < int(list.Length); i++ {
-		if i == 0 || ls.compare(i-1, i) < 0 {
+		if i == 0 || ls.less(i-1, i) {
 			lb.items[n] = lb.items[i]
 			n++
 		}

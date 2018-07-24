@@ -331,7 +331,7 @@ type groupRun struct {
 // grouping columns, and false otherwise.
 func (n *groupNode) matchLastGroupKey(ctx *tree.EvalContext, row tree.Datums) bool {
 	for _, i := range n.orderedGroupCols {
-		if n.run.lastOrderedGroupKey[i].Compare(ctx, row[i]) != 0 {
+		if tree.Distinct(ctx, n.run.lastOrderedGroupKey[i], row[i]) {
 			return false
 		}
 	}

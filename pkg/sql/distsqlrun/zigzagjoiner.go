@@ -245,6 +245,8 @@ type zigzagJoiner struct {
 	// TODO(andrei): get rid of this field and move the actions it gates into the
 	// Start() method.
 	started bool
+
+	datumAlloc sqlbase.DatumAlloc
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -604,12 +606,9 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 	}
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &sqlbase.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, curEqDatums)
-	if err != nil {
-		return false, err
-	}
-	return cmp == 0, nil
+	cmp, err := prevEqDatums.Distinct(
+		eqColTypes, &z.datumAlloc, ordering, &z.flowCtx.EvalCtx, curEqDatums)
+	return !cmp, err
 }
 
 // emitFromContainers returns the next row that is to be emitted from those
@@ -753,8 +752,8 @@ func (z *zigzagJoiner) nextRow(
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
-			da := &sqlbase.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.TotalOrderCompare(
+				eqColTypes, &z.datumAlloc, ordering, &z.flowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}

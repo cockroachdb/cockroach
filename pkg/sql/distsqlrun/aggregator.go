@@ -418,10 +418,10 @@ func (ag *orderedAggregator) close() {
 // columns, and false otherwise.
 func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
-		res, err := ag.lastOrdGroupCols[colIdx].Compare(
+		cmp, err := ag.lastOrdGroupCols[colIdx].Distinct(
 			&ag.inputTypes[colIdx], &ag.datumAlloc, &ag.flowCtx.EvalCtx, &row[colIdx],
 		)
-		if res != 0 || err != nil {
+		if cmp || err != nil {
 			return false, err
 		}
 	}

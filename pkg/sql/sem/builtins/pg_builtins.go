@@ -533,7 +533,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
+				if !tree.Distinct(ctx, args[0], DatEncodingUTFId) {
 					return datEncodingUTF8ShortName, nil
 				}
 				return tree.DNull, nil

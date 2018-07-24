@@ -646,7 +646,7 @@ func (ss *sortTopKStrategy) Add(ctx context.Context, values tree.Datums) error {
 		if err := ss.vNode.PushValues(ctx, values); err != nil {
 			return err
 		}
-	case ss.vNode.ValuesLess(values, ss.vNode.rows.At(0)):
+	case sqlbase.LessDatums(ss.vNode.ordering, false, ss.vNode.evalCtx, values, ss.vNode.rows.At(0)):
 		// Once the heap is full, only replace the top
 		// value if a new value is less than it. If so
 		// replace and fix the heap.
@@ -756,19 +756,13 @@ func (n *sortValues) Len() int {
 	return n.rows.Len() - n.rowsPopped
 }
 
-// ValuesLess returns the comparison result between the two provided
-// Datums slices in the context of the sortValues ordering.
-func (n *sortValues) ValuesLess(ra, rb tree.Datums) bool {
-	return sqlbase.CompareDatums(n.ordering, n.evalCtx, ra, rb) < 0
-}
-
 // Less implements the sort.Interface interface.
 func (n *sortValues) Less(i, j int) bool {
 	// TODO(pmattis): An alternative to this type of field-based comparison would
 	// be to construct a sort-key per row using encodeTableKey(). Using a
 	// sort-key approach would likely fit better with a disk-based sort.
 	ra, rb := n.rows.At(i), n.rows.At(j)
-	return n.invertSorting != n.ValuesLess(ra, rb)
+	return sqlbase.LessDatums(n.ordering, n.invertSorting, n.evalCtx, ra, rb)
 }
 
 // Swap implements the sort.Interface interface.

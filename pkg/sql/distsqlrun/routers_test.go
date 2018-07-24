@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -172,11 +172,11 @@ func TestRouters(t *testing.T) {
 							for _, row2 := range r2 {
 								equal := true
 								for _, c := range tc.spec.HashColumns {
-									cmp, err := row[c].Compare(&types[c], alloc, evalCtx, &row2[c])
+									cmp, err := row[c].Distinct(&types[c], alloc, evalCtx, &row2[c])
 									if err != nil {
 										t.Fatal(err)
 									}
-									if cmp != 0 {
+									if cmp {
 										equal = false
 										break
 									}
@@ -207,11 +207,11 @@ func TestRouters(t *testing.T) {
 
 						equal := true
 						for j, c := range row {
-							cmp, err := c.Compare(&types[j], alloc, evalCtx, &row2[j])
+							cmp, err := c.Distinct(&types[j], alloc, evalCtx, &row2[j])
 							if err != nil {
 								t.Fatal(err)
 							}
-							if cmp != 0 {
+							if cmp {
 								equal = false
 								break
 							}
@@ -801,9 +801,9 @@ func TestRouterDiskSpill(t *testing.T) {
 		}
 		// Verify correct order (should be the order in which we added rows).
 		for j, c := range row {
-			if cmp, err := c.Compare(&intType, alloc, &flowCtx.EvalCtx, &rows[i][j]); err != nil {
+			if cmp, err := c.Distinct(&intType, alloc, &flowCtx.EvalCtx, &rows[i][j]); err != nil {
 				t.Fatal(err)
-			} else if cmp != 0 {
+			} else if cmp {
 				t.Fatalf(
 					"order violated on row %d, expected %v got %v",
 					i,

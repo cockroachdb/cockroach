@@ -108,7 +108,7 @@ func (s *orderedSynchronizer) Len() int {
 func (s *orderedSynchronizer) Less(i, j int) bool {
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
-	cmp, err := si.row.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
+	cmp, err := si.row.TotalOrderCompare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
 	if err != nil {
 		s.err = err
 		return false
@@ -241,7 +241,7 @@ func (s *orderedSynchronizer) advanceRoot() error {
 	} else {
 		heap.Fix(s, 0)
 		// TODO(radu): this check may be costly, we could disable it in production
-		if cmp, err := oldRow.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, src.row); err != nil {
+		if cmp, err := oldRow.TotalOrderCompare(s.types, &s.alloc, s.ordering, s.evalCtx, src.row); err != nil {
 			return err
 		} else if cmp > 0 {
 			return errors.Errorf(

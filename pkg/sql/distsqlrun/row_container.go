@@ -140,11 +140,8 @@ func (mc *memRowContainer) initWithMon(
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *memRowContainer) Less(i, j int) bool {
-	cmp := sqlbase.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
-	if mc.invertSorting {
-		cmp = -cmp
-	}
-	return cmp < 0
+	ra, rb := mc.At(i), mc.At(j)
+	return sqlbase.LessDatums(mc.ordering, mc.invertSorting, mc.evalCtx, ra, rb)
 }
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
@@ -189,11 +186,11 @@ func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
 // smaller. Assumes InitTopK was called.
 func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	max := mc.At(0)
-	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
+	cmp, err := row.LessThanDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
 		return err
 	}
-	if cmp < 0 {
+	if cmp {
 		// row is smaller than the max; replace.
 		for i := range row {
 			if err := row[i].EnsureDecoded(&mc.types[i], &mc.datumAlloc); err != nil {
