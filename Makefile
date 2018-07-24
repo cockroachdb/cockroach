@@ -296,7 +296,7 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 
 bin/.submodules-initialized:
 ifneq ($(GIT_DIR),)
-	git submodule update --init
+	git submodule update --init --recursive
 endif
 	mkdir -p $(@D)
 	touch $@
