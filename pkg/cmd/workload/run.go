@@ -350,6 +350,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
 			printTotalHist := func(t workload.HistogramTick) {
+				if t.Cumulative == nil {
+					return
+				}
 				if t.Cumulative.TotalCount() == 0 {
 					return
 				}

@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 )
 
@@ -49,13 +50,14 @@ func registerInterleaved(r *registry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration " + ifLocal("10s", "10m")
+			histograms := " --histograms ./histograms"
 
 			// Just to initialize the database
 			cmdInit := "./workload run interleavedpartitioned --init --east --sessions 0" +
 				" --insert-percent 0 --retrieve-percent 100 --update-percent 0 --delete-percent 0 --duration 5s {pgurl:4}"
 
 			cmdEast := fmt.Sprintf(
-				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:4-6}",
+				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+histograms+" {pgurl:4-6}",
 				customersPerSession,
 				devicesPerSession,
 				variantsPerSession,
@@ -70,7 +72,7 @@ func registerInterleaved(r *registry) {
 			)
 
 			cmdWest := fmt.Sprintf(
-				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+" {pgurl:1-3}",
+				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+histograms+" {pgurl:1-3}",
 				customersPerSession,
 				devicesPerSession,
 				variantsPerSession,
@@ -85,7 +87,7 @@ func registerInterleaved(r *registry) {
 			)
 
 			cmdCentral := fmt.Sprintf(
-				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-batch-size %d"+duration+" {pgurl:7-9}",
+				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-batch-size %d"+duration+histograms+" {pgurl:7-9}",
 				deleteBatchSize,
 			)
 
@@ -109,6 +111,10 @@ func registerInterleaved(r *registry) {
 
 			// This will only finish when all the workload jobs have finished.
 			wg.Wait()
+			err := execCmd(ctx, c.l, roachprod, "get", c.name, "histograms:1,4,7", filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "histograms"))
+			if err != nil {
+				return err
+			}
 			return nil
 		})
 		m.Wait()
