@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -24,7 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+)
+
+// irjState represents the state of the processor.
+type irjState int
+
+const (
+	irjStateUnknown irjState = iota
+	// irjReading causes the state machine to read the next row from the kvFetcher
+	// and potentially output a merged row.
+	irjReading
+	// irjUnmatchedChild indicates that the state machine should output the
+	// unmatched child row stored in the unmatchedChild field.
+	irjUnmatchedChild
 )
 
 type tableInfo struct {
@@ -40,6 +51,11 @@ type tableInfo struct {
 // See docs/RFCS/20171025_interleaved_table_joins.md
 type interleavedReaderJoiner struct {
 	joinerBase
+
+	// runningState represents the state of the processor. This is in addition to
+	// processorBase.state - the runningState is only relevant when
+	// processorBase.state == stateRunning.
+	runningState irjState
 
 	// Each tableInfo contains the output helper (for intermediate
 	// filtering) and ordering info for each table-index being joined.
@@ -60,9 +76,196 @@ type interleavedReaderJoiner struct {
 	ancestorJoined     bool
 	ancestorJoinSide   joinSide
 	descendantJoinSide joinSide
+	unmatchedChild     sqlbase.EncDatumRow
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
 	ancestorTablePos int
+}
+
+func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
+	irj.runningState = irjReading
+	ctx = irj.startInternal(ctx, interleavedReaderJoinerProcName)
+	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+	if err := irj.fetcher.StartScan(
+		irj.ctx, irj.flowCtx.txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
+	); err != nil {
+		irj.moveToDraining(err)
+	}
+	return ctx
+}
+
+func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	// Next is implemented as a state machine. The states are represented by the
+	// irjState enum at the top of this file.
+	// Roughly, the state machine is either in an initialization phase, a steady
+	// state phase that outputs either 1 or 0 rows on every call, or a special
+	// unmatched child phase that outputs a child row that doesn't match the last
+	// seen ancestor if the join type calls for it.
+	for irj.state == stateRunning {
+		var row sqlbase.EncDatumRow
+		var meta *ProducerMetadata
+		switch irj.runningState {
+		case irjReading:
+			irj.runningState, row, meta = irj.nextRow()
+		case irjUnmatchedChild:
+			rendered := irj.renderUnmatchedRow(irj.unmatchedChild, irj.descendantJoinSide)
+			row = irj.processRowHelper(rendered)
+			irj.unmatchedChild = nil
+			irj.runningState = irjReading
+		default:
+			log.Fatalf(irj.ctx, "unsupported state: %d", irj.runningState)
+		}
+		if row != nil || meta != nil {
+			return row, meta
+		}
+	}
+	return nil, irj.drainHelper()
+}
+
+// findTable returns the tableInfo for the given table and index descriptor,
+// along with a boolean that is true if the found tableInfo represents the
+// ancestor table in this join. err is non-nil if the table was missing from the
+// list.
+func (irj *interleavedReaderJoiner) findTable(
+	table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) (tInfo *tableInfo, isAncestorRow bool, err error) {
+	for i := range irj.tables {
+		tInfo = &irj.tables[i]
+		if table.ID == tInfo.tableID && index.ID == tInfo.indexID {
+			if i == irj.ancestorTablePos {
+				isAncestorRow = true
+			}
+			return tInfo, isAncestorRow, nil
+		}
+	}
+	return nil,
+		false,
+		errors.Errorf("index %q.%q missing from interleaved join",
+			table.Name, index.Name)
+}
+
+// nextRow implements the steady state of the interleavedReaderJoiner. It
+// requests the next row from its backing kv fetcher, determines whether its an
+// ancestor or child row, and conditionally merges and outputs a result.
+func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	row, desc, index, err := irj.fetcher.NextRow(irj.ctx)
+	if err != nil {
+		irj.moveToDraining(scrub.UnwrapScrubError(err))
+		return irjStateUnknown, nil, irj.drainHelper()
+	}
+	if row == nil {
+		// All done - just finish maybe emitting our last ancestor.
+		lastAncestor := irj.maybeUnmatchedAncestor()
+		irj.moveToDraining(nil)
+		return irjReading, lastAncestor, nil
+	}
+
+	// Lookup the helper that belongs to this row.
+	tInfo, isAncestorRow, err := irj.findTable(desc, index)
+	if err != nil {
+		irj.moveToDraining(err)
+		return irjStateUnknown, nil, irj.drainHelper()
+	}
+
+	// We post-process the intermediate row from either table.
+	tableRow, ok, err := tInfo.post.ProcessRow(irj.ctx, row)
+	if err != nil {
+		irj.moveToDraining(err)
+		return irjStateUnknown, nil, irj.drainHelper()
+	}
+	if !ok {
+		irj.moveToDraining(nil)
+	}
+
+	// Row was filtered out.
+	if tableRow == nil {
+		return irjReading, nil, nil
+	}
+
+	if isAncestorRow {
+		maybeAncestor := irj.maybeUnmatchedAncestor()
+
+		irj.ancestorJoined = false
+		irj.ancestorRow = tInfo.post.rowAlloc.CopyRow(tableRow)
+
+		// If maybeAncestor is nil, we'll loop back around and read the next row
+		// without returning a row to the caller.
+		return irjReading, maybeAncestor, nil
+	}
+
+	// A child row (tableRow) is fetched.
+
+	// TODO(richardwu): Generalize this to 2+ tables and sibling
+	// tables.
+	var lrow, rrow sqlbase.EncDatumRow
+	if irj.ancestorTablePos == 0 {
+		lrow, rrow = irj.ancestorRow, tableRow
+	} else {
+		lrow, rrow = tableRow, irj.ancestorRow
+	}
+
+	// TODO(richardwu): this is a very expensive comparison
+	// in the hot path. We can avoid this if there is a foreign
+	// key constraint between the merge columns.
+	// That is: any child rows can be joined with the most
+	// recent parent row without this comparison.
+	cmp, err := CompareEncDatumRowForMerge(
+		irj.tables[0].post.outputTypes,
+		lrow,
+		rrow,
+		irj.tables[0].ordering,
+		irj.tables[1].ordering,
+		false, /* nullEquality */
+		&irj.alloc,
+		&irj.flowCtx.EvalCtx,
+	)
+	if err != nil {
+		irj.moveToDraining(err)
+		return irjStateUnknown, nil, irj.drainHelper()
+	}
+
+	// The child row match the most recent ancestorRow on the
+	// equality columns.
+	// Try to join/render and emit.
+	if cmp == 0 {
+		renderedRow, err := irj.render(lrow, rrow)
+		if err != nil {
+			irj.moveToDraining(err)
+			return irjStateUnknown, nil, irj.drainHelper()
+		}
+		if renderedRow != nil {
+			irj.ancestorJoined = true
+		}
+		return irjReading, irj.processRowHelper(renderedRow), nil
+	}
+
+	// Child does not match previous ancestorRow.
+	// Try to emit the ancestor row.
+	unmatchedAncestor := irj.maybeUnmatchedAncestor()
+
+	// Reset the ancestorRow (we know there are no more
+	// corresponding children rows).
+	irj.ancestorRow = nil
+	irj.ancestorJoined = false
+
+	newState := irjReading
+	// Set the unmatched child if necessary (we'll pick it up again after we emit
+	// the ancestor).
+	if shouldEmitUnmatchedRow(irj.descendantJoinSide, irj.joinType) {
+		irj.unmatchedChild = row
+		newState = irjUnmatchedChild
+	}
+
+	return newState, unmatchedAncestor, nil
+}
+
+func (irj *interleavedReaderJoiner) ConsumerDone() {
+	irj.moveToDraining(nil /* err */)
+}
+
+func (irj *interleavedReaderJoiner) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	irj.internalClose()
 }
 
 var _ Processor = &interleavedReaderJoiner{}
@@ -164,7 +367,7 @@ func newInterleavedReaderJoiner(
 
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.joinerBase.init(
-		nil, /* self */
+		irj,
 		flowCtx,
 		processorID,
 		irj.tables[0].post.outputTypes,
@@ -176,7 +379,10 @@ func newInterleavedReaderJoiner(
 		0,   /*numMergedColumns*/
 		post,
 		output,
-		procStateOpts{}, // irj doesn't implement RowSource and so doesn't use it.
+		procStateOpts{
+			inputsToDrain:        []RowSource{},
+			trailingMetaCallback: irj.generateTrailingMeta,
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -214,213 +420,31 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-// sendMisplannedRangesMetadata sends information about the non-local ranges
-// that were read by this interleavedReaderJoiner.
-// This should be called after the fetcher was used to read everything this
-// interleavedReaderJoiner was supposed to read.
-func (irj *interleavedReaderJoiner) sendMisplannedRangesMetadata(ctx context.Context) {
-	misplannedRanges := misplannedRanges(ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
-
-	if len(misplannedRanges) != 0 {
-		irj.out.output.Push(nil /* row */, &ProducerMetadata{Ranges: misplannedRanges})
+func (irj *interleavedReaderJoiner) generateTrailingMeta() []ProducerMetadata {
+	var trailingMeta []ProducerMetadata
+	ranges := misplannedRanges(irj.ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
+	if ranges != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
+	if meta := getTxnCoordMeta(irj.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
+	}
+	irj.internalClose()
+	return trailingMeta
 }
 
 const interleavedReaderJoinerProcName = "interleaved reader joiner"
 
-// Run is part of the Processor interface.
-func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
-	irj.startInternal(ctx, interleavedReaderJoinerProcName)
-	defer tracing.FinishSpan(irj.span)
-	ctx = irj.ctx
-
-	tableIDs := make([]sqlbase.ID, len(irj.tables))
-	for i := range tableIDs {
-		tableIDs[i] = irj.tables[i].tableID
-	}
-
-	txn := irj.flowCtx.txn
-	if txn == nil {
-		log.Fatalf(ctx, "interleavedReaderJoiner outside of txn")
-	}
-
-	log.VEventf(ctx, 1, "starting")
-	if log.V(1) {
-		defer log.Infof(ctx, "exiting")
-	}
-
-	if err := irj.fetcher.StartScan(
-		ctx, txn, irj.allSpans, true /* limit batches */, irj.limitHint, irj.flowCtx.traceKV,
-	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
-		irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-		irj.out.Close()
-		return
-	}
-
-	ok := true
-	for ok {
-		row, desc, index, err := irj.fetcher.NextRow(ctx)
-		if err != nil || row == nil {
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
-				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			} else if irj.ancestorRow != nil && !irj.ancestorJoined {
-				// If the last row read is a parent, we may need to
-				// emit it unmatched for OUTER joins.
-				_, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
-				if err != nil {
-					irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-				}
-			}
-			break
-		}
-
-		// Lookup the helper that belongs to this row.
-		var tInfo *tableInfo
-		isAncestorRow := false
-		for i := range irj.tables {
-			tInfo = &irj.tables[i]
-			if desc.ID == tInfo.tableID && index.ID == tInfo.indexID {
-				if i == irj.ancestorTablePos {
-					isAncestorRow = true
-				}
-				break
-			}
-		}
-
-		// We post-process the intermediate row from either table.
-		var tableRow sqlbase.EncDatumRow
-		tableRow, ok, err = tInfo.post.ProcessRow(ctx, row)
-		if err != nil {
-			irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			break
-		}
-
-		// Row was filtered out.
-		if tableRow == nil {
-			continue
-		}
-
-		if isAncestorRow {
-			needMoreRows := irj.maybeEmitUnmatchedAncestor(ctx)
-			if !needMoreRows {
-				break
-			}
-
-			// A new ancestor row is fetched. We re-assign our reference
-			// to the most recent ancestor row.
-			irj.ancestorRow = tInfo.post.rowAlloc.CopyRow(tableRow)
-			irj.ancestorJoined = false
-			continue
-		}
-
-		// A child row (tableRow) is fetched.
-
-		// TODO(richardwu): Generalize this to 2+ tables and sibling
-		// tables.
-		var lrow, rrow sqlbase.EncDatumRow
-		if irj.ancestorTablePos == 0 {
-			lrow, rrow = irj.ancestorRow, tableRow
-		} else {
-			lrow, rrow = tableRow, irj.ancestorRow
-		}
-
-		// TODO(richardwu): this is a very expensive comparison
-		// in the hot path. We can avoid this if there is a foreign
-		// key constraint between the merge columns.
-		// That is: any child rows can be joined with the most
-		// recent parent row without this comparison.
-		cmp, err := CompareEncDatumRowForMerge(
-			irj.tables[0].post.outputTypes,
-			lrow,
-			rrow,
-			irj.tables[0].ordering,
-			irj.tables[1].ordering,
-			false, /* nullEquality */
-			&irj.alloc,
-			&irj.flowCtx.EvalCtx,
-		)
-		if err != nil {
-			irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			break
-		}
-
-		// The child row match the most recent ancestorRow on the
-		// equality columns.
-		// Try to join/render and emit.
-		if cmp == 0 {
-			renderedRow, err := irj.render(lrow, rrow)
-			if err != nil {
-				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-				break
-			}
-			if renderedRow != nil {
-				consumerStatus, err := irj.out.EmitRow(ctx, renderedRow)
-				if err != nil || consumerStatus != NeedMoreRows {
-					if err != nil {
-						irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-					}
-					break
-				}
-
-				irj.ancestorJoined = true
-
-				continue
-			}
-		} else {
-			// Child does not match previous ancestorRow.
-			// Try to emit the ancestor row.
-			needMoreRows := irj.maybeEmitUnmatchedAncestor(ctx)
-			if !needMoreRows {
-				break
-			}
-
-			// Reset the ancestorRow (we know there are no more
-			// corresponding children rows).
-			irj.ancestorRow = nil
-		}
-
-		// Either a child row is read before an ancestor row is read
-		// (which is possible at the beginning of a span partition)
-		// or the child row cannot be joined with the ancestor row.
-		// We will need to try to emit the unmatched row if we have an
-		// OUTER join.
-		needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, tableRow, irj.descendantJoinSide)
-		if !needMoreRows || err != nil {
-			if err != nil {
-				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			}
-			break
-		}
-	}
-
-	irj.sendMisplannedRangesMetadata(ctx)
-	sendTraceData(ctx, irj.out.output)
-	if meta := getTxnCoordMeta(irj.flowCtx.txn); meta != nil {
-		irj.out.output.Push(nil /* row */, &ProducerMetadata{TxnCoordMeta: meta})
-	}
-	irj.out.Close()
-}
-
-func (irj *interleavedReaderJoiner) maybeEmitUnmatchedAncestor(
-	ctx context.Context,
-) (needMoreRows bool) {
+func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow {
 	// We first try to emit the previous ancestor row if it
 	// was never joined with a child row.
 	if irj.ancestorRow != nil && !irj.ancestorJoined {
-		needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
-		if !needMoreRows || err != nil {
-			if err != nil {
-				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			}
-			return false
+		if !shouldEmitUnmatchedRow(irj.ancestorJoinSide, irj.joinType) {
+			return nil
 		}
-	}
 
-	return true
+		rendered := irj.renderUnmatchedRow(irj.ancestorRow, irj.ancestorJoinSide)
+		return irj.processRowHelper(rendered)
+	}
+	return nil
 }
