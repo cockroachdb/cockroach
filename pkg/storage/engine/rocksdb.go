@@ -1653,6 +1653,19 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
+func makeBatchGroup(pending []*rocksDBBatch, maxSize int) []*rocksDBBatch {
+	size := len(pending[0].unsafeRepr())
+	for i := 1; i < len(pending); i++ {
+		b := pending[i]
+		n := len(b.unsafeRepr())
+		if size+n > maxSize {
+			return pending[:i]
+		}
+		size += n
+	}
+	return pending
+}
+
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
@@ -1681,8 +1694,10 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 		for c.committing {
 			c.cond.Wait()
 		}
-		pending := c.pending
-		c.pending = nil
+
+		const maxSize = 1 << 20
+		pending := makeBatchGroup(c.pending, maxSize)
+		c.pending = c.pending[len(pending):]
 		c.committing = true
 		c.Unlock()
 

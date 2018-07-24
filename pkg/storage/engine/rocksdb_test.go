@@ -1460,3 +1460,33 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 		})
 	}
 }
+
+func TestMakeBatchGroup(t *testing.T) {
+	testCases := []struct {
+		sizes    []int
+		maxSize  int
+		expected int
+	}{
+		{[]int{12, 12, 12}, 1, 1},
+		{[]int{12, 12, 12}, 23, 1},
+		{[]int{12, 12, 12}, 24, 2},
+		{[]int{12, 12, 12}, 35, 2},
+		{[]int{12, 12, 12}, 36, 3},
+		{[]int{1000, 10000}, 2000, 1},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			pending := make([]*rocksDBBatch, len(c.sizes))
+			for i := range pending {
+				// We use intimate knowledge of rocksDBBatch and RocksDBBatchBuilder to
+				// construct a batch of a specific size.
+				pending[i] = &rocksDBBatch{}
+				pending[i].builder.repr = make([]byte, c.sizes[i])
+			}
+			n := len(makeBatchGroup(pending, c.maxSize))
+			if c.expected != n {
+				t.Fatalf("expected %d, but got %d", c.expected, n)
+			}
+		})
+	}
+}
