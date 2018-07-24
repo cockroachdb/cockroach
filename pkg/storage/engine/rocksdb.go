@@ -476,6 +476,7 @@ type RocksDB struct {
 		syncutil.Mutex
 		cond       sync.Cond
 		committing bool
+		groupSize  int
 		pending    []*rocksDBBatch
 	}
 
@@ -1653,6 +1654,32 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
+func makeBatchGroup(
+	pending []*rocksDBBatch, b *rocksDBBatch, groupSize, maxSize int,
+) (_ []*rocksDBBatch, _ int, leader bool) {
+	leader = len(pending) == 0
+	if n := len(b.unsafeRepr()); leader {
+		groupSize = n
+	} else if groupSize+n > maxSize {
+		leader = true
+		groupSize = n
+		pending = append(pending, nil)
+	} else {
+		groupSize += n
+	}
+	pending = append(pending, b)
+	return pending, groupSize, leader
+}
+
+func nextBatchGroup(pending []*rocksDBBatch) (prefix []*rocksDBBatch, suffix []*rocksDBBatch) {
+	for i := 1; i < len(pending); i++ {
+		if pending[i] == nil {
+			return pending[:i], pending[i+1:]
+		}
+	}
+	return pending, pending[len(pending):]
+}
+
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
@@ -1673,16 +1700,20 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	// slice. Every batch has an associated wait group which is signaled when
 	// the commit is complete.
 	c.Lock()
-	leader := len(c.pending) == 0
-	c.pending = append(c.pending, r)
+
+	const maxSize = 1 << 20
+	var leader bool
+	c.pending, c.groupSize, leader = makeBatchGroup(c.pending, r, c.groupSize, maxSize)
 
 	if leader {
-		// We're the leader. Wait for any running commit to finish.
-		for c.committing {
+		// We're the leader of our group. Wait for any running commit to finish and
+		// for our batch to make it to the head of the pending queue.
+		for c.committing && c.pending[0] != r {
 			c.cond.Wait()
 		}
-		pending := c.pending
-		c.pending = nil
+
+		var pending []*rocksDBBatch
+		pending, c.pending = nextBatchGroup(c.pending)
 		c.committing = true
 		c.Unlock()
 
