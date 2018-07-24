@@ -200,7 +200,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         </PageConfig>
         <section className="section">
           <div className="l-columns">
-            <div className="chart-group l-columns__left">
+            <div className="l-columns__left">
               <DashboardsPage
                 dashboard="overview"
                 aggregationLevel={aggregationLevel}

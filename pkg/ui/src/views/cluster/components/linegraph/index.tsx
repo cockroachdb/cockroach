@@ -17,6 +17,7 @@ import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
 
 export interface LineGraphProps extends MetricsDataComponentProps {
+  slug?: string;
   title?: string;
   subtitle?: string;
   legend?: boolean;
@@ -58,6 +59,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     (children) => {
       return findChildrenOfType(children, Metric) as React.ReactElement<MetricProps>[];
     });
+
+  getSlug() {
+    return this.props.slug || this.props.title;
+  }
 
   initChart() {
     const axis = this.axis(this.props);
@@ -119,9 +124,9 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
 
     // Only dispatch if we have something to change to avoid action spamming.
-    if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
+    if (this.props.hoverState.hoverChart !== this.getSlug() || !result.isSame(this.props.hoverState.hoverTime)) {
       this.props.hoverOn({
-        hoverChart: this.props.title,
+        hoverChart: this.getSlug(),
         hoverTime: result,
       });
     }
@@ -152,7 +157,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       if (this.props.hoverState) {
         const { currentlyHovering, hoverChart } = this.props.hoverState;
         // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
-        if (currentlyHovering && hoverChart !== this.props.title) {
+        if (currentlyHovering && hoverChart !== this.getSlug()) {
           hoverTime = this.props.hoverState.hoverTime;
         }
       }

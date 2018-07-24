@@ -7,7 +7,7 @@ import "./visualizations.styl";
 import spinner from "assets/spinner.gif";
 
 interface VisualizationProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   tooltip?: React.ReactNode;
   // If warning or warningTitle exist, they are appended to the tooltip
@@ -55,7 +55,7 @@ export default class Visualization extends React.Component<VisualizationProps, {
       <div className={vizClasses}>
         <div className="visualization__header">
           <span className="visualization__title">
-            {title}
+            {title ? title : ""}
           </span>
           {
             this.props.subtitle ?

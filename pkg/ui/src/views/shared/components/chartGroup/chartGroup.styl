@@ -20,36 +20,28 @@ permissions and limitations under the License.
 $viz-bottom = 65px
 $viz-sides = 62px
 
-.visualization
+.chart-group
   position relative
+  background-color white
+  color $headings-color
+  border-radius 5px
+  border 1px solid rgba(0, 0, 0, .1)
+  // prevents borders from doubling up
+  margin-bottom 10px
 
   &__content
-    height 200px
-    margin-bottom 10px
-    &.visualization--loading
-      display flex
-      justify-content center
-      align-items center
+    padding 0 10px 15px
 
   &__header
     display flex
     justify-content center
     align-items center
+    padding 15px 25px 0
 
   &__title
     font-size 14px
     font-family Lato-Bold
     color $body-color
-
-  &__subtitle
-    color $tooltip-color
-    margin-left 5px
-    font-size 12px
-    font-family Lato-Regular
-
-  &__spinner
-    width 40px
-    height 40px
 
   &__tooltip
     width 36px  // Reserve space for 10px padding around centered 16px icon
@@ -75,15 +67,3 @@ $viz-sides = 62px
 
   .icon-warning
     color $warning-color
-
-.linegraph
-  height 100%
-
-.visualization--faded
-  .visualization .number
-  .nv-group
-  .nv-areaWrap
-    opacity .2
-
-.linked-guideline__line
-  stroke $link-color

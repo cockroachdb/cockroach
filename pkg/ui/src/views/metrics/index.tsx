@@ -2,6 +2,7 @@ import React from "react";
 
 import { LineGraph, LineGraphProps } from "src/views/cluster/components/linegraph";
 import { nodeDisplayName, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
+import { ChartGroup } from "src/views/shared/components/chartGroup";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { AggregationLevel } from "src/redux/aggregationLevel";
@@ -61,48 +62,60 @@ export class DashboardsPage extends React.Component<DashboardsPageProps> {
       const Tooltip = chart.tooltip;
 
       return (
-        <MetricsDataProvider id={key}>
-          <LineGraph
-            sources={this.getSources(chart.sourceLevel)}
-            title={chart.title}
-            tooltip={<Tooltip selection={this.props.tooltipSelection} />}
-            {...this.props.forwardProps}
-          >
-            <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
-              {
-                chart.metrics.map((metric) => (
-                  <Metric {...metric} key={metric.name} />
-                ))
-              }
-            </Axis>
-          </LineGraph>
-        </MetricsDataProvider>
+        <ChartGroup
+          title={chart.title}
+          tooltip={<Tooltip selection={this.props.tooltipSelection} />}
+        >
+          <MetricsDataProvider id={key}>
+            <LineGraph
+              slug={key}
+              sources={this.getSources(chart.sourceLevel)}
+              {...this.props.forwardProps}
+            >
+              <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
+                {
+                  chart.metrics.map((metric) => (
+                    <Metric {...metric} key={metric.name} />
+                  ))
+                }
+              </Axis>
+            </LineGraph>
+          </MetricsDataProvider>
+        </ChartGroup>
       );
     } else {
-      return chart.metrics.map((metric, index) => (
-        <MetricsDataProvider id={key + "." + index}>
-          <LineGraph
-            title={chart.title}
-            subtitle={metric.title}
-            tooltip={metric.tooltip}
-            {...this.props.forwardProps}
-          >
-            <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
-              {
-                this.props.nodeSources.map((node) => (
-                  <Metric
-                    {...metric}
-                    key={node}
-                    name={metric.name}
-                    title={nodeDisplayName(this.props.nodesSummary, node)}
-                    sources={this.getSources(chart.sourceLevel, node)}
-                  />
-                ))
-              }
-            </Axis>
-          </LineGraph>
-        </MetricsDataProvider>
-      ));
+      return (
+        <ChartGroup
+          title={chart.title}
+        >
+          {
+            chart.metrics.map((metric, index) => (
+              <MetricsDataProvider id={key + "." + index}>
+                <LineGraph
+                  slug={key + "." + index}
+                  subtitle={metric.title}
+                  tooltip={metric.tooltip}
+                  {...this.props.forwardProps}
+                >
+                  <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
+                    {
+                      this.props.nodeSources.map((node) => (
+                        <Metric
+                          {...metric}
+                          key={node}
+                          name={metric.name}
+                          title={nodeDisplayName(this.props.nodesSummary, node)}
+                          sources={this.getSources(chart.sourceLevel, node)}
+                        />
+                      ))
+                    }
+                  </Axis>
+                </LineGraph>
+              </MetricsDataProvider>
+            ))
+          }
+        </ChartGroup>
+      );
     }
   }
 
