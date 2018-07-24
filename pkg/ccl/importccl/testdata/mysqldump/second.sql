@@ -24,8 +24,11 @@ DROP TABLE IF EXISTS `second`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `second` (
   `i` int(11) NOT NULL,
-  `s` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`i`)
+  `k` int(11) DEFAULT NULL,
+  PRIMARY KEY (`i`),
+  UNIQUE KEY `ik` (`i`,`k`),
+  KEY `ki` (`k`,`i`),
+  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -35,7 +38,7 @@ CREATE TABLE `second` (
 
 LOCK TABLES `second` WRITE;
 /*!40000 ALTER TABLE `second` DISABLE KEYS */;
-INSERT INTO `second` VALUES (0,'0'),(1,'1'),(2,'2'),(3,'3'),(4,'4'),(5,'5'),(6,'6');
+INSERT INTO `second` VALUES (-7,7),(-6,6),(-5,5),(-4,4),(-3,3),(-2,2),(-1,1);
 /*!40000 ALTER TABLE `second` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -48,4 +51,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-06-08  2:58:38
+-- Dump completed on 2018-07-19 15:31:19
