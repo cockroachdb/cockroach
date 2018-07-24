@@ -411,18 +411,20 @@ func (nl *NodeLiveness) StartHeartbeat(
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("hb", nil)
+		ctx := stopper.WithCancelOnStop(context.Background())
+		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		defer sp.Finish()
+
+		incrementEpoch := true
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
-		incrementEpoch := true
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
 					// Give the context a timeout approximately as long as the time we
 					// have left before our liveness entry expires.
-					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
-					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+					ctx, cancel := context.WithTimeout(ctx, nl.livenessThreshold-nl.heartbeatInterval)
 					defer cancel()
-					defer sp.Finish()
 
 					// Retry heartbeat in the event the conditional put fails.
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {

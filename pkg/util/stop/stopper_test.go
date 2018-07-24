@@ -349,10 +349,22 @@ func TestStopperRunTaskPanic(t *testing.T) {
 func TestStopperWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	ctx := s.WithCancel(context.Background())
+	ctx := context.Background()
+	ctx1 := s.WithCancelOnQuiesce(ctx)
+	ctx2 := s.WithCancelOnStop(ctx)
+	s.Quiesce(ctx)
+	if err := ctx1.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+	if err := ctx2.Err(); err != nil {
+		t.Fatalf("should not be canceled: %v", err)
+	}
 	s.Stop(ctx)
-	if err := ctx.Err(); err != context.Canceled {
-		t.Fatal(err)
+	if err := ctx1.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
+	}
+	if err := ctx2.Err(); err != context.Canceled {
+		t.Fatalf("should be canceled: %v", err)
 	}
 }
 
