@@ -122,7 +122,7 @@ func (ev EventLogger) InsertEventRecord(
 	info interface{},
 ) error {
 	// Record event record insertion in local log output.
-	txn.AddCommitTrigger(func() {
+	txn.AddCommitTrigger(func(ctx context.Context) {
 		log.Infof(
 			ctx, "Event: %q, target: %d, info: %+v",
 			eventType,
