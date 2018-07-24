@@ -534,9 +534,9 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
 	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
-	// pq: cannot set zone configs for system config tables; try setting your container on the entire "system" database instead
+	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
-	// pq: cannot set zone configs for system config tables; try setting your container on the entire "system" database instead
+	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
 	// pq: relation "system.public.nonexistent" does not exist
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml

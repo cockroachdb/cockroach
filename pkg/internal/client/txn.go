@@ -361,7 +361,7 @@ func (txn *Txn) SetTxnAnchorKey(key roachpb.Key) error {
 func (txn *Txn) SetSystemConfigTrigger() error {
 	if !txn.systemConfigTrigger {
 		txn.systemConfigTrigger = true
-		// The system-config trigger must be run on the system-container range which
+		// The system-config trigger must be run on the system-config range which
 		// means any transaction with the trigger set needs to be anchored to the
 		// system-config range.
 		return txn.SetTxnAnchorKey(keys.SystemConfigSpan.Key)

@@ -4170,7 +4170,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if changedRepl := r.processRaftCommand(
 				ctx, commandID, e.Term, e.Index, command,
 			); !changedRepl {
-				// If we did not apply the config change, tell raft that the container change was aborted.
+				// If we did not apply the config change, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
 			stats.processed++
@@ -6274,7 +6274,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	}
 	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
 		log.VEventf(ctx, 2,
-			"not gossiping system config because the replica doesn't contain the system container's start key")
+			"not gossiping system config because the replica doesn't contain the system config's start key")
 		return nil
 	}
 	if !r.shouldGossip() {

@@ -794,7 +794,7 @@ var (
 	}
 )
 
-// Create a kv pair for the zone config for the given key and container value.
+// Create a kv pair for the zone config for the given key and config value.
 func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(&zoneConfig); err != nil {

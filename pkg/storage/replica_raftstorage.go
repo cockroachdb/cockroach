@@ -861,7 +861,7 @@ func (r *Replica) applySnapshot(
 
 	// As the last deferred action after committing the batch, update other
 	// fields which are uninitialized or need updating. This may not happen
-	// if the system config has not yet been loaded. While container update
+	// if the system config has not yet been loaded. While config update
 	// will correctly set the fields, there is no order guarantee in
 	// ApplySnapshot.
 	// TODO: should go through the standard store lock when adding a replica.

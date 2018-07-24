@@ -92,7 +92,7 @@ func getZoneConfig(
 }
 
 // ZoneConfigHook returns the zone config for the object with id using the
-// cached system config. If keySuffix is within a subzone, the subzone's container
+// cached system config. If keySuffix is within a subzone, the subzone's config
 // is returned instead.
 func ZoneConfigHook(
 	cfg config.SystemConfig, id uint32, keySuffix []byte,
