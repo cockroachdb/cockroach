@@ -194,7 +194,12 @@ func mysqlValueToDatum(
 // found). Returned tables are given dummy, placeholder IDs -- it is up to the
 // caller to allocate and assign real IDs.
 func readMysqlCreateTable(
-	input io.Reader, evalCtx *tree.EvalContext, parentID sqlbase.ID, match string,
+	ctx context.Context,
+	input io.Reader,
+	evalCtx *tree.EvalContext,
+	startingID, parentID sqlbase.ID,
+	match string,
+	fks fkHandler,
 ) ([]*sqlbase.TableDescriptor, error) {
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
@@ -225,13 +230,16 @@ func readMysqlCreateTable(
 				found = append(found, name)
 				continue
 			}
-			id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-			tbl, err := mysqlTableToCockroach(evalCtx, parentID, id, name, i.TableSpec)
+			id := sqlbase.ID(int(startingID) + len(ret))
+			tbl, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks)
 			if err != nil {
 				return nil, err
 			}
 			if match == name {
 				return []*sqlbase.TableDescriptor{tbl}, nil
+			}
+			if fks.allowed {
+				fks.resolver[tbl.Name] = tbl
 			}
 			ret = append(ret, tbl)
 		}
@@ -242,7 +250,12 @@ func readMysqlCreateTable(
 // CREATE TABLE statement, converting columns and indexes to their closest
 // Cockroach counterparts.
 func mysqlTableToCockroach(
-	evalCtx *tree.EvalContext, parentID, id sqlbase.ID, name string, in *mysql.TableSpec,
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	parentID, id sqlbase.ID,
+	name string,
+	in *mysql.TableSpec,
+	fks fkHandler,
 ) (*sqlbase.TableDescriptor, error) {
 	if in == nil {
 		return nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
@@ -284,7 +297,51 @@ func mysqlTableToCockroach(
 	if err := desc.AllocateIDs(); err != nil {
 		return nil, err
 	}
+
+	for _, raw := range in.Constraints {
+		switch i := raw.Details.(type) {
+		case *mysql.ForeignKeyDefinition:
+			if !fks.allowed {
+				return nil, errors.Errorf("foreign keys not supported: %s", mysql.String(raw))
+			}
+			if fks.skip {
+				continue
+			}
+			fromCols := i.Source
+			toTable := tree.MakeTableName(
+				tree.Name(i.ReferencedTable.Qualifier.String()), tree.Name(i.ReferencedTable.Name.String()),
+			)
+			toCols := i.ReferencedColumns
+			d := &tree.ForeignKeyConstraintTableDef{
+				Name:     tree.Name(raw.Name),
+				FromCols: toNameList(fromCols),
+				ToCols:   toNameList(toCols),
+			}
+			d.Table.TableNameReference = &toTable
+			if err := sql.ResolveFK(
+				ctx, nil, fks.resolver, &desc, d, map[sqlbase.ID]*sqlbase.TableDescriptor{}, sqlbase.ConstraintValidity_Validated,
+			); err != nil {
+				return nil, err
+			}
+			if err := fixDescriptorFKState(&desc); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := desc.AllocateIDs(); err != nil {
+		return nil, err
+	}
+
 	return &desc, nil
+}
+
+func toNameList(cols mysql.Columns) tree.NameList {
+	res := make([]tree.Name, len(cols))
+	for i := range cols {
+		res[i] = tree.Name(cols[i].String())
+	}
+	return res
 }
 
 // mysqlColToCockroach attempts to convert a parsed MySQL column definition to a

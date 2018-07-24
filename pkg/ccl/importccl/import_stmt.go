@@ -698,7 +698,7 @@ func importPlanHook(
 			switch format.Format {
 			case roachpb.IOFileFormat_Mysqldump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readMysqlCreateTable(reader, evalCtx, parentID, match)
+				tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks)
 			case roachpb.IOFileFormat_PgDump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
 				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
