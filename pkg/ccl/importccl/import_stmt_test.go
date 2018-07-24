@@ -138,7 +138,7 @@ d
 			typ:  "CSV",
 			data: `5,STRING,7,9`,
 			query: map[string][][]string{
-				`SELECT count(*) from d.t`: {{"1"}},
+				`SELECT count(*) from t`: {{"1"}},
 			},
 		},
 		{
@@ -148,7 +148,7 @@ d
 			data: `\x0143
 0143`,
 			query: map[string][][]string{
-				`SELECT * from d.t`: {{"\x01C"}, {"0143"}},
+				`SELECT * from t`: {{"\x01C"}, {"0143"}},
 			},
 		},
 		{
@@ -204,7 +204,7 @@ d
 			typ:    "MYSQLOUTFILE",
 			data:   "@N\nN@@\nNULL",
 			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from d.t`: {{"(null)"}, {"N@"}, {"NULL"}},
+				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@"}, {"NULL"}},
 			},
 		},
 		{
@@ -214,7 +214,7 @@ d
 			typ:    "MYSQLOUTFILE",
 			data:   "\\N\n\\\\N\nNULL",
 			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from d.t`: {{"(null)"}, {`\N`}, {"NULL"}},
+				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {`\N`}, {"NULL"}},
 			},
 		},
 		{
@@ -239,7 +239,7 @@ d
 			typ:    "MYSQLOUTFILE",
 			data:   "\\N\n\\\\N\nNULL",
 			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from d.t`: {{`\N`}, {`\\N`}, {"(null)"}},
+				`SELECT COALESCE(s, '(null)') from t`: {{`\N`}, {`\\N`}, {"(null)"}},
 			},
 		},
 		{
@@ -248,7 +248,7 @@ d
 			typ:    "MYSQLOUTFILE",
 			data:   `\x`,
 			query: map[string][][]string{
-				`SELECT * from d.t`: {{`\x`}},
+				`SELECT * from t`: {{`\x`}},
 			},
 		},
 
@@ -273,7 +273,7 @@ d
 			typ:    "PGCOPY",
 			data:   `\x43\122`,
 			query: map[string][][]string{
-				`SELECT * from d.t`: {{"CR"}},
+				`SELECT * from t`: {{"CR"}},
 			},
 		},
 		{
@@ -282,7 +282,7 @@ d
 			typ:    "PGCOPY",
 			data:   "1\tSTR\n2\t\\N\n\\N\t\\t",
 			query: map[string][][]string{
-				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", "\t"}},
+				`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", "\t"}},
 			},
 		},
 		{
@@ -292,7 +292,7 @@ d
 			with:   `WITH delimiter = ','`,
 			data:   "1,STR\n2,\\N\n\\N,\\,",
 			query: map[string][][]string{
-				`SELECT * from d.t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
+				`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
 			},
 		},
 		{
@@ -565,13 +565,14 @@ COPY t (a, b, c) FROM stdin;
 	sqlDB.Exec(t, `CREATE TABLE blah (i int)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
-	for _, tc := range tests {
+	for i, tc := range tests {
 		t.Run(fmt.Sprintf("%s: %s", tc.typ, tc.name), func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
-			defer sqlDB.Exec(t, `DROP DATABASE d`)
+			dbName := fmt.Sprintf("d%d", i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
+			defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
 			var q string
 			if tc.create != "" {
-				q = fmt.Sprintf(`IMPORT TABLE d.t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
+				q = fmt.Sprintf(`IMPORT TABLE t (%s) %s DATA ($1) %s`, tc.create, tc.typ, tc.with)
 			} else {
 				q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
 			}
@@ -588,11 +589,10 @@ COPY t (a, b, c) FROM stdin;
 	}
 
 	t.Run("mysqlout multiple", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE DATABASE d; USE d`)
-		sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
+		sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
 		dataString = "1"
-		sqlDB.Exec(t, `IMPORT TABLE d.t (s STRING) MYSQLOUTFILE DATA ($1, $1)`, srv.URL)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t`, [][]string{{"1"}, {"1"}})
+		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) MYSQLOUTFILE DATA ($1, $1)`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
 	})
 }
 
