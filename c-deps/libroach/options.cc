@@ -42,9 +42,11 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   virtual bool InDomain(const rocksdb::Slice& src) const { return true; }
 };
 
+// The DBLogger is a rocksdb::Logger that calls back into Go code for formatted logging.
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger() {}
+  DBLogger(int go_log_level) : go_log_level_(go_log_level) {}
+
   virtual void Logv(const char* format, va_list ap) {
     // First try with a small fixed size buffer.
     char space[1024];
@@ -58,7 +60,7 @@ class DBLogger : public rocksdb::Logger {
     va_end(backup_ap);
 
     if ((result >= 0) && (result < sizeof(space))) {
-      rocksDBLog(space, result);
+      rocksDBLog(go_log_level_, space, result);
       return;
     }
 
@@ -81,13 +83,16 @@ class DBLogger : public rocksdb::Logger {
 
       if ((result >= 0) && (result < length)) {
         // It fit
-        rocksDBLog(buf, result);
+        rocksDBLog(go_log_level_, buf, result);
         delete[] buf;
         return;
       }
       delete[] buf;
     }
   }
+
+ private:
+  int go_log_level_;
 };
 
 class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
@@ -140,6 +145,8 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
 
 }  // namespace
 
+rocksdb::Logger* NewDBLogger(int go_log_level) { return new DBLogger(go_log_level); }
+
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
@@ -153,7 +160,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(new DBLogger());
+  options.info_log.reset(NewDBLogger(kDefaultLogLevel));
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();

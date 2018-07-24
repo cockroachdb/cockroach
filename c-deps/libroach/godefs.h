@@ -17,6 +17,6 @@
 #include <libroach.h>
 
 extern "C" {
-void __attribute__((weak)) rocksDBLog(char*, int);
+void __attribute__((weak)) rocksDBLog(int, char*, int);
 char* __attribute__((weak)) prettyPrintKey(DBKey);
 }  // extern "C"
