@@ -226,7 +226,7 @@ query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 sort                   ·      ·
- │                     order  +database_name,+schema_name,+table_name,+grantee
+ │                     order  +database_name,+schema_name,+table_name,+grantee,+privilege_type
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·

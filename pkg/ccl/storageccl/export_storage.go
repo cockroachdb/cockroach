@@ -482,10 +482,16 @@ type s3Storage struct {
 	settings *cluster.Settings
 }
 
-func s3Retry(ctx context.Context, fn func() error) error {
+// delayedRetry runs fn and re-runs it a limited number of times if it
+// fails. It knows about specific kinds of errors that need longer retry
+// delays than normal.
+func delayedRetry(ctx context.Context, fn func() error) error {
 	const maxAttempts = 3
 	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 		err := fn()
+		if err == nil {
+			return nil
+		}
 		if s3err, ok := err.(s3.RequestFailure); ok {
 			// A 503 error could mean we need to reduce our request rate. Impose an
 			// arbitrary slowdown in that case.
@@ -495,6 +501,15 @@ func s3Retry(ctx context.Context, fn func() error) error {
 				case <-time.After(time.Second * 5):
 				case <-ctx.Done():
 				}
+			}
+		}
+		// See https:github.com/GoogleCloudPlatform/google-cloud-go/issues/1012#issuecomment-393606797
+		// which suggests this GCE error message could be due to auth quota limits
+		// being reached.
+		if strings.Contains(err.Error(), "net/http: timeout awaiting response headers") {
+			select {
+			case <-time.After(time.Second * 5):
+			case <-ctx.Done():
 			}
 		}
 		return err
@@ -527,7 +542,7 @@ func makeS3Storage(
 		return nil, errors.Wrap(err, "new aws session")
 	}
 	if region == "" {
-		err = s3Retry(ctx, func() error {
+		err = delayedRetry(ctx, func() error {
 			var err error
 			region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
 			return err
@@ -689,7 +704,14 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	return g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+
+	var rc io.ReadCloser
+	err := delayedRetry(ctx, func() error {
+		var readErr error
+		rc, readErr = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+		return readErr
+	})
+	return rc, err
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
