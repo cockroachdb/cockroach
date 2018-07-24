@@ -6,8 +6,7 @@ export interface EncryptionStatusProps {
   store: protos.cockroach.server.serverpb.IStoreDetails;
 }
 
-export default class EncryptionStatus extends React.Component<EncryptionStatusProps, {}> {
-
+export default class EncryptionStatus {
   getEncryptionRows(): React.ReactElement<any> {
     return null;
   }

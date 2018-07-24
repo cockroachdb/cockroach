@@ -10,7 +10,12 @@ import { FixLong } from "src/util/fixLong";
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 
-export default class EncryptionStatus extends React.Component<EncryptionStatusProps, {}> {
+export default class EncryptionStatus {
+  props: EncryptionStatusProps;
+
+  constructor(props: EncryptionStatusProps) {
+    this.props = props;
+  }
 
   renderHeaderRow(header: string) {
     return (
@@ -58,7 +63,7 @@ export default class EncryptionStatus extends React.Component<EncryptionStatusPr
   }
 
   calculatePercentage(active: Long, total: Long): number {
-    if (active === total) {
+    if (active.eq(total)) {
       return 100;
     }
     return Long.fromInt(100).mul(active).toNumber() / total.toNumber();
