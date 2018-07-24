@@ -220,10 +220,10 @@ func (p *PhysicalPlan) MergeResultStreams(
 	}
 }
 
-// AddSingleGroupStage adds a "single group" stage (one that cannot be
-// parallelized) which consists of a single processor on the specified node. The
-// previous stage (ResultRouters) are all connected to this processor.
-func (p *PhysicalPlan) AddSingleGroupStage(
+// AddSingleProcessorStage adds a stage consisting of a single processor on the
+// specified node. The previous stage (ResultRouters) are all connected to this
+// processor.
+func (p *PhysicalPlan) AddSingleProcessorStage(
 	nodeID roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
 	post distsqlrun.PostProcessSpec,
@@ -686,7 +686,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 	if count != math.MaxInt64 {
 		post.Limit = uint64(count)
 	}
-	p.AddSingleGroupStage(
+	p.AddSingleProcessorStage(
 		node,
 		distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
 		post,

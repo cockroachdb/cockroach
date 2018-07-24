@@ -146,7 +146,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if len(p.ResultRouters) == 1 {
 		node = p.Processors[p.ResultRouters[0]].Node
 	}
-	p.AddSingleGroupStage(
+	p.AddSingleProcessorStage(
 		node,
 		distsqlrun.ProcessorCoreUnion{SampleAggregator: agg},
 		distsqlrun.PostProcessSpec{},
