@@ -257,5 +257,28 @@ TEST_F(CCLTest, EncryptionStats) {
     EXPECT_NE(stats.total_bytes, stats.active_key_bytes);
 
     DBClose(db);
+
+    // Sleep for 1 second. Key creation timestamps are in seconds since epoch.
+    ASSERT_EQ(0, sleep(1));
+
+    // Re-open the DB with exactly the same options and grab stats in a separate object.
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBEnvStatsResult stats2;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats2).data, NULL);
+    EXPECT_STRNE(stats2.encryption_status.data, NULL);
+
+    // Now parse the status protobuf.
+    enginepbccl::EncryptionStatus enc_status2;
+    ASSERT_TRUE(
+        enc_status2.ParseFromArray(stats2.encryption_status.data, stats2.encryption_status.len));
+    EXPECT_EQ(enc_status2.active_store_key().encryption_type(), enginepbccl::AES128_CTR);
+    EXPECT_EQ(enc_status2.active_data_key().encryption_type(), enginepbccl::AES128_CTR);
+
+    // Check timestamp equality with the previous stats, we want to make sure we have
+    // the time we first saw the store key, not the second start.
+    EXPECT_EQ(enc_status2.active_store_key().creation_time(),
+              enc_status.active_store_key().creation_time());
+
+    DBClose(db);
   }
 }
