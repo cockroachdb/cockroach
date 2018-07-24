@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"testing"
@@ -544,7 +545,12 @@ func TestConcurrentBatch(t *testing.T) {
 			if err := batch.Put(MakeMVCCMetadataKey(key), nil); err != nil {
 				t.Fatal(err)
 			}
-			if len(batch.Repr()) >= 4<<20 {
+			const targetSize = 4 << 20
+			if targetSize < maxBatchGroupSize {
+				t.Fatalf("target size (%d) should be larger than the max batch group size (%d)",
+					targetSize, maxBatchGroupSize)
+			}
+			if len(batch.Repr()) >= targetSize {
 				break
 			}
 		}
@@ -1027,5 +1033,59 @@ func TestRocksDBOptions(t *testing.T) {
 				t.Errorf("unable to find %s in %s", o, p)
 			}
 		}
+	}
+}
+
+func TestMakeBatchGroup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		maxSize   int
+		sizes     []int
+		groupSize []int
+		leader    []bool
+		groups    []int
+	}{
+		{1, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
+		{199, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
+		{200, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
+		{299, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
+		{300, []int{100, 100, 100}, []int{100, 200, 300}, []bool{true, false, false}, []int{3}},
+		{
+			400,
+			[]int{100, 200, 300, 100, 500},
+			[]int{100, 300, 300, 400, 500},
+			[]bool{true, false, true, false, true},
+			[]int{2, 2, 1},
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var pending []*rocksDBBatch
+			var groupSize int
+			for i := range c.sizes {
+				// We use intimate knowledge of rocksDBBatch and RocksDBBatchBuilder to
+				// construct a batch of a specific size.
+				b := &rocksDBBatch{}
+				b.builder.repr = make([]byte, c.sizes[i])
+				var leader bool
+				pending, groupSize, leader = makeBatchGroup(pending, b, groupSize, c.maxSize)
+				if c.groupSize[i] != groupSize {
+					t.Fatalf("expected group size %d, but found %d", c.groupSize[i], groupSize)
+				}
+				if c.leader[i] != leader {
+					t.Fatalf("expected leader %t, but found %t", c.leader[i], leader)
+				}
+			}
+			var groups []int
+			for len(pending) > 0 {
+				var group []*rocksDBBatch
+				group, pending = nextBatchGroup(pending)
+				groups = append(groups, len(group))
+			}
+			if !reflect.DeepEqual(c.groups, groups) {
+				t.Fatalf("expected %d, but found %d", c.groups, groups)
+			}
+		})
 	}
 }
