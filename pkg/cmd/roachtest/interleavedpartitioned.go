@@ -112,10 +112,7 @@ func registerInterleaved(r *registry) {
 			// This will only finish when all the workload jobs have finished.
 			wg.Wait()
 			err := execCmd(ctx, c.l, roachprod, "get", c.name, "histograms:1,4,7", filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "histograms"))
-			if err != nil {
-				return err
-			}
-			return nil
+			return err
 		})
 		m.Wait()
 	}
