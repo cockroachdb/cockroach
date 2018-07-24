@@ -697,7 +697,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	}
 
 	stopper := txn.db.ctx.Stopper
-	ctx = stopper.WithCancel(txn.db.AnnotateCtx(context.Background()))
+	ctx = stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		if err := txn.sendEndTxnReq(ctx, false /* commit */, nil); err != nil {
 			log.Infof(ctx, "async rollback failed: %s", err)

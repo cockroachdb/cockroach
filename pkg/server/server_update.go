@@ -38,7 +38,8 @@ func (*UpgradeTestingKnobs) ModuleTestingKnobs() {}
 
 // startAttemptUpgrade attempts to upgrade cluster version.
 func (s *Server) startAttemptUpgrade(ctx context.Context) {
-	if err := s.stopper.RunAsyncTask(s.stopper.WithCancel(ctx), "auto-upgrade", func(ctx context.Context) {
+	ctx = s.stopper.WithCancelOnQuiesce(ctx)
+	if err := s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
 		retryOpts := retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,

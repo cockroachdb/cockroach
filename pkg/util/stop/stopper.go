@@ -121,7 +121,8 @@ type Stopper struct {
 		numTasks  int        // number of outstanding tasks
 		tasks     TaskMap
 		closers   []Closer
-		cancels   []func()
+		qCancels  []func()
+		sCancels  []func()
 	}
 }
 
@@ -416,6 +417,9 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	s.Quiesce(ctx)
+	for _, cancel := range s.mu.sCancels {
+		cancel()
+	}
 	close(s.stopper)
 	s.stop.Wait()
 	s.mu.Lock()
@@ -462,7 +466,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	defer s.Recover(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, cancel := range s.mu.cancels {
+	for _, cancel := range s.mu.qCancels {
 		cancel()
 	}
 	if !s.mu.quiescing {
@@ -476,13 +480,23 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	}
 }
 
-// WithCancel returns a child context which is canceled when the Stopper
-// begins to quiesce.
-func (s *Stopper) WithCancel(ctx context.Context) context.Context {
+// WithCancelOnQuiesce returns a child context which is canceled when the
+// Stopper begins to quiesce.
+func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) context.Context {
+	return s.withCancel(ctx, &s.mu.qCancels)
+}
+
+// WithCancelOnStop returns a child context which is canceled when the Stopper
+// begins to stop.
+func (s *Stopper) WithCancelOnStop(ctx context.Context) context.Context {
+	return s.withCancel(ctx, &s.mu.sCancels)
+}
+
+func (s *Stopper) withCancel(ctx context.Context, cancels *[]func()) context.Context {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.cancels = append(s.mu.cancels, cancel)
+	*cancels = append(*cancels, cancel)
 	return ctx
 }

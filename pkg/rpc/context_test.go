@@ -807,7 +807,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			ctx := stopper.WithCancel(context.TODO())
+			ctx := stopper.WithCancelOnQuiesce(context.TODO())
 
 			// Construct server with server-side keepalive.
 			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
