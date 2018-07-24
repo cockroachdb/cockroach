@@ -344,8 +344,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	const numFKRows = 10000
 	b.Run("insertRows_IdenticalFK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -371,8 +371,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("deleteRows_IdenticalFK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		if _, err := db.Exec(`INSERT INTO parentFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -402,8 +402,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("insertRows_UniqueFKs", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		for i := 1; i <= numFKRows; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -433,8 +433,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("deleteRows_UniqueFKs", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		for i := 1; i <= numFKRows; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -466,8 +466,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("insertRows_NoFK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentNoFK`: struct{}{},
-			`childNoFK`:  struct{}{},
+			`parentNoFK`: {},
+			`childNoFK`:  {},
 		})
 		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -492,8 +492,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("deleteRows_NoFK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentNoFK`: struct{}{},
-			`childNoFK`:  struct{}{},
+			`parentNoFK`: {},
+			`childNoFK`:  {},
 		})
 		if _, err := db.Exec(`INSERT INTO parentNoFK(foo) VALUES(1)`); err != nil {
 			b.Fatal(err)
@@ -523,8 +523,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	const refsPerRow = 10
 	b.Run("insertRows_multiple_refs", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -551,8 +551,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("deleteRows_multiple_refs", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentFK`: struct{}{},
-			`childFK`:  struct{}{},
+			`parentFK`: {},
+			`childFK`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentFK(foo) VALUES(%d)`, i)); err != nil {
@@ -582,8 +582,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("insertRows_multiple_refs_noFK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentNoFK`: struct{}{},
-			`childNoFK`:  struct{}{},
+			`parentNoFK`: {},
+			`childNoFK`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentNoFK(foo) VALUES(%d)`, i)); err != nil {
@@ -611,8 +611,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("deleteRows_multiple_refs_No_FK", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentNoFK`: struct{}{},
-			`childNoFK`:  struct{}{},
+			`parentNoFK`: {},
+			`childNoFK`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentNoFK(foo) VALUES(%d)`, i)); err != nil {
@@ -644,8 +644,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	// Inserts and deletes are tested for interleaved tables
 	b.Run("insertRows_interleaved", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentInterleaved`: struct{}{},
-			`childInterleaved`:  struct{}{},
+			`parentInterleaved`: {},
+			`childInterleaved`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
@@ -673,8 +673,8 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("deleteRows_interleaved", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`parentInterleaved`: struct{}{},
-			`childInterleaved`:  struct{}{},
+			`parentInterleaved`: {},
+			`childInterleaved`:  {},
 		})
 		for i := 1; i <= numFKRowsMultipleRef; i++ {
 			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
@@ -715,7 +715,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	const numSRRows = 10000
 	b.Run("SelfReferential_Cascade_FK_Chain_Delete", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential`: struct{}{},
+			`self_referential`: {},
 		})
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
@@ -739,7 +739,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("SelfReferential_Cascade_FK_ManyChildren_Delete", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential`: struct{}{},
+			`self_referential`: {},
 		})
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential(id) VALUES (1)`); err != nil {
@@ -762,7 +762,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("SelfReferential_No_FK_Chain_Delete", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential_noFK`: struct{}{},
+			`self_referential_noFK`: {},
 		})
 		defer drop()
 		var insert bytes.Buffer
@@ -787,7 +787,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("SelfReferential_No_FK_ManyChildren_Delete", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential_noFK`: struct{}{},
+			`self_referential_noFK`: {},
 		})
 		defer drop()
 		if _, err := db.Exec(`INSERT INTO self_referential_noFK(id) VALUES (1)`); err != nil {
@@ -809,7 +809,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 	})
 	b.Run("SelfReferential_SetNull_FK_Chain_Delete", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential_setnull`: struct{}{},
+			`self_referential_setnull`: {},
 		})
 		defer drop()
 		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
@@ -833,7 +833,7 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 
 	b.Run("SelfReferential_SetNull_FK_ManyChildren", func(b *testing.B) {
 		setup(map[string]struct{}{
-			`self_referential_setnull`: struct{}{},
+			`self_referential_setnull`: {},
 		})
 		defer drop()
 		run3 := `INSERT INTO self_referential_setnull(id) VALUES (1)`
