@@ -188,7 +188,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       aggregationLevel,
     };
 
-    const forwardParams = {
+    const forwardProps = {
       hoverOn: this.props.hoverOn,
       hoverOff: this.props.hoverOff,
       hoverState: this.props.hoverState,
@@ -200,6 +200,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         aggregationLevel={aggregationLevel}
         nodeSources={nodeIDs}
         nodesSummary={nodesSummary}
+        forwardProps={forwardProps}
       />
     );
 

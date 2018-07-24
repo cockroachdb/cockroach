@@ -1,6 +1,6 @@
 import React from "react";
 
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import { LineGraph, LineGraphProps } from "src/views/cluster/components/linegraph";
 import { nodeDisplayName, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
@@ -16,6 +16,7 @@ interface DashboardsPageProps {
   aggregationLevel: AggregationLevel;
   nodeSources: string[];
   nodesSummary: NodesSummary;
+  forwardProps: Partial<LineGraphProps>;
 }
 
 function mapUnits(units: Units): AxisUnits {
@@ -62,6 +63,7 @@ export class DashboardsPage extends React.Component<DashboardsPageProps> {
             sources={this.getSources(chart.sourceLevel)}
             title={chart.title}
             tooltip={chart.tooltip}
+            {...this.props.forwardProps}
           >
             <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
               {
@@ -80,6 +82,7 @@ export class DashboardsPage extends React.Component<DashboardsPageProps> {
             title={chart.title}
             subtitle={metric.title}
             tooltip={metric.tooltip}
+            {...this.props.forwardProps}
           >
             <Axis label={chart.axis.label} units={mapUnits(chart.axis.units)}>
               {
