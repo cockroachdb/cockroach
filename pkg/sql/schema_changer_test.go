@@ -32,13 +32,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1682,45 +1685,55 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	// Create a column that is not NULL. This schema change doesn't return an
-	// error only because we've turned off the synchronous execution path; it
-	// will eventually fail when run by the asynchronous path.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD a INT DEFAULT 0 UNIQUE, ADD c INT`); err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		sql    string
+		status jobs.Status
+	}{
+		// Create a column that is not NULL. This schema change doesn't return an
+		// error only because we've turned off the synchronous execution path; it
+		// will eventually fail when run by the asynchronous path.
+		{`ALTER TABLE t.public.test ADD COLUMN a INT UNIQUE DEFAULT 0, ADD COLUMN c INT`,
+			jobs.StatusFailed},
+		// Add an index over a column that will be purged. This index will
+		// eventually not get added. The column aa will also be dropped as
+		// a result.
+		{`ALTER TABLE t.public.test ADD COLUMN aa INT, ADD CONSTRAINT foo UNIQUE (a)`,
+			jobs.StatusFailed},
+
+		// The purge of column 'a' doesn't influence these schema changes.
+
+		// Drop column 'v' moves along just fine.
+		{`ALTER TABLE t.public.test DROP COLUMN v`,
+			jobs.StatusSucceeded},
+		// Add unique column 'b' moves along creating column b and the index on
+		// it.
+		{`ALTER TABLE t.public.test ADD COLUMN b INT UNIQUE`,
+			jobs.StatusSucceeded},
+		// #27033: Add a column followed by an index on the column.
+		{`ALTER TABLE t.public.test ADD COLUMN d STRING NOT NULL DEFAULT 'something'`,
+			jobs.StatusSucceeded},
+
+		{`CREATE INDEX ON t.public.test (d)`,
+			jobs.StatusSucceeded},
+
+		// Add an index over a column 'c' that will be purged. This index will
+		// eventually not get added. The column bb will also be dropped as
+		// a result.
+		{`ALTER TABLE t.public.test ADD COLUMN bb INT, ADD CONSTRAINT bar UNIQUE (c)`,
+			jobs.StatusFailed},
+		// Cascading of purges. column 'c' -> column 'bb' -> constraint 'idx_bb'.
+		{`ALTER TABLE t.public.test ADD CONSTRAINT idx_bb UNIQUE (bb)`,
+			jobs.StatusFailed},
 	}
 
-	// Add an index over a column that will be purged. This index will
-	// eventually not get added.
-	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_a ON t.test (a)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// The purge of column 'a' doesn't influence these schema changes.
-
-	// Drop column 'v' moves along just fine. The constraint 'foo' will not be
-	// enforced because c is not added.
-	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test DROP v, ADD CONSTRAINT foo UNIQUE (c)`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Add unique column 'b' moves along creating column b and the index on
-	// it.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b INT UNIQUE`); err != nil {
-		t.Fatal(err)
-	}
-
-	// #27033: Add a column followed by an index on the column.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN d STRING NOT NULL DEFAULT 'something'`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`CREATE INDEX ON t.test (d)`); err != nil {
-		t.Fatal(err)
+	for _, tc := range testCases {
+		if _, err := sqlDB.Exec(tc.sql); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	if e := 10; e != len(tableDesc.Mutations) {
+	if e := 13; e != len(tableDesc.Mutations) {
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
@@ -1840,6 +1853,32 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
+
+	// State of jobs table
+	runner := sqlutils.SQLRunner{DB: sqlDB}
+	for i, tc := range testCases {
+		if err := jobutils.VerifySystemJob(t, &runner, i, jobspb.TypeSchemaChange, tc.status, jobs.Record{
+			Username:    security.RootUser,
+			Description: tc.sql,
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Roll back job.
+	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: "ROLL BACK " + testCases[0].sql,
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 // This test checks backward compatibility with old data that contains

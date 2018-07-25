@@ -131,7 +131,12 @@ func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 
 // VerifySystemJob checks that that job records are created as expected.
 func VerifySystemJob(
-	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobspb.Type, expected jobs.Record,
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus jobs.Status,
+	expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
@@ -160,7 +165,7 @@ func VerifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
+	if e, a := expectedStatus, jobs.Status(statusString); e != a {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
 	}
 	if e, a := expectedType.String(), actualType; e != a {

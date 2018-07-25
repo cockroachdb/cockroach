@@ -471,7 +471,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobspb.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -486,7 +486,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobspb.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
