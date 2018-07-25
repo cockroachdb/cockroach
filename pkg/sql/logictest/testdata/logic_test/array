@@ -925,12 +925,17 @@ SELECT ARRAY[1,2,4] = NULL
 ----
 NULL
 
-# This behavior is surprising (one might expect that the result would be
-# NULL), but it's how Postgres behaves.
+# In PostgreSQL 10, the values inside arrays are always compared using
+# total comparison. This behavior is surprising (one might expect that
+# the result if the array contains NULL would be NULL), and is
+# arguably a bug.
+# We (radu/knz) have opted to rectify this in CockroachDB for now.
+# Should a different behavior be desired, this can be altered
+# in tree/compare.go.
 query B
 SELECT ARRAY[1,2,NULL] = ARRAY[1,2,3]
 ----
-false
+NULL
 
 # ARRAY_APPEND function
 

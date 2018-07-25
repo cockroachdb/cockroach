@@ -1707,13 +1707,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
-			},
-		},
+		makeEqFn(types.FamTuple, types.FamTuple),
 	},
 
 	LT: {
@@ -1752,13 +1746,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
-			},
-		},
+		makeLtFn(types.FamTuple, types.FamTuple),
 	},
 
 	LE: {
@@ -1797,13 +1785,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
-			},
-		},
+		makeLeFn(types.FamTuple, types.FamTuple),
 	},
 
 	IsNotDistinctFrom: {
@@ -1851,16 +1833,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				if left == DNull || right == DNull {
-					return MakeDBool(left == DNull && right == DNull), nil
-				}
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
-			},
-		},
+		makeIsFn(types.FamTuple, types.FamTuple),
 	},
 
 	In: {
@@ -2052,124 +2025,66 @@ func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 	return ScalarCompare(ctx, left, right, IsNotDistinctFrom), nil
 }
 
-func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
-	switch op {
-	case EQ, IsNotDistinctFrom:
-		return MakeDBool(cmp == 0)
-	case LT:
-		return MakeDBool(cmp < 0)
-	case LE:
-		return MakeDBool(cmp <= 0)
-	default:
-		panic(fmt.Sprintf("unexpected ComparisonOperator in boolFromCmp: %v", op))
-	}
-}
-
-func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
-	cmp := 0
-	sawNull := false
-	for i, leftElem := range left.D {
-		rightElem := right.D[i]
-		// Like with cmpOpScalarFn, check for values that need to be handled
-		// differently than when ordering Datums.
-		if leftElem == DNull || rightElem == DNull {
-			switch op {
-			case EQ:
-				// If either Datum is NULL and the op is EQ, we continue the
-				// comparison and the result is only NULL if the other (non-NULL)
-				// elements are equal. This is because NULL is thought of as "unknown",
-				// so a NULL equality comparison does not prevent the equality from
-				// being proven false, but does prevent it from being proven true.
-				sawNull = true
-
-			case IsNotDistinctFrom:
-				// For IS NOT DISTINCT FROM, NULLs are "equal".
-				if leftElem != DNull || rightElem != DNull {
-					return DBoolFalse
-				}
-
-			default:
-				// If either Datum is NULL and the op is not EQ or IS NOT DISTINCT FROM,
-				// we short-circuit the evaluation and the result of the comparison is
-				// NULL. This is because NULL is thought of as "unknown" and tuple
-				// inequality is defined lexicographically, so once a NULL comparison is
-				// seen, the result of the entire tuple comparison is unknown.
-				return DNull
-			}
-		} else {
-			cmp = leftElem.internalCompare(ctx, rightElem)
-			if cmp != 0 {
-				break
-			}
-		}
-	}
-	b := boolFromCmp(cmp, op)
-	if b == DBoolTrue && sawNull {
-		// The op is EQ and all non-NULL elements are equal, but we saw at least
-		// one NULL element. Since NULL comparisons are treated as unknown, the
-		// result of the comparison becomes unknown (NULL).
-		return DNull
-	}
-	return b
-}
-
 func makeEvalTupleIn(typ types.T) CmpOp {
 	return CmpOp{
-		LeftType:  typ,
-		RightType: types.FamTuple,
-		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
-			vtuple := values.(*DTuple)
-			// If the tuple was sorted during normalization, we can perform an
-			// efficient binary search to find if the arg is in the tuple (as
-			// long as the arg doesn't contain any NULLs).
-			if len(vtuple.D) == 0 {
-				// If the rhs tuple is empty, the result is always false (even if arg is
-				// or contains NULL).
-				return DBoolFalse, nil
-			}
-			if arg == DNull {
-				return DNull, nil
-			}
-			argTuple, argIsTuple := arg.(*DTuple)
-			if vtuple.Sorted() && !(argIsTuple && argTuple.containsNull()) {
-				// The right-hand tuple is already sorted and contains no NULLs, and the
-				// left side is not NULL (e.g. `NULL IN (1, 2)`) or a tuple that
-				// contains NULL (e.g. `(1, NULL) IN ((1, 2), (3, 4))`).
-				//
-				// We can use binary search to make a determination in this case. This
-				// is the common case when tuples don't contain NULLs.
-				_, result := vtuple.SearchSorted(ctx, arg)
-				return MakeDBool(DBool(result)), nil
-			}
-
-			sawNull := false
-			if !argIsTuple {
-				// The left-hand side is not a tuple, e.g. `1 IN (1, 2)`.
-				for _, val := range vtuple.D {
-					if val == DNull {
-						sawNull = true
-					} else if val.internalCompare(ctx, arg) == 0 {
-						return DBoolTrue, nil
-					}
-				}
-			} else {
-				// The left-hand side is a tuple, e.g. `(1, 2) IN ((1, 2), (3, 4))`.
-				for _, val := range vtuple.D {
-					// Use the EQ function which properly handles NULLs.
-					if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
-						sawNull = true
-					} else if res == DBoolTrue {
-						return DBoolTrue, nil
-					}
-				}
-			}
-			if sawNull {
-				return DNull, nil
-			}
-			return DBoolFalse, nil
-		},
+		LeftType:     typ,
+		RightType:    types.FamTuple,
 		NullableArgs: true,
+		fn: func(ctx *EvalContext, lhs, rhs Datum) (Datum, error) {
+			rhsTuple := rhs.(*DTuple)
+			res := rhsTuple.search(ctx, lhs)
+			if res == -2 {
+				// the value was not found and a NULL participated: unknown.
+				return DNull, nil
+			}
+			// no NULL participated: we know the result.
+			return MakeDBool(DBool(res == 0)), nil
+		},
 	}
+}
+
+// containsNull returns true if the datum contains NULL, possibly
+// nested inside other datums. For example, all the following datums
+// contain NULL:
+//  (1, 2, NULL)
+//  ((1, 1), (2, array[3, NULL]))
+//  (((1, 1), (2, array[2, NULL])), ((3, 3), (4, NULL)))
+func containsNull(d Datum) (res bool) {
+	switch t := d.(type) {
+	case dNull:
+		return true
+	case *DTuple:
+		if t.hasNulls != 0 {
+			return t.hasNulls == -1
+		}
+		for _, r := range t.D {
+			if containsNull(r) {
+				t.hasNulls = -1
+				return true
+			}
+		}
+		t.hasNulls = 1
+	case *DArray:
+		if t.hasSubNulls != 0 {
+			return t.hasSubNulls == -1
+		}
+		if t.HasNulls {
+			t.hasSubNulls = -1
+			return true
+		}
+		// Even if HasNulls is false, there may be sub-values that contain
+		// NULLs, e.g. in arrays of tuples.
+		for _, r := range t.Array {
+			if containsNull(r) {
+				t.hasSubNulls = -1
+				return true
+			}
+		}
+		t.hasSubNulls = 1
+	case *DOidWrapper:
+		return containsNull(t.Wrapped)
+	}
+	return false
 }
 
 // evalDatumsCmp evaluates Datums (slice of Datum) using the provided

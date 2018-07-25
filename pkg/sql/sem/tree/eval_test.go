@@ -909,6 +909,26 @@ func TestEval(t *testing.T) {
 		{`(NULL, NULL) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((3, 4))`, `NULL`},
+		{`(1, (2, NULL)) IN ((1, (1, NULL)), (1, (2, NULL)))`, `NULL`},
+		{`(1, (2, NULL)) IN ((1, (1, NULL)), (1, (3, NULL)))`, `false`},
+		{`(1, (2, 3)) IN ((1, (1, NULL)), (1, (2, NULL)), (1, (2, 3)))`, `true`},
+		{`(1, (2, NULL)) IN ((1, (1, NULL)), (1, (NULL, 3)))`, `NULL`},
+		{`(1, (2, 3)) IN ((1, (1, NULL)), (1, (NULL, 3)))`, `NULL`},
+
+		// The following are CockroachDB-specific behavior that differ
+		// from PostgreSQL. See the comment inside
+		// (*DArray).internalCompare().
+		{`(1, ARRAY[2, NULL]) IN ((1, ARRAY[1, NULL]), (1, ARRAY[2, NULL]))`, `NULL`},
+		{`(1, ARRAY[2, NULL]) IN ((1, ARRAY[1, NULL]), (1, ARRAY[3, NULL]))`, `false`},
+		{`(1, ARRAY[2, 3]) IN ((1, ARRAY[1, NULL]), (1, ARRAY[2, NULL]), (1, ARRAY[2, 3]))`, `true`},
+		{`(1, ARRAY[2, NULL]) IN ((1, ARRAY[1, NULL]), (1, ARRAY[NULL, 3]))`, `NULL`},
+		{`(1, ARRAY[2, 3]) IN ((1, ARRAY[1, NULL]), (1, ARRAY[NULL, 3]))`, `NULL`},
+
+		// Regression tests from #12022.
+		{`(1, 0) < (1, NULL)`, `NULL`},
+		{`(1, (0, 0)) < (1, (0, NULL))`, `NULL`},
+		{`(1, (0, 0)) > (1, (0, NULL))`, `NULL`},
+
 		// ANY, SOME, and ALL expressions.
 		{`1   = ANY ARRAY[]`, `false`},
 		{`1   = ANY (ARRAY[2, 3, 4])`, `false`},

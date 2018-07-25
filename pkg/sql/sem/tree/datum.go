@@ -77,12 +77,12 @@ type Datum interface {
 	AmbiguousFormat() bool
 
 	// internalCompare returns -1 if the receiver sorts before other, 0
-	// if receiver is not distinct to other, +1 if receiver sorts after
-	// other.
-	// This interface is broken! Do not use. Use instead the functions
-	// in compare.go.
-	// TODO(knz): Fix this.
-	internalCompare(ctx *EvalContext, other Datum) int
+	// if receiver sorts the same as other, +1 if receiver sorts after
+	// other. If orderedNULLs is true, -2 is returned if a NULL value
+	// was involved in the comparison.
+	// Note: do not use this directly. Instead use the functions in
+	// compare.go.
+	internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
 	// The previous datum satisfies the following definition: if the receiver is
@@ -2180,6 +2180,12 @@ type DTuple struct {
 	// This is used to accelerate IN comparisons.
 	sorted bool
 
+	// hasNulls indicates that a previous invocation of containsNull()
+	// has determined whether the tuple contains nulls in
+	// sub-expressions. 0 indicates "unknown", 1 is "no nulls", -1 is
+	// "null presents".
+	hasNulls int
+
 	// typ is the tuple's type.
 	//
 	// The Types sub-field can be initially uninitialized, and is then
@@ -2360,37 +2366,16 @@ func (d *DTuple) Sorted() bool {
 
 // SetSorted sets the sorted flag on the DTuple. This should be used when a
 // DTuple is known to be sorted based on the datums added to it.
+// The caller must guarantee that the tuple is sorted in comparison
+// order already.
 func (d *DTuple) SetSorted() *DTuple {
-	if d.containsNull() {
+	if containsNull(d) {
 		// A DTuple that contains a NULL (see containsNull) cannot be
 		// marked as sorted.
 		return d
 	}
 	d.sorted = true
 	return d
-}
-
-// AssertSorted asserts that the DTuple is sorted.
-func (d *DTuple) AssertSorted() {
-	if !d.sorted {
-		panic(fmt.Sprintf("expected sorted tuple, found %#v", d))
-	}
-}
-
-// SearchSorted searches the tuple for the target Datum, returning an int with
-// the same contract as sort.Search and a boolean flag signifying whether the datum
-// was found. It assumes that the DTuple is sorted and panics if it is not.
-//
-// The target Datum cannot be NULL or a DTuple that contains NULLs (we cannot
-// binary search in this case; for example `(1, NULL) IN ((1, 2), ..)` needs to
-// be
-func (d *DTuple) SearchSorted(ctx *EvalContext, target Datum) (int, bool) {
-	d.AssertSorted()
-	i := sort.Search(len(d.D), func(i int) bool {
-		return !TotalOrderLess(ctx, d.D[i], target)
-	})
-	found := i < len(d.D) && !Distinct(ctx, d.D[i], target)
-	return i, found
 }
 
 // Normalize sorts and uniques the datum tuple.
@@ -2427,25 +2412,6 @@ func (d *DTuple) Size() uintptr {
 		sz += dsz
 	}
 	return sz
-}
-
-// containsNull returns true if the tuple contains NULL, possibly nested inside
-// other tuples. For example, all the following tuples contain NULL:
-//  (1, 2, NULL)
-//  ((1, 1), (2, NULL))
-//  (((1, 1), (2, 2)), ((3, 3), (4, NULL)))
-func (d *DTuple) containsNull() bool {
-	for _, r := range d.D {
-		if r == DNull {
-			return true
-		}
-		if t, ok := r.(*DTuple); ok {
-			if t.containsNull() {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 type dNull struct{}
@@ -2503,9 +2469,15 @@ func (d dNull) Size() uintptr {
 type DArray struct {
 	ParamTyp types.T
 	Array    Datums
-	// HasNulls is set to true if any of the datums within the array are null.
-	// This is used in the binary array serialization format.
+	// HasNulls is set to true if any of the immediate datums within the
+	// array are null.  This is used in the binary array serialization
+	// format.
 	HasNulls bool
+	// hasSubNulls indicates that a previous invocation of
+	// containsNull() has determined whether the array contains nulls in
+	// sub-expressions. 0 indicates "unknown", 1 is "no nulls", -1 is
+	// "null presents".
+	hasSubNulls int
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
