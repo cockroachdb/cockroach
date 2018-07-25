@@ -772,6 +772,12 @@
   version = "v0.15.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/lufia/iostat"
+  packages = ["."]
+  revision = "9f7362b77ad333b26c01c99de52a11bdb650ded2"
+
+[[projects]]
   name = "github.com/marstr/guid"
   packages = ["."]
   revision = "8bd9a64bf37eb297b492a4101fb28e80ac0b290f"
@@ -1318,6 +1324,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7356b2f481042b2b79a78bd5541e8c7d40e8073cbb5d6c6f0854c9dcfd9455b0"
+  inputs-digest = "24f1631a158f62585d7805d142405d71312f2609b00cb7a3d268b18b9f5f7f32"
   solver-name = "gps-cdcl"
   solver-version = 1
