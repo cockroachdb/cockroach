@@ -2131,7 +2131,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 				return DNull, nil
 			}
 			argTuple, argIsTuple := arg.(*DTuple)
-			if vtuple.Sorted() && !(argIsTuple && argTuple.ContainsNull()) {
+			if vtuple.Sorted() && !(argIsTuple && argTuple.containsNull()) {
 				// The right-hand tuple is already sorted and contains no NULLs, and the
 				// left side is not NULL (e.g. `NULL IN (1, 2)`) or a tuple that
 				// contains NULL (e.g. `(1, NULL) IN ((1, 2), (3, 4))`).

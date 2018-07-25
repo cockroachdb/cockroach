@@ -2361,8 +2361,9 @@ func (d *DTuple) Sorted() bool {
 // SetSorted sets the sorted flag on the DTuple. This should be used when a
 // DTuple is known to be sorted based on the datums added to it.
 func (d *DTuple) SetSorted() *DTuple {
-	if d.ContainsNull() {
-		// A DTuple that contains a NULL (see ContainsNull) cannot be marked as sorted.
+	if d.containsNull() {
+		// A DTuple that contains a NULL (see containsNull) cannot be
+		// marked as sorted.
 		return d
 	}
 	d.sorted = true
@@ -2428,18 +2429,18 @@ func (d *DTuple) Size() uintptr {
 	return sz
 }
 
-// ContainsNull returns true if the tuple contains NULL, possibly nested inside
+// containsNull returns true if the tuple contains NULL, possibly nested inside
 // other tuples. For example, all the following tuples contain NULL:
 //  (1, 2, NULL)
 //  ((1, 1), (2, NULL))
 //  (((1, 1), (2, 2)), ((3, 3), (4, NULL)))
-func (d *DTuple) ContainsNull() bool {
+func (d *DTuple) containsNull() bool {
 	for _, r := range d.D {
 		if r == DNull {
 			return true
 		}
 		if t, ok := r.(*DTuple); ok {
-			if t.ContainsNull() {
+			if t.containsNull() {
 				return true
 			}
 		}
