@@ -1876,8 +1876,8 @@ func TestImportMysql(t *testing.T) {
 	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.second, baseDir))}
 	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB, baseDir))}
 
-	const expectAll, expectSimple, expectSecond = 1, 2, 3
-
+	const expectSimple, expectSecond, expectEverything = 1 << 0, 1 << 2, 1 << 3
+	const expectAll = -1
 	for _, c := range []struct {
 		name     string
 		expected int
@@ -1895,7 +1895,7 @@ func TestImportMysql(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, everything`)
 			sqlDB.Exec(t, c.query, c.args...)
 
-			if c.expected == expectSimple || c.expected == expectAll {
+			if c.expected&expectSimple != 0 {
 				for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM simple ORDER BY i") {
 					{
 						expected, actual := simpleTestRows[idx].s, row[1]
@@ -1917,9 +1917,15 @@ func TestImportMysql(t *testing.T) {
 						}
 					}
 				}
+			} else {
+				_, err := sqlDB.DB.Exec(`SELECT 1 FROM simple LIMIT 1`)
+				expected := "does not exist"
+				if !testutils.IsError(err, expected) {
+					t.Fatalf("expected %s, got %v", expected, err)
+				}
 			}
 
-			if c.expected == expectSecond || c.expected == expectAll {
+			if c.expected&expectSecond != 0 {
 				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
 				if expected, actual := secondTableRows, len(res); expected != actual {
 					t.Fatalf("expected %d, got %d", expected, actual)
@@ -1929,17 +1935,37 @@ func TestImportMysql(t *testing.T) {
 						t.Fatalf("expected %s = - %s", i, j)
 					}
 				}
-			}
-
-			if c.expected == expectSecond {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM simple LIMIT 1`)
+			} else {
+				_, err := sqlDB.DB.Exec(`SELECT 1 FROM second LIMIT 1`)
 				expected := "does not exist"
 				if !testutils.IsError(err, expected) {
 					t.Fatalf("expected %s, got %v", expected, err)
 				}
 			}
-			if c.expected == expectSimple {
-				_, err := sqlDB.DB.Exec(`SELECT 1 FROM second LIMIT 1`)
+			if c.expected&expectEverything != 0 {
+				res := sqlDB.QueryStr(t, "SELECT i, c, iw, fl, d53 FROM everything ORDER BY i")
+				if expected, actual := len(everythingTestRows), len(res); expected != actual {
+					t.Fatalf("expected %d, got %d", expected, actual)
+				}
+				for i := range res {
+					if got, expected := res[i][0], fmt.Sprintf("%v", everythingTestRows[i].i); got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+					if got, expected := res[i][1], everythingTestRows[i].c; got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+					if got, expected := res[i][2], fmt.Sprintf("%v", everythingTestRows[i].iw); got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+					if got, expected := res[i][3], fmt.Sprintf("%v", everythingTestRows[i].fl); got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+					if got, expected := res[i][4], everythingTestRows[i].d53; got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+				}
+			} else {
+				_, err := sqlDB.DB.Exec(`SELECT 1 FROM everything LIMIT 1`)
 				expected := "does not exist"
 				if !testutils.IsError(err, expected) {
 					t.Fatalf("expected %s, got %v", expected, err)
