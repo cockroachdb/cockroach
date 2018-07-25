@@ -20,25 +20,31 @@ sudo apt-get install -y --no-install-recommends \
   ccache \
   docker.io \
   libncurses-dev \
+  make \
+  gcc \
+  g++ \
   git \
   nodejs \
   yarn
 
 sudo adduser "${USER}" docker
 
-# Configure environment variables
-echo 'export PATH="/usr/lib/ccache:${PATH}"' >> ~/.bashrc_bootstrap
+# Configure environment variables.
+echo 'export PATH="/usr/lib/ccache:${PATH}:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
 echo 'export COCKROACH_BUILDER_CCACHE=1' >> ~/.bashrc_bootstrap
-# NB: GOPATH defaults to ${HOME}/go (but maybe having it set for the remainder
-# of the script is enough reason to keep it here).
-echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_bootstrap
 echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
-
 . ~/.bashrc_bootstrap
 
-mkdir -p "$GOPATH/src/github.com/cockroachdb"
+# Install Go.
+trap 'rm -f /tmp/go.tgz' EXIT
+curl https://dl.google.com/go/go1.10.3.linux-amd64.tar.gz > /tmp/go.tgz
+sha256sum - <<EOF
+fa1b0e45d3b647c252f51f5e1204aba049cde4af177ef9f2181f43004f901035  /tmp/go.tgz
+EOF
+sudo tar -C /usr/local -zxf /tmp/go.tgz
 
-git clone https://github.com/cockroachdb/cockroach.git "$GOPATH/src/github.com/cockroachdb/cockroach"
+# Clone CockroachDB.
+go get -d github.com/cockroachdb/cockroach
 
-. bootstrap/bootstrap-go.sh
+# Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh
