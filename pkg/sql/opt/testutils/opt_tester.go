@@ -114,6 +114,12 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    Builds an expression tree from a SQL query and outputs it without any
 //    optimizations applied to it.
 //
+//  - norm [flags]
+//
+//    Builds an expression tree from a SQL query, applies normalization
+//    optimizations, and outputs it without any exploration optimizations
+//    applied to it.
+//
 //  - opt [flags]
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
@@ -176,6 +182,19 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "build":
 		ev, err := ot.OptBuild()
+		if err != nil {
+			text := strings.TrimSpace(err.Error())
+			if pgerr, ok := err.(*pgerror.Error); ok {
+				// Output Postgres error code if it's available.
+				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
+			}
+			return fmt.Sprintf("error: %s\n", text)
+		}
+		fillInLazyProps(ev)
+		return ev.FormatString(ot.Flags.ExprFormat)
+
+	case "norm":
+		ev, err := ot.OptNorm()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
 			if pgerr, ok := err.(*pgerror.Error); ok {
@@ -286,14 +305,21 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
 func (ot *OptTester) OptBuild() (memo.ExprView, error) {
-	return ot.optimizeExpr(false /* allowOptimizations */)
+	return ot.optimizeExpr(false /* allowNormalizations */, false /* allowExplorations */)
+}
+
+// OptNorm constructs an opt expression tree for the SQL query, with all
+// normalization transformations applied to it. The normalized output of the
+// optbuilder is the final expression tree.
+func (ot *OptTester) OptNorm() (memo.ExprView, error) {
+	return ot.optimizeExpr(true /* allowNormalizations */, false /* allowExplorations */)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
 func (ot *OptTester) Optimize() (memo.ExprView, error) {
-	return ot.optimizeExpr(true /* allowOptimizations */)
+	return ot.optimizeExpr(true /* allowNormalizations */, true /* allowExplorations */)
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -501,10 +527,16 @@ func (ot *OptTester) buildExpr(
 	return b.Build()
 }
 
-func (ot *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error) {
+func (ot *OptTester) optimizeExpr(
+	allowNormalizations, allowExplorations bool,
+) (memo.ExprView, error) {
 	o := xform.NewOptimizer(&ot.evalCtx)
-	if !allowOptimizations {
-		o.DisableOptimizations()
+	if !allowExplorations {
+		if allowNormalizations {
+			o.DisableExplorations()
+		} else {
+			o.DisableOptimizations()
+		}
 	}
 	root, required, err := ot.buildExpr(o.Factory())
 	if err != nil {

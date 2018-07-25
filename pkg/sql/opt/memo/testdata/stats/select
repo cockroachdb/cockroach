@@ -58,7 +58,7 @@ ALTER TABLE b INJECT STATISTICS '[
 ----
 
 # Distinct values calculation with constraints.
-build
+norm
 SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
@@ -76,24 +76,21 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight), fd=()-->(1,2)]
-           └── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight)]
-                ├── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - ]; tight)]
-                │    ├── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight)]
-                │    │    ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-                │    │    │    ├── variable: b.x [type=int, outer=(1)]
-                │    │    │    └── const: 1 [type=int]
-                │    │    └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
-                │    │         ├── variable: b.z [type=int, outer=(2)]
-                │    │         └── const: 2 [type=int]
-                │    └── ge [type=bool, outer=(3), constraints=(/3: [/5 - ]; tight)]
-                │         ├── variable: b.rowid [type=int, outer=(3)]
-                │         └── const: 5 [type=int]
-                └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /8]; tight)]
-                     ├── variable: b.rowid [type=int, outer=(3)]
-                     └── const: 8 [type=int]
+           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           │    ├── variable: b.x [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+           │    ├── variable: b.z [type=int, outer=(2)]
+           │    └── const: 2 [type=int]
+           ├── ge [type=bool, outer=(3), constraints=(/3: [/5 - ]; tight)]
+           │    ├── variable: b.rowid [type=int, outer=(3)]
+           │    └── const: 5 [type=int]
+           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /8]; tight)]
+                ├── variable: b.rowid [type=int, outer=(3)]
+                └── const: 8 [type=int]
 
 # Can't determine stats from filter.
-build
+norm
 SELECT * FROM a WHERE x + y < 10
 ----
 select
@@ -114,12 +111,12 @@ select
            └── const: 10 [type=int]
 
 # Remaining filter.
-build
+norm
 SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=10, distinct(2)=1]
+ ├── stats: [rows=3.33333333, distinct(2)=1]
  ├── key: (1)
  ├── fd: ()-->(2)
  ├── scan a
@@ -128,18 +125,17 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters [type=bool, outer=(1,2), constraints=(/2: [/5 - /5]), fd=()-->(2)]
-      └── and [type=bool, outer=(1,2), constraints=(/2: [/5 - /5])]
-           ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-           │    ├── variable: a.y [type=int, outer=(2)]
-           │    └── const: 5 [type=int]
-           └── lt [type=bool, outer=(1,2)]
-                ├── plus [type=int, outer=(1,2)]
-                │    ├── variable: a.x [type=int, outer=(1)]
-                │    └── variable: a.y [type=int, outer=(2)]
-                └── const: 10 [type=int]
+      ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── lt [type=bool, outer=(1,2)]
+           ├── plus [type=int, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── const: 10 [type=int]
 
 # Contradiction.
-build
+norm
 SELECT * FROM a WHERE x > 5 AND x < 0
 ----
 select
@@ -153,15 +149,14 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters [type=bool, outer=(1), constraints=(contradiction; tight)]
-      └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
-           ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── const: 5 [type=int]
-           └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
-                ├── variable: a.x [type=int, outer=(1)]
-                └── const: 0 [type=int]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 0 [type=int]
 
-build
+norm
 SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 ----
 project
@@ -173,27 +168,19 @@ project
       ├── stats: [rows=100, distinct(2)=100]
       ├── key: (2)
       ├── fd: (2)-->(4)
-      ├── project
+      ├── select
       │    ├── columns: x:1(int!null) z:2(int!null)
-      │    ├── stats: [rows=2000, distinct(2)=100]
-      │    └── select
-      │         ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
-      │         ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=100]
-      │         ├── key: (3)
-      │         ├── fd: (3)-->(1,2)
-      │         ├── scan b
-      │         │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
-      │         │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
-      │         │    ├── key: (3)
-      │         │    └── fd: (3)-->(1,2)
-      │         └── filters [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
-      │              └── and [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
-      │                   ├── gt [type=bool, outer=(1), constraints=(/1: [/1001 - ]; tight)]
-      │                   │    ├── variable: b.x [type=int, outer=(1)]
-      │                   │    └── const: 1000 [type=int]
-      │                   └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /2000]; tight)]
-      │                        ├── variable: b.x [type=int, outer=(1)]
-      │                        └── const: 2000 [type=int]
+      │    ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=100]
+      │    ├── scan b
+      │    │    ├── columns: x:1(int) z:2(int!null)
+      │    │    └── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
+      │    └── filters [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
+      │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1001 - ]; tight)]
+      │         │    ├── variable: b.x [type=int, outer=(1)]
+      │         │    └── const: 1000 [type=int]
+      │         └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /2000]; tight)]
+      │              ├── variable: b.x [type=int, outer=(1)]
+      │              └── const: 2000 [type=int]
       └── aggregations [outer=(1)]
            └── sum [type=decimal, outer=(1)]
                 └── variable: b.x [type=int, outer=(1)]

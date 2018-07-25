@@ -24,7 +24,7 @@ ALTER TABLE a INJECT STATISTICS '[
 ]'
 ----
 
-build
+norm
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10
 ----
 select
@@ -43,15 +43,14 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-      └── and [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-           ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
-           │    ├── variable: ordinality [type=int, outer=(3)]
-           │    └── const: 0 [type=int]
-           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
-                ├── variable: ordinality [type=int, outer=(3)]
-                └── const: 10 [type=int]
+      ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+      │    ├── variable: ordinality [type=int, outer=(3)]
+      │    └── const: 0 [type=int]
+      └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+           ├── variable: ordinality [type=int, outer=(3)]
+           └── const: 10 [type=int]
 
-build
+norm
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
 ----
 select
@@ -70,15 +69,14 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
-      └── and [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
-           ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
-           │    ├── variable: a.y [type=int, outer=(2)]
-           │    └── const: 0 [type=int]
-           └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
-                ├── variable: a.y [type=int, outer=(2)]
-                └── const: 10 [type=int]
+      ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 0 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 10 [type=int]
 
-build
+norm
 SELECT 1 x FROM a WITH ORDINALITY
 ----
 project
@@ -86,19 +84,15 @@ project
  ├── stats: [rows=4000]
  ├── fd: ()-->(4)
  ├── row-number
- │    ├── columns: a.x:1(int!null) y:2(int) ordinality:3(int!null)
+ │    ├── columns: ordinality:3(int!null)
  │    ├── stats: [rows=4000]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (3)-->(1,2)
+ │    ├── key: (3)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000]
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
+ │         └── stats: [rows=4000]
  └── projections
       └── const: 1 [type=int]
 
-build
+norm
 SELECT x FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinality <= 10
 ----
 project
@@ -106,31 +100,29 @@ project
  ├── stats: [rows=10]
  ├── key: (1)
  └── select
-      ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+      ├── columns: x:1(int!null) ordinality:3(int!null)
       ├── stats: [rows=10, distinct(3)=10]
       ├── key: (1)
-      ├── fd: (1)-->(2,3), (3)-->(1,2)
+      ├── fd: (1)-->(3), (3)-->(1)
       ├── row-number
-      │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+      │    ├── columns: x:1(int!null) ordinality:3(int!null)
       │    ├── stats: [rows=4000, distinct(3)=4000]
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3), (3)-->(1,2)
+      │    ├── fd: (1)-->(3), (3)-->(1)
       │    └── scan a
-      │         ├── columns: x:1(int!null) y:2(int)
+      │         ├── columns: x:1(int!null)
       │         ├── stats: [rows=4000]
-      │         ├── key: (1)
-      │         └── fd: (1)-->(2)
+      │         └── key: (1)
       └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-           └── and [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-                ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
-                │    ├── variable: ordinality [type=int, outer=(3)]
-                │    └── const: 0 [type=int]
-                └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
-                     ├── variable: ordinality [type=int, outer=(3)]
-                     └── const: 10 [type=int]
+           ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+           │    ├── variable: ordinality [type=int, outer=(3)]
+           │    └── const: 0 [type=int]
+           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+                ├── variable: ordinality [type=int, outer=(3)]
+                └── const: 10 [type=int]
 
 
-build
+norm
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality = 2
 ----
 select
