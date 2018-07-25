@@ -226,8 +226,9 @@ func (dsp *DistSQLPlanner) Run(
 		recv.SetError(err)
 		return
 	}
+
 	// TODO(radu): this should go through the flow scheduler.
-	if err := flow.Start(ctx, func() {}); err != nil {
+	if err := flow.StartSync(ctx, func() {}); err != nil {
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}

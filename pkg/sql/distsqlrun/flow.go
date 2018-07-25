@@ -457,13 +457,10 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	return nil
 }
 
-// Start starts the flow (each processor runs in their own goroutine).
-//
-// Generally if errors are encountered during the setup part, they're returned.
-// But if the flow is a synchronous one, then no error is returned; instead the
-// setup error is pushed to the syncFlowConsumer. In this case, a subsequent
-// call to f.Wait() will not block.
-func (f *Flow) Start(ctx context.Context, doneFn func()) error {
+// startInternal starts the flow. All processors apart from the last one are
+// started, each in their own goroutine. The caller must forward any returned
+// error to syncFlowConsumer if set.
+func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -481,12 +478,6 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if err := f.flowRegistry.RegisterFlow(
 		ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
 	); err != nil {
-		if f.syncFlowConsumer != nil {
-			// For sync flows, the error goes to the consumer.
-			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
-			f.syncFlowConsumer.ProducerDone()
-			return nil
-		}
 		return err
 	}
 
@@ -498,9 +489,51 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	for _, s := range f.startables {
 		s.start(ctx, &f.waitGroup, f.ctxCancel)
 	}
-	for _, p := range f.processors {
+	for i := 0; i < len(f.processors)-1; i++ {
 		f.waitGroup.Add(1)
-		go p.Run(ctx, &f.waitGroup)
+		go f.processors[i].Run(ctx, &f.waitGroup)
+	}
+	return nil
+}
+
+// StartAsync starts the flow. Each processor runs in their own goroutine.
+//
+// Generally if errors are encountered during the setup part, they're returned.
+// But if the flow is a synchronous one, then no error is returned; instead the
+// setup error is pushed to the syncFlowConsumer. In this case, a subsequent
+// call to f.Wait() will not block.
+func (f *Flow) StartAsync(ctx context.Context, doneFn func()) error {
+	if err := f.startInternal(ctx, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if f.syncFlowConsumer != nil {
+			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	if len(f.processors) > 0 {
+		f.waitGroup.Add(1)
+		go f.processors[len(f.processors)-1].Run(ctx, &f.waitGroup)
+	}
+	return nil
+}
+
+// StartSync starts the flow just like StartAsync but the last processor is run
+// from the main goroutine. Wait() must still be called afterwards as other
+// goroutines might be spawned.
+func (f *Flow) StartSync(ctx context.Context, doneFn func()) error {
+	if err := f.startInternal(ctx, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if f.syncFlowConsumer != nil {
+			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	if len(f.processors) > 0 {
+		f.processors[len(f.processors)-1].Run(ctx, nil)
 	}
 	return nil
 }
