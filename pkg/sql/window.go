@@ -285,6 +285,24 @@ func (p *planner) constructWindowDefinitions(
 		if _, ok := namedWindowSpecs[name]; ok {
 			return pgerror.NewErrorf(pgerror.CodeWindowingError, "window %q is already defined", name)
 		}
+		if windowDef.Frame != nil {
+			bounds := windowDef.Frame.Bounds
+			startBound, endBound := bounds.StartBound, bounds.EndBound
+			if startBound.OffsetExpr != nil {
+				typedStartOffsetExpr, err := tree.TypeCheckAndRequire(startBound.OffsetExpr, &p.semaCtx, types.Int, "window frame start")
+				if err != nil {
+					return err
+				}
+				startBound.OffsetExpr = typedStartOffsetExpr
+			}
+			if endBound != nil && endBound.OffsetExpr != nil {
+				typedEndOffsetExpr, err := tree.TypeCheckAndRequire(endBound.OffsetExpr, &p.semaCtx, types.Int, "window frame end")
+				if err != nil {
+					return err
+				}
+				endBound.OffsetExpr = typedEndOffsetExpr
+			}
+		}
 		namedWindowSpecs[name] = windowDef
 	}
 
