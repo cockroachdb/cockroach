@@ -1207,7 +1207,13 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 	if err != nil {
 		return err
 	}
-	return nl.Heartbeat(ctx, l)
+
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+		if err = nl.Heartbeat(ctx, l); err != storage.ErrEpochIncremented {
+			break
+		}
+	}
+	return err
 }
 
 // advanceClock advances the mtc's manual clock such that all
