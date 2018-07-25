@@ -762,12 +762,18 @@ sort
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
 ----
-error (0A000): ORDER BY index not supported
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,+3
+ └── project
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── scan abc
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
-error (0A000): ORDER BY index not supported
+error: table "a" not found
 
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -796,7 +802,8 @@ CREATE TABLE abcd (
   b INT,
   c INT,
   d INT,
-  INDEX abc (a, b, c)
+  INDEX abc (a, b, c),
+  INDEX bcd (b, c DESC, d)
 )
 ----
 TABLE abcd
@@ -806,10 +813,15 @@ TABLE abcd
  ├── d int
  ├── INDEX primary
  │    └── a int not null
- └── INDEX abc
-      ├── a int not null
+ ├── INDEX abc
+ │    ├── a int not null
+ │    ├── b int
+ │    └── c int
+ └── INDEX bcd
       ├── b int
-      └── c int
+      ├── c int desc
+      ├── d int
+      └── a int not null
 
 # Verify that projections after ORDER BY perform correctly (i.e., the outer
 # expression does not guarantee it will apply the ORDER BY).
@@ -898,6 +910,115 @@ limit
  │         ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) raw_bytes:4(bytes)
  │         └── ordering: +1,+2,+3
  └── const: 1 [type=int]
+
+build
+SELECT a FROM abcd ORDER BY PRIMARY KEY abcd
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: +1
+ └── scan abcd
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      └── ordering: +1
+
+build
+SELECT a FROM abcd ORDER BY b, PRIMARY KEY abcd
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,+1
+ └── project
+      ├── columns: a:1(int!null) b:2(int)
+      └── scan abcd
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@abc
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +1,+2,+3
+ └── project
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      └── scan abcd
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@abc DESC
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: -1,-2,-3
+ └── project
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      └── scan abcd
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM abcd AS foo ORDER BY INDEX abcd@abc DESC
+----
+error (42P01): no data source matches prefix: t.public.abcd
+
+build
+SELECT a FROM abcd AS foo ORDER BY INDEX foo@abc DESC
+----
+error: table "foo" not found
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@bcd
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,-3,+4,+1
+ └── scan abcd
+      └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@bcd DESC
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: -2,+3,-4,-1
+ └── scan abcd
+      └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+
+build
+SELECT a FROM abcd ORDER BY INDEX abcd@nonexistent
+----
+error: index "nonexistent" not found
+
+build
+SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,-3,+4,+1
+ └── scan abcd
+      └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM t.abcd ORDER BY INDEX t.abcd@bcd
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,-3,+4,+1
+ └── scan abcd
+      └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM public.abcd ORDER BY INDEX public.abcd@bcd
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,-3,+4,+1
+ └── scan abcd
+      └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+
+build
+SELECT a FROM (SELECT a FROM abcd) ORDER BY INDEX abcd@bcd
+----
+error (42P01): no data source matches prefix: t.public.abcd
 
 # Drop previous table with same name, but different schema.
 exec-ddl

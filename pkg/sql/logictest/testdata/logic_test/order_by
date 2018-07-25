@@ -375,6 +375,18 @@ statement error ORDER BY INDEX in window definition is not supported
 SELECT avg(k) OVER (ORDER BY PRIMARY KEY kv) FROM kv
 
 statement ok
+INSERT INTO kv VALUES (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)
+
+query I
+SELECT k FROM kv ORDER BY INDEX kv@foo
+----
+1
+2
+3
+4
+5
+
+statement ok
 CREATE TABLE abc2 (
   a INT,
   b INT,
@@ -428,3 +440,9 @@ SELECT a, b, c FROM abc2 ORDER BY INDEX abc2@ba DESC
 3  30  300
 2  30  400
 1  30  500
+
+statement error relation \"x\" does not exist
+SELECT a, b, c FROM abc2 AS x ORDER BY INDEX x@bc
+
+statement error no data source matches prefix: test.public.abc2
+SELECT a, b, c FROM abc2 AS x ORDER BY INDEX abc2@bc
