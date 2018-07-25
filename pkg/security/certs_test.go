@@ -203,7 +203,7 @@ func generateSplitCACerts(certsDir string) error {
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		512, time.Hour*96, true, true,
 	); err != nil {
-		return errors.Errorf("could not generate CA pair: %v", err)
+		return errors.Errorf("could not generate client CA pair: %v", err)
 	}
 
 	if err := security.CreateClientPair(
@@ -218,6 +218,20 @@ func generateSplitCACerts(certsDir string) error {
 		512, time.Hour*48, true, security.RootUser,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
+	}
+
+	if err := security.CreateUICAPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		512, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Errorf("could not generate UI CA pair: %v", err)
+	}
+
+	if err := security.CreateUIPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedUICAKey),
+		512, time.Hour*48, true, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Errorf("could not generate UI pair: %v", err)
 	}
 
 	return nil
@@ -416,6 +430,10 @@ func TestUseSplitCACerts(t *testing.T) {
 		{"root", security.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
 		{"node", security.EmbeddedCACert, "node", "tls: bad certificate"},
+		// We can't verify the node certificate using the UI cert.
+		{"node", security.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
+		// And the SQL server doesn't know what the ui.crt is.
+		{"node", security.EmbeddedCACert, "ui", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
@@ -454,9 +472,12 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete the ca-client.crt before starting the node.
+	// Delete ca-client.crt and ca-ui.crt before starting the node.
 	// This will make the server fall back on using ca.crt.
 	if err := os.Remove(filepath.Join(certsDir, "ca-client.crt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(certsDir, "ca-ui.crt")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -490,7 +511,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		t.Fatalf("Expected SSL error, got success: %s", body)
 	}
 
-	// New client. With certs this time.
+	// New client with certs, but the UI CA is gone, we have no way to verify the Admin UI cert.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	httpClient, err = clientContext.GetHTTPClient()
@@ -501,11 +522,10 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
-	// TODO(mberhault): this will succeed once the UI TLSConfig does not
-	// check client certificates.
+
 	_, err = httpClient.Do(req)
-	if expected := "tls: bad certificate"; !testutils.IsError(err, expected) {
-		t.Errorf("expected error %v, got %v", expected, err)
+	if expected := "certificate signed by unknown authority"; !testutils.IsError(err, expected) {
+		t.Fatalf("Expected error %q, got %v", expected, err)
 	}
 
 	// Check KV connection.
@@ -537,5 +557,4 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 			t.Errorf("#%d: expected error %v, got %v", i, tc.expectedError, err)
 		}
 	}
-
 }
