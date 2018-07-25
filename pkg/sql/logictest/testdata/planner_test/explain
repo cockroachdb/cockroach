@@ -735,3 +735,11 @@ render              ·         ·                                           (x i
 
 statement error EXPLAIN \(OPT\) only supported with the cost-based optimizer
 EXPLAIN (OPT) SELECT 1
+
+# Make sure that casts of null values to collated strings roundtrip correctly.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT NULL COLLATE en
+----
+render         ·         ·                                ("?column?")  "?column?"=CONST
+ │             render 0  CAST(NULL AS STRING) COLLATE en  ·             ·
+ └── emptyrow  ·         ·                                ()            ·
