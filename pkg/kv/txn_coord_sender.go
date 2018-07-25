@@ -496,6 +496,11 @@ func (tc *TxnCoordSender) OnFinish(onFinishFn func(error)) {
 	tc.mu.onFinishFn = onFinishFn
 }
 
+// DisablePipelining is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) DisablePipelining() {
+	tc.interceptorAlloc.txnPipeliner.disabled = true
+}
+
 // Send implements the batch.Sender interface.
 //
 // Read/write mutating requests have their key or key range added to the

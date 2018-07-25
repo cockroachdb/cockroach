@@ -416,6 +416,15 @@ func (r *Replica) AdminMerge(
 		// TODO(benesch): expose a proper API for preventing the fast path.
 		_ = txn.CommitTimestamp()
 
+		// Pipelining might send QueryIntent requests to the RHS after the RHS has
+		// noticed the merge and started blocking all traffic. This causes the merge
+		// transaction to deadlock. Just turn pipelining off; the structure of the
+		// merge transaction means pipelining provides no performance benefit
+		// anyway.
+		if err := txn.DisablePipelining(); err != nil {
+			return err
+		}
+
 		// Update the range descriptor for the receiving range.
 		{
 			b := txn.NewBatch()
@@ -471,22 +480,15 @@ func (r *Replica) AdminMerge(
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
-		//
-		// We make sure to send this request through the txn so that we can stall
-		// its write pipeline and prevent any reads to the right-hand range when
-		// the EndTransactionRequest is issued.
-		// TODO(nvanbenschoten): this is subtle and it's not clear that its the
-		// best way to achieve this goal. Reconsider.
-		b = txn.NewBatch()
-		b.AddRawRequest(&roachpb.GetSnapshotForMergeRequest{
-			RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-			LeftRange:     *origLeftDesc,
-		})
-		if err := txn.Run(ctx, b); err != nil {
-			return err
+		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
+			&roachpb.GetSnapshotForMergeRequest{
+				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
+				LeftRange:     *origLeftDesc,
+			})
+		if pErr != nil {
+			return pErr.GoError()
 		}
-		br := b.RawResponse()
-		rhsSnapshotRes := br.Responses[0].GetInner().(*roachpb.GetSnapshotForMergeResponse)
+		rhsSnapshotRes := br.(*roachpb.GetSnapshotForMergeResponse)
 
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the

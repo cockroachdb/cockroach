@@ -207,7 +207,13 @@ func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.closers = append(s.mu.closers, c)
+	select {
+	case <-s.stopper:
+		// Close immediately.
+		c.Close()
+	default:
+		s.mu.closers = append(s.mu.closers, c)
+	}
 }
 
 // WithCancelOnQuiesce returns a child context which is canceled when the
@@ -217,7 +223,7 @@ func (s *Stopper) AddCloser(c Closer) {
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
-	return s.withCancel(ctx, s.mu.qCancels)
+	return s.withCancel(ctx, s.mu.qCancels, s.quiescer)
 }
 
 // WithCancelOnStop returns a child context which is canceled when the
@@ -227,24 +233,31 @@ func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, fun
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnStop(ctx context.Context) (context.Context, func()) {
-	return s.withCancel(ctx, s.mu.sCancels)
+	return s.withCancel(ctx, s.mu.sCancels, s.stopper)
 }
 
 func (s *Stopper) withCancel(
-	ctx context.Context, cancels map[int]func(),
+	ctx context.Context, cancels map[int]func(), cancelCh chan struct{},
 ) (context.Context, func()) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := s.mu.idAlloc
-	s.mu.idAlloc++
-	cancels[id] = cancel
-	return ctx, func() {
+	select {
+	case <-cancelCh:
+		// Cancel immediately.
 		cancel()
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		delete(cancels, id)
+		return ctx, func() {}
+	default:
+		id := s.mu.idAlloc
+		s.mu.idAlloc++
+		cancels[id] = cancel
+		return ctx, func() {
+			cancel()
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			delete(cancels, id)
+		}
 	}
 }
 
@@ -461,10 +474,13 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	s.Quiesce(ctx)
+	s.mu.Lock()
 	for _, cancel := range s.mu.sCancels {
 		cancel()
 	}
 	close(s.stopper)
+	s.mu.Unlock()
+
 	s.stop.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
