@@ -338,25 +338,6 @@ func (*DBool) ResolvedType() types.T {
 	return types.Bool
 }
 
-// internalCompare implements the Datum interface.
-func (d *DBool) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DBool)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if !*d && *v {
-		return -1
-	}
-	if *d && !*v {
-		return 1
-	}
-	return 0
-}
-
 // Prev implements the Datum interface.
 func (*DBool) Prev(_ *EvalContext) (Datum, bool) {
 	return DBoolFalse, true
@@ -447,30 +428,6 @@ func (*DInt) ResolvedType() types.T {
 	return types.Int
 }
 
-// internalCompare implements the Datum interface.
-func (d *DInt) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	var v DInt
-	switch t := UnwrapDatum(ctx, other).(type) {
-	case *DInt:
-		v = *t
-	case *DFloat, *DDecimal:
-		return -t.internalCompare(ctx, d)
-	default:
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < v {
-		return -1
-	}
-	if *d > v {
-		return 1
-	}
-	return 0
-}
-
 // Prev implements the Datum interface.
 func (d *DInt) Prev(_ *EvalContext) (Datum, bool) {
 	return NewDInt(*d - 1), true
@@ -548,42 +505,6 @@ func ParseDFloat(s string) (*DFloat, error) {
 // ResolvedType implements the TypedExpr interface.
 func (*DFloat) ResolvedType() types.T {
 	return types.Float
-}
-
-// internalCompare implements the Datum interface.
-func (d *DFloat) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	var v DFloat
-	switch t := UnwrapDatum(ctx, other).(type) {
-	case *DFloat:
-		v = *t
-	case *DInt:
-		v = DFloat(MustBeDInt(t))
-	case *DDecimal:
-		return -t.internalCompare(ctx, d)
-	default:
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < v {
-		return -1
-	}
-	if *d > v {
-		return 1
-	}
-	// NaN sorts before non-NaN (#10109).
-	if *d == v {
-		return 0
-	}
-	if math.IsNaN(float64(*d)) {
-		if math.IsNaN(float64(v)) {
-			return 0
-		}
-		return -1
-	}
-	return 1
 }
 
 // Prev implements the Datum interface.
@@ -703,36 +624,6 @@ func (*DDecimal) ResolvedType() types.T {
 	return types.Decimal
 }
 
-// internalCompare implements the Datum interface.
-func (d *DDecimal) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v := ctx.getTmpDec()
-	switch t := UnwrapDatum(ctx, other).(type) {
-	case *DDecimal:
-		v = &t.Decimal
-	case *DInt:
-		v.SetCoefficient(int64(*t)).SetExponent(0)
-	case *DFloat:
-		if _, err := v.SetFloat64(float64(*t)); err != nil {
-			panic(err)
-		}
-	default:
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	// NaNs sort first in SQL.
-	if dn, vn := d.Form == apd.NaN, v.Form == apd.NaN; dn && !vn {
-		return -1
-	} else if !dn && vn {
-		return 1
-	} else if dn && vn {
-		return 0
-	}
-	return d.Cmp(v)
-}
-
 // Prev implements the Datum interface.
 func (d *DDecimal) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -842,25 +733,6 @@ func MustBeDString(e Expr) DString {
 // ResolvedType implements the TypedExpr interface.
 func (*DString) ResolvedType() types.T {
 	return types.String
-}
-
-// internalCompare implements the Datum interface.
-func (d *DString) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DString)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < *v {
-		return -1
-	}
-	if *d > *v {
-		return 1
-	}
-	return 0
 }
 
 // Prev implements the Datum interface.
@@ -986,19 +858,6 @@ func (d *DCollatedString) ResolvedType() types.T {
 	return types.TCollatedString{Locale: d.Locale}
 }
 
-// internalCompare implements the Datum interface.
-func (d *DCollatedString) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DCollatedString)
-	if !ok || d.Locale != v.Locale {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	return bytes.Compare(d.Key, v.Key)
-}
-
 // Prev implements the Datum interface.
 func (d *DCollatedString) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -1071,25 +930,6 @@ func AsDBytes(e Expr) (DBytes, bool) {
 // ResolvedType implements the TypedExpr interface.
 func (*DBytes) ResolvedType() types.T {
 	return types.Bytes
-}
-
-// internalCompare implements the Datum interface.
-func (d *DBytes) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DBytes)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < *v {
-		return -1
-	}
-	if *d > *v {
-		return 1
-	}
-	return 0
 }
 
 // Prev implements the Datum interface.
@@ -1173,19 +1013,6 @@ func NewDUuid(d DUuid) *DUuid {
 // ResolvedType implements the TypedExpr interface.
 func (*DUuid) ResolvedType() types.T {
 	return types.UUID
-}
-
-// internalCompare implements the Datum interface.
-func (d *DUuid) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DUuid)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	return bytes.Compare(d.GetBytes(), v.GetBytes())
 }
 
 func (d DUuid) equal(other *DUuid) bool {
@@ -1289,20 +1116,6 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 // ResolvedType implements the TypedExpr interface.
 func (*DIPAddr) ResolvedType() types.T {
 	return types.INet
-}
-
-// internalCompare implements the Datum interface.
-func (d *DIPAddr) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DIPAddr)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-
-	return d.IPAddr.Compare(&v.IPAddr)
 }
 
 func (d DIPAddr) equal(other *DIPAddr) bool {
@@ -1445,30 +1258,6 @@ func (*DDate) ResolvedType() types.T {
 	return types.Date
 }
 
-// internalCompare implements the Datum interface.
-func (d *DDate) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	var v DDate
-	switch t := UnwrapDatum(ctx, other).(type) {
-	case *DDate:
-		v = *t
-	case *DTimestamp, *DTimestampTZ:
-		return compareTimestamps(ctx, d, other)
-	default:
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < v {
-		return -1
-	}
-	if v < *d {
-		return 1
-	}
-	return 0
-}
-
 // Prev implements the Datum interface.
 func (d *DDate) Prev(_ *EvalContext) (Datum, bool) {
 	return NewDDate(*d - 1), true
@@ -1545,15 +1334,6 @@ func ParseDTime(s string) (*DTime, error) {
 // ResolvedType implements the TypedExpr interface.
 func (*DTime) ResolvedType() types.T {
 	return types.Time
-}
-
-// internalCompare implements the Datum interface.
-func (d *DTime) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1648,15 +1428,6 @@ func ParseDTimeTZ(s string, loc *time.Location) (*DTimeTZ, error) {
 // ResolvedType implements the TypedExpr interface.
 func (*DTimeTZ) ResolvedType() types.T {
 	return types.TimeTZ
-}
-
-// internalCompare implements the Datum interface.
-func (d *DTimeTZ) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1897,15 +1668,6 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 	return 0
 }
 
-// internalCompare implements the Datum interface.
-func (d *DTimestamp) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	return compareTimestamps(ctx, d, other)
-}
-
 // Prev implements the Datum interface.
 func (d *DTimestamp) Prev(_ *EvalContext) (Datum, bool) {
 	return &DTimestamp{Time: d.Add(-time.Microsecond)}, true
@@ -1994,15 +1756,6 @@ func ParseDTimestampTZ(
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestampTZ) ResolvedType() types.T {
 	return types.TimestampTZ
-}
-
-// internalCompare implements the Datum interface.
-func (d *DTimestampTZ) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -2189,19 +1942,6 @@ func (*DInterval) ResolvedType() types.T {
 	return types.Interval
 }
 
-// internalCompare implements the Datum interface.
-func (d *DInterval) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DInterval)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	return d.Duration.Compare(v.Duration)
-}
-
 // Prev implements the Datum interface.
 func (d *DInterval) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -2381,26 +2121,6 @@ func (*DJSON) ResolvedType() types.T {
 	return types.JSON
 }
 
-// internalCompare implements the Datum interface.
-func (d *DJSON) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DJSON)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	// No avenue for us to pass up this error here at the moment, but Compare
-	// only errors for invalid encoded data.
-	// TODO(justin): modify internalCompare to allow passing up errors.
-	c, err := d.JSON.Compare(v.JSON)
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
 // Prev implements the Datum interface.
 func (d *DJSON) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -2511,35 +2231,6 @@ func (d *DTuple) ResolvedType() types.T {
 		}
 	}
 	return d.typ
-}
-
-// internalCompare implements the Datum interface.
-func (d *DTuple) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DTuple)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	n := len(d.D)
-	if n > len(v.D) {
-		n = len(v.D)
-	}
-	for i := 0; i < n; i++ {
-		c := d.D[i].internalCompare(ctx, v.D[i])
-		if c != 0 {
-			return c
-		}
-	}
-	if len(d.D) < len(v.D) {
-		return -1
-	}
-	if len(d.D) > len(v.D) {
-		return 1
-	}
-	return 0
 }
 
 // Prev implements the Datum interface.
@@ -2763,14 +2454,6 @@ func (dNull) ResolvedType() types.T {
 	return types.Unknown
 }
 
-// internalCompare implements the Datum interface.
-func (d dNull) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		return 0
-	}
-	return -1
-}
-
 // Prev implements the Datum interface.
 func (d dNull) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -2856,35 +2539,6 @@ func MustBeDArray(e Expr) *DArray {
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() types.T {
 	return types.TArray{Typ: d.ParamTyp}
-}
-
-// internalCompare implements the Datum interface.
-func (d *DArray) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DArray)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	n := d.Len()
-	if n > v.Len() {
-		n = v.Len()
-	}
-	for i := 0; i < n; i++ {
-		c := d.Array[i].internalCompare(ctx, v.Array[i])
-		if c != 0 {
-			return c
-		}
-	}
-	if d.Len() < v.Len() {
-		return -1
-	}
-	if d.Len() > v.Len() {
-		return 1
-	}
-	return 0
 }
 
 // Prev implements the Datum interface.
@@ -3037,25 +2691,6 @@ func (d *DOid) AsRegProc(name string) *DOid {
 // AmbiguousFormat implements the Datum interface.
 func (*DOid) AmbiguousFormat() bool { return true }
 
-// internalCompare implements the Datum interface.
-func (d *DOid) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	v, ok := UnwrapDatum(ctx, other).(*DOid)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if d.DInt < v.DInt {
-		return -1
-	}
-	if d.DInt > v.DInt {
-		return 1
-	}
-	return 0
-}
-
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
 	if d.semanticType == coltypes.Oid || d.name == "" {
@@ -3182,18 +2817,6 @@ func (d *DOidWrapper) ResolvedType() types.T {
 	return types.WrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
 }
 
-// internalCompare implements the Datum interface.
-func (d *DOidWrapper) internalCompare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	if v, ok := other.(*DOidWrapper); ok {
-		return d.Wrapped.internalCompare(ctx, v.Wrapped)
-	}
-	return d.Wrapped.internalCompare(ctx, other)
-}
-
 // Prev implements the Datum interface.
 func (d *DOidWrapper) Prev(ctx *EvalContext) (Datum, bool) {
 	prev, ok := d.Wrapped.Prev(ctx)
@@ -3259,11 +2882,6 @@ func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
 		panic(fmt.Sprintf("fail %s", err))
 	}
 	return out
-}
-
-// internalCompare implements the Datum interface.
-func (d *Placeholder) internalCompare(ctx *EvalContext, other Datum) int {
-	return d.mustGetValue(ctx).internalCompare(ctx, other)
 }
 
 // Prev implements the Datum interface.
