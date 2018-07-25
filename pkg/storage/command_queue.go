@@ -94,6 +94,10 @@ type cmd struct {
 	// don't need to keep multiple *cmd slices in-sync.
 	prereqs    *[]*cmd
 	prereqsBuf []*cmd
+	// Only initialized if needed and only ever initialized
+	// on a parent cmd. Stores all of the IDs of commands
+	// in the prereq slice to avoid duplicates.
+	prereqIDs map[int64]struct{}
 
 	pending chan struct{} // closed when complete
 }
@@ -229,7 +233,26 @@ func (c *cmd) ResolvePendingPrereq() {
 	// dependencies (see rules in command_queue.go) will work as expected with
 	// regard to properly transferring dependencies. This is because these
 	// timestamp rules all exhibit a transitive relationship.
-	*c.prereqs = append(*c.prereqs, *pre.prereqs...)
+	if len(*pre.prereqs) > 0 {
+		// Avoid adding duplicate prereqs into the prereq slice. If we naively
+		// inserted duplicate prereqs into the slice then it could grow
+		// quadratically in cases where multiple prereqs of cmd each share
+		// common prerequisites themselves.
+		if c.prereqIDs == nil {
+			// Lazily compute prereq ID set. This is only necessary during
+			// command cancellation scenario.
+			c.prereqIDs = make(map[int64]struct{}, len(*c.prereqs))
+			for _, pre := range *c.prereqs {
+				c.prereqIDs[pre.id] = struct{}{}
+			}
+		}
+		for _, newPre := range *pre.prereqs {
+			if _, ok := c.prereqIDs[newPre.id]; !ok {
+				*c.prereqs = append(*c.prereqs, newPre)
+				c.prereqIDs[newPre.id] = struct{}{}
+			}
+		}
+	}
 
 	// Truncate the command's prerequisite list so that it no longer includes
 	// the first prerequisite. Before doing so, nil out prefix of slice to allow
@@ -238,6 +261,9 @@ func (c *cmd) ResolvePendingPrereq() {
 	// especially during cascade command cancellation.
 	(*c.prereqs)[0] = nil
 	(*c.prereqs) = (*c.prereqs)[1:]
+
+	// Delete from the prereq ID set (if c.prereqIDs is nil, this is a no-op).
+	delete(c.prereqIDs, pre.id)
 }
 
 // OptimisticallyResolvePrereqs removes all prerequisite in the cmd's prereq
