@@ -547,8 +547,17 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	case *UnaryExpr:
 		switch cv := t.Expr.(type) {
 		case *NumVal:
-			if token, ok := unaryOpToToken[t.Operator]; ok {
-				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+			if tok, ok := unaryOpToToken[t.Operator]; ok {
+				switch tok {
+				case token.ADD:
+					return cv
+				case token.SUB:
+					// We always coerce -0 to 0 everywhere else, so this can be a passthrough.
+					if cv.Value.Kind() == constant.Float && constant.Compare(cv.Value, token.EQL, constant.MakeFloat64(0)) {
+						return cv
+					}
+				}
+				return &NumVal{Value: constant.UnaryOp(tok, cv.Value, 0)}
 			}
 			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
 				if intVal, ok := cv.asConstantInt(); ok {
