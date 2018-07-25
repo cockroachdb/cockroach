@@ -213,6 +213,7 @@ func TestNormalizeExpr(t *testing.T) {
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
 		{`(random() + 1.0)::INT`, `(random() + 1.0)::INT`},
 		{`('a' || left('b', random()::INT)) COLLATE en`, `('a' || left('b', random()::INT)) COLLATE en`},
+		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE en`},
 		{`(1.0 + random()) IS OF (INT)`, `(1.0 + random()) IS OF (INT)`},
 		// #14687: ensure that negative divisors flip the inequality when rotating.
 		{`1 < a / -2`, `a < -2`},

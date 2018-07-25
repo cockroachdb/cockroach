@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -178,6 +179,22 @@ func BenchmarkPrettyData(b *testing.B) {
 			for _, w := range []int{1, 30, 80} {
 				pretty.Pretty(doc, w, true /*useTabs*/, 4 /*tabWidth*/)
 			}
+		}
+	}
+}
+
+func TestPrettyExprs(t *testing.T) {
+	tests := map[tree.Expr]string{
+		&tree.CastExpr{
+			Expr: tree.NewDString("foo"),
+			Type: &coltypes.TCollatedString{Locale: "en"},
+		}: `CAST('foo':::STRING AS STRING) COLLATE en`,
+	}
+
+	for expr, pretty := range tests {
+		got := tree.Pretty(expr)
+		if pretty != got {
+			t.Fatalf("got: %s\nexpected: %s", got, pretty)
 		}
 	}
 }
