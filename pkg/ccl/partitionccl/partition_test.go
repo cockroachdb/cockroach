@@ -1186,15 +1186,15 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// expr is the expected output
 		expr string
 	}{
-		{`p33p44`, `(a, b) IN ((3, 3), (4, 4))`},
-		{`p335p445`, `(a, b, c) IN ((3, 3, 5), (4, 4, 5))`},
-		{`p33dp44d`, `(((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))) OR (((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5)))`},
+		{`p33p44`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
+		{`p335p445`, `((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))`},
+		{`p33dp44d`, `(((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5))))`},
 		// NB See the TODO in the impl for why this next case has some clearly
 		// unrelated `!=`s.
-		{`p6d`, `((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4)))`},
-		{`pdd`, `((a, b) != (3, 3)) AND (((a, b) != (4, 4)) AND ((a) != (6)))`},
+		{`p6d`, `((a) = (6)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
+		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a) = (6)))`},
 
-		{`p335p445,p6d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR (((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4))))`},
+		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a) = (6)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
 
 		// TODO(dan): The expression simplification in this method is all done
 		// by our normal SQL expression simplification code. Seems like it could
@@ -1203,9 +1203,9 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// because for every requested partition, all descendent partitions are
 		// omitted, which is an optimization to save a little work with the side
 		// benefit of making more of these what we want.
-		{`p335p445,p33dp44d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR ((((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5))) OR (((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))))`},
-		{`p33p44,p335p445`, `(a, b) IN ((3, 3), (4, 4))`},
-		{`p33p44,p335p445,p33dp44d`, `(a, b) IN ((3, 3), (4, 4))`},
+		{`p335p445,p33dp44d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR ((((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5)))))`},
+		{`p33p44,p335p445`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
+		{`p33p44,p335p445,p33dp44d`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
 	}
 
 	evalCtx := &tree.EvalContext{}

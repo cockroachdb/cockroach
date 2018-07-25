@@ -262,9 +262,6 @@ func selectPartitionExprs(
 	if err != nil {
 		return nil, err
 	}
-	if e, equiv := sql.SimplifyExpr(evalCtx, expr); equiv {
-		expr = e
-	}
 	// In order to typecheck during simplification and normalization, we used
 	// dummy IndexVars. Swap them out for actual column references.
 	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (error, bool, tree.Expr) {
