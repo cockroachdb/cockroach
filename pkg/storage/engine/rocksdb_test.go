@@ -1400,68 +1400,76 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 	for _, entries := range []int{10, 1000, 100000} {
 		b.Run(fmt.Sprintf("entries=%d", entries), func(b *testing.B) {
-			db := setupMVCCInMemRocksDB(b, "unused").(InMem)
-			defer db.Close()
+			for _, deleted := range []int{entries, entries - 1} {
+				b.Run(fmt.Sprintf("deleted=%d", deleted), func(b *testing.B) {
+					db := setupMVCCInMemRocksDB(b, "unused").(InMem)
+					defer db.Close()
 
-			makeKey := func(i int) roachpb.Key {
-				return roachpb.Key(fmt.Sprintf("%09d", i))
-			}
-
-			// Create an SST with N entries and ingest it. This is a fast way to get a
-			// lof of entries into RocksDB.
-			{
-				sst, err := MakeRocksDBSstFileWriter()
-				if err != nil {
-					b.Fatal(sst)
-				}
-				defer sst.Close()
-
-				for i := 0; i < entries; i++ {
-					kv := MVCCKeyValue{
-						Key: MVCCKey{
-							Key: makeKey(i),
-						},
+					makeKey := func(i int) roachpb.Key {
+						return roachpb.Key(fmt.Sprintf("%09d", i))
 					}
-					if err := sst.Add(kv); err != nil {
+
+					// Create an SST with N entries and ingest it. This is a fast way to get a
+					// lot of entries into RocksDB.
+					{
+						sst, err := MakeRocksDBSstFileWriter()
+						if err != nil {
+							b.Fatal(sst)
+						}
+						defer sst.Close()
+
+						for i := 0; i < entries; i++ {
+							kv := MVCCKeyValue{
+								Key: MVCCKey{
+									Key: makeKey(i),
+								},
+							}
+							if err := sst.Add(kv); err != nil {
+								b.Fatal(err)
+							}
+						}
+
+						sstContents, err := sst.Finish()
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						filename := fmt.Sprintf("ingest")
+						if err := db.WriteFile(filename, sstContents); err != nil {
+							b.Fatal(err)
+						}
+
+						err = db.IngestExternalFiles(context.Background(), []string{filename}, true)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+
+					// Create a range tombstone that deletes most (or all) of those entries.
+					from := makeKey(0)
+					to := makeKey(deleted)
+					if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
 						b.Fatal(err)
 					}
-				}
 
-				sstContents, err := sst.Finish()
-				if err != nil {
-					b.Fatal(err)
-				}
-
-				filename := fmt.Sprintf("ingest")
-				if err := db.WriteFile(filename, sstContents); err != nil {
-					b.Fatal(err)
-				}
-
-				err = db.IngestExternalFiles(context.Background(), []string{filename}, true)
-				if err != nil {
-					b.Fatal(err)
-				}
-			}
-
-			// Create a range tombstone that overlaps all of these entries.
-			from := makeKey(0)
-			to := makeKey(entries)
-			if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
-				b.Fatal(err)
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-				iter.Seek(MakeMVCCMetadataKey(from))
-				ok, err := iter.Valid()
-				if err != nil {
-					b.Fatal(err)
-				}
-				if ok {
-					b.Fatal("unexpected key found")
-				}
-				iter.Close()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+						iter.Seek(MakeMVCCMetadataKey(from))
+						ok, err := iter.Valid()
+						if err != nil {
+							b.Fatal(err)
+						}
+						if deleted < entries {
+							if !ok {
+								b.Fatal("key not found")
+							}
+						} else if ok {
+							b.Fatal("unexpected key found")
+						}
+						iter.Close()
+					}
+				})
 			}
 		})
 	}
