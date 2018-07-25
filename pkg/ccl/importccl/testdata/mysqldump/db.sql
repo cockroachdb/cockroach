@@ -59,7 +59,7 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-07-25 21:58:46',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-07-25 22:06:58',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -126,9 +126,12 @@ CREATE TABLE `third` (
   `i` int(11) NOT NULL,
   `a` int(11) DEFAULT NULL,
   `b` int(11) DEFAULT NULL,
+  `C` int(11) DEFAULT NULL,
   PRIMARY KEY (`i`),
   KEY `a` (`a`,`b`),
-  CONSTRAINT `third_ibfk_1` FOREIGN KEY (`a`, `b`) REFERENCES `second` (`i`, `k`)
+  KEY `C` (`C`),
+  CONSTRAINT `third_ibfk_1` FOREIGN KEY (`a`, `b`) REFERENCES `second` (`i`, `k`),
+  CONSTRAINT `third_ibfk_2` FOREIGN KEY (`C`) REFERENCES `third` (`i`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -150,4 +153,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-07-25 21:58:46
+-- Dump completed on 2018-07-25 22:06:58
