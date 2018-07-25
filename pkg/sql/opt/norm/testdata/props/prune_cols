@@ -204,16 +204,16 @@ WHERE
 project
  ├── columns: i:2(int)
  ├── prune: (2)
- └── semi-join
+ └── semi-join (merge)
       ├── columns: k:1(int!null) i:2(int)
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       ├── semi-join (merge)
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
       │    ├── prune: (2)
       │    ├── interesting orderings: (+1)
       │    ├── scan a
@@ -238,10 +238,14 @@ project
       ├── scan xy
       │    ├── columns: xy.x:5(int!null)
       │    ├── key: (5)
+      │    ├── ordering: +5
       │    ├── prune: (5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # AntiJoin operator.
 opt
@@ -254,16 +258,16 @@ WHERE
 project
  ├── columns: i:2(int)
  ├── prune: (2)
- └── anti-join
+ └── anti-join (merge)
       ├── columns: k:1(int!null) i:2(int)
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       ├── anti-join (merge)
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
       │    ├── prune: (2)
       │    ├── interesting orderings: (+1)
       │    ├── scan a
@@ -288,10 +292,14 @@ project
       ├── scan xy
       │    ├── columns: xy.x:5(int!null)
       │    ├── key: (5)
+      │    ├── ordering: +5
       │    ├── prune: (5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # GroupBy operator.
 opt

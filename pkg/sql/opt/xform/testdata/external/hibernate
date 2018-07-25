@@ -243,40 +243,54 @@ where
             phone0_.id=calls3_.phone_id
     )
 ----
-inner-join
+inner-join (merge)
  ├── columns: id1_6_0_:1(int!null) id1_4_1_:6(int!null) phone_nu2_6_0_:2(string) person_i4_6_0_:4(int!null) phone_ty3_6_0_:3(string) person_i1_5_0__:12(int!null) addresse2_5_0__:13(string) addresse3_0__:14(string!null) address2_4_1_:7(string) createdo3_4_1_:8(timestamp) name4_4_1_:9(string) nickname5_4_1_:10(string) version6_4_1_:11(int!null) person_i1_5_0__:12(int!null) addresse2_5_0__:13(string) addresse3_0__:14(string!null)
  ├── key: (1,14)
  ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6,12), (6)==(4,12), (12,14)-->(13), (12)==(4,6)
- ├── inner-join
+ ├── inner-join (merge)
  │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6), (6)==(4)
- │    ├── semi-join
- │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-4)
- │    │    ├── scan phone
- │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2-4)
- │    │    ├── scan phone_call
- │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
- │    │    │    ├── key: (15)
- │    │    │    └── fd: (15)-->(18)
- │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    ├── ordering: +(4|6)
  │    ├── scan person
  │    │    ├── columns: person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
  │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7-11)
- │    └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
- │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
+ │    │    ├── fd: (6)-->(7-11)
+ │    │    └── ordering: +6
+ │    ├── sort
+ │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── ordering: +4
+ │    │    └── semi-join
+ │    │         ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-4)
+ │    │         ├── scan phone
+ │    │         │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │         │    ├── key: (1)
+ │    │         │    └── fd: (1)-->(2-4)
+ │    │         ├── scan phone_call
+ │    │         │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+ │    │         │    ├── key: (15)
+ │    │         │    └── fd: (15)-->(18)
+ │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+ │    │              └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    └── merge-on
+ │         ├── left ordering: +6
+ │         ├── right ordering: +4
+ │         └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+ │              └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
  ├── scan person_addresses
  │    ├── columns: person_addresses.person_id:12(int!null) addresses:13(string) addresses_key:14(string!null)
  │    ├── key: (12,14)
- │    └── fd: (12,14)-->(13)
- └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
-      └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
+ │    ├── fd: (12,14)-->(13)
+ │    └── ordering: +12
+ └── merge-on
+      ├── left ordering: +6
+      ├── right ordering: +12
+      └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+           └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
 
 opt
 select
@@ -305,36 +319,50 @@ where
 project
  ├── columns: id1_6_:1(int!null) phone_nu2_6_:2(string) person_i4_6_:4(int!null) phone_ty3_6_:3(string)
  ├── fd: (1)-->(2-4)
- └── inner-join
+ └── inner-join (merge)
       ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) person_addresses.person_id:12(int!null)
       ├── fd: (1)-->(2-4), (4)==(6,12), (6)==(4,12), (12)==(4,6)
-      ├── inner-join
+      ├── inner-join (merge)
       │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
-      │    ├── semi-join
+      │    ├── ordering: +(4|6)
+      │    ├── scan person
+      │    │    ├── columns: person.id:6(int!null)
+      │    │    ├── key: (6)
+      │    │    └── ordering: +6
+      │    ├── sort
       │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── scan phone
-      │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── scan phone_call
-      │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
-      │    │    │    ├── key: (15)
-      │    │    │    └── fd: (15)-->(18)
-      │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
-      │    │         └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
-      │    ├── scan person
-      │    │    ├── columns: person.id:6(int!null)
-      │    │    └── key: (6)
-      │    └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
-      │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
+      │    │    ├── ordering: +4
+      │    │    └── semi-join
+      │    │         ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2-4)
+      │    │         ├── scan phone
+      │    │         │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+      │    │         │    ├── key: (1)
+      │    │         │    └── fd: (1)-->(2-4)
+      │    │         ├── scan phone_call
+      │    │         │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+      │    │         │    ├── key: (15)
+      │    │         │    └── fd: (15)-->(18)
+      │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+      │    │              └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │    └── merge-on
+      │         ├── left ordering: +6
+      │         ├── right ordering: +4
+      │         └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      │              └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
       ├── scan person_addresses
-      │    └── columns: person_addresses.person_id:12(int!null)
-      └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
-           └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
+      │    ├── columns: person_addresses.person_id:12(int!null)
+      │    └── ordering: +12
+      └── merge-on
+           ├── left ordering: +6
+           ├── right ordering: +12
+           └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+                └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
 
 opt
 select
@@ -1950,22 +1978,36 @@ WHERE ref0_.generationuser_id = 1;
 project
  ├── columns: generati1_2_0_:1(int!null) ref_id2_2_0_:2(int!null) formula131_0_:11(string) formula132_0_:16(string) formula133_0_:21(string) id1_0_1_:3(int!null) age2_0_1_:4(string) culture3_0_1_:5(string) descript4_0_1_:6(string)
  ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- ├── left-join
+ ├── right-join (merge)
  │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generationgroup.id:3(int!null) generationgroup.age:4(string) generationgroup.culture:5(string) generationgroup.description:6(string) generationgroup.age:8(string) generationgroup.culture:14(string) generationgroup.id:17(int) generationgroup.description:20(string)
  │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (17)-->(20)
+ │    ├── scan generationgroup
+ │    │    ├── columns: generationgroup.id:17(int!null) generationgroup.description:20(string)
+ │    │    ├── key: (17)
+ │    │    ├── fd: (17)-->(20)
+ │    │    └── ordering: +17
  │    ├── project
  │    │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generationgroup.id:3(int!null) generationgroup.age:4(string) generationgroup.culture:5(string) generationgroup.description:6(string) generationgroup.age:8(string) generationgroup.culture:14(string)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- │    │    └── left-join
+ │    │    ├── ordering: +(2|3) opt(1)
+ │    │    └── right-join (merge)
  │    │         ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generationgroup.id:3(int!null) generationgroup.age:4(string) generationgroup.culture:5(string) generationgroup.description:6(string) generationgroup.age:8(string) generationgroup.id:12(int) generationgroup.culture:14(string)
  │    │         ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (12)-->(14)
+ │    │         ├── ordering: +(2|3) opt(1)
+ │    │         ├── scan generationgroup
+ │    │         │    ├── columns: generationgroup.id:12(int!null) generationgroup.culture:14(string)
+ │    │         │    ├── key: (12)
+ │    │         │    ├── fd: (12)-->(14)
+ │    │         │    └── ordering: +12
  │    │         ├── project
  │    │         │    ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generationgroup.id:3(int!null) generationgroup.age:4(string) generationgroup.culture:5(string) generationgroup.description:6(string) generationgroup.age:8(string)
  │    │         │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
+ │    │         │    ├── ordering: +(2|3) opt(1)
  │    │         │    └── right-join (merge)
  │    │         │         ├── columns: generationuser_id:1(int!null) ref_id:2(int!null) generationgroup.id:3(int!null) generationgroup.age:4(string) generationgroup.culture:5(string) generationgroup.description:6(string) generationgroup.id:7(int) generationgroup.age:8(string)
  │    │         │         ├── key: (3,7)
  │    │         │         ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8)
+ │    │         │         ├── ordering: +(2|3) opt(1)
  │    │         │         ├── scan generationgroup
  │    │         │         │    ├── columns: generationgroup.id:7(int!null) generationgroup.age:8(string)
  │    │         │         │    ├── key: (7)
@@ -1990,18 +2032,16 @@ project
  │    │         │              ├── right ordering: +2
  │    │         │              └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    │         │                   └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │    │         ├── scan generationgroup
- │    │         │    ├── columns: generationgroup.id:12(int!null) generationgroup.culture:14(string)
- │    │         │    ├── key: (12)
- │    │         │    └── fd: (12)-->(14)
- │    │         └── filters [type=bool, outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ]), fd=(2)==(12), (12)==(2)]
- │    │              └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ])]
- │    ├── scan generationgroup
- │    │    ├── columns: generationgroup.id:17(int!null) generationgroup.description:20(string)
- │    │    ├── key: (17)
- │    │    └── fd: (17)-->(20)
- │    └── filters [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
- │         └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ])]
+ │    │         └── merge-on
+ │    │              ├── left ordering: +12
+ │    │              ├── right ordering: +2
+ │    │              └── filters [type=bool, outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ]), fd=(2)==(12), (12)==(2)]
+ │    │                   └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ])]
+ │    └── merge-on
+ │         ├── left ordering: +17
+ │         ├── right ordering: +2
+ │         └── filters [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ]), fd=(2)==(17), (17)==(2)]
+ │              └── generationgroup.id = generationuser_generationgroup.ref_id [type=bool, outer=(2,17), constraints=(/2: (/NULL - ]; /17: (/NULL - ])]
  └── projections [outer=(1-6,8,14,20)]
       ├── variable: generationgroup.age [type=string, outer=(8)]
       ├── variable: generationgroup.culture [type=string, outer=(14)]
