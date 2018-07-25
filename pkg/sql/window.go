@@ -293,7 +293,7 @@ func (p *planner) constructWindowDefinitions(
 
 	// Construct window definitions for each window function application.
 	for idx, windowFn := range n.funcs {
-		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
+		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs, &p.semaCtx)
 		if err != nil {
 			return err
 		}
@@ -346,7 +346,7 @@ func (p *planner) constructWindowDefinitions(
 // modification. If the provided WindowDef does reference a named window spec, then the
 // referenced spec will be overridden with any extra clauses from the WindowDef and returned.
 func constructWindowDef(
-	def tree.WindowDef, namedWindowSpecs map[string]*tree.WindowDef,
+	def tree.WindowDef, namedWindowSpecs map[string]*tree.WindowDef, semaCtx *tree.SemaContext,
 ) (tree.WindowDef, error) {
 	modifyRef := false
 	var refName string
@@ -370,6 +370,25 @@ func constructWindowDef(
 		return def, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
 	}
 	if !modifyRef {
+		windowDef := *referencedSpec
+		if windowDef.Frame != nil {
+			bounds := windowDef.Frame.Bounds
+			startBound, endBound := bounds.StartBound, bounds.EndBound
+			if startBound.OffsetExpr != nil {
+				typedStartOffsetExpr, err := tree.TypeCheckAndRequire(startBound.OffsetExpr, semaCtx, types.Int, "window frame start")
+				if err != nil {
+					return *referencedSpec, err
+				}
+				startBound.OffsetExpr = typedStartOffsetExpr
+			}
+			if endBound != nil && endBound.OffsetExpr != nil {
+				typedEndOffsetExpr, err := tree.TypeCheckAndRequire(endBound.OffsetExpr, semaCtx, types.Int, "window frame end")
+				if err != nil {
+					return *referencedSpec, err
+				}
+				endBound.OffsetExpr = typedEndOffsetExpr
+			}
+		}
 		return *referencedSpec, nil
 	}
 
