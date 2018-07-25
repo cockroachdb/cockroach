@@ -904,62 +904,68 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		// Try reverse scans for all keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows,
-				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
-				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+	// Try reverse scans for all keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
+		if err != nil {
+			return err
 		}
-
-		// Try reverse scans for half of the keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		}
-
-		// Try limit maximum rows.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
-		}
-
-		// Try reverse scan with the same start and end key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-			if err == nil {
-				t.Errorf("expected a truncation error, got %s", err)
-			}
-		}
-
-		// Try reverse scan with non-existent key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
-			if err != nil {
-				return err
-			}
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-		}
-
+		checkKVs(t, rows,
+			keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
+			keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	if err != nil {
+	// Try reverse scans for half of the keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try limit maximum rows.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try reverse scan with the same start and end key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return err
+	}); err != nil {
+		if err == nil {
+			t.Errorf("expected a truncation error, got %s", err)
+		}
+	}
+
+	// Try reverse scan with non-existent key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
