@@ -223,8 +223,8 @@
 [[projects]]
   name = "github.com/cockroachdb/apd"
   packages = ["."]
-  revision = "b1ce49cb2a474f4416531e7395373eaafaa4fbe2"
-  version = "v1.0.0"
+  revision = "9c2ab8efc9ac66bf4bb79ab6bed4dcd0c709d1b9"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"

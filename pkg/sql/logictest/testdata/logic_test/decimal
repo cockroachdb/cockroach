@@ -67,11 +67,12 @@ statement ok
 CREATE TABLE t (d decimal, v decimal(3, 1))
 
 statement ok
-INSERT INTO t VALUES (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
+INSERT INTO t VALUES (0.000::decimal, 0.00::decimal), (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
 
 query RR
 SELECT * FROM t ORDER BY d
 ----
+0.000 0.0
 1.00 1.0
 2.0  2.0
 3    3.0
@@ -96,7 +97,7 @@ SELECT * FROM t2 ORDER BY d
 ----
 NaN        NaN
 -Infinity  -Infinity
--0.0000    -0.0
+0.0000     0.0
 1.00       1.0
 2.0        2.0
 3          3.0
@@ -160,11 +161,11 @@ query R rowsort
 SELECT * FROM s WHERE d = 0
 ----
 0
--0
--0.0
--0.00
--0.000
--0.0000
+0
+0.0
+0.00
+0.000
+0.0000
 
 query R
 SELECT * FROM s WHERE d IS NAN
@@ -186,62 +187,62 @@ NaN
 query RBBB rowsort
 SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY 1
 ----
+-1         false  false  false
+-Infinity  false  false  false
+0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
+1          false  false  false
+Infinity   false  false  false
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
--Infinity  false  false  false
--1         false  false  false
-0          false  false  false
--0         false  false  false
--0.0       false  false  false
--0.00      false  false  false
--0.000     false  false  false
--0.0000    false  false  false
-1          false  false  false
-Infinity   false  false  false
 
 query RBBB rowsort
 SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY 1
 ----
+-1         false  false  false
+-Infinity  false  false  false
+0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
+1          false  false  false
+Infinity   false  false  false
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
--Infinity  false  false  false
--1         false  false  false
-0          false  false  false
--0         false  false  false
--0.0       false  false  false
--0.00      false  false  false
--0.000     false  false  false
--0.0000    false  false  false
-1          false  false  false
-Infinity   false  false  false
 
 query RB rowsort
 select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d
 ----
--Infinity  true
 -1         true
+-Infinity  true
 0          true
--0         true
--0.0       true
--0.00      true
--0.000     true
--0.0000    true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
 1          true
 Infinity   true
 
 query RB rowsort
 select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d
 ----
--Infinity  true
 -1         true
+-Infinity  true
 0          true
--0         true
--0.0       true
--0.00      true
--0.000     true
--0.0000    true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
 1          true
 Infinity   true
 
@@ -253,11 +254,11 @@ query R rowsort
 SELECT * FROM s@idx WHERE d = 0
 ----
 0
--0
--0.0
--0.00
--0.000
--0.0000
+0
+0.0
+0.00
+0.000
+0.0000
 
 statement ok
 INSERT INTO s VALUES
