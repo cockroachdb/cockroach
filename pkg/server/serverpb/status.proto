@@ -48,6 +48,8 @@ message CertificateDetails {
     NODE = 1;
     CLIENT_CA = 2;
     CLIENT = 3;
+    UI_CA = 4;
+    UI = 5;
   }
 
   message Fields {

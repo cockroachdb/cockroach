@@ -42,6 +42,12 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+	metaUICAExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.ui-ca",
+		Help:        "Expiration for the UI CA certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 	metaNodeExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node",
 		Help:        "Expiration for the node certificate. 0 means no certificate or error.",
@@ -51,6 +57,12 @@ var (
 	metaNodeClientExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node-client",
 		Help:        "Expiration for the node's client certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
+	metaUIExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.ui",
+		Help:        "Expiration for the UI certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
@@ -91,14 +103,18 @@ type CertificateManager struct {
 
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
 	caCert         *CertInfo // default CA certificate
-	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
 	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'.
+	uiCACert       *CertInfo // optional: certificate to verify UI certficates
+	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
+	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
+	uiCert         *CertInfo // optional: server certificate for the admin UI.
 	clientCerts    map[string]*CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config.
 	serverConfig *tls.Config
+	// Server-side config for the Admin UI.
+	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
 	// All other client tls.Config objects are built as requested and not cached.
 	clientConfig *tls.Config
@@ -110,8 +126,10 @@ type CertificateManager struct {
 type CertificateMetrics struct {
 	CAExpiration         *metric.Gauge
 	ClientCAExpiration   *metric.Gauge
+	UICAExpiration       *metric.Gauge
 	NodeExpiration       *metric.Gauge
 	NodeClientExpiration *metric.Gauge
+	UIExpiration         *metric.Gauge
 }
 
 func makeCertificateManager(certsDir string) *CertificateManager {
@@ -120,8 +138,10 @@ func makeCertificateManager(certsDir string) *CertificateManager {
 	cm.certMetrics = CertificateMetrics{
 		CAExpiration:         metric.NewGauge(metaCAExpiration),
 		ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
+		UICAExpiration:       metric.NewGauge(metaUICAExpiration),
 		NodeExpiration:       metric.NewGauge(metaNodeExpiration),
 		NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
+		UIExpiration:         metric.NewGauge(metaUIExpiration),
 	}
 	return cm
 }
@@ -182,6 +202,12 @@ func (cm *CertificateManager) ClientCACertPath() string {
 	return filepath.Join(cm.certsDir, "ca-client"+certExtension)
 }
 
+// UICACertPath returns the expected file path for the CA certificate
+// used to verify Admin UI certificates.
+func (cm *CertificateManager) UICACertPath() string {
+	return filepath.Join(cm.certsDir, "ca-ui"+certExtension)
+}
+
 // NodeCertPath returns the expected file path for the node certificate.
 func (cm *CertificateManager) NodeCertPath() string {
 	return filepath.Join(cm.certsDir, "node"+certExtension)
@@ -190,6 +216,16 @@ func (cm *CertificateManager) NodeCertPath() string {
 // NodeKeyPath returns the expected file path for the node key.
 func (cm *CertificateManager) NodeKeyPath() string {
 	return filepath.Join(cm.certsDir, "node"+keyExtension)
+}
+
+// UICertPath returns the expected file path for the UI certificate.
+func (cm *CertificateManager) UICertPath() string {
+	return filepath.Join(cm.certsDir, "ui"+certExtension)
+}
+
+// UIKeyPath returns the expected file path for the UI key.
+func (cm *CertificateManager) UIKeyPath() string {
+	return filepath.Join(cm.certsDir, "ui"+keyExtension)
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
@@ -216,6 +252,22 @@ func (cm *CertificateManager) ClientCACert() *CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.clientCACert
+}
+
+// UICACert returns the CA cert used to verify the Admin UI certificate. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) UICACert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.uiCACert
+}
+
+// UICert returns the certificate used by the Admin UI. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) UICert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.uiCert
 }
 
 // checkCertIsValid returns an error if the passed cert is missing or has an error.
@@ -250,7 +302,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return errors.Wrapf(err, "problem loading certs directory %s", cm.certsDir)
 	}
 
-	var caCert, nodeCert, clientCACert, nodeClientCert *CertInfo
+	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
 	clientCerts := make(map[string]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -258,8 +310,12 @@ func (cm *CertificateManager) LoadCertificates() error {
 			caCert = ci
 		case ClientCAPem:
 			clientCACert = ci
+		case UICAPem:
+			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
+		case UIPem:
+			uiCert = ci
 		case ClientPem:
 			clientCerts[ci.Name] = ci
 			if ci.Name == NodeUser {
@@ -284,6 +340,12 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if err := checkCertIsValid(clientCACert); checkCertIsValid(cm.clientCACert) == nil && err != nil {
 			return errors.Wrap(err, "reload would lose valid CA certificate for client verification")
 		}
+		if err := checkCertIsValid(uiCACert); checkCertIsValid(cm.uiCACert) == nil && err != nil {
+			return errors.Wrap(err, "reload would lose valid CA certificate for UI")
+		}
+		if err := checkCertIsValid(uiCert); checkCertIsValid(cm.uiCert) == nil && err != nil {
+			return errors.Wrap(err, "reload would lose valid UI certificate")
+		}
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {
@@ -296,13 +358,18 @@ func (cm *CertificateManager) LoadCertificates() error {
 
 	// Swap everything.
 	cm.caCert = caCert
-	cm.nodeCert = nodeCert
-	cm.clientCerts = clientCerts
 	cm.clientCACert = clientCACert
+	cm.uiCACert = uiCACert
+
+	cm.nodeCert = nodeCert
 	cm.nodeClientCert = nodeClientCert
+	cm.uiCert = uiCert
+	cm.clientCerts = clientCerts
+
 	cm.initialized = true
 
 	cm.serverConfig = nil
+	cm.uiServerConfig = nil
 	cm.clientConfig = nil
 
 	cm.updateMetricsLocked()
@@ -332,6 +399,9 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	// Client CA certificate expiration.
 	maybeSetMetric(cm.certMetrics.ClientCAExpiration, cm.clientCACert)
 
+	// UI CA certificate expiration.
+	maybeSetMetric(cm.certMetrics.UICAExpiration, cm.uiCACert)
+
 	// Node certificate expiration.
 	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
 	// used to sign the node cert expires sooner, then that is the expiration time to report.
@@ -339,6 +409,9 @@ func (cm *CertificateManager) updateMetricsLocked() {
 
 	// Node client certificate expiration.
 	maybeSetMetric(cm.certMetrics.NodeClientExpiration, cm.nodeClientCert)
+
+	// UI certificate expiration.
+	maybeSetMetric(cm.certMetrics.UIExpiration, cm.uiCert)
 }
 
 // GetServerTLSConfig returns a server TLS config with a callback to fetch the
@@ -394,6 +467,47 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	return cfg, nil
 }
 
+// GetUIServerTLSConfig returns a server TLS config for the Admin UI with a
+// callback to fetch the latest TLS config. We still attempt to get the config to make sure
+// the initial call has a valid config loaded.
+func (cm *CertificateManager) GetUIServerTLSConfig() (*tls.Config, error) {
+	if _, err := cm.getEmbeddedUIServerTLSConfig(nil); err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		GetConfigForClient: cm.getEmbeddedUIServerTLSConfig,
+	}, nil
+}
+
+// getEmbeddedUIServerTLSConfig returns the most up-to-date server tls.Config for the Admin UI.
+// This is the callback set in tls.Config.GetConfigForClient. We currently
+// ignore the ClientHelloInfo object.
+func (cm *CertificateManager) getEmbeddedUIServerTLSConfig(
+	_ *tls.ClientHelloInfo,
+) (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.uiServerConfig != nil {
+		return cm.uiServerConfig, nil
+	}
+
+	uiCert, err := cm.getUICertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newUIServerTLSConfig(
+		uiCert.FileContents,
+		uiCert.KeyFileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.uiServerConfig = cfg
+	return cfg, nil
+}
+
 // getCACertLocked returns the general CA cert.
 // cm.mu must be held.
 func (cm *CertificateManager) getCACertLocked() (*CertInfo, error) {
@@ -418,6 +532,21 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 	return cm.clientCACert, nil
 }
 
+// getUICACertLocked returns the CA cert for the Admin UI.
+// Use the UI CA if it exists, otherwise fall back on the general CA.
+// cm.mu must be held.
+func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
+	if cm.uiCACert == nil {
+		// No UI CA: use general CA.
+		return cm.getCACertLocked()
+	}
+
+	if err := checkCertIsValid(cm.uiCACert); err != nil {
+		return nil, errors.Wrap(err, "problem with UI CA certificate")
+	}
+	return cm.uiCACert, nil
+}
+
 // getNodeCertLocked returns the node certificate.
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
@@ -425,6 +554,20 @@ func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 		return nil, errors.Wrap(err, "problem with node certificate")
 	}
 	return cm.nodeCert, nil
+}
+
+// getUICertLocked returns the UI certificate if present, otherwise returns
+// the node certificate.
+// cm.mu must be held.
+func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
+	if cm.uiCert == nil {
+		// No UI certificate: use node certificate.
+		return cm.getNodeCertLocked()
+	}
+	if err := checkCertIsValid(cm.uiCert); err != nil {
+		return nil, errors.Wrap(err, "problem with UI certificate")
+	}
+	return cm.uiCert, nil
 }
 
 // getClientCertLocked returns the client cert/key for the specified user,
@@ -509,6 +652,26 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	return cfg, nil
 }
 
+// GetUIClientTLSConfig returns the most up-to-date client tls.Config for Admin UI clients.
+// It does not include a client certificate and uses the UI CA certificate if present.
+func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// We always need the CA cert.
+	uiCA, err := cm.getUICACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newUIClientTLSConfig(uiCA.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
 // GetClientCertPaths returns the paths to the client cert and key.
 // Returns the node cert and key if user == NodeUser.
 func (cm *CertificateManager) GetClientCertPaths(user string) (string, string, error) {
@@ -561,8 +724,14 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	if cm.clientCACert != nil {
 		ret = append(ret, cm.clientCACert)
 	}
+	if cm.uiCACert != nil {
+		ret = append(ret, cm.uiCACert)
+	}
 	if cm.nodeCert != nil {
 		ret = append(ret, cm.nodeCert)
+	}
+	if cm.uiCert != nil {
+		ret = append(ret, cm.uiCert)
 	}
 	if cm.clientCerts != nil {
 		for _, cert := range cm.clientCerts {

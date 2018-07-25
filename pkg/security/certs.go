@@ -91,6 +91,17 @@ func CreateClientCAPair(
 	return createCACertAndKey(certsDir, caKeyPath, ClientCAPem, keySize, lifetime, allowKeyReuse, overwrite)
 }
 
+// CreateUICAPair creates a UI CA certificate and associated key.
+func CreateUICAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, UICAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
 // createCACertAndKey creates a CA key and a CA certificate.
 // If the certs directory does not exist, it is created.
 // If the key does not exist, it is created.
@@ -115,9 +126,9 @@ func createCACertAndKey(
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
 	}
-	if caType != CAPem && caType != ClientCAPem {
-		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), got: %d",
-			CAPem, ClientCAPem, caType)
+	if caType != CAPem && caType != ClientCAPem && caType != UICAPem {
+		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), or UICAPem (%d), got: %d",
+			CAPem, ClientCAPem, UICAPem, caType)
 	}
 
 	// The certificate manager expands the env for the certs directory.
@@ -179,6 +190,8 @@ func createCACertAndKey(
 		certPath = cm.CACertPath()
 	case ClientCAPem:
 		certPath = cm.ClientCACertPath()
+	case UICAPem:
+		certPath = cm.UICACertPath()
 	}
 
 	var existingCertificates []*pem.Block
@@ -263,6 +276,61 @@ func CreateNodePair(
 		return errors.Errorf("error writing node server key to %s: %v", keyPath, err)
 	}
 	log.Infof(context.Background(), "Generated node key: %s", keyPath)
+
+	return nil
+}
+
+// CreateUIPair creates a UI certificate and key using the UI CA.
+// The CA cert and key must load properly. If multiple certificates
+// exist in the CA cert, the first one is used.
+func CreateUIPair(
+	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
+) error {
+	if len(caKeyPath) == 0 {
+		return errors.New("the path to the CA key is required")
+	}
+	if len(certsDir) == 0 {
+		return errors.New("the path to the certs directory is required")
+	}
+
+	// The certificate manager expands the env for the certs directory.
+	// For consistency, we need to do this for the key as well.
+	caKeyPath = os.ExpandEnv(caKeyPath)
+
+	// Create a certificate manager with "create dir if not exist".
+	cm, err := NewCertificateManagerFirstRun(certsDir)
+	if err != nil {
+		return err
+	}
+
+	// Load the CA pair.
+	caCert, caPrivateKey, err := loadCACertAndKey(cm.UICACertPath(), caKeyPath)
+	if err != nil {
+		return err
+	}
+
+	// Generate certificates and keys.
+	uiKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	if err != nil {
+		return errors.Errorf("could not generate new UI key: %v", err)
+	}
+
+	uiCert, err := GenerateUIServerCert(caCert, caPrivateKey, uiKey.Public(), lifetime, hosts)
+	if err != nil {
+		return errors.Errorf("error creating UI server certificate and key: %s", err)
+	}
+
+	certPath := cm.UICertPath()
+	if err := writeCertificateToFile(certPath, uiCert, overwrite); err != nil {
+		return errors.Errorf("error writing UI server certificate to %s: %v", certPath, err)
+	}
+	log.Infof(context.Background(), "Generated UI certificate: %s", certPath)
+
+	keyPath := cm.UIKeyPath()
+	if err := writeKeyToFile(keyPath, uiKey, overwrite); err != nil {
+		return errors.Errorf("error writing UI server key to %s: %v", keyPath, err)
+	}
+	log.Infof(context.Background(), "Generated UI key: %s", keyPath)
 
 	return nil
 }

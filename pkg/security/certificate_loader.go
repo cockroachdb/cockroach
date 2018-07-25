@@ -78,8 +78,13 @@ const (
 	CAPem
 	// ClientCAPem describes the CA certificate used to verify client certificates.
 	ClientCAPem
-	// NodePem describes a combined server/client certificate for user Node.
+	// UICAPem describes the CA certificate used to verify the Admin UI server certificate.
+	UICAPem
+	// NodePem describes the server certificate for the node, possibly a combined server/client
+	// certificate for user Node if a separate 'client.node.crt' is not present.
 	NodePem
+	// UIPem describes the server certificate for the admin UI.
+	UIPem
 	// ClientPem describes a client certificate.
 	ClientPem
 
@@ -93,7 +98,7 @@ const (
 )
 
 func isCA(usage PemUsage) bool {
-	return usage == CAPem || usage == ClientCAPem
+	return usage == CAPem || usage == ClientCAPem || usage == UICAPem
 }
 
 func (p PemUsage) String() string {
@@ -102,8 +107,12 @@ func (p PemUsage) String() string {
 		return "CA"
 	case ClientCAPem:
 		return "Client CA"
+	case UICAPem:
+		return "UI CA"
 	case NodePem:
 		return "Node"
+	case UIPem:
+		return "UI"
 	case ClientPem:
 		return "Client"
 	default:
@@ -171,21 +180,29 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 	prefix := parts[0]
 	switch parts[0] {
 	case `ca`:
-		// This is main CA certificate.
 		fileUsage = CAPem
 		if numParts != 2 {
 			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
 		}
 	case `ca-client`:
-		// This is client CA certificate.
 		fileUsage = ClientCAPem
 		if numParts != 2 {
 			return nil, errors.Errorf("client CA certificate filename should match ca-client%s", certExtension)
+		}
+	case `ca-ui`:
+		fileUsage = UICAPem
+		if numParts != 2 {
+			return nil, errors.Errorf("UI CA certificate filename should match ca-ui%s", certExtension)
 		}
 	case `node`:
 		fileUsage = NodePem
 		if numParts != 2 {
 			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
+		}
+	case `ui`:
+		fileUsage = UIPem
+		if numParts != 2 {
+			return nil, errors.Errorf("UI certificate filename should match ui%s", certExtension)
 		}
 	case `client`:
 		fileUsage = ClientPem

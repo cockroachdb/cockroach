@@ -247,7 +247,29 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, notes)
 	}
 
+	if cert := cm.UICACert(); cert != nil {
+		var notes string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			notes = fmt.Sprintf("num certs: %d", len(cert.ParsedCertificates))
+		}
+		addRow(cert, notes)
+	}
+
 	if cert := cm.NodeCert(); cert != nil {
+		var addresses []string
+		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
+			addresses = cert.ParsedCertificates[0].DNSNames
+			for _, ip := range cert.ParsedCertificates[0].IPAddresses {
+				addresses = append(addresses, ip.String())
+			}
+		} else {
+			addresses = append(addresses, "<unknown>")
+		}
+
+		addRow(cert, fmt.Sprintf("addresses: %s", strings.Join(addresses, ",")))
+	}
+
+	if cert := cm.UICert(); cert != nil {
 		var addresses []string
 		if cert.Error == nil && len(cert.ParsedCertificates) > 0 {
 			addresses = cert.ParsedCertificates[0].DNSNames
