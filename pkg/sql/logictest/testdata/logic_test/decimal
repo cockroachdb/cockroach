@@ -67,14 +67,15 @@ statement ok
 CREATE TABLE t (d decimal, v decimal(3, 1))
 
 statement ok
-INSERT INTO t VALUES (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
+INSERT INTO t VALUES (0.000::decimal, 0.00::decimal), (1.00::decimal, 1.00::decimal), (2.0::decimal, 2.0::decimal), (3::decimal, 3::decimal)
 
 query RR
 SELECT * FROM t ORDER BY d
 ----
-1.00 1.0
-2.0  2.0
-3    3.0
+0.000  0.0
+1.00   1.0
+2.0    2.0
+3      3.0
 
 # Ensure trailing zeros are kept in an index.
 
@@ -96,7 +97,7 @@ SELECT * FROM t2 ORDER BY d
 ----
 NaN        NaN
 -Infinity  -Infinity
--0.0000    -0.0
+0.0000     0.0
 1.00       1.0
 2.0        2.0
 3          3.0
@@ -160,11 +161,11 @@ query R rowsort
 SELECT * FROM s WHERE d = 0
 ----
 0
--0
--0.0
--0.00
--0.000
--0.0000
+0
+0.0
+0.00
+0.000
+0.0000
 
 query R
 SELECT * FROM s WHERE d IS NAN
@@ -183,29 +184,12 @@ SELECT * FROM s WHERE d = 'NaN'
 NaN
 NaN
 
-# Check the ordering of decimal values.
-# The various zero values do not sort well currently
-# (see issue #28061) so we need to exclude them to get a stable sort.
-#
-# TODO(knz/mjibson): this WHERE clause can be removed/improved
-# once #27978 / #28061 are resolved.
-query R
-SELECT d FROM s WHERE d != 0 ORDER BY d
-----
-NaN
-NaN
--Infinity
--1
-1
-Infinity
+# In the following tests, the various zero values all compare equal to
+# each other so we must use two ORDER BY clauses to obtain a stable result.
 
-# We can check the relative ordering of zeros and other values by
-# doing some conversion to float and some arithmetic.
-#
-# TODO(knz/mjibson) This test can be deleted when the WHERE clause can
-# be removed from the previous test.
+# Check the ordering of decimal values.
 query R
-SELECT floor(d::FLOAT+0.1)::DECIMAL FROM s ORDER BY d
+SELECT d FROM s ORDER BY d, d::TEXT
 ----
 NULL
 NaN
@@ -214,81 +198,74 @@ NaN
 -1
 0
 0
-0
-0
-0
-0
+0.0
+0.00
+0.000
+0.0000
 1
 Infinity
 
-# In the following tests, the various zero values all compare equal to
-# each other so we cannot use ORDER BY to obtain a stable result so we
-# have to use `rowsort`. The test above has already controlled the
-# ordering.
-# These tests are only about testing the NaN-ness of the values, so
-# ordering is really inconsequential.
-
 # Just test the NaN-ness of the values.
-query RBBB rowsort
-SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary}
+query RBBB
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY d, d::TEXT
 ----
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
--0         false  false  false
--0.0       false  false  false
--0.00      false  false  false
--0.000     false  false  false
--0.0000    false  false  false
 0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
 1          false  false  false
 Infinity   false  false  false
 
 # Just test the NaN-ness of the values in secondary index
-query RBBB rowsort
-SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx}
+query RBBB
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY d, d::TEXT
 ----
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
--0         false  false  false
--0.0       false  false  false
--0.00      false  false  false
--0.000     false  false  false
--0.0000    false  false  false
 0          false  false  false
+0          false  false  false
+0.0        false  false  false
+0.00       false  false  false
+0.000      false  false  false
+0.0000     false  false  false
 1          false  false  false
 Infinity   false  false  false
 
-query RB rowsort
-select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN'
+query RB
+select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d, d::TEXT
 ----
 -Infinity  true
 -1         true
--0         true
--0.0       true
--0.00      true
--0.000     true
--0.0000    true
 0          true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
 1          true
 Infinity   true
 
-query RB rowsort
-select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN'
+query RB
+select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d, d::TEXT
 ----
 -Infinity  true
 -1         true
--0         true
--0.0       true
--0.00      true
--0.000     true
--0.0000    true
 0          true
+0          true
+0.0        true
+0.00       true
+0.000      true
+0.0000     true
 1          true
 Infinity   true
 
@@ -300,11 +277,11 @@ query R rowsort
 SELECT * FROM s@idx WHERE d = 0
 ----
 0
--0
--0.0
--0.00
--0.000
--0.0000
+0
+0.0
+0.00
+0.000
+0.0000
 
 statement ok
 INSERT INTO s VALUES
