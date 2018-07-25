@@ -33,12 +33,16 @@ case "${cmd}" in
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
+    gcloud compute firewall-rules create "${NAME}-et" --allow tcp:2022
 
     # Retry while vm and sshd to start up.
     retry gcloud compute ssh "${NAME}" --command=true
 
     gcloud compute copy-files "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
+    # This was not put in bootstrap-debian.sh because it's for Ubuntu (the Debian version of it
+    # was broken).
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="sudo add-apt-repository ppa:jgmath2000/et && sudo apt-get update && sudo apt-get install -y --no-install-recommends et"
 
     if [[ -n "${cr_dev_license}" ]]; then
         $0 ssh "echo COCKROACH_DEV_LICENSE=${cr_dev_license} >> ~/.bashrc_bootstrap"
@@ -58,11 +62,17 @@ case "${cmd}" in
     delete|destroy)
     status=0
     gcloud compute firewall-rules delete "${NAME}-mosh" || status=$((status+1))
+    gcloud compute firewall-rules delete "${NAME}-et" || status=$((status+1))
     gcloud compute instances delete "${NAME}" || status=$((status+1))
     exit ${status}
     ;;
     ssh)
     retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    ;;
+    et)
+    read -r -a arr <<< "$(gcloud compute ssh "${NAME}" --dry-run)"
+    host="${arr[-1]}"
+    et "${host}"
     ;;
     mosh)
     # An alternative solution would be to run gcloud compute config-ssh after
