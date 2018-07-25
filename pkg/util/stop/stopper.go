@@ -461,10 +461,13 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	s.Quiesce(ctx)
+	s.mu.Lock()
 	for _, cancel := range s.mu.sCancels {
 		cancel()
 	}
 	close(s.stopper)
+	s.mu.Unlock()
+
 	s.stop.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
