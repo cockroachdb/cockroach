@@ -3903,9 +3903,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
 			refreshReason = reasonNewLeader
 		}
-		// Clear the remote proposal set. Would have been nil already if not
-		// previously the leader.
-		r.mu.remoteProposals = nil
 		leaderID = roachpb.ReplicaID(rd.SoftState.Lead)
 	}
 
@@ -4077,7 +4074,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.lastIndex = lastIndex
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
-	r.mu.leaderID = leaderID
+	if r.mu.leaderID != leaderID {
+		r.mu.leaderID = leaderID
+		// Clear the remote proposal set. Would have been nil already if not
+		// previously the leader.
+		r.mu.remoteProposals = nil
+	}
 	r.mu.Unlock()
 
 	r.sendRaftMessages(ctx, otherMsgs)
