@@ -1927,8 +1927,14 @@ SELECT price, max(price) OVER (w ORDER BY price) AS max_price FROM products WIND
 statement error frame starting offset must not be negative
 SELECT price, avg(price) OVER (PARTITION BY price ROWS -1 PRECEDING) AS avg_price FROM products
 
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ROWS -1 PRECEDING)
+
 statement error frame ending offset must not be negative
 SELECT price, avg(price) OVER (PARTITION BY price ROWS BETWEEN 1 FOLLOWING AND -1 FOLLOWING) AS avg_price FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price ROWS BETWEEN 1 FOLLOWING AND -1 FOLLOWING)
 
 statement error frame ending offset must not be negative
 SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND -1 FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
@@ -1936,11 +1942,20 @@ SELECT product_name, price, min(price) OVER (PARTITION BY group_name ROWS BETWEE
 statement error incompatible window frame start type: decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS 1.5 PRECEDING) AS avg_price FROM products
 
+statement error argument of window frame start must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS 1.5 PRECEDING)
+
 statement error incompatible window frame start type: decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING) AS avg_price FROM products
 
+statement error argument of window frame start must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING)
+
 statement error incompatible window frame end type: decimal
 SELECT avg(price) OVER (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING) AS avg_price FROM products
+
+statement error argument of window frame end must be type int, not type decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name ROWS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING)
 
 query TRT
 SELECT product_name, price, first_value(product_name) OVER w AS first FROM products WHERE price = 200 OR price = 700 WINDOW w as (PARTITION BY price ORDER BY product_name RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) ORDER BY price, product_name
@@ -2148,3 +2163,18 @@ Dell             800.00   700.00   1200.00  1500.00  800.00
 iPad             700.00   700.00   700.00   1050.00  700.00
 Kindle Fire      150.00   150.00   700.00   1050.00  150.00
 Samsung          200.00   150.00   700.00   350.00   200.00
+
+query RRR
+SELECT avg(price) OVER w1, avg(price) OVER w2, avg(price) OVER w1 FROM products WINDOW w1 AS (PARTITION BY group_name ORDER BY group_id ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING), w2 AS (ORDER BY group_id ROWS 1 PRECEDING)
+----
+300.00                 200.00   300.00
+366.66666666666666667  300.00   366.66666666666666667
+600.00                 450.00   600.00
+700.00                 700.00   700.00
+950.00                 1050.00  950.00
+866.66666666666666667  950.00   866.66666666666666667
+733.33333333333333333  700.00   733.33333333333333333
+750.00                 750.00   750.00
+425.00                 750.00   425.00
+350.00                 425.00   350.00
+175.00                 175.00   175.00
