@@ -15,6 +15,9 @@
 package optbuilder
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -51,14 +54,86 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 	orderByScope := inScope.push()
 	orderByScope.physicalProps.Ordering.Columns = make([]props.OrderingColumnChoice, 0, len(orderBy))
 
-	// TODO(rytaft): rewrite ORDER BY if it uses ORDER BY INDEX tbl@idx or
-	// ORDER BY PRIMARY KEY syntax.
-
 	for i := range orderBy {
 		b.buildOrdering(orderBy[i], inScope, projectionsScope, orderByScope)
 	}
 
 	b.buildOrderByProject(projectionsScope, orderByScope)
+}
+
+// findIndexByName returns an index in the table with the given name. If the
+// name is empty the primary index is returned.
+func (b *Builder) findIndexByName(table opt.Table, name tree.UnrestrictedName) (opt.Index, error) {
+	if name == "" {
+		return table.Index(0), nil
+	}
+
+	for i, n := 0, table.IndexCount(); i < n; i++ {
+		idx := table.Index(i)
+		if string(name) == idx.IdxName() {
+			return idx, nil
+		}
+	}
+
+	return nil, fmt.Errorf(`index %q not found`, name)
+}
+
+// addOrderingColumn adds expr as an ordering column to orderByScope, if it is
+// already projected in projectionsScope then that projection is re-used.
+func (b *Builder) addOrderingColumn(
+	expr tree.TypedExpr, inScope, projectionsScope, orderByScope *scope,
+) {
+	// Use an existing projection if possible. Otherwise, build a new
+	// projection.
+	if col := projectionsScope.findExistingCol(expr); col != nil {
+		orderByScope.cols = append(orderByScope.cols, *col)
+	} else {
+		b.buildScalarProjection(expr, "", inScope, orderByScope)
+	}
+}
+
+// buildOrderByIndex appends to the ordering a column for each indexed column
+// in the specified index, including the implicit primary key columns.
+func (b *Builder) buildOrderByIndex(
+	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
+) {
+	tn, err := order.Table.Normalize()
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	tab := b.resolveTable(tn)
+
+	index, err := b.findIndexByName(tab, order.Index)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	start := len(orderByScope.cols)
+	// Append each key column from the index (including the implicit primary key
+	// columns) to the ordering scope.
+	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
+		// Columns which are indexable are always orderable.
+		col := index.Column(i)
+		if err != nil {
+			panic(err)
+		}
+
+		expr := inScope.resolveType(tree.NewColumnItem(tab.TabName(), tree.Name(col.Column.ColName())), types.Any)
+		b.addOrderingColumn(expr, inScope, projectionsScope, orderByScope)
+	}
+
+	// Add the new columns to the ordering.
+	for i := start; i < len(orderByScope.cols); i++ {
+		desc := index.Column(i - start).Descending
+
+		// DESC inverts the order of the index.
+		if order.Direction == tree.Descending {
+			desc = !desc
+		}
+
+		orderByScope.physicalProps.Ordering.AppendCol(orderByScope.cols[i].id, desc)
+	}
 }
 
 // buildOrdering sets up the projection(s) of a single ORDER BY argument.
@@ -67,7 +142,8 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 // The projection columns are added to the orderByScope.
 func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, orderByScope *scope) {
 	if order.OrderType == tree.OrderByIndex {
-		panic(unimplementedf("ORDER BY index not supported"))
+		b.buildOrderByIndex(order, inScope, projectionsScope, orderByScope)
+		return
 	}
 
 	// Unwrap parenthesized expressions like "((a))" to "a".
@@ -133,14 +209,7 @@ func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, or
 	for _, e := range exprs {
 		// Ensure we can order on the given column.
 		ensureColumnOrderable(e)
-
-		// Use an existing projection if possible. Otherwise, build a new
-		// projection.
-		if col := projectionsScope.findExistingCol(e); col != nil {
-			orderByScope.cols = append(orderByScope.cols, *col)
-		} else {
-			b.buildScalarProjection(e, "", inScope, orderByScope)
-		}
+		b.addOrderingColumn(e, inScope, projectionsScope, orderByScope)
 	}
 
 	// Add the new columns to the ordering.

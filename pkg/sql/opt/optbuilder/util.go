@@ -341,3 +341,18 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 		})
 	}
 }
+
+// resolveTable returns the table in the catalog with the given name.
+func (b *Builder) resolveTable(tn *tree.TableName) opt.Table {
+	tab, err := b.catalog.FindTable(b.ctx, tn)
+	if err != nil {
+		pgerr, ok := err.(*pgerror.Error)
+		if ok && pgerr.Code == pgerror.CodeWrongObjectTypeError {
+			// Remap wrong object error to unimplemented error.
+			panic(unimplementedf("views and sequences are not supported"))
+		}
+
+		panic(builderError{err})
+	}
+	return tab
+}
