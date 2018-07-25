@@ -1641,7 +1641,11 @@ func MVCCDeleteRange(
 
 // mvccScanInternal scans the key range [key,endKey) up to some maximum number
 // of results. Specify reverse=true to scan in descending instead of ascending
-// order. If iter is not specified, a new iterator is created from engine.
+// order. If iter is not specified, a new iterator is created from engine. It
+// returns the found keys and values in batch format, or a resumeSpan if an
+// exceptional condition occurred. A resumeSpan is only set if err != nil. If
+// err == nil, the caller is responsible for determining the resumeSpan of the
+// scan (based on the last key returned) if kv data is returned.
 func mvccScanInternal(
 	ctx context.Context,
 	engine Reader,
@@ -1654,12 +1658,9 @@ func mvccScanInternal(
 	tombstones bool,
 	txn *roachpb.Transaction,
 	reverse bool,
-) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	if max == 0 {
-		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
-	}
+) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
 	if len(endKey) == 0 {
-		return nil, nil, nil, emptyKeyError()
+		return nil, 0, nil, nil, emptyKeyError()
 	}
 
 	var ownIter bool
@@ -1687,25 +1688,97 @@ func mvccScanInternal(
 		iter.Close()
 	}
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, 0, nil, nil, err
 	}
 
-	kvs, resumeKey, intents, err := buildScanResults(kvData, numKvs, intentData, max, consistent)
-	var resumeSpan *roachpb.Span
-	if resumeKey != nil {
-		// NB: we copy the resume key here to ensure that it doesn't point to the
-		// same shared buffer as the main results. Higher levels of the code may
-		// cache the resume key and we don't want them pinning excessive amounts of
-		// memory.
-		if reverse {
-			resumeKey = resumeKey[:len(resumeKey):len(resumeKey)]
-			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
-		} else {
-			resumeKey = append(roachpb.Key(nil), resumeKey...)
-			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
-		}
+	intents, err := buildScanIntents(intentData)
+	if err != nil {
+		return nil, 0, nil, nil, err
 	}
-	return kvs, resumeSpan, intents, err
+	if consistent && len(intents) > 0 {
+		// When encountering intents during a consistent scan we still need to
+		// return the resume key.
+		resumeKey, _, err := buildScanResumeKey(kvData, numKvs, max)
+		if err != nil {
+			return nil, 0, nil, nil, err
+		}
+		return nil, 0, resumeKeyToSpan(key, endKey, resumeKey, reverse), nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	return kvData, numKvs, nil, intents, nil
+}
+
+// mvccScanToBytes scans the key range [key,endKey) up to some maximum number
+// of results. Specify reverse=true to scan in descending instead of ascending
+// order. If iter is not specified, a new iterator is created from engine. It
+// returns the found keys and values in batch format.
+func mvccScanToBytes(
+	ctx context.Context,
+	engine Reader,
+	iter Iterator,
+	key,
+	endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	tombstones bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
+	if max == 0 {
+		return nil, 0, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
+	}
+	kvData, numKvs, resumeSpan, intents, err := mvccScanInternal(
+		ctx, engine, iter, key, endKey, max, timestamp, consistent, tombstones, txn, reverse)
+	if err != nil {
+		return nil, 0, resumeSpan, nil, err
+	}
+	if len(kvData) == 0 || numKvs == 0 {
+		return nil, 0, nil, intents, nil
+	}
+
+	resumeKey, offset, err := buildScanResumeKey(kvData, numKvs, max)
+	if err != nil {
+		return nil, 0, nil, nil, nil
+	}
+	if resumeKey != nil {
+		kvData = kvData[:offset]
+		numKvs = max
+	}
+	return kvData, numKvs, resumeKeyToSpan(key, endKey, resumeKey, reverse), intents, err
+}
+
+// mvccScanToKvs scans the key range [key,endKey) up to some maximum number
+// of results. Specify reverse=true to scan in descending instead of ascending
+// order. If iter is not specified, a new iterator is created from engine. It
+// returns the found keys and values in a slice of roachpb.KeyValue.
+func mvccScanToKvs(
+	ctx context.Context,
+	engine Reader,
+	iter Iterator,
+	key,
+	endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	tombstones bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
+	if max == 0 {
+		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
+	}
+	kvData, numKvs, resumeSpan, intents, err := mvccScanInternal(
+		ctx, engine, iter, key, endKey, max, timestamp, consistent, tombstones, txn, reverse)
+	if err != nil {
+		return nil, resumeSpan, nil, err
+	}
+	if len(kvData) == 0 || numKvs == 0 {
+		return nil, nil, intents, nil
+	}
+
+	kvs, resumeKey, err := buildScanResults(kvData, numKvs, max)
+	return kvs, resumeKeyToSpan(key, endKey, resumeKey, reverse), intents, err
 }
 
 func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
@@ -1741,51 +1814,51 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) {
-	if len(kvData) == 0 {
-		return nil, nil
+// resumeKeyToSpan creates a resumeSpan suitable for returning in a ScanResponse
+// out of a resumeKey (the last key in a batch that exceeded a limit).
+func resumeKeyToSpan(key, endKey, resumeKey roachpb.Key, reverse bool) (resumeSpan *roachpb.Span) {
+	if resumeKey != nil {
+		// NB: we copy the resume key here to ensure that it doesn't point to the
+		// same shared buffer as the main results. Higher levels of the code may
+		// cache the resume key and we don't want them pinning excessive amounts of
+		// memory.
+		if reverse {
+			resumeKey = resumeKey[:len(resumeKey):len(resumeKey)]
+			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
+		} else {
+			resumeKey = append(roachpb.Key(nil), resumeKey...)
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
+		}
+	}
+	return resumeSpan
+}
+
+func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, int, error) {
+	kvLen := len(kvData)
+	if kvLen == 0 {
+		return nil, 0, nil
 	}
 	if numKvs <= max {
-		return nil, nil
+		return nil, 0, nil
 	}
 	var err error
 	for i := int64(0); i < max; i++ {
-		_, _, kvData, err = mvccScanDecodeKeyValue(kvData)
+		kvData, err = mvccScanSkipKeyValue(kvData)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
-	key, _, _, err := mvccScanDecodeKeyValue(kvData)
+	offset := kvLen - len(kvData)
+	key, _, _, err := MVCCScanDecodeKeyValue(kvData)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return key.Key, nil
+	return key.Key, offset, nil
 }
 
 func buildScanResults(
-	kvData []byte, numKvs int64, intentData []byte, max int64, consistent bool,
-) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
-	intents, err := buildScanIntents(intentData)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if consistent && len(intents) > 0 {
-		// When encountering intents during a consistent scan we still need to
-		// return the resume key.
-		resumeKey, err := buildScanResumeKey(kvData, numKvs, max)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return nil, resumeKey, nil, &roachpb.WriteIntentError{Intents: intents}
-	}
-	if len(kvData) == 0 {
-		return nil, nil, intents, nil
-	}
-
-	if numKvs == 0 {
-		return nil, nil, intents, nil
-	}
-
+	kvData []byte, numKvs int64, max int64,
+) ([]roachpb.KeyValue, roachpb.Key, error) {
 	// Iterator.MVCCScan will return up to max+1 results. The extra result is
 	// returned so that we can generate the resumeKey in the same manner as the
 	// old Go version of MVCCScan.
@@ -1800,10 +1873,11 @@ func buildScanResults(
 
 	var key MVCCKey
 	var rawBytes []byte
+	var err error
 	for i := range kvs {
-		key, rawBytes, kvData, err = mvccScanDecodeKeyValue(kvData)
+		key, rawBytes, kvData, err = MVCCScanDecodeKeyValue(kvData)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		kvs[i].Key = key.Key
 		kvs[i].Value.RawBytes = rawBytes
@@ -1812,14 +1886,14 @@ func buildScanResults(
 
 	var resumeKey roachpb.Key
 	if numKvs > max {
-		key, _, _, err = mvccScanDecodeKeyValue(kvData)
+		key, _, _, err = MVCCScanDecodeKeyValue(kvData)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		resumeKey = key.Key
 	}
 
-	return kvs, resumeKey, intents, nil
+	return kvs, resumeKey, nil
 }
 
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
@@ -1837,7 +1911,22 @@ func MVCCScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
+	return mvccScanToKvs(ctx, engine, nil, key, endKey, max, timestamp,
+		consistent, false /* tombstones */, txn, false /* reverse */)
+}
+
+// MVCCScanToBytes is like MVCCScan, but it returns the results in a byte array.
+func MVCCScanToBytes(
+	ctx context.Context,
+	engine Reader,
+	key,
+	endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
+	return mvccScanToBytes(ctx, engine, nil, key, endKey, max, timestamp,
 		consistent, false /* tombstones */, txn, false /* reverse */)
 }
 
@@ -1854,7 +1943,23 @@ func MVCCReverseScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
+	return mvccScanToKvs(ctx, engine, nil, key, endKey, max, timestamp,
+		consistent, false /* tombstones */, txn, true /* reverse */)
+}
+
+// MVCCReverseScanToBytes is like MVCCReverseScan, but it returns the results
+// in a byte array.
+func MVCCReverseScanToBytes(
+	ctx context.Context,
+	engine Reader,
+	key,
+	endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+) ([]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
+	return mvccScanToBytes(ctx, engine, nil, key, endKey, max, timestamp,
 		consistent, false /* tombstones */, txn, true /* reverse */)
 }
 
@@ -1901,7 +2006,7 @@ func MVCCIterateUsingIter(
 
 	for {
 		const maxKeysPerScan = 1000
-		kvs, resume, newIntents, err := mvccScanInternal(
+		kvs, resume, newIntents, err := mvccScanToKvs(
 			ctx, engine, iter, startKey, endKey, maxKeysPerScan, timestamp, consistent, tombstones, txn, reverse)
 		if err != nil {
 			switch tErr := err.(type) {

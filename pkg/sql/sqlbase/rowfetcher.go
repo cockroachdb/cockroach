@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,7 +39,13 @@ import (
 const debugRowFetch = false
 
 type kvFetcher interface {
-	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, bool, error)
+	// nextBatch returns the next batch of rows. Returns false in the first
+	// parameter if there are no more keys in the scan. May return either a slice
+	// of KeyValues or a batchResponse, numKvs pair, depending on the server
+	// version - both must be handled by calling code. maybeNewSpan is true if
+	// if it was possible that the kv pairs returned were from a new span.
+	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
+		batchResponse []byte, numKvs int64, maybeNewSpan bool, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -217,6 +224,9 @@ type RowFetcher struct {
 	kvEnd             bool
 
 	kvs []roachpb.KeyValue
+
+	batchResponse []byte
+	batchNumKvs   int64
 
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
@@ -431,6 +441,8 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 	rf.indexKey = nil
 	rf.kvFetcher = f
 	rf.kvs = nil
+	rf.batchNumKvs = 0
+	rf.batchResponse = nil
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
@@ -451,7 +463,30 @@ func (rf *RowFetcher) nextKV(
 		rf.maybeNewSpan = false
 		return true, kv, newSpan, nil
 	}
-	ok, rf.kvs, rf.maybeNewSpan, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchNumKvs > 0 {
+		rf.batchNumKvs--
+		var key engine.MVCCKey
+		var rawBytes []byte
+		var err error
+		newSpan = rf.maybeNewSpan
+		rf.maybeNewSpan = false
+		key, rawBytes, rf.batchResponse, err = engine.MVCCScanDecodeKeyValue(rf.batchResponse)
+		if err != nil {
+			return false, kv, false, err
+		}
+		return true, roachpb.KeyValue{
+			Key: key.Key,
+			Value: roachpb.Value{
+				RawBytes: rawBytes,
+			},
+		}, newSpan, nil
+	}
+
+	var numKeys int64
+	ok, rf.kvs, rf.batchResponse, numKeys, rf.maybeNewSpan, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchResponse != nil {
+		rf.batchNumKvs = numKeys
+	}
 	if err != nil {
 		return ok, kv, false, err
 	}

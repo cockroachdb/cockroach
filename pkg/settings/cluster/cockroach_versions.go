@@ -66,6 +66,7 @@ const (
 	VersionColumnarTimeSeries
 	VersionTxnCoordMetaInvalidField
 	VersionAsyncConsensus
+	VersionBatchResponse
 
 	// Add new versions here (step one of two).
 
@@ -252,6 +253,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionAsyncConsensus is https://github.com/cockroachdb/cockroach/pull/26599.
 		Key:     VersionAsyncConsensus,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 9},
+	},
+	{
+		// VersionBatchResponse is https://github.com/cockroachdb/cockroach/pull/26553.
+		Key:     VersionBatchResponse,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).
