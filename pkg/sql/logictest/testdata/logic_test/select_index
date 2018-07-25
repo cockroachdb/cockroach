@@ -598,3 +598,28 @@ SELECT * FROM abc WHERE (c IS NULL OR c=2) AND a>0
 1  1  NULL
 1  2  NULL
 2  2  2
+
+# More regression testing for #12022.
+
+statement ok
+CREATE TABLE t12022_2(a INT, b INT);
+  INSERT INTO t12022_2 VALUES (0,0), (1,NULL), (1,0), (1,2);
+  CREATE INDEX foo ON t12022_2(a,b)
+
+# When querying over the primary index, we're
+# doing a full table scan.
+# In that case the scalar filter kicks in. We don't expect the row
+# (1,NULL) even though NULL sorts before 0, because the result of NULL
+# comparisons is undefined and wqualifies as "false" for filtering.
+query II
+SELECT * FROM t12022_2@primary WHERE (a,b) < (1,0)
+----
+0  0
+
+# When using an index, the result must be consistent with when the
+# index is not used. If the span generation is incorrect, the row
+# (1,NULL) would incorrectly appear here.
+query II
+SELECT * FROM t12022_2@foo WHERE (a,b) < (1,0)
+----
+0  0

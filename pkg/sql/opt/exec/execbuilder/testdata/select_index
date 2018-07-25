@@ -1354,3 +1354,36 @@ render           ·         ·           (w)     ·
       │          spans     /1-/100     ·       ·
       └── scan   ·         ·           (v, w)  ·
 ·                table     t3@primary  ·       ·
+
+# Regression test for #12022.
+# This accompanies the result test in logic_test/select_index.
+# It must confirm that we're performing a full scan
+# when the index is not specified, and uses
+# spans when the index is specified.
+
+statement ok
+CREATE TABLE t12022_2(a INT, b INT);
+  CREATE INDEX foo ON t12022_2(a,b)
+
+query TTTTT
+EXPLAIN(VERBOSE) SELECT * FROM t12022_2@primary WHERE (a,b) < (1,0)
+----
+render     ·         ·                       (a, b)                         ·
+ │         render 0  test.public.t12022_2.a  ·                              ·
+ │         render 1  test.public.t12022_2.b  ·                              ·
+ └── scan  ·         ·                       (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)
+·          table     t12022_2@primary        ·                              ·
+·          spans     ALL                     ·                              ·
+·          filter    (a, b) < (1, 0)         ·                              ·
+
+
+query TTTTT
+EXPLAIN(VERBOSE) SELECT * FROM t12022_2@foo WHERE (a,b) < (1,0)
+----
+render     ·         ·                       (a, b)                         ·
+ │         render 0  test.public.t12022_2.a  ·                              ·
+ │         render 1  test.public.t12022_2.b  ·                              ·
+ └── scan  ·         ·                       (a, b, rowid[hidden,omitted])  rowid!=NULL; weak-key(a,b,rowid)
+·          table     t12022_2@foo            ·                              ·
+·          spans     /!NULL-/1/0             ·                              ·
+·          filter    (a, b) < (1, 0)         ·                              ·
