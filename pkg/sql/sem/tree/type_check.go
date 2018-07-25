@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -51,6 +52,15 @@ type SemaContext struct {
 	// the root user.
 	// TODO(knz): this attribute can be moved to EvalContext pending #15363.
 	privileged bool
+
+	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
+	// query, if any. If the query is not an AS OF SYSTEM TIME query,
+	// AsOfTimestamp is nil.
+	// TODO(knz): we may want to support table readers at arbitrary
+	// timestamps, so that each FROM clause can have its own
+	// timestamp. In that case, the timestamp would not be set
+	// globally for the entire txn and this field would not be needed.
+	AsOfTimestamp *hlc.Timestamp
 
 	Properties SemaProperties
 }

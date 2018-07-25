@@ -1050,10 +1050,12 @@ select
            ├── variable: a.x [type=int]
            └── placeholder: $1 [type=int]
 
+# This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets
+# interpreted by the executor, which obviously is not at play in these tests.
 build
 SELECT * FROM a AS OF SYSTEM TIME '10ns'
 ----
-error (0A000): AS OF clause not supported
+error: AS OF SYSTEM TIME must be provided on a top-level statement
 
 build
 SELECT * FROM a AS t(a, b, c)

@@ -193,7 +193,7 @@ func (ex *connExecutor) prepare(
 			return err
 		}
 		if protoTS != nil {
-			p.asOfSystemTime = true
+			p.semaCtx.AsOfTimestamp = protoTS
 			// We can't use cached descriptors anywhere in this query, because
 			// we want the descriptors at the timestamp given, not the latest
 			// known to the cache.
