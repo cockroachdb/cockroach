@@ -340,7 +340,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
-			p.asOfSystemTime = true
+			p.semaCtx.AsOfTimestamp = ts
 			p.avoidCachedDescriptors = true
 			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
 		}
@@ -359,7 +359,7 @@ func (ex *connExecutor) execStmtInOpenState(
 					"Generally \"as of system time\" cannot be used inside a transaction.",
 					ex.state.mu.txn.OrigTimestamp()))
 			}
-			p.asOfSystemTime = true
+			p.semaCtx.AsOfTimestamp = ts
 			p.avoidCachedDescriptors = true
 		}
 	}
