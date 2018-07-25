@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1741,5 +1742,72 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 
 	if numSpans := len(tcs.GetMeta().Intents); numSpans != 1 {
 		t.Fatalf("expected 1 intent span, got: %d", numSpans)
+	}
+}
+
+// TestTxnCoordSenderPipelining verifies that transactional pipelining of writes
+// is enabled by default in a transaction and is disabled after
+// DisablePipelining is called. It also verifies that DisablePipelining returns
+// an error if the transaction has already performed an operation.
+func TestTxnCoordSenderPipelining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+	distSender := s.DB.GetFactory().(*TxnCoordSenderFactory).NonTransactionalSender()
+
+	var calls []roachpb.Method
+	var senderFn client.SenderFunc = func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error) {
+		calls = append(calls, ba.Methods()...)
+		return distSender.Send(ctx, ba)
+	}
+
+	ambientCtx := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
+		AmbientCtx: ambientCtx,
+		Settings:   s.Cfg.Settings,
+		Clock:      s.Clock,
+		Stopper:    s.Stopper,
+	}, senderFn)
+	db := client.NewDB(ambientCtx, tsf, s.Clock)
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return txn.Put(ctx, "key", "val")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.DisablePipelining(); err != nil {
+			return err
+		}
+		return txn.Put(ctx, "key", "val")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	require.Equal(t, []roachpb.Method{
+		roachpb.BeginTransaction, roachpb.Put, roachpb.QueryIntent, roachpb.EndTransaction,
+		roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction,
+	}, calls)
+
+	for _, action := range []func(ctx context.Context, txn *client.Txn) error{
+		func(ctx context.Context, txn *client.Txn) error { return txn.Put(ctx, "key", "val") },
+		func(ctx context.Context, txn *client.Txn) error { _, err := txn.Get(ctx, "key"); return err },
+	} {
+		err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := action(ctx, txn); err != nil {
+				t.Fatal(err)
+			}
+			return txn.DisablePipelining()
+		})
+		if exp := "cannot disable pipelining on a running transaction"; !testutils.IsError(err, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, err)
+		}
 	}
 }

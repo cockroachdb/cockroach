@@ -896,10 +896,14 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
 	var mtc *multiTestContext
-	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
-		if ba.IsSingleGetSnapshotForMergeRequest() && rand.Int()%4 == 0 {
-			// Before every few GetSnapshotForMerge requests, expire all range leases.
-			// This makes the following sequence of events quite likely:
+	storeCfg.TestingKnobs.TestingResponseFilter = func(
+		ba roachpb.BatchRequest, _ *roachpb.BatchResponse,
+	) *roachpb.Error {
+		del := ba.Requests[0].GetDelete()
+		if del != nil && bytes.HasSuffix(del.Key, keys.LocalRangeDescriptorSuffix) && rand.Int()%4 == 0 {
+			// After every few deletions of the local range descriptor, expire all
+			// range leases. This makes the following sequence of events quite
+			// likely:
 			//
 			//     1. The merge transaction begins and lays down deletion intents for
 			//        the meta2 and local copies of the RHS range descriptor.
@@ -911,7 +915,10 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 			//        channel.
 			//     4. The Get request blocks on the newly installed mergeComplete
 			//        channel.
-			//     5. The GetSnapshotForMerge request arrives.
+			//     5. The GetSnapshotForMerge request arrives. (Or, if the merge
+			//        transaction is incorrectly pipelined, the QueryIntent request
+			//        for the RHS range descriptor key that precedes the
+			//        GetSnapshotForMerge request arrives.)
 			//
 			// This scenario previously caused deadlock. The merge was not able to
 			// complete until the GetSnapshotForMerge request completed, but the
