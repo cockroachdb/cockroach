@@ -15,48 +15,46 @@
 package status
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/net"
 )
 
 func TestSumDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	counters := map[string]disk.IOCountersStat{
-		"disk0": {
-			ReadBytes:      1,
-			ReadTime:       1,
-			ReadCount:      1,
-			IopsInProgress: 1,
-			WriteBytes:     1,
-			WriteTime:      1,
-			WriteCount:     1,
+	counters := []diskStats{
+		{
+			readBytes:      1,
+			readTimeMs:     1,
+			readCount:      1,
+			iopsInProgress: 1,
+			writeBytes:     1,
+			writeTimeMs:    1,
+			writeCount:     1,
 		},
-		"disk1": {
-			ReadBytes:      1,
-			ReadTime:       1,
-			ReadCount:      1,
-			IopsInProgress: 1,
-			WriteBytes:     1,
-			WriteTime:      1,
-			WriteCount:     1,
+		{
+			readBytes:      1,
+			readTimeMs:     1,
+			readCount:      1,
+			iopsInProgress: 1,
+			writeBytes:     1,
+			writeTimeMs:    1,
+			writeCount:     1,
 		},
 	}
 	summed := sumDiskCounters(counters)
-	expected := disk.IOCountersStat{
-		ReadBytes:      2,
-		ReadTime:       2,
-		ReadCount:      2,
-		WriteBytes:     2,
-		WriteTime:      2,
-		WriteCount:     2,
-		IopsInProgress: 2,
+	expected := diskStats{
+		readBytes:      2,
+		readTimeMs:     2,
+		readCount:      2,
+		writeBytes:     2,
+		writeTimeMs:    2,
+		writeCount:     2,
+		iopsInProgress: 2,
 	}
 	if !reflect.DeepEqual(summed, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, summed)
@@ -95,32 +93,32 @@ func TestSumNetCounters(t *testing.T) {
 func TestSubtractDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	from := disk.IOCountersStat{
-		ReadBytes:      3,
-		ReadTime:       3,
-		ReadCount:      3,
-		WriteBytes:     3,
-		WriteTime:      3,
-		WriteCount:     3,
-		IopsInProgress: 3,
+	from := diskStats{
+		readBytes:      3,
+		readTimeMs:     3,
+		readCount:      3,
+		writeBytes:     3,
+		writeTimeMs:    3,
+		writeCount:     3,
+		iopsInProgress: 3,
 	}
-	sub := disk.IOCountersStat{
-		ReadBytes:      1,
-		ReadTime:       1,
-		ReadCount:      1,
-		IopsInProgress: 1,
-		WriteBytes:     1,
-		WriteTime:      1,
-		WriteCount:     1,
+	sub := diskStats{
+		readBytes:      1,
+		readTimeMs:     1,
+		readCount:      1,
+		iopsInProgress: 1,
+		writeBytes:     1,
+		writeTimeMs:    1,
+		writeCount:     1,
 	}
-	expected := disk.IOCountersStat{
-		ReadBytes:      2,
-		ReadTime:       2,
-		ReadCount:      2,
-		WriteBytes:     2,
-		WriteTime:      2,
-		WriteCount:     2,
-		IopsInProgress: 2,
+	expected := diskStats{
+		readBytes:      2,
+		readTimeMs:     2,
+		readCount:      2,
+		writeBytes:     2,
+		writeTimeMs:    2,
+		writeCount:     2,
+		iopsInProgress: 2,
 	}
 	subtractDiskCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
