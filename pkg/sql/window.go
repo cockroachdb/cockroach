@@ -53,6 +53,18 @@ type windowNode struct {
 	aggContainer windowNodeAggContainer
 	ivarHelper   *tree.IndexedVarHelper
 
+	// numRendersNotToBeReused indicates the number of renders that are being used
+	// as arguments to window functions plus (possibly) some columns that are simply
+	// being passed through windowNode (i.e. with no window functions).
+	//
+	// Currently, we do not want to reuse these renders because the columns these renders
+	// refer to will not be output by window processors in DistSQL once
+	// the corresponding window functions have been computed (window processors
+	// put the result of computing of window functions in place of the arguments
+	// to window functions).
+	// TODO(yuzefovich): once this is no longer necessary, remove this restriction.
+	numRendersNotToBeReused int
+
 	run windowRun
 }
 
@@ -279,6 +291,8 @@ func (p *planner) constructWindowDefinitions(
 	}
 
 	n.run.windowFrames = make([]*tree.WindowFrame, len(n.funcs))
+	n.numRendersNotToBeReused = len(s.render)
+
 	// Construct window definitions for each window function application.
 	for idx, windowFn := range n.funcs {
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
@@ -295,7 +309,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 
-			colIdxs := s.addOrReuseRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
@@ -313,7 +327,7 @@ func (p *planner) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			colIdxs := s.addOrReuseRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
 					ColIdx:    idx,
@@ -480,13 +494,13 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					Name: t.String(),
 					Typ:  t.ResolvedType(),
 				}
-				colIdx := s.addOrReuseRender(col, t, true)
+				colIdx := s.addOrReuseRenderStartingFromIdx(col, t, true, n.numRendersNotToBeReused)
 				n.colContainer.idxMap[t.Idx] = colIdx
 				return nil, false, ivarHelper.IndexedVar(t.Idx)
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
 				// windowFuncHolders at this point, so if we see an aggregate
-				// function in the window renders, it is above a window function.
+				// function in the window renders, it is above a windowing level.
 				if t.GetAggregateConstructor() != nil {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
