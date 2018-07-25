@@ -44,7 +44,6 @@ package closedts
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
@@ -67,7 +66,6 @@ import (
 // disk state; we don't need to bootstrap it into a new consistent state
 // that can be updated incrementally).
 type Storage interface {
-	fmt.Stringer
 	// VisitAscending visits the historical states contained within the Storage
 	// in ascending closed timestamp order. Each state (Entry) is full, i.e.
 	// non-incremental. The iteration stops when all states have been visited

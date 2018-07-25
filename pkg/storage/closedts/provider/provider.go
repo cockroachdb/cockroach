@@ -53,10 +53,14 @@ type Provider struct {
 
 	mu struct {
 		syncutil.RWMutex
+		*sync.Cond // on RWMutex.RLocker()
+		// The current subscribers. The goroutine associated to each
+		// subscriber uses the RLock to mutate its slot. Thus, when
+		// accessing this slice for any other reason, the write lock
+		// needs to be acquired.
 		subscribers []*subscriber
 		draining    bool // tell subscribers to terminate
 	}
-	cond *sync.Cond
 
 	everyClockLog log.EveryN
 }
@@ -65,11 +69,12 @@ var _ closedts.Provider = (*Provider)(nil)
 
 // NewProvider initializes a Provider, that has yet to be started.
 func NewProvider(cfg *Config) *Provider {
-	return &Provider{
+	p := &Provider{
 		cfg:           cfg,
-		cond:          sync.NewCond((&syncutil.RWMutex{}).RLocker()),
 		everyClockLog: log.Every(time.Minute),
 	}
+	p.mu.Cond = sync.NewCond(p.mu.RLocker())
+	return p
 }
 
 // Start implements closedts.Provider.
@@ -86,7 +91,7 @@ func (p *Provider) drain() {
 	p.mu.draining = true
 	p.mu.Unlock()
 	for {
-		p.cond.Broadcast()
+		p.mu.Broadcast()
 		p.mu.Lock()
 		done := true
 		for _, sub := range p.mu.subscribers {
@@ -104,6 +109,9 @@ func (p *Provider) runCloser(ctx context.Context) {
 	// The loop below signals the subscribers, so when it exits it needs to do
 	// extra work to help the subscribers terminate.
 	defer p.drain()
+
+	ch := p.Notify(p.cfg.NodeID)
+	defer close(ch)
 
 	var t timeutil.Timer
 	defer t.Stop()
@@ -129,6 +137,9 @@ func (p *Provider) runCloser(ctx context.Context) {
 			if p.everyClockLog.ShouldLog() {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %s", err)
 			}
+			// Broadcast even if nothing new was queued, so that the subscribers
+			// loop to check their client's context.
+			p.mu.Broadcast()
 		} else {
 			closed, m := p.cfg.Close(next)
 			if log.V(1) {
@@ -146,24 +157,13 @@ func (p *Provider) runCloser(ctx context.Context) {
 
 			// Simulate a subscription to the local node, so that the new information
 			// is added to the storage (and thus becomes available to future subscribers
-			// as well, not only to existing ones).
+			// as well, not only to existing ones). The other end of the chan will Broadcast().
 			//
 			// TODO(tschottdorf): the transport should ignore connection requests from
 			// the node to itself. Those connections would pointlessly loop this around
 			// once more.
-			p.cfg.Storage.Add(p.cfg.NodeID, entry)
-
-			// Notify existing subscribers.
-			p.mu.Lock()
-			for _, sub := range p.mu.subscribers {
-				sub.queue = append(sub.queue, entry)
-			}
-			p.mu.Unlock()
+			ch <- entry
 		}
-
-		// Broadcast even if nothing new was queued, so that the subscribers
-		// loop to check their client's context.
-		p.cond.Broadcast()
 	}
 }
 
@@ -173,15 +173,41 @@ func (p *Provider) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
 
 	p.cfg.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		for entry := range ch {
+		handle := func(entry ctpb.Entry) {
 			p.cfg.Storage.Add(nodeID, entry)
+		}
+		// Special-case data about the origin node, which folks can subscribe to.
+		// This is easily generalized to also allow subscriptions for data that
+		// originated on other nodes, but this doesn't seem necessary right now.
+		if nodeID == p.cfg.NodeID {
+			handle = func(entry ctpb.Entry) {
+				// Add to the Storage first.
+				p.cfg.Storage.Add(nodeID, entry)
+				// Notify existing subscribers.
+				p.mu.Lock()
+				for _, sub := range p.mu.subscribers {
+					if sub == nil {
+						continue
+					}
+					sub.queue = append(sub.queue, entry)
+				}
+				p.mu.Unlock()
+				// Wake up all clients.
+				p.mu.Broadcast()
+			}
+		}
+		for entry := range ch {
+			handle(entry)
 		}
 	})
 
 	return ch
 }
 
-// Subscribe implements closedts.Producer.
+// Subscribe implements closedts.Producer. It produces a stream of Entries
+// pertaining to the local Node.
+//
+// TODO(tschottdorf): consider not forcing the caller to launch the goroutine.
 func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	var i int
 	sub := &subscriber{ch, nil}
@@ -215,44 +241,47 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	// The subscription is already active, so any storage snapshot from now on is
 	// going to fully catch up the subscriber without a gap.
 	{
-		p.cfg.Storage.VisitAscending(p.cfg.NodeID, func(e ctpb.Entry) (done bool) {
-			select {
-			case ch <- e:
-			case <-ctx.Done():
-				return true // done
-			}
-			return false // want more
+		var entries []ctpb.Entry
+
+		p.cfg.Storage.VisitAscending(p.cfg.NodeID, func(entry ctpb.Entry) (done bool) {
+			// Don't block in this method.
+			entries = append(entries, entry)
+			return false // not done
 		})
+
+		for _, entry := range entries {
+			select {
+			case ch <- entry:
+			case <-ctx.Done():
+				return
+			}
+		}
 	}
 
 	for {
-		p.cond.L.Lock()
-		p.cond.Wait()
-		p.cond.L.Unlock()
-
-		if err := ctx.Err(); err != nil {
-			if log.V(1) {
-				log.Info(ctx, err)
-			}
-			return
-		}
-
-		var queue []ctpb.Entry
 		p.mu.RLock()
+		var done bool
+		for len(p.mu.subscribers[i].queue) == 0 {
+			if ctx.Err() != nil || p.mu.draining {
+				done = true
+				break
+			}
+			p.mu.Wait()
+		}
+		var queue []ctpb.Entry
+		// When only readers are around (as they are now), we can actually
+		// mutate our slot because that's all the others do as well.
 		queue, p.mu.subscribers[i].queue = p.mu.subscribers[i].queue, nil
-		draining := p.mu.draining
 		p.mu.RUnlock()
 
-		if draining {
+		if done {
 			return
 		}
 
 		for _, entry := range queue {
 			select {
 			case ch <- entry:
-			default:
-				// Abort the subscription if consumer doesn't keep up.
-				log.Warning(ctx, "closed timestamp update subscriber did not catch up; terminating")
+			case <-ctx.Done():
 				return
 			}
 		}

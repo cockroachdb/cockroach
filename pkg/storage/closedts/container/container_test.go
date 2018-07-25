@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	providertestutils "github.com/cockroachdb/cockroach/pkg/storage/closedts/provider/testutils"
 	transporttestutils "github.com/cockroachdb/cockroach/pkg/storage/closedts/transport/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,12 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
-
-type Tick struct {
-	liveNow   hlc.Timestamp
-	liveEpoch ctpb.Epoch
-	err       error
-}
 
 type LateBoundDialer struct {
 	Wrapped *transporttestutils.ChanDialer
@@ -63,33 +58,7 @@ type TestContainer struct {
 		RangeIDs []roachpb.RangeID
 	}
 	Dialer    *LateBoundDialer
-	TestClock *TestClock
-}
-
-type TestClock struct {
-	stopper *stop.Stopper
-	ch      chan Tick
-}
-
-func NewTestClock(stopper *stop.Stopper) *TestClock {
-	t := &TestClock{
-		stopper: stopper,
-		ch:      make(chan Tick),
-	}
-	return t
-}
-
-func (c *TestClock) Tick(liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, err error) {
-	c.ch <- Tick{liveNow, liveEpoch, err}
-}
-
-func (c *TestClock) LiveNow() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error) {
-	select {
-	case r := <-c.ch:
-		return r.liveNow, r.liveEpoch, r.err
-	case <-c.stopper.ShouldQuiesce():
-		return hlc.Timestamp{}, 0, errors.New("quiescing")
-	}
+	TestClock *providertestutils.TestClock
 }
 
 func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
@@ -97,7 +66,7 @@ func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
 
 	tc := &TestContainer{}
 
-	tc.TestClock = NewTestClock(stopper)
+	tc.TestClock = providertestutils.NewTestClock(stopper)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
