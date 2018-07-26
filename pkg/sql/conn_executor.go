@@ -445,10 +445,12 @@ func (sp sessionParams) sessionData(
 		DistSQLMode:     sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
 		OptimizerMode:   sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
 		SearchPath:      sqlbase.DefaultSearchPath,
-		Location:        time.UTC,
 		User:            sp.args.User,
 		RemoteAddr:      sp.args.RemoteAddr,
 		SequenceState:   sessiondata.NewSequenceState(),
+		DataConversion: sessiondata.DataConversionConfig{
+			Location: time.UTC,
+		},
 	}
 	return sd
 }
@@ -1066,7 +1068,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 
 			stmtRes := ex.clientComm.CreateStatementResult(
 				tcmd.Stmt, NeedRowDesc, pos, nil, /* formatCodes */
-				ex.sessionData.Location, ex.sessionData.BytesEncodeFormat)
+				ex.sessionData.DataConversion)
 			res = stmtRes
 			curStmt := Statement{AST: tcmd.Stmt}
 
@@ -1120,7 +1122,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				// needed.
 				DontNeedRowDesc,
 				pos, portal.OutFormats,
-				ex.sessionData.Location, ex.sessionData.BytesEncodeFormat)
+				ex.sessionData.DataConversion)
 			stmtRes.SetLimit(tcmd.Limit)
 			res = stmtRes
 			curStmt := Statement{
@@ -1798,7 +1800,7 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)
-	p.semaCtx.Location = &ex.sessionData.Location
+	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
 

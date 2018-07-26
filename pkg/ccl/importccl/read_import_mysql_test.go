@@ -29,7 +29,9 @@ import (
 )
 
 var testEvalCtx = &tree.EvalContext{
-	SessionData:   &sessiondata.SessionData{Location: time.UTC},
+	SessionData: &sessiondata.SessionData{
+		DataConversion: sessiondata.DataConversionConfig{Location: time.UTC},
+	},
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 }
 

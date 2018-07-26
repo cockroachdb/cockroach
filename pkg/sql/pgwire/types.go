@@ -67,7 +67,7 @@ func pgTypeForParserType(t types.T) pgType {
 const secondsInDay = 24 * 60 * 60
 
 func (b *writeBuffer) writeTextDatum(
-	ctx context.Context, d tree.Datum, sessionLoc *time.Location, be sessiondata.BytesEncodeFormat,
+	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
@@ -94,7 +94,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DFloat:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'f', -1, 64)
+		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'g', conv.GetFloatPrec(), 64)
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -102,7 +102,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedDatum(v)
 
 	case *tree.DBytes:
-		result := lex.EncodeByteArrayToRawBytes(string(*v), be, false /* skipHexPrefix */)
+		result := lex.EncodeByteArrayToRawBytes(
+			string(*v), conv.BytesEncodeFormat, false /* skipHexPrefix */)
 		b.putInt32(int32(len(result)))
 		b.write([]byte(result))
 
@@ -133,7 +134,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DTimeTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v, sessionLoc, b.putbuf[4:4])
+		s := formatTimeTZ(v, conv.Location, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -145,7 +146,7 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *tree.DTimestampTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTs(v.Time, sessionLoc, b.putbuf[4:4])
+		s := formatTs(v.Time, conv.Location, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 

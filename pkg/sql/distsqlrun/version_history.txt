@@ -72,3 +72,5 @@
     - Add scalar vs non-scalar designation to aggregator.
 - Version: 18 (MinAcceptedVersion: 6)
     - New EvalContext field.
+- Version: 19 (MinAcceptedVersion: 6)
+    - More EvalContext fields.
