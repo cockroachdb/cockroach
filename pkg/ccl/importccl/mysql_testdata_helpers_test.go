@@ -16,12 +16,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // This can be toggled to re-write the `testdata`. Requires local mysql
@@ -87,6 +89,22 @@ var simpleTestRows = func() []simpleTestRow {
 		testRows = append(testRows, simpleTestRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
 	}
 	return testRows
+}()
+
+type everythingTestRow struct {
+	i   int
+	c   string
+	bin []byte
+	dt  time.Time
+	iw  int
+	fl  float64
+	d53 string
+}
+
+var everythingTestRows = func() []everythingTestRow {
+	return []everythingTestRow{
+		{1, "c", []byte("bin"), timeutil.Unix(946684800, 0), -2, -1.5, "-12.345"},
+	}
 }()
 
 type testFiles struct {
@@ -224,15 +242,15 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 		`CREATE TABLE everything (
 				i INT PRIMARY KEY,
 
-				c       CHAR(10),
+				c       CHAR(10) NOT NULL,
 				s       VARCHAR(100),
 				tx      TEXT,
 
-				bin     BINARY(100),
+				bin     BINARY(100) NOT NULL,
 				vbin    VARBINARY(100),
 				bl      BLOB,
 
-				dt      DATETIME,
+				dt      DATETIME NOT NULL,
 				d       DATE,
 				ts      TIMESTAMP,
 				t       TIME,
@@ -243,14 +261,14 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 				nu      NUMERIC,
 				d53     DECIMAL(5,3),
 
-				iw      INT(5),
+				iw      INT(5) NOT NULL,
 				iz      INT ZEROFILL,
 				ti      TINYINT,
 				si      SMALLINT,
 				mi      MEDIUMINT,
 				bi      BIGINT,
 
-				fl      FLOAT,
+				fl      FLOAT NOT NULL,
 				rl      REAL,
 				db      DOUBLE,
 
@@ -277,6 +295,17 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 	}
 	for i := 1; i <= secondTableRows; i++ {
 		if _, err := db.Exec(`INSERT INTO second VALUES (?, ?)`, -i, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, r := range everythingTestRows {
+		if _, err := db.Exec(
+			`INSERT INTO everything (
+			i, c, bin, dt, iw, fl, d53
+		) VALUES (
+			?, ?, ?, ?, ?, ?, ?
+		)`, r.i, r.c, r.bin, r.dt, r.iw, r.fl, r.d53); err != nil {
 			t.Fatal(err)
 		}
 	}

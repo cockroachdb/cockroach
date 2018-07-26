@@ -178,6 +178,29 @@ func mysqlValueToDatum(
 		default:
 			return nil, fmt.Errorf("unsupported value type %c: %v", v.Type, v)
 		}
+
+	case *mysql.UnaryExpr:
+		if v.Operator != "-" {
+			return nil, errors.Errorf("unexpected operator: %q", v.Operator)
+		}
+		parsed, err := mysqlValueToDatum(v.Expr, desired, evalContext)
+		if err != nil {
+			return nil, err
+		}
+		switch i := parsed.(type) {
+		case *tree.DInt:
+			return tree.NewDInt(-*i), nil
+		case *tree.DFloat:
+			return tree.NewDFloat(-*i), nil
+		case *tree.DDecimal:
+			dec := &i.Decimal
+			dd := &tree.DDecimal{}
+			dd.Decimal.Neg(dec)
+			return dd, nil
+		default:
+			return nil, errors.Errorf("unsupported negation of %T", i)
+		}
+
 	case *mysql.NullVal:
 		return tree.DNull, nil
 
