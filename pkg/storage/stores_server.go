@@ -18,30 +18,23 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Server implements ConsistencyServer.
 type Server struct {
-	descriptor *roachpb.NodeDescriptor
-	stores     *Stores
+	stores *Stores
 }
 
 var _ ConsistencyServer = Server{}
 
 // MakeServer returns a new instance of Server.
 func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
-	return Server{descriptor, stores}
+	return Server{stores}
 }
 
 func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) error {
-	if h.NodeID != is.descriptor.NodeID {
-		return errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
-			h.NodeID, is.descriptor.NodeID)
-	}
 	store, err := is.stores.GetStore(h.StoreID)
 	if err != nil {
 		return err
