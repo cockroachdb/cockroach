@@ -587,7 +587,6 @@ func (n *Node) startStores(
 	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
 		return err
 	}
-	// Also populate bootstrap list
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
