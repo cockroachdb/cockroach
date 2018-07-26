@@ -352,7 +352,7 @@ type raftRequestQueue struct {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident              roachpb.StoreIdent
+	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
@@ -1324,16 +1324,13 @@ func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent,
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
 
-	// Read the store ident if not already initialized. "NodeID != 0" implies
-	// the store has already been initialized.
-	if s.Ident.NodeID == 0 {
-		// Read store ident and return a not-bootstrapped error if necessary.
-		ident, err := ReadStoreIdent(ctx, s.engine)
-		if err != nil {
-			return err
-		}
-		s.Ident = ident
+	// Populate the store ident. If not bootstrapped, ReadStoreIntent will
+	// return an error.
+	ident, err := ReadStoreIdent(ctx, s.engine)
+	if err != nil {
+		return err
 	}
+	s.Ident = &ident
 
 	// Set the store ID for logging.
 	s.cfg.AmbientCtx.AddLogTagInt("s", int(s.StoreID()))
@@ -1831,19 +1828,22 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(
-	ctx context.Context, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
+func Bootstrap(
+	ctx context.Context, eng engine.Engine, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
 ) error {
-	if (s.Ident != roachpb.StoreIdent{}) {
-		return errors.Errorf("store %s is already bootstrapped", s)
+	exIdent, err := ReadStoreIdent(ctx, eng)
+	if err == nil {
+		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent)
 	}
-	ctx = s.AnnotateCtx(ctx)
-	if err := checkEngineEmpty(ctx, s.engine); err != nil {
+	if _, ok := err.(*NotBootstrappedError); !ok {
+		return err
+	}
+
+	if err := checkEngineEmpty(ctx, eng); err != nil {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
-	s.Ident = ident
 
-	batch := s.engine.NewBatch()
+	batch := eng.NewBatch()
 	if err := engine.MVCCPutProto(
 		ctx,
 		batch,
@@ -1851,7 +1851,7 @@ func (s *Store) Bootstrap(
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
 		nil,
-		&s.Ident,
+		&ident,
 	); err != nil {
 		batch.Close()
 		return err
@@ -1860,7 +1860,7 @@ func (s *Store) Bootstrap(
 		batch.Close()
 		return errors.Wrap(err, "cannot write cluster version")
 	}
-	if err := batch.Commit(true); err != nil {
+	if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting bootstrap data")
 	}
 

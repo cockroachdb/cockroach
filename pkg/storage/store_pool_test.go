@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -549,6 +550,13 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	cfg := TestStoreConfig(clock)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	store := NewStore(cfg, eng, &node)
+	// Fake an ident because this test doesn't want to start the store
+	// but without an Ident there will be NPEs.
+	store.Ident = &roachpb.StoreIdent{
+		ClusterID: uuid.Nil,
+		StoreID:   1,
+		NodeID:    1,
+	}
 
 	// Create replica.
 	rg := roachpb.RangeDescriptor{

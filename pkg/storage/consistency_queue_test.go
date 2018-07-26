@@ -115,7 +115,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	notifyReportDiff := make(chan struct{}, 1)
 	sc.TestingKnobs.BadChecksumReportDiff =
 		func(s roachpb.StoreIdent, diff []storage.ReplicaSnapshotDiff) {
-			if s != mtc.Store(0).Ident {
+			if s != *mtc.Store(0).Ident {
 				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %s)", s)
 				return
 			}
@@ -131,7 +131,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// Store 0 will panic.
 	notifyPanic := make(chan struct{}, 1)
 	sc.TestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
-		if s != mtc.Store(0).Ident {
+		if s != *mtc.Store(0).Ident {
 			t.Errorf("BadChecksumPanic called from follower (StoreIdent = %s)", s)
 			return
 		}
