@@ -848,7 +848,11 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		return pretty.Fold(pretty.Concat,
+		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
+		if isCollatedString {
+			typ = pretty.Text(coltypes.String.String())
+		}
+		ret := pretty.Fold(pretty.Concat,
 			pretty.Text("CAST"),
 			pretty.Bracket(
 				"(",
@@ -862,6 +866,14 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 				")",
 			),
 		)
+
+		if isCollatedString {
+			ret = pretty.Fold(pretty.ConcatSpace,
+				ret,
+				pretty.Text("COLLATE"),
+				pretty.Text(t.Locale))
+		}
+		return ret
 	}
 }
 
