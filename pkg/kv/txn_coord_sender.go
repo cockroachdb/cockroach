@@ -38,7 +38,6 @@ import (
 
 const (
 	opTxnCoordSender = "txn coordinator"
-	opHeartbeatLoop  = "heartbeat txn"
 )
 
 // txnCoordState represents the state of the transaction coordinator.
@@ -761,8 +760,6 @@ func (tc *TxnCoordSender) finalTxnStatsLocked() (duration, restarts int64, statu
 // stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents. When the heartbeat stops, the transaction
 // stats are updated based on its final disposition.
-//
-// TODO(wiz): Update (*DBServer).Batch to not use context.TODO().
 func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 	var tickChan <-chan time.Time
 	{
@@ -770,12 +767,6 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
-
-	// TODO(tschottdorf): this should join to the trace of the request
-	// which starts this goroutine.
-	sp := tc.AmbientContext.Tracer.StartSpan(opHeartbeatLoop)
-	defer sp.Finish()
-	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	defer func() {
 		tc.mu.Lock()
@@ -948,10 +939,15 @@ func (tc *TxnCoordSender) startHeartbeatLoopLocked(ctx context.Context) error {
 	tc.mu.txnEnd = make(chan struct{})
 	// Create a new context so that the heartbeat loop doesn't inherit the
 	// caller's cancelation.
+	// We want the loop to run in a span linked to the current one, though, so we
+	// put our span in the new context and expect RunAsyncTask to fork it
+	// immediately.
 	hbCtx := tc.AnnotateCtx(context.Background())
+	hbCtx = opentracing.ContextWithSpan(hbCtx, opentracing.SpanFromContext(ctx))
+
 	if err := tc.stopper.RunAsyncTask(
-		ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
-			tc.heartbeatLoop(hbCtx)
+		hbCtx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
+			tc.heartbeatLoop(ctx)
 		}); err != nil {
 		// The system is already draining and we can't start the
 		// heartbeat. We refuse new transactions for now because
