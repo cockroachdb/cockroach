@@ -17,6 +17,7 @@ package kv_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Test that a transaction gets cleaned up when the heartbeat loop finds out
@@ -119,5 +121,63 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		err, "HandledRetryableTxnError: TransactionAbortedError",
 	) {
 		t.Fatalf("expected aborted error, got: %s", err)
+	}
+}
+
+// Test that, when a transaction restarts, we don't get a second heartbeat loop
+// for it. This bug happened in the past.
+//
+// The test traces the restarting transaction and looks in it to see how many
+// times a heartbeat loop was started.
+func TestNoDuplicateHeartbeatLoops(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	key := roachpb.Key("a")
+
+	tracer := tracing.NewTracer()
+	sp := tracer.StartSpan("test", tracing.Recordable)
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	txnCtx := opentracing.ContextWithSpan(context.Background(), sp)
+
+	push := func(ctx context.Context, key roachpb.Key) error {
+		return db.Put(ctx, key, "push")
+	}
+
+	var attempts int
+	err := db.Txn(txnCtx, func(ctx context.Context, txn *client.Txn) error {
+		attempts++
+		if attempts == 1 {
+			if err := push(context.Background() /* keep the contexts separate */, key); err != nil {
+				return err
+			}
+		}
+		if _, err := txn.Get(ctx, key); err != nil {
+			return err
+		}
+		return txn.Put(ctx, key, "val")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got: %d", attempts)
+	}
+	sp.Finish()
+	recording := tracing.GetRecording(sp)
+	var foundHeartbeatLoop bool
+	for _, sp := range recording {
+		if strings.Contains(sp.Operation, "heartbeat loop") {
+			if foundHeartbeatLoop {
+				t.Fatal("second heartbeat loop found")
+			}
+			foundHeartbeatLoop = true
+		}
+	}
+	if !foundHeartbeatLoop {
+		t.Fatal("no heartbeat loop found. Test rotted?")
 	}
 }
