@@ -472,7 +472,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// table readers at arbitrary timestamps, and each FROM clause
 		// can have its own timestamp. In that case, the timestamp
 		// would not be set globally for the entire txn.
-		if !p.asOfSystemTime {
+		if p.semaCtx.AsOfTimestamp == nil {
 			return hlc.MaxTimestamp, false,
 				fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
 		}
@@ -485,7 +485,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
-		if ts != p.txn.OrigTimestamp() {
+		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
 				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
 		}

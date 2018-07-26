@@ -1800,6 +1800,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)
 	p.semaCtx.Location = &ex.sessionData.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
+	p.semaCtx.AsOfTimestamp = nil
 
 	p.extendedEvalCtx = ex.evalCtx(ctx, p, stmtTS)
 	p.extendedEvalCtx.ClusterID = ex.server.cfg.ClusterID()
@@ -1810,7 +1811,6 @@ func (ex *connExecutor) resetPlanner(
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.autoCommit = false
 	p.isPreparing = false
-	p.asOfSystemTime = false
 	p.avoidCachedDescriptors = false
 }
 

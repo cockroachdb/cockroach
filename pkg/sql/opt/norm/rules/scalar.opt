@@ -170,7 +170,7 @@
 (Eq
   (FetchVal
     $val:*
-    $key:(Const) & ^(Null) & (IsString $key)
+    $key:(Const) & (IsString $key)
   )
   $right:(Const)
 )
@@ -195,7 +195,7 @@
 (Contains
   (FetchVal
     $val:*
-    $key:(Const) & ^(Null) & (IsString $key)
+    $key:(Const) & (IsString $key)
   )
   $right:(Const) & ^(IsJSONScalar $right)
 )

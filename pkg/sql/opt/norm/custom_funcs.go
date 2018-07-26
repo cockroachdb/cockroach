@@ -982,16 +982,21 @@ func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
 	return c.f.ConstructConst(c.f.InternDatum(r))
 }
 
+// ExtractConstValue extracts the Datum from a constant value.
+func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
+	return c.f.mem.LookupPrivate(c.f.mem.NormExpr(group).AsConst().Value())
+}
+
 // IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
 func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
-	v := c.f.mem.LookupPrivate(c.f.mem.NormExpr(value).AsConst().Value()).(tree.Datum).(*tree.DJSON)
+	v := c.ExtractConstValue(value).(*tree.DJSON)
 	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
 }
 
 // MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
 func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
-	k := c.f.mem.LookupPrivate(c.f.mem.NormExpr(key).AsConst().Value()).(*tree.DString)
-	v := c.f.mem.LookupPrivate(c.f.mem.NormExpr(value).AsConst().Value()).(*tree.DJSON)
+	k := c.ExtractConstValue(key).(*tree.DString)
+	v := c.ExtractConstValue(value).(*tree.DJSON)
 
 	builder := json.NewObjectBuilder(1)
 	builder.Add(string(*k), v.JSON)
