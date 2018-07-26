@@ -106,6 +106,10 @@ type mdTable struct {
 // mdColumn stores information about one of the columns stored in the metadata,
 // including its label and type.
 type mdColumn struct {
+	// tabID is the identifier of the base table to which this column belongs.
+	// If the column was synthesized (i.e. no base table), then the value is zero.
+	tabID TableID
+
 	// label is the best-effort name of this column. Since the same column can
 	// have multiple labels (using aliasing), one of those is chosen to be used
 	// for pretty-printing and debugging. This might be different than what is
@@ -146,8 +150,17 @@ func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
 		ord := index.Column(i).Ordinal
 		indexCols.Add(int(md.TableColumn(tableID, ord)))
 	}
-
 	return indexCols
+}
+
+// ColumnTableID returns the identifier of the base table to which the given
+// column belongs. If the column has no base table because it was synthesized,
+// ColumnTableID returns zero.
+func (md *Metadata) ColumnTableID(id ColumnID) TableID {
+	if id == 0 {
+		panic("uninitialized column id 0")
+	}
+	return md.cols[id].tabID
 }
 
 // ColumnLabel returns the label of the given column. It is used for pretty-
@@ -156,7 +169,6 @@ func (md *Metadata) ColumnLabel(id ColumnID) string {
 	if id == 0 {
 		panic("uninitialized column id 0")
 	}
-
 	return md.cols[id].label
 }
 
@@ -165,8 +177,20 @@ func (md *Metadata) ColumnType(id ColumnID) types.T {
 	if id == 0 {
 		panic("uninitialized column id 0")
 	}
-
 	return md.cols[id].typ
+}
+
+// ColumnOrdinal returns the ordinal position of the column in its base table.
+// It panics if the column has no base table because it was synthesized.
+func (md *Metadata) ColumnOrdinal(id ColumnID) int {
+	if id == 0 {
+		panic("uninitialized column id 0")
+	}
+	tabID := md.cols[id].tabID
+	if tabID == 0 {
+		panic("column was synthesized and has no ordinal position")
+	}
+	return int(id) - int(tabID)
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
@@ -187,12 +211,14 @@ func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
 	}
 
 	for i := 0; i < tab.ColumnCount(); i++ {
+		var label string
 		col := tab.Column(i)
 		if tabName == "" {
-			md.AddColumn(string(col.ColName()), col.DatumType())
+			label = string(col.ColName())
 		} else {
-			md.AddColumn(fmt.Sprintf("%s.%s", tabName, col.ColName()), col.DatumType())
+			label = fmt.Sprintf("%s.%s", tabName, col.ColName())
 		}
+		md.cols = append(md.cols, mdColumn{tabID: tabID, label: label, typ: col.DatumType()})
 	}
 
 	if md.tables == nil {

@@ -43,6 +43,15 @@ type Logical struct {
 	Scalar *Scalar
 }
 
+// AvailableRuleProps is a bit set that indicates when lazily-populated Rule
+// properties are initialized and ready for use.
+type AvailableRuleProps int
+
+const (
+	// UnfilteredCols is set when the Rule.UnfilteredCols field is populated.
+	UnfilteredCols AvailableRuleProps = 1 << iota
+)
+
 // Relational properties are the subset of logical properties that are computed
 // for relational expressions that return rows and columns rather than scalar
 // values.
@@ -122,6 +131,12 @@ type Relational struct {
 	// what works best for those rules. Neither the rules nor their properties
 	// can be considered in isolation, without considering the other.
 	Rule struct {
+		// Available contains bits that indicate whether lazily-populated Rule
+		// properties have been initialized. For example, if the UnfilteredCols
+		// bit is set, then the Rule.UnfilteredCols field has been initialized
+		// and is ready for use.
+		Available AvailableRuleProps
+
 		// PruneCols is the subset of output columns that can potentially be
 		// eliminated by one of the PruneCols normalization rules. Those rules
 		// operate by pushing a Project operator down the tree that discards
@@ -181,6 +196,17 @@ type Relational struct {
 		// joins), it is calculated lazily. Once it is calculated, it is not nil
 		// (even if there are no interesting orderings).
 		InterestingOrderings opt.OrderingSet
+
+		// UnfilteredCols is the set of output columns that have values for every
+		// row in their owner table. Rows may be duplicated, but no rows can be
+		// missing. For example, an unconstrained, unlimited Scan operator can
+		// add all of its output columns to this property, but a Select operator
+		// cannot add any columns, as it may have filtered rows.
+		//
+		// UnfilteredCols is lazily populated by the SimplifyLeftJoinWithFilters
+		// and SimplifyRightJoinWithFilters rules. It is only valid once the
+		// Rule.Available.UnfilteredCols bit has been set.
+		UnfilteredCols opt.ColSet
 	}
 }
 
@@ -248,6 +274,12 @@ type Scalar struct {
 	//
 	// For more details, see the header comment for FuncDepSet.
 	FuncDeps FuncDepSet
+}
+
+// IsAvailable returns true if the specified rule property has been populated
+// on this relational properties instance.
+func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
+	return (r.Rule.Available & p) != 0
 }
 
 // OuterCols is a helper method that returns either the relational or scalar
