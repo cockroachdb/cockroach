@@ -1362,8 +1362,17 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
+		typ := node.Type
+		if isCollatedString {
+			typ = coltypes.String
+		}
+		typ.Format(buf, ctx.flags.EncodeFlags())
 		ctx.WriteByte(')')
+		if isCollatedString {
+			ctx.WriteString(" COLLATE ")
+			lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, t.Locale, lex.EncNoFlags)
+		}
 	}
 }
 
