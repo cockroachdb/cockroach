@@ -496,11 +496,11 @@ message Error {
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
-  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 6;
+  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false];
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
