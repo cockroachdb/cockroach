@@ -46,12 +46,7 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	if e == nil {
 		return nil
 	}
-	if e.Detail == nil {
-		// Unknown error detail; return the generic error.
-		return (*internalError)(e)
-	}
-
-	if err, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
+	if err, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
 		return err
 	}
 	// Unknown error detail; return the generic error.
@@ -67,7 +62,22 @@ func NewError(err error) *Error {
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else {
-		e.setGoError(err)
+		if sErr, ok := err.(ErrorDetailInterface); ok {
+			e.Message = sErr.message(e)
+		} else {
+			e.Message = err.Error()
+		}
+		var isTxnError bool
+		if r, ok := err.(transactionRestartError); ok {
+			isTxnError = true
+			e.TransactionRestart = r.canRestartTransaction()
+		}
+		// If the specific error type exists in the detail union, set it.
+		if !e.Detail.SetInner(err) {
+			if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
+			}
+		}
 	}
 
 	return e
@@ -137,30 +147,6 @@ func (e *Error) GoError() error {
 	return e.GetDetail()
 }
 
-// setGoError sets Error using err.
-func (e *Error) setGoError(err error) {
-	if e.Message != "" {
-		panic("cannot re-use roachpb.Error")
-	}
-	if sErr, ok := err.(ErrorDetailInterface); ok {
-		e.Message = sErr.message(e)
-	} else {
-		e.Message = err.Error()
-	}
-	var isTxnError bool
-	if r, ok := err.(transactionRestartError); ok {
-		isTxnError = true
-		e.TransactionRestart = r.canRestartTransaction()
-	}
-	// If the specific error type exists in the detail union, set it.
-	detail := &ErrorDetail{}
-	if detail.SetValue(err) {
-		e.Detail = detail
-	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
-		panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
-	}
-}
-
 // SetTxn sets the txn and resets the error message. txn is cloned before being
 // stored in the Error.
 // TODO(kaneda): Unexpose this method and make callers use NewErrorWithTxn.
@@ -170,11 +156,9 @@ func (e *Error) SetTxn(txn *Transaction) {
 		txnClone := txn.Clone()
 		e.UnexposedTxn = &txnClone
 	}
-	if e.Detail != nil {
-		if sErr, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
-			// Refresh the message as the txn is updated.
-			e.Message = sErr.message(e)
-		}
+	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
+		// Refresh the message as the txn is updated.
+		e.Message = sErr.message(e)
 	}
 }
 

@@ -32,7 +32,7 @@ func newZeroNode(columns sqlbase.ResultColumns) *zeroNode {
 	return &zeroNode{columns: columns}
 }
 
-// NewZeroNode is the exported version of makeZeroNode. Used by CCL.
+// NewZeroNode is the exported version of newZeroNode. Used by CCL.
 func NewZeroNode(columns sqlbase.ResultColumns) PlanNode {
 	return newZeroNode(columns)
 }
