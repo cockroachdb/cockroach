@@ -73,14 +73,16 @@ func TotalOrderLess(ctx *EvalContext, a, b Datum) bool {
 // should not be used to test equality. Consider Distinct()
 // and ScalarCompare() instead.
 func TotalOrderCompare(ctx *EvalContext, a, b Datum) int {
-	return doCompare(ctx, cmpFlagOrderedNulls, a, b)
+	// We can safely cast to int because doCompare never returns
+	// cmpObservedNulls if cmpFlagOrderedNulls is set.
+	return int(doCompare(ctx, cmpFlagOrderedNulls, a, b))
 }
 
 // Distinct returns true if and only if a and b are distinct
 // from each other. NULLs are considered to not be distinct from each
 // other but are distinct from every other value.
 func Distinct(ctx *EvalContext, a, b Datum) bool {
-	return doCompare(ctx, cmpFlagOrderedNulls, a, b) != 0
+	return doCompare(ctx, cmpFlagOrderedNulls, a, b) != cmpResultEqual
 }
 
 // Distinct checks to see if two slices of datums are distinct
@@ -116,10 +118,12 @@ func ScalarCompare(ctx *EvalContext, a, b Datum, op ComparisonOperator) Datum {
 	if op == EQ {
 		fl = cmpFlagEQ
 	}
-	cmp := doCompare(ctx, fl, a, b)
-	if cmp == -2 {
+	res := doCompare(ctx, fl, a, b)
+	if res == cmpObservedNulls {
 		return DNull
 	}
+
+	cmp := int(res)
 
 	switch op {
 	case EQ:
@@ -133,19 +137,28 @@ func ScalarCompare(ctx *EvalContext, a, b Datum, op ComparisonOperator) Datum {
 	}
 }
 
+type internalCmpResult int
+
+const (
+	cmpResultLower   internalCmpResult = -1 // must be -1 for TotalOrderCompare() and TotalOrderLess()
+	cmpResultEqual   internalCmpResult = 0  // must be zero for TotalOrderCompare()
+	cmpResultGreater internalCmpResult = 1  // must be 1 for TotalOrderCompare()
+	cmpObservedNulls internalCmpResult = 2  // can be anything else than -1, 0, or 1
+)
+
 // doCompare is the main function.
-func doCompare(ctx *EvalContext, flags internalCmpFlags, a, b Datum) int {
+func doCompare(ctx *EvalContext, flags internalCmpFlags, a, b Datum) internalCmpResult {
 	if a == DNull || b == DNull {
 		if flags.isSet(cmpFlagOrderedNulls) {
 			if b != DNull {
-				return -1
+				return cmpResultLower
 			}
 			if a != DNull {
-				return 1
+				return cmpResultGreater
 			}
-			return 0
+			return cmpResultEqual
 		}
-		return -2
+		return cmpObservedNulls
 	}
 	b = UnwrapDatum(ctx, b)
 	return a.internalCompare(ctx, flags, b)
@@ -168,22 +181,26 @@ func (f internalCmpFlags) isSet(fl internalCmpFlags) bool {
 }
 
 // internalCompare implements the Datum interface.
-func (d *DBool) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DBool) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DBool)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if !*d && *v {
-		return -1
+		return cmpResultLower
 	}
 	if *d && !*v {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DInt) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DInt) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	var v DInt
 	switch t := other.(type) {
 	case *DInt:
@@ -191,23 +208,25 @@ func (d *DInt) internalCompare(ctx *EvalContext, flags internalCmpFlags, other D
 	case *DFloat, *DDecimal:
 		// We don't need to call doCompare() here because we know both
 		// sides are non-NULL and not OID wrappers.
-		// Also since they are non-NULL the value is never -2 so
+		// Also since they are non-NULL the value is never cmpObservedNulls so
 		// flipping the sign is always correct.
 		return -t.internalCompare(ctx, flags, d)
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < v {
-		return -1
+		return cmpResultLower
 	}
 	if *d > v {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DFloat) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DFloat) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	var v DFloat
 	switch t := other.(type) {
 	case *DFloat:
@@ -217,33 +236,35 @@ func (d *DFloat) internalCompare(ctx *EvalContext, flags internalCmpFlags, other
 	case *DDecimal:
 		// We don't need to call doCompare() here because we know both
 		// sides are non-NULL and not OID wrappers.
-		// Also since they are non-NULL the value is never -2 so
+		// Also since they are non-NULL the value is never cmpObservedNulls so
 		// flipping the sign is always correct.
 		return -t.internalCompare(ctx, flags, d)
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < v {
-		return -1
+		return cmpResultLower
 	}
 	if *d > v {
-		return 1
+		return cmpResultGreater
 	}
 	// NaN sorts before non-NaN (#10109).
 	if *d == v {
-		return 0
+		return cmpResultEqual
 	}
 	if math.IsNaN(float64(*d)) {
 		if math.IsNaN(float64(v)) {
-			return 0
+			return cmpResultEqual
 		}
-		return -1
+		return cmpResultLower
 	}
-	return 1
+	return cmpResultGreater
 }
 
 // internalCompare implements the Datum interface.
-func (d *DDecimal) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DDecimal) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v := ctx.getTmpDec()
 	switch t := other.(type) {
 	case *DDecimal:
@@ -259,126 +280,148 @@ func (d *DDecimal) internalCompare(ctx *EvalContext, flags internalCmpFlags, oth
 	}
 	// NaNs sort first in SQL.
 	if dn, vn := d.Form == apd.NaN, v.Form == apd.NaN; dn && !vn {
-		return -1
+		return cmpResultLower
 	} else if !dn && vn {
-		return 1
+		return cmpResultGreater
 	} else if dn && vn {
-		return 0
+		return cmpResultEqual
 	}
-	return d.Cmp(v)
+	return internalCmpResult(d.Cmp(v))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DString) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DString) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DString)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < *v {
-		return -1
+		return cmpResultLower
 	}
 	if *d > *v {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
 func (d *DCollatedString) internalCompare(
 	ctx *EvalContext, flags internalCmpFlags, other Datum,
-) int {
+) internalCmpResult {
 	v, ok := other.(*DCollatedString)
 	if !ok || d.Locale != v.Locale {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return bytes.Compare(d.Key, v.Key)
+	return internalCmpResult(bytes.Compare(d.Key, v.Key))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DBytes) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DBytes) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DBytes)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < *v {
-		return -1
+		return cmpResultLower
 	}
 	if *d > *v {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DUuid) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DUuid) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DUuid)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return bytes.Compare(d.GetBytes(), v.GetBytes())
+	return internalCmpResult(bytes.Compare(d.GetBytes(), v.GetBytes()))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DIPAddr) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DIPAddr) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DIPAddr)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 
-	return d.IPAddr.Compare(&v.IPAddr)
+	return internalCmpResult(d.IPAddr.Compare(&v.IPAddr))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DDate) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DDate) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	var v DDate
 	switch t := other.(type) {
 	case *DDate:
 		v = *t
 	case *DTimestamp, *DTimestampTZ:
-		return compareTimestamps(ctx, d, other)
+		return internalCmpResult(compareTimestamps(ctx, d, other))
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < v {
-		return -1
+		return cmpResultLower
 	}
 	if v < *d {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DTime) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
-	return compareTimestamps(ctx, d, other)
+func (d *DTime) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
+	return internalCmpResult(compareTimestamps(ctx, d, other))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DTimeTZ) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
-	return compareTimestamps(ctx, d, other)
+func (d *DTimeTZ) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
+	return internalCmpResult(compareTimestamps(ctx, d, other))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DTimestamp) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
-	return compareTimestamps(ctx, d, other)
+func (d *DTimestamp) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
+	return internalCmpResult(compareTimestamps(ctx, d, other))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DTimestampTZ) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
-	return compareTimestamps(ctx, d, other)
+func (d *DTimestampTZ) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
+	return internalCmpResult(compareTimestamps(ctx, d, other))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DInterval) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DInterval) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DInterval)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return d.Duration.Compare(v.Duration)
+	return internalCmpResult(d.Duration.Compare(v.Duration))
 }
 
 // internalCompare implements the Datum interface.
-func (d *DJSON) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DJSON) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DJSON)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
@@ -394,11 +437,13 @@ func (d *DJSON) internalCompare(ctx *EvalContext, flags internalCmpFlags, other 
 	// do not mean "unknown" and are values of their own. So they can
 	// always be compared to each other and we do not need to consider
 	// the compare flags here.
-	return c
+	return internalCmpResult(c)
 }
 
 // internalCompare implements the Datum interface.
-func (d *DTuple) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DTuple) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DTuple)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
@@ -421,9 +466,9 @@ func (d *DTuple) internalCompare(ctx *EvalContext, flags internalCmpFlags, other
 		//   }
 		c := doCompare(ctx, flags, d.D[i], v.D[i])
 		switch c {
-		case 0:
+		case cmpResultEqual:
 			continue
-		case -2:
+		case cmpObservedNulls:
 			// One of the operands was NULL.
 			// If either Datum is NULL and the op is EQ, we continue the
 			// comparison and the result is only NULL if the other (non-NULL)
@@ -443,24 +488,24 @@ func (d *DTuple) internalCompare(ctx *EvalContext, flags internalCmpFlags, other
 		// The op is EQ and all non-NULL elements are equal, but we saw at least
 		// one NULL element. Since NULL comparisons are treated as unknown, the
 		// result of the comparison becomes unknown (NULL).
-		return -2
+		return cmpObservedNulls
 	}
 	if len(d.D) < len(v.D) {
-		return -1
+		return cmpResultLower
 	}
 	if len(d.D) > len(v.D) {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // search searches the tuple for the target Datum, returning
-// - 0 of the datum was found and no NULL participated;
-// - +1 or -1 if the datum was not found and no NULL participated;
-// - -2 if a NULL participated in the comparison.
-func (d *DTuple) search(ctx *EvalContext, target Datum) (res int) {
+// - cmpResultEqual of the datum was found and no NULL participated;
+// - != cmpResultEqual, != cmpObserverNull if the datum was not found and no NULL participated;
+// - cmpObservedNull if a NULL participated in the comparison.
+func (d *DTuple) search(ctx *EvalContext, target Datum) internalCmpResult {
 	if len(d.D) == 0 {
-		return -1
+		return cmpResultLower
 	}
 	if d.sorted && !containsNull(target) {
 		// If d.sorted is set, the tuple is guaranteed to not contain
@@ -472,39 +517,43 @@ func (d *DTuple) search(ctx *EvalContext, target Datum) (res int) {
 		})
 		if i >= len(d.D) {
 			// The binary search failed.
-			return -1
+			return cmpResultLower
 		}
 		return doCompare(ctx, 0, d.D[i], target)
 	}
 
 	sawNull := false
 	for _, val := range d.D {
-		if res := doCompare(ctx, cmpFlagEQ, val, target); res == -2 {
+		if res := doCompare(ctx, cmpFlagEQ, val, target); res == cmpObservedNulls {
 			// If a NULL is encountered, we continue the comparison and
 			// the result is only NULL if the lhs is not found in the
 			// rhs tuple. This is because NULL is thought of as
 			// "unknown".
 			sawNull = true
-		} else if res == 0 {
-			return 0
+		} else if res == cmpResultEqual {
+			return cmpResultEqual
 		}
 	}
 	if sawNull {
 		// The value was not found directly in the rhs tuple, but
 		// a NULL was observed to participate in the comparison.
 		// In that case, we don't really know: return "unknown".
-		return -2
+		return cmpObservedNulls
 	}
-	return -1
+	return cmpResultLower
 }
 
 // internalCompare implements the Datum interface.
-func (d dNull) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d dNull) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	panic("programming error: doCompare() is responsible for this case")
 }
 
 // internalCompare implements the Datum interface.
-func (d *DArray) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DArray) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DArray)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
@@ -527,9 +576,9 @@ func (d *DArray) internalCompare(ctx *EvalContext, flags internalCmpFlags, other
 		//   }
 		c := doCompare(ctx, flags, d.Array[i], v.Array[i])
 		switch c {
-		case 0:
+		case cmpResultEqual:
 			continue
-		case -2:
+		case cmpObservedNulls:
 			// One of the operands was NULL.
 			// If either Datum is NULL and the op is EQ, we continue the
 			// comparison and the result is only NULL if the other (non-NULL)
@@ -549,38 +598,44 @@ func (d *DArray) internalCompare(ctx *EvalContext, flags internalCmpFlags, other
 		// The op is EQ and all non-NULL elements are equal, but we saw at least
 		// one NULL element. Since NULL comparisons are treated as unknown, the
 		// result of the comparison becomes unknown (NULL).
-		return -2
+		return cmpObservedNulls
 	}
 	if d.Len() < v.Len() {
-		return -1
+		return cmpResultLower
 	}
 	if d.Len() > v.Len() {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DOid) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DOid) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	v, ok := other.(*DOid)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if d.DInt < v.DInt {
-		return -1
+		return cmpResultLower
 	}
 	if d.DInt > v.DInt {
-		return 1
+		return cmpResultGreater
 	}
-	return 0
+	return cmpResultEqual
 }
 
 // internalCompare implements the Datum interface.
-func (d *DOidWrapper) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *DOidWrapper) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	return doCompare(ctx, flags, d.Wrapped, other)
 }
 
 // internalCompare implements the Datum interface.
-func (d *Placeholder) internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int {
+func (d *Placeholder) internalCompare(
+	ctx *EvalContext, flags internalCmpFlags, other Datum,
+) internalCmpResult {
 	return doCompare(ctx, flags, d.mustGetValue(ctx), other)
 }

@@ -2033,12 +2033,12 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 		fn: func(ctx *EvalContext, lhs, rhs Datum) (Datum, error) {
 			rhsTuple := rhs.(*DTuple)
 			res := rhsTuple.search(ctx, lhs)
-			if res == -2 {
+			if res == cmpObservedNulls {
 				// the value was not found and a NULL participated: unknown.
 				return DNull, nil
 			}
 			// no NULL participated: we know the result.
-			return MakeDBool(DBool(res == 0)), nil
+			return MakeDBool(DBool(res == cmpResultEqual)), nil
 		},
 	}
 }
