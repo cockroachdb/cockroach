@@ -208,12 +208,12 @@
     (Filters (ExtractUnboundConditions $list $right))
 )
 
-# SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
-# FullJoin to a RightJoin) when it's known that the join's right input never
-# returns zero rows and when there's no join condition. The outer join only
-# populates the right side with NULL values when it would otherwise not be
-# present.
-[SimplifyLeftJoin, Normalize]
+# SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
+# operator (or a FullJoin to a RightJoin) when it's known that the join's right
+# input never returns zero rows and when there's no join condition. The outer
+# join only populates the right side with NULL values when it would otherwise
+# not be present.
+[SimplifyLeftJoinWithoutFilters, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
     $right:* & ^(CanHaveZeroRows $right)
@@ -227,16 +227,68 @@
     $on
 )
 
-# SimplifyRightJoin reduces a RightJoin operator to an InnerJoin operator (or a
-# FullJoin to a LeftJoin) when it's known that the join's left input never
-# returns zero rows and when there's no join condition. The outer join only
-# populates the left side with NULL values when it would otherwise not be
-# present.
-[SimplifyRightJoin, Normalize]
+# SimplifyRightJoinWithoutFilters reduces a RightJoin operator to an InnerJoin
+# operator (or a FullJoin to a LeftJoin) when it's known that the join's left
+# input never returns zero rows and when there's no join condition. The outer
+# join only populates the left side with NULL values when it would otherwise not
+# be present.
+[SimplifyRightJoinWithoutFilters, Normalize]
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
     $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:(True)
+)
+=>
+(ConstructNonRightJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# SimplifyLeftJoinWithFilters reduces a LeftJoin operator to an InnerJoin
+# operator (or a FullJoin to a RightJoin) when it's known that every row in the
+# join's left input will match at least one row in the right input. Since every
+# row matches, NULL-extended rows will never be added by the outer join, and
+# therefore can be mapped to an InnerJoin (or RightJoin in case of FullJoin).
+# See JoinConditionMatchesAllLeftRows comment for conditions in which this rule
+# can match.
+#
+# Self-join example:
+#   SELECT * FROM xy LEFT JOIN xy AS xy2 ON xy.y = xy2.y
+#   =>
+#   SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.y = xy2.y
+#
+# Foreign-key example:
+#   SELECT * FROM orders o LEFT JOIN customers c ON o.customer_id = c.id
+#   =>
+#   SELECT * FROM orders o INNER JOIN customers c ON o.customer_id = c.id
+#
+# TODO(andyk): Need to implement foreign key case.
+[SimplifyLeftJoinWithFilters, Normalize]
+(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:*
+    $on:(Filters) & (JoinFiltersMatchAllLeftRows $left $right $on)
+)
+=>
+(ConstructNonLeftJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# SimplifyRightJoinWithFilters reduces a RightJoin operator to an InnerJoin
+# operator (or a FullJoin to a LeftJoin) when it's known that every row in the
+# join's right input will match at least one row in the left input. This rule
+# is symmetric with SimplifyLeftJoinWithFilters; see that rule for more details
+# and examples.
+[SimplifyRightJoinWithFilters, Normalize]
+(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:*
+    $on:(Filters) & (JoinFiltersMatchAllLeftRows $right $left $on)
 )
 =>
 (ConstructNonRightJoin
