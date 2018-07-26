@@ -2652,8 +2652,7 @@ may increase either contention or retry errors, or both.`,
 	// SQL client against a pg server.
 	"current_schema": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			Category: categorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2686,8 +2685,7 @@ may increase either contention or retry errors, or both.`,
 	// server.
 	"current_schemas": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			Category: categorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
