@@ -134,26 +134,11 @@ var varGen = map[string]sessionVar{
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 	// Also aliased to SET NAMES.
-	`client_encoding`: {
-		Get: func(_ *extendedEvalContext) string {
-			return "UTF8"
-		},
-		Set: func(
-			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
-		) error {
-			s, err := getStringVal(&evalCtx.EvalContext, `client_encoding`, values)
-			if err != nil {
-				return err
-			}
-			upper := strings.ToUpper(s)
-			if upper != "UTF8" && upper != "UNICODE" {
-				return fmt.Errorf("non-UTF8 encoding %s not supported", s)
-			}
-			return nil
-		},
-		Reset: func(_ *sessionDataMutator) error { return nil },
-	},
+	`client_encoding`: makeEncodingVar(`client_encoding`),
+
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
+	`server_encoding`: makeEncodingVar(`server_encoding`),
 
 	// CockroachDB extension.
 	`database`: {
@@ -604,6 +589,33 @@ var varGen = map[string]sessionVar{
 		},
 		// Setting is done by the SetTracing statement.
 	},
+}
+
+func makeEncodingVar(varName string) sessionVar {
+	return sessionVar{
+		Get: func(_ *extendedEvalContext) string {
+			return "UTF8"
+		},
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getStringVal(&evalCtx.EvalContext, varName, values)
+			if err != nil {
+				return err
+			}
+			enc := strings.ToLower(s)
+			switch enc {
+			// All the following are aliases to each other in PostgreSQL.
+			case "utf8", "utf-8", "unicode", "cp65001":
+			// ok, all good
+			default:
+				return fmt.Errorf("non-UTF8 encoding %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(_ *sessionDataMutator) error { return nil },
+	}
 }
 
 var varNames = func() []string {

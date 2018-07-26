@@ -40,6 +40,7 @@ intervalstyle                   postgres
 max_index_keys                  32
 node_id                         1
 search_path                     public
+server_encoding                 UTF8
 server_version                  9.5.0
 server_version_num              90500
 session_user                    root
