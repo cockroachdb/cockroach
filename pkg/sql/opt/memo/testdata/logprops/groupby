@@ -268,5 +268,5 @@ group-by
  └── aggregations [outer=(1,3)]
       ├── count [type=int, outer=(3)]
       │    └── variable: xyzs.z [type=float, outer=(3)]
-      └── any-not-null [type=int, outer=(1)]
+      └── const-agg [type=int, outer=(1)]
            └── variable: xyzs.x [type=int, outer=(1)]

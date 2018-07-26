@@ -117,7 +117,7 @@ group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(2)]
       ├── count-rows [type=int]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: a.y [type=int, outer=(2)]
 
 # Test calculation of multi-column stats.
