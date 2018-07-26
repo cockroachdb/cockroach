@@ -368,6 +368,38 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	}
 }
 
+func TestChangefeedComputedColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	// TODO(dan): Also test a non-STORED computed column once we support them.
+	sqlDB.Exec(t, `CREATE TABLE cc (
+		a INT, b INT AS (a + 1) STORED, c INT AS (a + 2) STORED, PRIMARY KEY (b, a)
+	)`)
+	sqlDB.Exec(t, `INSERT INTO cc (a) VALUES (1)`)
+
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR cc`)
+	defer closeFeedRowsHack(t, sqlDB, rows)
+
+	assertPayloads(t, rows, []string{
+		`cc: [2, 1]->{"a": 1, "b": 2, "c": 3}`,
+	})
+
+	sqlDB.Exec(t, `INSERT INTO cc (a) VALUES (10)`)
+	assertPayloads(t, rows, []string{
+		`cc: [11, 10]->{"a": 10, "b": 11, "c": 12}`,
+	})
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
