@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -434,6 +435,34 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR system.jobs`,
 	); !testutils.IsError(err, `CHANGEFEEDs are not supported on system tables`) {
 		t.Errorf(`expected 'CHANGEFEEDs are not supported on system tables' error got: %+v`, err)
+	}
+}
+
+func TestChangefeedPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingAddr(), "TestChangefeedPermissions-testuser", url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	if _, err := testuser.Exec(
+		`CREATE CHANGEFEED FOR foo`,
+	); !testutils.IsError(err, `only superusers are allowed to CREATE CHANGEFEED`) {
+		t.Errorf(`expected 'only superusers are allowed to CREATE CHANGEFEED' error got: %+v`, err)
 	}
 }
 
