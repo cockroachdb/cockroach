@@ -75,7 +75,7 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 17
+const Version DistSQLVersion = 18
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
@@ -338,13 +338,26 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 
+	var be sessiondata.BytesEncodeFormat
+	switch req.EvalContext.BytesEncodeFormat {
+	case BytesEncodeFormat_HEX:
+		be = sessiondata.BytesEncodeHex
+	case BytesEncodeFormat_ESCAPE:
+		be = sessiondata.BytesEncodeEscape
+	case BytesEncodeFormat_BASE64:
+		be = sessiondata.BytesEncodeBase64
+	default:
+		return nil, nil, errors.Errorf("unknown byte encode format: %s",
+			req.EvalContext.BytesEncodeFormat.String())
+	}
 	sd := &sessiondata.SessionData{
-		ApplicationName: req.EvalContext.ApplicationName,
-		Location:        location,
-		Database:        req.EvalContext.Database,
-		User:            req.EvalContext.User,
-		SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
-		SequenceState:   sessiondata.NewSequenceState(),
+		ApplicationName:   req.EvalContext.ApplicationName,
+		Database:          req.EvalContext.Database,
+		Location:          location,
+		User:              req.EvalContext.User,
+		SearchPath:        sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+		SequenceState:     sessiondata.NewSequenceState(),
+		BytesEncodeFormat: be,
 	}
 	ie := ds.SessionBoundInternalExecutorFactory(ctx, sd)
 
