@@ -125,6 +125,7 @@ func newIndexJoiner(
 // Start is part of the RowSource interface.
 func (ij *indexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
+	ij.fetcherInput.Start(ctx)
 	return ij.startInternal(ctx, indexJoinerProcName)
 }
 
