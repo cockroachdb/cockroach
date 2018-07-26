@@ -232,21 +232,31 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (0)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
 
-	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
-	defer closeFeedRowsHack(t, sqlDB, rows)
-
+	var start string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&start)
+	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (0, '0')`)
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (1)`)
-	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
+	sqlDB.Exec(t, `ALTER TABLE foo ALTER COLUMN b SET DEFAULT 'after'`)
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (2)`)
-	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (3, 4)`)
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN c INT`)
+	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (3)`)
+	sqlDB.Exec(t, `INSERT INTO foo (a, c) VALUES (4, 14)`)
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, start)
+	defer closeFeedRowsHack(t, sqlDB, rows)
 	assertPayloads(t, rows, []string{
-		`foo: [0]->{"a": 0}`,
-		`foo: [1]->{"a": 1}`,
-		`foo: [2]->{"a": 2, "b": null}`,
-		`foo: [3]->{"a": 3, "b": 4}`,
+		`foo: [0]->{"a": 0, "b": "0"}`,
+		`foo: [1]->{"a": 1, "b": "before"}`,
+		`foo: [2]->{"a": 2, "b": "after"}`,
+		`foo: [3]->{"a": 3, "b": "after", "c": null}`,
+		`foo: [4]->{"a": 4, "b": "after", "c": 14}`,
+	})
+
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d INT`)
+	sqlDB.Exec(t, `INSERT INTO foo (a, d) VALUES (5, 15)`)
+	assertPayloads(t, rows, []string{
+		`foo: [5]->{"a": 5, "b": "after", "c": null, "d": 15}`,
 	})
 
 	// TODO(dan): Test a schema change that uses a backfill once we figure out
