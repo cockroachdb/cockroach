@@ -447,87 +447,6 @@ func (n *Node) start(
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	if err := n.startStoresInitNodeIDConnectGossip(ctx, bootstrappedEngines); err != nil {
-		return err
-	}
-
-	// Bootstrap any uninitialized stores.
-	if len(emptyEngines) > 0 {
-		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
-			return err
-		}
-	}
-
-	n.startedAt = n.storeCfg.Clock.Now().WallTime
-
-	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
-	// Be careful about moving this line above `startStores`; store migrations rely
-	// on the fact that the cluster version has not been updated via Gossip (we
-	// have migrations that want to run only if the server starts with a given
-	// cluster version, but not if the server starts with a lower one and gets
-	// bumped immediately, which would be possible if gossip got started earlier).
-	n.startGossip(ctx, n.stopper)
-
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)
-	return nil
-}
-
-// IsDraining returns true if at least one Store housed on this Node is not
-// currently allowing range leases to be procured or extended.
-func (n *Node) IsDraining() bool {
-	var isDraining bool
-	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		isDraining = isDraining || s.IsDraining()
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-	return isDraining
-}
-
-// SetDraining sets the draining mode on all of the node's underlying stores.
-func (n *Node) SetDraining(drain bool) error {
-	return n.stores.VisitStores(func(s *storage.Store) error {
-		s.SetDraining(drain)
-		return nil
-	})
-}
-
-// SetHLCUpperBound sets the upper bound of the HLC wall time on all of the
-// node's underlying stores.
-func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error {
-	return n.stores.VisitStores(func(s *storage.Store) error {
-		return s.WriteHLCUpperBound(ctx, hlcUpperBound)
-	})
-}
-
-// initStores initializes the Stores map from ID to Store. Stores are
-// added to the local sender if already bootstrapped. A bootstrapped
-// Store has a valid ident with cluster, node and Store IDs set. If
-// the Store doesn't yet have a valid ident, it's added to the
-// bootstraps list for initialization once the cluster and node IDs
-// have been determined.
-func (n *Node) initStores(
-	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
-) ([]*storage.Store, error) {
-	var stores []*storage.Store
-	for _, e := range engines {
-		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
-		log.Eventf(ctx, "created store for engine: %s", e)
-
-		stores = append(stores, s)
-	}
-	return stores, nil
-}
-
-// startStoresInitNodeIDConnectGossip starts the existing (i.e. bootstrapped)
-// stores of this node. If there are any stores, they contain the NodeID and we
-// initialize it from there. Otherwise, a new node ID is allocated. In either
-// case, Gossip will have been connected when this method returns, which means
-// that the cluster ID is known.
-func (n *Node) startStoresInitNodeIDConnectGossip(
-	ctx context.Context, bootstrappedEngines []engine.Engine,
-) error {
 	// Initialize the stores we're going to start.
 	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
 	if err != nil {
@@ -602,7 +521,73 @@ func (n *Node) startStoresInitNodeIDConnectGossip(
 		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
 	}
 
+	// Bootstrap any uninitialized stores.
+	if len(emptyEngines) > 0 {
+		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
+			return err
+		}
+	}
+
+	n.startedAt = n.storeCfg.Clock.Now().WallTime
+
+	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+	// Be careful about moving this line above `startStores`; store migrations rely
+	// on the fact that the cluster version has not been updated via Gossip (we
+	// have migrations that want to run only if the server starts with a given
+	// cluster version, but not if the server starts with a lower one and gets
+	// bumped immediately, which would be possible if gossip got started earlier).
+	n.startGossip(ctx, n.stopper)
+
+	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)
 	return nil
+}
+
+// IsDraining returns true if at least one Store housed on this Node is not
+// currently allowing range leases to be procured or extended.
+func (n *Node) IsDraining() bool {
+	var isDraining bool
+	if err := n.stores.VisitStores(func(s *storage.Store) error {
+		isDraining = isDraining || s.IsDraining()
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	return isDraining
+}
+
+// SetDraining sets the draining mode on all of the node's underlying stores.
+func (n *Node) SetDraining(drain bool) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
+		s.SetDraining(drain)
+		return nil
+	})
+}
+
+// SetHLCUpperBound sets the upper bound of the HLC wall time on all of the
+// node's underlying stores.
+func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
+		return s.WriteHLCUpperBound(ctx, hlcUpperBound)
+	})
+}
+
+// initStores initializes the Stores map from ID to Store. Stores are
+// added to the local sender if already bootstrapped. A bootstrapped
+// Store has a valid ident with cluster, node and Store IDs set. If
+// the Store doesn't yet have a valid ident, it's added to the
+// bootstraps list for initialization once the cluster and node IDs
+// have been determined.
+func (n *Node) initStores(
+	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
+) ([]*storage.Store, error) {
+	var stores []*storage.Store
+	for _, e := range engines {
+		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
+		log.Eventf(ctx, "created store for engine: %s", e)
+
+		stores = append(stores, s)
+	}
+	return stores, nil
 }
 
 func (n *Node) addStore(store *storage.Store) {
