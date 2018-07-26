@@ -255,7 +255,7 @@ func bootstrapCluster(
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Bootstrap store to persist the store ident and cluster version.
-		if err := s.Bootstrap(ctx, sIdent, bootstrapVersion); err != nil {
+		if err := storage.Bootstrap(ctx, eng, sIdent, bootstrapVersion); err != nil {
 			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
@@ -447,29 +447,13 @@ func (n *Node) start(
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	// Initialize the stores we're going to start.
-	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
-	if err != nil {
+	if err := n.startStoresInitNodeIDConnectGossip(ctx, bootstrappedEngines); err != nil {
 		return err
 	}
 
-	// Initialize the stores we need to bootstrap first.
-	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-
-	if err := n.startStores(ctx, stores, n.stopper); err != nil {
-		return err
-	}
-
-	// Bootstrap any uninitialized stores asynchronously.
-	if len(bootstraps) > 0 {
-		log.Infof(ctx, "%s: asynchronously bootstrapping engine(s) %v", n, emptyEngines)
-
-		if err := n.stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
-			n.bootstrapStores(ctx, bootstraps, n.stopper)
-		}); err != nil {
+	// Bootstrap any uninitialized stores.
+	if len(emptyEngines) > 0 {
+		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -536,11 +520,22 @@ func (n *Node) initStores(
 	return stores, nil
 }
 
-func (n *Node) startStores(
-	ctx context.Context, stores []*storage.Store, stopper *stop.Stopper,
+// startStoresInitNodeIDConnectGossip starts the existing (i.e. bootstrapped)
+// stores of this node. If there are any stores, they contain the NodeID and we
+// initialize it from there. Otherwise, a new node ID is allocated. In either
+// case, Gossip will have been connected when this method returns, which means
+// that the cluster ID is known.
+func (n *Node) startStoresInitNodeIDConnectGossip(
+	ctx context.Context, bootstrappedEngines []engine.Engine,
 ) error {
+	// Initialize the stores we're going to start.
+	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
+	if err != nil {
+		return err
+	}
+
 	for _, s := range stores {
-		if err := s.Start(ctx, stopper); err != nil {
+		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
 		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
@@ -591,7 +586,6 @@ func (n *Node) startStores(
 	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
 		return err
 	}
-	// Also populate bootstrap list
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
@@ -635,23 +629,10 @@ func (n *Node) validateStores(ctx context.Context) error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(
-	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
-) {
+	ctx context.Context, emptyEngines []engine.Engine, stopper *stop.Stopper,
+) error {
 	if n.clusterID.Get() == uuid.Nil {
-		panic("ClusterID missing during store bootstrap of auxiliary store")
-	}
-
-	// Bootstrap all waiting stores by allocating a new store id for
-	// each and invoking store.Bootstrap() to persist.
-	inc := int64(len(bootstraps))
-	firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
-	if err != nil {
-		log.Fatalf(ctx, "error allocating store ids: %+v", err)
-	}
-	sIdent := roachpb.StoreIdent{
-		ClusterID: n.clusterID.Get(),
-		NodeID:    n.Descriptor.NodeID,
-		StoreID:   firstID,
+		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
 	// There's a bit of an awkward dance around cluster versions here. If this node
@@ -666,18 +647,40 @@ func (n *Node) bootstrapStores(
 	// that still need it.
 	cv, err := n.stores.SynthesizeClusterVersion(ctx)
 	if err != nil {
-		log.Fatalf(ctx, "error retrieving cluster version for bootstrap: %s", err)
+		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)
 	}
 
-	for _, s := range bootstraps {
-		if err := s.Bootstrap(ctx, sIdent, cv); err != nil {
-			log.Fatal(ctx, err)
+	{
+		// Bootstrap all waiting stores by allocating a new store id for
+		// each and invoking store.Bootstrap() to persist.
+		inc := int64(len(emptyEngines))
+		firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
+		if err != nil {
+			return errors.Errorf("error allocating store ids: %s", err)
 		}
+		sIdent := roachpb.StoreIdent{
+			ClusterID: n.clusterID.Get(),
+			NodeID:    n.Descriptor.NodeID,
+			StoreID:   firstID,
+		}
+		for _, eng := range emptyEngines {
+			if err := storage.Bootstrap(ctx, eng, sIdent, cv); err != nil {
+				return err
+			}
+			sIdent.StoreID++
+		}
+	}
+
+	// Start the newly bootstrapped stores.
+	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
+	if err != nil {
+		return err
+	}
+	for _, s := range bootstraps {
 		if err := s.Start(ctx, stopper); err != nil {
-			log.Fatal(ctx, err)
+			return err
 		}
 		n.addStore(s)
-		sIdent.StoreID++
 		log.Infof(ctx, "bootstrapped store %s", s)
 		// Done regularly in Node.startGossip, but this cuts down the time
 		// until this store is used for range allocations.
@@ -685,6 +688,7 @@ func (n *Node) bootstrapStores(
 			log.Warningf(ctx, "error doing initial gossiping: %s", err)
 		}
 	}
+
 	clusterVersion := n.storeCfg.Settings.Version.Version()
 	n.onClusterVersionChange(clusterVersion)
 
@@ -693,6 +697,8 @@ func (n *Node) bootstrapStores(
 	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
+
+	return nil
 }
 
 // connectGossip connects to gossip network and reads cluster ID. If

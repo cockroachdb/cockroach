@@ -551,8 +551,6 @@ func subtractDiskCounters(from *diskStats, sub diskStats) {
 	from.readCount -= sub.readCount
 	from.readTimeMs -= sub.readTimeMs
 	from.readBytes -= sub.readBytes
-
-	from.iopsInProgress -= sub.iopsInProgress
 }
 
 // sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the
