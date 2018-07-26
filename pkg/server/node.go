@@ -394,11 +394,11 @@ func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
 			log.Fatal(ctxWithSpan, "new node allocated illegal ID 0")
 		}
 		span.Finish()
-		n.storeCfg.Gossip.NodeID.Set(ctx, id)
 	} else {
 		log.Infof(ctx, "node ID %d initialized", id)
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
+	n.storeCfg.Gossip.NodeID.Set(ctx, id)
 	n.Descriptor.NodeID = id
 	if err = n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
@@ -440,11 +440,34 @@ func (n *Node) start(
 	locality roachpb.Locality,
 	cv cluster.ClusterVersion,
 ) error {
-	n.initDescriptor(addr, attrs, locality)
-
 	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
 	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
 		return errors.Wrap(err, "while initializing cluster version")
+	}
+
+	n.initDescriptor(addr, attrs, locality)
+
+	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
+	// stores, the NodeID is persisted in each of them. If not, then we'll need to
+	// use the KV store to get a NodeID assigned.
+	if len(bootstrappedEngines) > 0 {
+		firstIdent, err := storage.ReadStoreIdent(ctx, bootstrappedEngines[0])
+		if err != nil {
+			return err
+		}
+		n.initNodeID(ctx, firstIdent.NodeID)
+	} else {
+		n.initialBoot = true
+		// Wait until Gossip is connected before trying to allocate a NodeID.
+		// This isn't strictly necessary but avoids trying to use the KV store
+		// before it can possibly work.
+		if err := n.connectGossip(ctx); err != nil {
+			return err
+		}
+		// If no NodeID has been assigned yet, allocate a new node ID by
+		// supplying 0 to initNodeID.
+		n.initNodeID(ctx, 0)
+		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
 	}
 
 	// Initialize the stores we're going to start.
@@ -506,19 +529,17 @@ func (n *Node) start(
 		return err
 	}
 
-	// Connect gossip before starting bootstrap. For new nodes, connecting
-	// to the gossip network is necessary to get the cluster ID.
-	if err := n.connectGossip(ctx); err != nil {
-		return err
-	}
-	log.Event(ctx, "connected to gossip")
-
-	// If no NodeID has been assigned yet, allocate a new node ID by
-	// supplying 0 to initNodeID.
-	if n.Descriptor.NodeID == 0 {
-		n.initNodeID(ctx, 0)
-		n.initialBoot = true
-		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
+	if len(bootstrappedEngines) != 0 {
+		// Connect gossip before starting bootstrap. This will be necessary
+		// to bootstrap new stores. We do it before initializing the NodeID
+		// as well (if needed) to avoid awkward error messages until Gossip
+		// has connected.
+		//
+		// NB: if we have no bootstrapped engines, then we've done this above
+		// already.
+		if err := n.connectGossip(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Bootstrap any uninitialized stores.
