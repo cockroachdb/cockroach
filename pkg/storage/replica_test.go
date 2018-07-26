@@ -2503,6 +2503,88 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	}
 }
 
+// TestReplicaCommandQueueCancellationCascade verifies that commands which are
+// waiting on the command queue properly handle cascading cancellations without
+// resulting in quadratic memory growth.
+func TestReplicaCommandQueueCancellationCascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a dependency graph that looks like:
+	//
+	//   --- --- --- ---
+	//    |   |   |   |
+	//   ---------------
+	//    |   |   |   |
+	//   --- --- --- ---  ...
+	//    |   |   |   |
+	//   ---------------
+	//    |   |   |   |
+	//
+	//         ...
+	//
+	// The test then creates a cascade cancellation scenario
+	// where most commands are canceled:
+	//
+	//   --- xxx xxx xxx
+	//    |   |   |   |
+	//   xxxxxxxxxxxxxxx
+	//    |   |   |   |
+	//   --- xxx xxx xxx  ...
+	//    |   |   |   |
+	//   xxxxxxxxxxxxxxx
+	//    |   |   |   |
+	//
+	//         ...
+	//
+	// Canceling commands in this pattern stresses two operations that
+	// are necessary to avoid quadratic prerequisite count growth:
+	// 1. Canceling all but the first command in each of the multi-command
+	//    levels stresses OptimisticallyResolvePrereqs. Without scanning
+	//    through all of a command's prereqs and ignoring already completed
+	//    commands, commands that were finished would be transferred to
+	//    dependent commands.
+	// 2. Alternating multi-command layers and single command layers creates
+	//    a scenario where dependencies would add duplicate prereqs to their
+	//    prereq slice if not careful. This duplication of commands would
+	//    result in quadratic growth.
+	//
+	// Without these operations, the test fails.
+	const spansPerLevel = 25
+	const levels = 25
+
+	var levelSpans [spansPerLevel]roachpb.Span
+	keyBuf := bytes.Repeat([]byte("a"), spansPerLevel+1)
+	for i := 0; i < len(levelSpans); i++ {
+		levelSpans[i] = roachpb.Span{
+			Key:    keyBuf[:i+1],
+			EndKey: keyBuf[:i+2],
+		}
+	}
+	globalSpan := roachpb.Span{
+		Key:    levelSpans[0].Key,
+		EndKey: levelSpans[len(levelSpans)-1].EndKey,
+	}
+
+	var instrs []cancelInstr
+	var cancelOrder []int
+	for level := 0; level < levels; level++ {
+		for i, span := range levelSpans {
+			if i != 0 {
+				cancelOrder = append(cancelOrder, len(instrs))
+			}
+			instrs = append(instrs, cancelInstr{span: span})
+		}
+
+		cancelOrder = append(cancelOrder, len(instrs))
+		instrs = append(instrs, cancelInstr{span: globalSpan})
+	}
+
+	// Fails with "command never left CommandQueue after cancellation"
+	// timeout without proper handling of cascade cancellation.
+	ct := newCmdQCancelTest(t)
+	ct.Run(instrs, cancelOrder)
+}
+
 // TestReplicaCommandQueueCancellationRandom verifies that commands in a
 // random dependency graph which are waiting on the command queue do not
 // execute or deadlock if their context is canceled, and that commands

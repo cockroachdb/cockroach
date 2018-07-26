@@ -2356,16 +2356,18 @@ func (r *Replica) beginCmds(
 						err := ctx.Err()
 						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
 
-						// Remove the command from the command queue immediately. Dependents will
-						// transfer transitive dependencies when they try to block on this command,
-						// because our prereqs slice is not empty. This migration of dependencies
-						// will happen for each dependent in ResolvePendingPrereq, which will notice
-						// that our prereqs slice was not empty when we stopped pending and will
-						// adopt our prerequisites in turn. New commands that would have established
-						// a dependency on this command will never see it, which is fine.
 						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 							fn(ba, storagebase.CommandQueueCancellation)
 						}
+
+						// Remove the command from the command queue immediately. New commands that
+						// would have established a dependency on this command will never see it,
+						// which is fine. Current dependents that already have a dependency on this
+						// command will transfer transitive dependencies when they try to block on
+						// this command, because our prereqs slice is not empty. This migration of
+						// dependencies will happen for each dependent in ResolvePendingPrereq,
+						// which will notice that our prereqs slice was not empty when we stopped
+						// pending and will adopt our prerequisites in turn.
 						r.removeCmdsFromCommandQueue(newCmds)
 						return nil, err
 					case <-r.store.stopper.ShouldQuiesce():
@@ -2468,6 +2470,16 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 	r.cmdQMu.Lock()
 	for _, accessCmds := range cmds {
 		for scope, cmd := range accessCmds {
+			if cmd.PrereqLen() > 0 {
+				// The command was canceled while it still had prerequisites to
+				// wait on. To avoid transferring already resolved prerequisites
+				// to our dependencies, we perform one last optimistic scan over
+				// our prerequisites and resolve any that are no longer pending
+				// and were not canceled themselves. This helps bound the
+				// quadratic blowup of prerequisites during cascading
+				// cancellations.
+				cmd.OptimisticallyResolvePrereqs()
+			}
 			r.cmdQMu.queues[scope].remove(cmd)
 		}
 	}
