@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -131,12 +130,6 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
-
-	var tableLookupIds []sqlbase.ID
-	for id := range fkHelper.Tables {
-		tableLookupIds = append(tableLookupIds, id)
-	}
-	log.Warningf(ctx, "insert: fkCheckType: %t, final tableLookups = %s", fkCheckType, tableLookupIds)
 
 	// maxInsertIdx is the highest column index we are allowed to insert into -
 	// in the presence of computed columns, when we don't explicitly specify the
