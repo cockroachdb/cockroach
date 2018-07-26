@@ -239,3 +239,160 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(col opt.ColumnID, fd *props.Func
 
 	return res
 }
+
+// JoinFiltersMatchAllLeftRows returns true when each row in the given join's
+// left input matches at least one row from the right input, according to the
+// join filters. This is true when the following conditions are satisfied:
+//
+//   1. Each conjunct in the join condition is an equality between a not-null
+//      column from the left input and a not-null column from the right input.
+//   2. All left input equality columns come from a single table (called its
+//      "equality table"), as do all right input equality columns (can be
+//      different table).
+//   3. The right input contains every row from its equality table. There may be
+//      a subset of columns from the table, and/or duplicate rows, but every row
+//      must be present.
+//   4. If the left equality table is the same as the right equality table, then
+//      it's the self-join case. The columns in each equality pair must have the
+//      same ordinal position in the table.
+//   5. If the left equality table is different than the right equality table,
+//      then it's the foreign-key case. The left equality columns must map to
+//      a foreign key on the left equality table, and the right equality columns
+//      to the corresponding referenced columns in the right equality table.
+//
+func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.GroupID) bool {
+	unfilteredCols := c.deriveUnfilteredCols(right)
+	if unfilteredCols.Empty() {
+		// Condition #3: right input has no columns which contain values from
+		// every row.
+		return false
+	}
+
+	filtersExpr := c.f.mem.NormExpr(filters).AsFilters()
+	if filtersExpr == nil {
+		return false
+	}
+
+	leftCols := c.LookupLogical(left).Relational.NotNullCols
+	rightCols := c.LookupLogical(right).Relational.NotNullCols
+
+	md := c.f.Metadata()
+
+	var leftTab, rightTab opt.Table
+	for _, condition := range c.f.mem.LookupList(filtersExpr.Conditions()) {
+		eqExpr := c.f.mem.NormExpr(condition).AsEq()
+		if eqExpr == nil {
+			// Condition #1: conjunct is not an equality comparison.
+			return false
+		}
+
+		leftVarExpr := c.f.mem.NormExpr(eqExpr.Left()).AsVariable()
+		rightVarExpr := c.f.mem.NormExpr(eqExpr.Right()).AsVariable()
+		if leftVarExpr == nil || rightVarExpr == nil {
+			// Condition #1: conjunct does not compare two columns.
+			return false
+		}
+
+		leftCol := c.ExtractColID(leftVarExpr.Col())
+		rightCol := c.ExtractColID(rightVarExpr.Col())
+
+		// Normalize leftCol to come from leftCols.
+		if !leftCols.Contains(int(leftCol)) {
+			leftCol, rightCol = rightCol, leftCol
+		}
+		if !leftCols.Contains(int(leftCol)) || !rightCols.Contains(int(rightCol)) {
+			// Condition #1: columns don't come from both sides of join, or
+			// columns are nullable.
+			return false
+		}
+
+		if !unfilteredCols.Contains(int(rightCol)) {
+			// Condition #3: right column doesn't contain values from every row.
+			return false
+		}
+
+		if leftTab == nil {
+			leftTabID := md.ColumnTableID(leftCol)
+			rightTabID := md.ColumnTableID(rightCol)
+			if leftTabID == 0 || rightTabID == 0 {
+				// Condition #2: Columns don't come from base tables.
+				return false
+			}
+			leftTab = md.Table(leftTabID)
+			rightTab = md.Table(rightTabID)
+		} else if md.Table(md.ColumnTableID(leftCol)) != leftTab {
+			// Condition #2: All left columns don't come from same table.
+			return false
+		} else if md.Table(md.ColumnTableID(rightCol)) != rightTab {
+			// Condition #2: All right columns don't come from same table.
+			return false
+		}
+
+		if leftTab == rightTab {
+			// Check self-join case.
+			if md.ColumnOrdinal(leftCol) != md.ColumnOrdinal(rightCol) {
+				// Condition #4: Left and right column ordinals do not match.
+				return false
+			}
+		} else {
+			// TODO(andyk): Check foreign key case.
+			return false
+		}
+	}
+
+	return true
+}
+
+// deriveUnfilteredCols returns the subset of the given group's output columns
+// that have values for every row in their owner table. In other words, columns
+// from tables that have had none of their rows filtered (but it's OK if rows
+// have been duplicated).
+//
+// deriveUnfilteredCols recursively derives the property, and populates the
+// props.Relational.Rule.UnfilteredCols field as it goes to make future calls
+// faster.
+func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
+	// If the UnfilteredCols property has already been derived, return it
+	// immediately.
+	relational := c.LookupLogical(group).Relational
+	if relational.IsAvailable(props.UnfilteredCols) {
+		return relational.Rule.UnfilteredCols
+	}
+	relational.Rule.Available |= props.UnfilteredCols
+
+	// Derive the UnfilteredCols property now.
+	// TODO(andyk): Could add other cases, such as outer joins and union.
+	expr := c.f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.ScanOp:
+		// All un-limited, unconstrained output columns are unfiltered columns.
+		def := expr.Private(c.f.mem).(*memo.ScanOpDef)
+		if def.HardLimit == 0 && def.Constraint == nil {
+			relational.Rule.UnfilteredCols = relational.OutputCols
+		}
+
+	case opt.ProjectOp:
+		// Project never filters rows, so it passes through unfiltered columns.
+		unfilteredCols := c.deriveUnfilteredCols(expr.ChildGroup(c.f.mem, 0))
+		relational.Rule.UnfilteredCols = unfilteredCols.Intersection(relational.OutputCols)
+
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		left := expr.ChildGroup(c.f.mem, 0)
+		right := expr.ChildGroup(c.f.mem, 1)
+		on := expr.ChildGroup(c.f.mem, 2)
+
+		// Cross join always preserves left/right rows.
+		isCrossJoin := c.f.mem.NormExpr(on).Operator() == opt.TrueOp
+
+		// Inner joins may preserve left/right rows, according to
+		// JoinFiltersMatchAllLeftRows conditions.
+		if isCrossJoin || c.JoinFiltersMatchAllLeftRows(left, right, on) {
+			relational.Rule.UnfilteredCols.UnionWith(c.deriveUnfilteredCols(left))
+		}
+		if isCrossJoin || c.JoinFiltersMatchAllLeftRows(right, left, on) {
+			relational.Rule.UnfilteredCols.UnionWith(c.deriveUnfilteredCols(right))
+		}
+	}
+
+	return relational.Rule.UnfilteredCols
+}
