@@ -130,6 +130,15 @@ statement error non-UTF8 encoding other not supported
 SET client_encoding = 'other'
 
 statement ok
+SET server_encoding = 'UTF8'
+
+statement ok
+SET server_encoding = 'unicode'
+
+statement error non-UTF8 encoding other not supported
+SET server_encoding = 'other'
+
+statement ok
 SET datestyle = 'ISO'
 
 statement error non-ISO date style other not supported

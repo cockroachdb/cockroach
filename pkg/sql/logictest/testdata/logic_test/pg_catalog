@@ -1292,6 +1292,7 @@ intervalstyle                   postgres      NULL      NULL        NULL        
 max_index_keys                  32            NULL      NULL        NULL        string
 node_id                         1             NULL      NULL        NULL        string
 search_path                     public        NULL      NULL        NULL        string
+server_encoding                 UTF8          NULL      NULL        NULL        string
 server_version                  9.5.0         NULL      NULL        NULL        string
 server_version_num              90500         NULL      NULL        NULL        string
 session_user                    root          NULL      NULL        NULL        string
@@ -1325,6 +1326,7 @@ intervalstyle                   postgres      NULL  user     NULL      postgres 
 max_index_keys                  32            NULL  user     NULL      32            32
 node_id                         1             NULL  user     NULL      1             1
 search_path                     public        NULL  user     NULL      public        public
+server_encoding                 UTF8          NULL  user     NULL      UTF8          UTF8
 server_version                  9.5.0         NULL  user     NULL      9.5.0         9.5.0
 server_version_num              90500         NULL  user     NULL      90500         90500
 session_user                    root          NULL  user     NULL      root          root
@@ -1359,6 +1361,7 @@ intervalstyle                   NULL    NULL     NULL     NULL        NULL
 max_index_keys                  NULL    NULL     NULL     NULL        NULL
 node_id                         NULL    NULL     NULL     NULL        NULL
 search_path                     NULL    NULL     NULL     NULL        NULL
+server_encoding                 NULL    NULL     NULL     NULL        NULL
 server_version                  NULL    NULL     NULL     NULL        NULL
 server_version_num              NULL    NULL     NULL     NULL        NULL
 session_user                    NULL    NULL     NULL     NULL        NULL
