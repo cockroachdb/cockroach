@@ -27,7 +27,7 @@ variable                        value
 application_name                ·
 bytea_output                    hex
 client_encoding                 UTF8
-client_min_messages             ·
+client_min_messages             notice
 database                        test
 datestyle                       ISO
 default_transaction_isolation   serializable
@@ -36,6 +36,7 @@ distsql                         off
 experimental_force_lookup_join  off
 experimental_force_zigzag_join  off
 extra_float_digits              0
+integer_datetimes               on
 intervalstyle                   postgres
 max_index_keys                  32
 node_id                         1

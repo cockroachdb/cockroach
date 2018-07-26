@@ -16,11 +16,8 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,7 +40,8 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	if n.Name == "" {
 		// A client has sent the reserved internal syntax SET ROW ...,
 		// or the user entered `SET "" = foo`. Reject it.
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid variable name: %q", n.Name)
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"invalid variable name: %q", n.Name)
 	}
 
 	name := strings.ToLower(n.Name)
@@ -69,7 +67,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 				typedValue, err := p.analyzeExpr(
 					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
-					return nil, err
+					return nil, wrapSetVarError(name, expr.String(), "%v", err)
 				}
 				typedValues[i] = typedValue
 			}
@@ -78,16 +76,19 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 
 	v, ok := varGen[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown variable: %q", name)
+		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			"unrecognized configuration parameter %q", name)
 	}
 
 	if typedValues != nil {
 		if v.Set == nil {
-			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
+			return nil, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
+				"parameter %q cannot be set", name)
 		}
 	} else {
 		if v.Reset == nil {
-			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
+			return nil, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
+				"parameter %q cannot be reset", name)
 		}
 	}
 
@@ -130,15 +131,16 @@ func datumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr)
 	}
 	s, ok := tree.AsDString(val)
 	if !ok {
-		return "", fmt.Errorf("set %s: requires a string value: %s is a %s",
-			name, value, val.ResolvedType())
+		return "", pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"parameter %q requires a string value", name).SetDetailf(
+			"%s is a %s", value, val.ResolvedType())
 	}
 	return string(s), nil
 }
 
 func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
-		return "", fmt.Errorf("set %s: requires a single string value", name)
+		return "", newSingleArgVarError(name)
 	}
 	return datumAsString(evalCtx, name, values[0])
 }
@@ -148,17 +150,18 @@ func datumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (i
 	if err != nil {
 		return 0, err
 	}
-	s, ok := tree.AsDInt(val)
+	iv, ok := tree.AsDInt(val)
 	if !ok {
-		return 0, fmt.Errorf("set %s: requires an int value: %s is a %s",
-			name, value, val.ResolvedType())
+		return 0, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"parameter %q requires an integer value", name).SetDetailf(
+			"%s is a %s", value, val.ResolvedType())
 	}
-	return int64(s), nil
+	return int64(iv), nil
 }
 
 func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (int64, error) {
 	if len(values) != 1 {
-		return 0, fmt.Errorf("set %s: requires a single int value", name)
+		return 0, newSingleArgVarError(name)
 	}
 	return datumAsInt(evalCtx, name, values[0])
 }
@@ -167,7 +170,7 @@ func setTimeZone(
 	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 ) error {
 	if len(values) != 1 {
-		return errors.New("set time zone requires a single argument")
+		return newSingleArgVarError("timezone")
 	}
 	d, err := values[0].Eval(&evalCtx.EvalContext)
 	if err != nil {
@@ -186,7 +189,8 @@ func setTimeZone(
 			if err1 != nil {
 				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
 				if err1 != nil {
-					return fmt.Errorf("cannot find time zone %q: %v", location, err)
+					return wrapSetVarError("timezone", values[0].String(),
+						"cannot find time zone %q: %v", location, err)
 				}
 			}
 		}
@@ -194,7 +198,7 @@ func setTimeZone(
 	case *tree.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
 		if err != nil {
-			return err
+			return wrapSetVarError("timezone", values[0].String(), "%v", err)
 		}
 
 	case *tree.DInt:
@@ -210,11 +214,12 @@ func setTimeZone(
 		ed.Mul(sixty, sixty, &v.Decimal)
 		offset = ed.Int64(sixty)
 		if ed.Err() != nil {
-			return fmt.Errorf("time zone value %s would overflow an int64", sixty)
+			return wrapSetVarError("timezone", values[0].String(),
+				"time zone value %s would overflow an int64", sixty)
 		}
 
 	default:
-		return fmt.Errorf("bad time zone value: %s", d.String())
+		return newVarValueError("timezone", values[0].String())
 	}
 	if loc == nil {
 		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
@@ -227,7 +232,7 @@ func setStmtTimeout(
 	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 ) error {
 	if len(values) != 1 {
-		return errors.New("set statement_timeout requires a single argument")
+		return newSingleArgVarError("statement_timeout")
 	}
 	d, err := values[0].Eval(&evalCtx.EvalContext)
 	if err != nil {
@@ -239,23 +244,24 @@ func setStmtTimeout(
 	case *tree.DString:
 		interval, err := tree.ParseDInterval(string(*v))
 		if err != nil {
-			return err
+			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
 		}
 		timeout, err = intervalToDuration(interval)
 		if err != nil {
-			return err
+			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
 		}
 	case *tree.DInterval:
 		timeout, err = intervalToDuration(v)
 		if err != nil {
-			return err
+			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
 		}
 	case *tree.DInt:
 		timeout = time.Duration(*v) * time.Millisecond
 	}
 
 	if timeout < 0 {
-		return errors.New("statement_timeout cannot have a negative duration")
+		return wrapSetVarError("statement_timeout", values[0].String(),
+			"statement_timeout cannot have a negative duration")
 	}
 	m.SetStmtTimeout(timeout)
 
@@ -268,4 +274,23 @@ func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
 		return 0, err
 	}
 	return time.Duration(nanos), nil
+}
+
+func newSingleArgVarError(varName string) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		"SET %s takes only one argument", varName)
+}
+
+func wrapSetVarError(varName, actualValue string, fmt string, args ...interface{}) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		"invalid value for parameter %q: %q", varName, actualValue).SetDetailf(fmt, args...)
+}
+
+func newVarValueError(varName, actualVal string, allowedVals ...string) *pgerror.Error {
+	err := pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		"invalid value for parameter %q: %q", varName, actualVal)
+	if len(allowedVals) > 0 {
+		err = err.SetHintf("Available values: %s", strings.Join(allowedVals, ","))
+	}
+	return err
 }

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -35,7 +36,8 @@ func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error
 	}
 
 	if _, ok := varGen[name]; !ok {
-		return nil, fmt.Errorf("unknown variable: %q", origName)
+		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			"unrecognized configuration parameter %q", origName)
 	}
 
 	varName := lex.EscapeSQLString(name)
