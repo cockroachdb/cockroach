@@ -70,3 +70,5 @@
       would not be recognized by old versions.
 - Version: 17 (MinAcceptedVersion: 6)
     - Add scalar vs non-scalar designation to aggregator.
+- Version: 18 (MinAcceptedVersion: 6)
+    - New EvalContext field.

@@ -63,6 +63,14 @@ message EvalContext {
   optional string user = 7 [(gogoproto.nullable) = false];
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
   optional string application_name = 9 [(gogoproto.nullable) = false];
+  optional BytesEncodeFormat bytes_encode_format = 10 [(gogoproto.nullable) = false];
+}
+
+// BytesEncodeFormat is the configuration for bytes to string conversions.
+enum BytesEncodeFormat {
+  HEX = 0;
+  ESCAPE = 1;
+  BASE64 = 2;
 }
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.
