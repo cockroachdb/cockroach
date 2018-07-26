@@ -19,8 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 )
 
 func TestMain(m *testing.M) {
+	defer utilccl.TestingEnableEnterprise()()
 	acceptance.MainTest(m)
 }
