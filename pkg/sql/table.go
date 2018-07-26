@@ -182,10 +182,12 @@ type TableCollection struct {
 }
 
 type dbCacheSubscriber interface {
-	// waitForCacheState takes a callback depending on the cache state and blocks
-	// until the callback declares success. The callback is repeatedly called as
-	// the cache is updated.
-	waitForCacheState(cond func(*databaseCache) (bool, error)) error
+	// subscribe allows a caller to receive notifications when the cache
+	// has been updated.  It is the caller's responsibility to cancel
+	// the context when it no longer wishes to receive notifications.
+	// The current databaseCache will always be emitted as the first
+	// value in the channel.
+	subscribe(ctx context.Context) <-chan *databaseCache
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
@@ -411,27 +413,29 @@ func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) er
 			if !uc.dropped {
 				continue
 			}
+
 			// Wait until the database cache has been updated to properly
 			// reflect a dropped database, so that future commands on the
 			// same gateway node observe the dropped database.
-			err := tc.dbCacheSubscriber.waitForCacheState(
-				func(dc *databaseCache) (bool, error) {
-					// Resolve the database name from the database cache.
-					dbID, err := dc.getDatabaseID(ctx,
-						tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
-					if err != nil || dbID == 0 {
-						// dbID can still be 0 if required is false and
-						// the database is not found.
-						return true, err
-					}
+			subCtx, cancelSub := context.WithCancel(ctx)
 
-					// If the database name still exists but it now references another
-					// db with a more recent id, we're good - it means that the database
-					// name has been reused.
-					return dbID > uc.id, nil
-				})
-			if err != nil {
-				return err
+			for dc := range tc.dbCacheSubscriber.subscribe(subCtx) {
+				// Resolve the database name from the database cache.
+				dbID, err := dc.getDatabaseID(subCtx,
+					tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
+				if err != nil {
+					cancelSub()
+					return err
+				}
+
+				// If the database name still exists but it now references another
+				// db with a more recent id, we're good - it means that the database
+				// name has been reused.
+				// Also ,dbID can still be 0 if required is false and
+				// the database is not found.
+				if dbID == 0 || dbID > uc.id {
+					cancelSub()
+				}
 			}
 		}
 	}
