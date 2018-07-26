@@ -75,7 +75,7 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 18
+const Version DistSQLVersion = 19
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
@@ -351,13 +351,16 @@ func (ds *ServerImpl) setupFlow(
 			req.EvalContext.BytesEncodeFormat.String())
 	}
 	sd := &sessiondata.SessionData{
-		ApplicationName:   req.EvalContext.ApplicationName,
-		Database:          req.EvalContext.Database,
-		Location:          location,
-		User:              req.EvalContext.User,
-		SearchPath:        sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
-		SequenceState:     sessiondata.NewSequenceState(),
-		BytesEncodeFormat: be,
+		ApplicationName: req.EvalContext.ApplicationName,
+		Database:        req.EvalContext.Database,
+		User:            req.EvalContext.User,
+		SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+		SequenceState:   sessiondata.NewSequenceState(),
+		DataConversion: sessiondata.DataConversionConfig{
+			Location:          location,
+			BytesEncodeFormat: be,
+			ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
+		},
 	}
 	ie := ds.SessionBoundInternalExecutorFactory(ctx, sd)
 

@@ -81,3 +81,57 @@ SELECT * FROM i WHERE f = 0
 
 statement error duplicate key value
 CREATE UNIQUE INDEX ON i (f)
+
+subtest extra_float_digits
+
+statement ok
+CREATE TABLE vals(f FLOAT);
+  INSERT INTO vals VALUES (0.0), (123.4567890123456789), (12345678901234567890000), (0.0001234567890123456789)
+
+query RT rowsort
+SELECT f, f::string FROM vals
+----
+0                     0
+123.456789012346      123.456789012346
+1.23456789012346e+22  1.23456789012346e+22
+0.000123456789012346  0.000123456789012346
+
+statement ok
+SET extra_float_digits = 3
+
+query RT rowsort
+SELECT f, f::string FROM vals
+----
+0                       0
+123.45678901234568      123.45678901234568
+1.2345678901234568e+22  1.2345678901234568e+22
+0.00012345678901234567  0.00012345678901234567
+
+statement ok
+SET extra_float_digits = -8
+
+query RT rowsort
+SELECT f, f::string FROM vals
+----
+0             0
+123.4568      123.4568
+1.234568e+22  1.234568e+22
+0.0001234568  0.0001234568
+
+statement ok
+SET extra_float_digits = -15
+
+query RT rowsort
+SELECT f, f::string FROM vals
+----
+0       0
+100     1e+02
+1e+22   1e+22
+0.0001  0.0001
+
+statement ok
+DROP TABLE vals
+
+statement ok
+RESET extra_float_digits
+

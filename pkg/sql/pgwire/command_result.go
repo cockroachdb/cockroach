@@ -17,7 +17,6 @@ package pgwire
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -48,10 +47,8 @@ const (
 type commandResult struct {
 	// conn is the parent connection of this commandResult.
 	conn *conn
-	// loc is the current time zone as set in the SQL session.
-	loc *time.Location
-	// bytesEncodeFormat is the current byte array encoding format as set in the SQL session.
-	bytesEncodeFormat sessiondata.BytesEncodeFormat
+	// conv indicates the conversion settings for SQL values.
+	conv sessiondata.DataConversionConfig
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
 
@@ -86,19 +83,17 @@ func (c *conn) makeCommandResult(
 	pos sql.CmdPos,
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) commandResult {
 	return commandResult{
-		conn:              c,
-		pos:               pos,
-		descOpt:           descOpt,
-		stmtType:          stmt.StatementType(),
-		formatCodes:       formatCodes,
-		loc:               loc,
-		typ:               commandComplete,
-		cmdCompleteTag:    stmt.StatementTag(),
-		bytesEncodeFormat: be,
+		conn:           c,
+		pos:            pos,
+		descOpt:        descOpt,
+		stmtType:       stmt.StatementType(),
+		formatCodes:    formatCodes,
+		typ:            commandComplete,
+		cmdCompleteTag: stmt.StatementTag(),
+		conv:           conv,
 	}
 }
 
@@ -215,7 +210,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	}
 	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.loc, r.bytesEncodeFormat)
+	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv)
 	_ /* flushed */, err := r.conn.maybeFlush(r.pos)
 	return err
 }

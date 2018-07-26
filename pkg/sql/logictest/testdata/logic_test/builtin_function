@@ -530,30 +530,32 @@ SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
+subtest standard_float_digits
+
 query RR
 SELECT acos(-0.5), round(acos(0.5), 15)
 ----
-2.0943951023931957 1.047197551196598
+2.0943951023932  1.0471975511966
 
 query RR
 SELECT cot(-0.5), cot(0.5)
 ----
--1.830487721712452 1.830487721712452
+-1.83048772171245  1.83048772171245
 
 query RRR
 SELECT asin(-0.5), asin(0.5), asin(1.5)
 ----
--0.5235987755982989 0.5235987755982989 NaN
+-0.523598775598299  0.523598775598299  NaN
 
 query RR
 SELECT atan(-0.5), atan(0.5)
 ----
--0.4636476090008061 0.4636476090008061
+-0.463647609000806  0.463647609000806
 
 query RR
 SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 ----
--1.1071487177940904 1.1071487177940904
+-1.10714871779409  1.10714871779409
 
 query RRR
 SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
@@ -568,7 +570,77 @@ SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decim
 query RR
 SELECT cos(-0.5), cos(0.5)
 ----
-0.8775825618903728 0.8775825618903728
+0.877582561890373  0.877582561890373
+
+query RRR
+SELECT sin(-1.0), sin(0.0), sin(1.0)
+----
+-0.841470984807897  0  0.841470984807897
+
+query RR
+SELECT degrees(-0.5), degrees(0.5)
+----
+-28.6478897565412  28.6478897565412
+
+subtest extra_float_digits_3
+
+statement ok
+SET extra_float_digits = 3
+
+query RR
+SELECT acos(-0.5), round(acos(0.5), 15)
+----
+2.0943951023931957  1.047197551196598
+
+query RR
+SELECT cot(-0.5), cot(0.5)
+----
+-1.830487721712452  1.830487721712452
+
+query RRR
+SELECT asin(-0.5), asin(0.5), asin(1.5)
+----
+-0.5235987755982989  0.5235987755982989  NaN
+
+query RR
+SELECT atan(-0.5), atan(0.5)
+----
+-0.4636476090008061  0.4636476090008061
+
+query RR
+SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
+----
+-1.1071487177940904  1.1071487177940904
+
+query RRR
+SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
+----
+-1 3 2.6823725926296729544
+
+query RRRRR
+SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
+----
+-0  1  1  1  -0
+
+query RR
+SELECT cos(-0.5), cos(0.5)
+----
+0.8775825618903728  0.8775825618903728
+
+query RRR
+SELECT sin(-1.0), sin(0.0), sin(1.0)
+----
+-0.8414709848078965  0  0.8414709848078965
+
+query RR
+SELECT degrees(-0.5), degrees(0.5)
+----
+-28.64788975654116  28.64788975654116
+
+statement ok
+RESET extra_float_digits
+
+subtest other_tests
 
 query IIII
 SELECT div(-1::int, 2::int), div(1::int, 2::int), div(9::int, 4::int), div(-9::int, 4::int)
@@ -579,11 +651,6 @@ query RRRRRR
 SELECT div(-1.0::float, 2.0), div(1.0::float, 2.0), div(9.0::float, 4.0), div(-9.0::float, 4.0), div(1.0::float, 0.0), div(1111.0::decimal, 9.44)
 ----
 -0 0 2 -2 +Inf 117
-
-query RR
-SELECT degrees(-0.5), degrees(0.5)
-----
--28.64788975654116 28.64788975654116
 
 query error div\(\): division by zero
 SELECT div(1.0::decimal, 0.0::decimal)
@@ -597,7 +664,7 @@ SELECT div(1::int, 0::int)
 query RRR
 SELECT exp(-1.0::float), round(exp(1.0::float), 13), exp(2.0::decimal)
 ----
-0.36787944117144233 2.718281828459 7.3890560989306502272
+0.367879441171442  2.718281828459  7.3890560989306502272
 
 query error exp\(\): overflow
 SELECT exp(1e2000::decimal)
@@ -615,7 +682,7 @@ false true false true false true
 query RRR
 SELECT ln(-2.0::float), ln(2.0::float), ln(2.5::decimal)
 ----
-NaN 0.6931471805599453 0.91629073187415506518
+NaN  0.693147180559945  0.91629073187415506518
 
 query error cannot take logarithm of a negative number
 SELECT ln(-100.000::decimal)
@@ -713,7 +780,7 @@ SELECT div(-9.0::float, -2.0) * -2.0 + mod(-9.0::float, -2.0)
 query R
 SELECT pi()
 ----
-3.141592653589793
+3.14159265358979
 
 query II
 SELECT pow(-2::int, 3::int), pow(2::int, 3::int)
@@ -755,7 +822,7 @@ SELECT power(-1, -.1)
 query RR
 SELECT radians(-45.0), radians(45.0)
 ----
--0.7853981633974483 0.7853981633974483
+-0.785398163397448  0.785398163397448
 
 query error invalid operation
 SELECT round(123.456::float, -2438602134409251682)
@@ -785,7 +852,7 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 query RRRRRRR
 SELECT round(1.390671161567e-309::float), round(0.49999999999999994::float), round(0.5000000000000001::float), round(2251799813685249.5::float), round(2251799813685250.5::float), round(4503599627370495.5::float), round(4503599627370497::float)
 ----
-0  0  1  2.25179981368525e+15  2.25179981368525e+15  4.503599627370496e+15  4.503599627370497e+15
+0  0  1  2.25179981368525e+15  2.25179981368525e+15  4.5035996273705e+15  4.5035996273705e+15
 
 # round up for decimals
 # These results are indeed different than floats. Compare with postgres.
@@ -805,8 +872,13 @@ SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.
 ----
 -3 -2 0 2 3
 
+subtest round_max_prec
+
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
+
+statement ok
+SET extra_float_digits = 3
 
 query RRR
 SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
@@ -828,15 +900,54 @@ SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
 ----
 -1e+308 1e+308
 
+query RRRR
+SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
+----
+1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
+
+statement ok
+RESET extra_float_digits
+
+subtest round_low_prec
+
+statement ok
+SET extra_float_digits = -6
+
+query RRR
+SELECT round(-2.123456789, 5), round(2.123456789, 5), round(2.12345678901234567890, 14)
+----
+-2.12346 2.12346 2.12345678901235
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308::float, 1)
+----
+-1.79769313e+308  1.79769313e+308
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, -303), round(1.7976931348623157e+308::float, -303)
+----
+-1.79769e+308 1.79769e+308
+
+query RR
+SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
+----
+-1e+308 1e+308
+
+query RRRR
+SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
+----
+1.23456789  1.23456789  1.23456789  1.23456789
+
+statement ok
+RESET extra_float_digits
+
+subtest more_round_tests
+
 query RR
 SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308::float, 1)
 ----
 -0 0
 
-query RRRR
-SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
-----
-1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
 query RRR
 SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3)
@@ -868,6 +979,9 @@ SELECT round('inf'::decimal)
 query error invalid operation
 SELECT round(1::decimal, 3000)
 
+subtest more_tests
+
+
 query III
 SELECT sign(-2), sign(0), sign(2)
 ----
@@ -877,11 +991,6 @@ query RRRR
 SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 ----
 -1 0 0 1
-
-query RRR
-SELECT sin(-1.0), sin(0.0), sin(1.0)
-----
--0.8414709848078965 0 0.8414709848078965
 
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)

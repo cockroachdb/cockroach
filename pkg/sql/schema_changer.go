@@ -1396,7 +1396,6 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extend
 		EvalContext: tree.EvalContext{
 			SessionData: &sessiondata.SessionData{
 				SearchPath: sqlbase.DefaultSearchPath,
-				Location:   dummyLocation,
 				// The database is not supposed to be needed in schema changes, as there
 				// shouldn't be unqualified identifiers in backfills, and the pure functions
 				// that need it should have already been evaluated.
@@ -1407,6 +1406,9 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extend
 				// pre-evaluated).
 				Database:      "",
 				SequenceState: sessiondata.NewSequenceState(),
+				DataConversion: sessiondata.DataConversionConfig{
+					Location: dummyLocation,
+				},
 			},
 		},
 	}

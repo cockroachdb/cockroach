@@ -1526,7 +1526,11 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
-	m.data.BytesEncodeFormat = val
+	m.data.DataConversion.BytesEncodeFormat = val
+}
+
+func (m *sessionDataMutator) SetExtraFloatDigits(val int) {
+	m.data.DataConversion.ExtraFloatDigits = val
 }
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
@@ -1566,7 +1570,7 @@ func (m *sessionDataMutator) SetSearchPath(val sessiondata.SearchPath) {
 }
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
-	m.data.Location = loc
+	m.data.DataConversion.Location = loc
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {

@@ -195,10 +195,12 @@ func newInternalPlanner(
 
 	sd := &sessiondata.SessionData{
 		SearchPath:    sqlbase.DefaultSearchPath,
-		Location:      time.UTC,
 		User:          user,
 		Database:      "system",
 		SequenceState: sessiondata.NewSequenceState(),
+		DataConversion: sessiondata.DataConversionConfig{
+			Location: time.UTC,
+		},
 	}
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
@@ -231,7 +233,7 @@ func newInternalPlanner(
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	p.semaCtx = tree.MakeSemaContext(sd.User == security.RootUser /* privileged */)
-	p.semaCtx.Location = &sd.Location
+	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 
 	plannerMon := mon.MakeUnlimitedMonitor(ctx,
