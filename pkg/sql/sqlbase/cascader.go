@@ -55,6 +55,7 @@ type cascader struct {
 func makeDeleteCascader(
 	txn *client.Txn,
 	table *TableDescriptor,
+	fkHelper FKHelper,
 	tablesByID TableLookupsByID,
 	evalCtx *tree.EvalContext,
 	alloc *DatumAlloc,
@@ -96,6 +97,7 @@ Outer:
 		txn:                txn,
 		tablesByID:         tablesByID,
 		indexPKRowFetchers: make(map[ID]map[IndexID]RowFetcher),
+		fkHelper:           fkHelper,
 		rowDeleters:        make(map[ID]RowDeleter),
 		deleterRowFetchers: make(map[ID]RowFetcher),
 		deletedRows:        make(map[ID]*RowContainer),
@@ -113,6 +115,7 @@ Outer:
 func makeUpdateCascader(
 	txn *client.Txn,
 	table *TableDescriptor,
+	fkHelper FKHelper,
 	tablesByID TableLookupsByID,
 	updateCols []ColumnDescriptor,
 	evalCtx *tree.EvalContext,

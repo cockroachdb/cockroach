@@ -649,6 +649,7 @@ func makeBaseFKHelper(
 		dir:         dir,
 	}
 	if b.searchTable == nil {
+		log.Warningf(context.TODO(), "baseFKHelper: ref.Table = %d, searchTable == nil", ref.Table)
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchPrefix = MakeIndexKeyPrefix(b.searchTable, ref.Index)

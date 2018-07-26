@@ -113,36 +113,9 @@ func (p *planner) Delete(
 	}
 
 	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
-	fetchColIDtoRowIndex := sqlbase.ColIDtoRowIndexFromCols(fetchCols)
-
-	maybeAddCol := func(colID sqlbase.ColumnID) error {
-		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
-			col, err := desc.FindColumnByID(colID)
-			if err != nil {
-				return err
-			}
-			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
-			fetchCols = append(fetchCols, *col)
-		}
-		return nil
-	}
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		if err := maybeAddCol(colID); err != nil {
-			return nil, err
-		}
-	}
-	for _, index := range indexes {
-		for _, colID := range index.ColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return nil, err
-			}
-		}
-		// The extra columns are needed to fix #14601.
-		for _, colID := range index.ExtraColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return nil, err
-			}
-		}
+	fetchColIDtoRowIndex, _, err := sqlbase.FetchColsForDelete(desc, fetchCols)
+	if err != nil {
+		return nil, err
 	}
 
 	// Determine what are the foreign key tables that are involved in the deletion.

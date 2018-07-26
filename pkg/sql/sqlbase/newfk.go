@@ -97,7 +97,7 @@ func makeFKHelper(
 		alloc:        alloc,
 	}
 	if err := fkHelper.initializeTableInfo(writeTable, colMap, dir); err != nil {
-		return FKHelper{}, err
+		return fkHelper, err
 	}
 	return fkHelper, nil
 }
@@ -109,6 +109,10 @@ func (fk *FKHelper) addFKRefInfo(writeTableID ID, idx IndexDescriptor, otherTabl
 		writeIdxStruct.searchIdxInfo[ref.Table] = make(indexLookupByID)
 	}
 	searchTable := otherTables[ref.Table].Table
+	if searchTable == nil {
+		log.Warningf(context.TODO(), "FKHelper: ref.Table = %d, searchTable == nil", ref.Table)
+		return errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+	}
 	searchPrefix := MakeIndexKeyPrefix(searchTable, ref.Index)
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
 	if err != nil {

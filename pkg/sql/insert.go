@@ -254,7 +254,7 @@ func (p *planner) Insert(
 		// The upsert path has a separate constructor.
 		node, err = p.newUpsertNode(
 			ctx, n, desc, ri, tn, alias, rows, rowsNeeded, columns,
-			defaultExprs, computeExprs, computedCols, fkHelper.Tables, desiredTypes)
+			defaultExprs, computeExprs, computedCols, fkHelper, fkHelper.Tables, desiredTypes)
 		if err != nil {
 			return nil, err
 		}
