@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -29,7 +28,6 @@ import (
 
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -71,7 +69,6 @@ func TestChangefeedBasics(t *testing.T) {
 
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -101,7 +98,6 @@ func TestChangefeedEnvelope(t *testing.T) {
 
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -130,7 +126,6 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 func TestChangefeedCursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -159,7 +154,6 @@ func TestChangefeedCursor(t *testing.T) {
 
 func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -225,7 +219,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 	t.Skip("#26661")
 
 	ctx := context.Background()
@@ -262,7 +255,6 @@ func TestChangefeedSchemaChange(t *testing.T) {
 
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
@@ -273,21 +265,21 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 	if _, err := sqlDB.DB.Exec(
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-	); !testutils.IsError(err, `client has run out of available brokers`) {
-		t.Fatalf(`expected 'client has run out of available brokers' error got: %+v`, err)
-	}
-	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO ''`,
 	); !testutils.IsError(err, `omit the SINK clause`) {
-		t.Fatalf(`expected 'omit the SINK clause' error got: %+v`, err)
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
 	}
 	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
 	); !testutils.IsError(err, `omit the SINK clause`) {
-		t.Fatalf(`expected 'omit the SINK clause' error got: %+v`, err)
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
 	}
 
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
+	); !testutils.IsError(err, `use of CHANGEFEED requires an enterprise license`) {
+		t.Errorf(`expected 'use of CHANGEFEED requires an enterprise license' error got: %+v`, err)
+	}
 }
 
 func assertPayloads(t *testing.T, rows *gosql.Rows, expected []string) {
