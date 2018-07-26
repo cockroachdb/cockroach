@@ -1300,10 +1300,14 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 // statusReportParams is a static mapping from run-time parameters to their respective
 // hard-coded values, each of which is to be returned as part of the status report
 // during connection initialization.
+//
+// The standard PostgreSQL status vars are listed here:
+// https://www.postgresql.org/docs/10/static/libpq-status.html
 var statusReportParams = map[string]string{
 	"client_encoding": "UTF8",
 	"server_encoding": "UTF8",
 	"DateStyle":       "ISO",
+	"IntervalStyle":   "postgres",
 	// All datetime binary formats expect 64-bit integer microsecond values.
 	// This param needs to be provided to clients or some may provide 64-bit
 	// floating-point microsecond values instead, which was a legacy datetime
