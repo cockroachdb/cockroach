@@ -260,6 +260,59 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	// the user facing semantics of that.
 }
 
+func TestChangefeedInterleaved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	sqlDB.Exec(t, `CREATE TABLE grandparent (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO grandparent VALUES (0, 'grandparent-0')`)
+	grandparent := sqlDB.Query(t, `CREATE CHANGEFEED FOR grandparent`)
+	defer closeFeedRowsHack(t, sqlDB, grandparent)
+	assertPayloads(t, grandparent, []string{
+		`grandparent: [0]->{"a": 0, "b": "grandparent-0"}`,
+	})
+
+	sqlDB.Exec(t,
+		`CREATE TABLE parent (a INT PRIMARY KEY, b STRING) INTERLEAVE IN PARENT grandparent (a)`)
+	sqlDB.Exec(t, `INSERT INTO grandparent VALUES (1, 'grandparent-1')`)
+	sqlDB.Exec(t, `INSERT INTO parent VALUES (1, 'parent-1')`)
+	parent := sqlDB.Query(t, `CREATE CHANGEFEED FOR parent`)
+	defer closeFeedRowsHack(t, sqlDB, parent)
+	assertPayloads(t, grandparent, []string{
+		`grandparent: [1]->{"a": 1, "b": "grandparent-1"}`,
+	})
+	assertPayloads(t, parent, []string{
+		`parent: [1]->{"a": 1, "b": "parent-1"}`,
+	})
+
+	sqlDB.Exec(t,
+		`CREATE TABLE child (a INT PRIMARY KEY, b STRING) INTERLEAVE IN PARENT parent (a)`)
+	sqlDB.Exec(t, `INSERT INTO grandparent VALUES (2, 'grandparent-2')`)
+	sqlDB.Exec(t, `INSERT INTO parent VALUES (2, 'parent-2')`)
+	sqlDB.Exec(t, `INSERT INTO child VALUES (2, 'child-2')`)
+	child := sqlDB.Query(t, `CREATE CHANGEFEED FOR child`)
+	defer closeFeedRowsHack(t, sqlDB, child)
+	assertPayloads(t, grandparent, []string{
+		`grandparent: [2]->{"a": 2, "b": "grandparent-2"}`,
+	})
+	assertPayloads(t, parent, []string{
+		`parent: [2]->{"a": 2, "b": "parent-2"}`,
+	})
+	assertPayloads(t, child, []string{
+		`child: [2]->{"a": 2, "b": "child-2"}`,
+	})
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
