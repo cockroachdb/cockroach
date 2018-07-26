@@ -20,7 +20,7 @@
         (MakeOne)
         (MakeOrderingChoiceFromColumn Min $col)
     )
-    (Aggregations [(AnyNotNull $variable)] $cols)
+    (Aggregations [(ConstAgg $variable)] $cols)
     $def
 )
 
@@ -44,6 +44,6 @@
         (MakeOne)
         (MakeOrderingChoiceFromColumn Max $col)
     )
-    (Aggregations [(AnyNotNull $variable)] $cols)
+    (Aggregations [(ConstAgg $variable)] $cols)
     $def
 )
