@@ -253,6 +253,44 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	// the user facing semantics of that.
 }
 
+func TestChangefeedColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	// Table with 2 column families.
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY (a), FAMILY (b))`)
+	if _, err := sqlDB.DB.Query(
+		`CREATE CHANGEFEED FOR foo`,
+	); !testutils.IsError(err, `exactly 1 column family`) {
+		t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
+	}
+
+	// Table with a second column family added after the changefeed starts.
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
+	sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
+	bar := sqlDB.Query(t, `CREATE CHANGEFEED FOR bar`)
+	defer closeFeedRowsHack(t, sqlDB, bar)
+	assertPayloads(t, bar, []string{
+		`bar: [0]->{"a": 0}`,
+	})
+	sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b STRING CREATE FAMILY f_b`)
+	sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+	bar.Next()
+	if err := bar.Err(); !testutils.IsError(err, `exactly 1 column family`) {
+		t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
+	}
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

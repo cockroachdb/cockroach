@@ -56,6 +56,9 @@ func (c *rowFetcherCache) RowFetcherForKey(
 	if err := c.leaseMgr.Release(tableDesc); err != nil {
 		return nil, err
 	}
+	if err := validateChangefeedTable(tableDesc); err != nil {
+		return nil, err
+	}
 	if rf, ok := c.fetchers[tableDesc]; ok {
 		return rf, nil
 	}
