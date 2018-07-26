@@ -14,11 +14,25 @@
 
 package distsqlrun
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+)
 
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // distsqlrun.EvalContext proto.
 func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
+	var be BytesEncodeFormat
+	switch evalCtx.SessionData.BytesEncodeFormat {
+	case sessiondata.BytesEncodeHex:
+		be = BytesEncodeFormat_HEX
+	case sessiondata.BytesEncodeEscape:
+		be = BytesEncodeFormat_ESCAPE
+	case sessiondata.BytesEncodeBase64:
+		be = BytesEncodeFormat_BASE64
+	default:
+		panic("unknown format")
+	}
 	res := EvalContext{
 		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
 		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
@@ -26,6 +40,7 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		Database:           evalCtx.SessionData.Database,
 		User:               evalCtx.SessionData.User,
 		ApplicationName:    evalCtx.SessionData.ApplicationName,
+		BytesEncodeFormat:  be,
 	}
 
 	// Populate the search path.
