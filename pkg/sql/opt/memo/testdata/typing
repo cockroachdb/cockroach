@@ -371,7 +371,7 @@ scalar-group-by
       └── jsonb-agg [type=jsonb]
            └── variable: column22 [type=jsonb]
 
-# AnyNotNull internal aggregate function.
+# ConstAgg internal aggregate function.
 opt
 SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE y=z::int) > 'foo'
 ----
@@ -393,12 +393,44 @@ project
  │    │    └── aggregations
  │    │         ├── max [type=string]
  │    │         │    └── variable: b.x [type=string]
- │    │         └── any-not-null [type=int]
+ │    │         └── const-agg [type=int]
  │    │              └── variable: a.y [type=int]
  │    └── filters [type=bool]
  │         └── max > 'foo' [type=bool]
  └── projections
       └── a.x::STRING [type=string]
+
+# ConstNotNullAgg internal aggregate function.
+opt
+SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
+----
+project
+ ├── columns: exists:6(bool)
+ ├── group-by
+ │    ├── columns: true_agg:8(bool) rownum:10(int!null)
+ │    ├── grouping columns: rownum:10(int!null)
+ │    ├── left-join
+ │    │    ├── columns: expr:3(int) true:7(bool) rownum:10(int!null)
+ │    │    ├── row-number
+ │    │    │    ├── columns: expr:3(int) rownum:10(int!null)
+ │    │    │    └── project
+ │    │    │         ├── columns: expr:3(int)
+ │    │    │         ├── scan a
+ │    │    │         │    └── columns: a.x:1(int!null)
+ │    │    │         └── projections
+ │    │    │              └── a.x + 1 [type=int]
+ │    │    ├── project
+ │    │    │    ├── columns: true:7(bool!null)
+ │    │    │    ├── scan a
+ │    │    │    └── projections
+ │    │    │         └── true [type=bool]
+ │    │    └── filters [type=bool]
+ │    │         └── expr < 0 [type=bool]
+ │    └── aggregations
+ │         └── const-not-null-agg [type=bool]
+ │              └── variable: true [type=bool]
+ └── projections
+      └── true_agg IS NOT NULL [type=bool]
 
 # Cast
 build
