@@ -222,14 +222,21 @@ func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDeta
 	}
 
 	for _, tableDesc := range details.TableDescs {
-		if len(tableDesc.Families) != 1 {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`only tables with 1 column family are currently supported: %s has %d`,
-				tableDesc.Name, len(tableDesc.Families))
+		if err := validateChangefeedTable(&tableDesc); err != nil {
+			return jobspb.ChangefeedDetails{}, err
 		}
 	}
 
 	return details, nil
+}
+
+func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
+	if len(tableDesc.Families) != 1 {
+		return errors.Errorf(
+			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
+			tableDesc.Name, len(tableDesc.Families))
+	}
+	return nil
 }
 
 type changefeedResumer struct{}
