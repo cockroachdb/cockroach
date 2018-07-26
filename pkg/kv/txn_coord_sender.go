@@ -878,6 +878,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := tc.wrapped.Send(ctx, ba)
 
+	var respTxn *roachpb.Transaction
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
 
@@ -890,32 +891,30 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
-		tc.mu.Lock()
-		// If the error contains updated txn info, ingest it. For example, we might
-		// find out this way that the transaction has been Aborted in the meantime
-		// (e.g. someone else pushed it), in which case it's up to us to clean up.
-		if errTxn := pErr.GetTxn(); errTxn != nil {
-			tc.mu.txn.Update(errTxn)
+		if pErr.GetTxn() != nil {
+			// It is not expected for a 2.1 node to return an error with a transaction
+			// in it. For one, heartbeats are not supposed to return
+			// TransactionAbortedErrors.
+			// TODO(andrei): Remove this in 2.2.
+			respTxn = pErr.GetTxn()
+		} else {
+			return true
 		}
-		status := tc.mu.txn.Status
-		if status == roachpb.ABORTED {
-			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
-			tc.abortTxnAsyncLocked()
-		}
-		tc.mu.Unlock()
-
-		return status == roachpb.PENDING
+	} else {
+		respTxn = br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn
 	}
-	txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 
-	// Give the news to the txn in the txns map. This will update long-running
-	// transactions (which may find out that they have to restart in that way),
-	// but in particular makes sure that they notice when they've been aborted
-	// (in which case we'll give them an error on their next request).
+	// Update our txn. In particular, we need to make sure that the client will
+	// notice when the txn has been aborted (in which case we'll give them an
+	// error on their next request).
 	tc.mu.Lock()
-	tc.mu.txn.Update(&txn)
-	tc.mu.Unlock()
-
+	defer tc.mu.Unlock()
+	tc.mu.txn.Update(respTxn)
+	if tc.mu.txn.Status != roachpb.PENDING {
+		log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+		tc.abortTxnAsyncLocked()
+		return false
+	}
 	return true
 }
 
