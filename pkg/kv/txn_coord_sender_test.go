@@ -395,74 +395,93 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderHeartbeat verifies periodic heartbeat of the
-// transaction record.
+// Test that the theartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
-	initialTxn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	tc := initialTxn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
-	// Set heartbeat interval to 1ms for testing.
-	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
-
-	if err := initialTxn.Put(context.TODO(), roachpb.Key("a"), []byte("value")); err != nil {
+	keyA := roachpb.Key("a")
+	keyC := roachpb.Key("c")
+	splitKey := roachpb.Key("b")
+	if err := s.DB.AdminSplit(ctx, splitKey /* spanKey */, splitKey /* splitKey */); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify 3 heartbeats.
-	var heartbeatTS hlc.Timestamp
-	for i := 0; i < 3; i++ {
-		testutils.SucceedsSoon(t, func() error {
-			txn, pErr := getTxn(context.Background(), initialTxn)
-			if pErr != nil {
-				t.Fatal(pErr)
+	// We're going to test twice. In both cases the heartbeat is supposed to
+	// notice that its transaction is aborted, but:
+	// - once the abort span is populated on the txn's range.
+	// - once the abort span is not populated.
+	// The two conditions are created by either clearing an intent from the txn's
+	// range or not (i.e. clearing an intent from another range).
+	// The difference is supposed to be immaterial for the heartbeat loop (that's
+	// what we're testing). As of June 2018, HeartbeatTxnRequests don't check the
+	// abort span.
+	for _, pusherKey := range []roachpb.Key{keyA, keyC} {
+		t.Run(fmt.Sprintf("pusher:%s", pusherKey), func(t *testing.T) {
+			initialTxn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+			tc := initialTxn.Sender().(*TxnCoordSender)
+			tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
+
+			if err := initialTxn.Put(ctx, keyA, []byte("value")); err != nil {
+				t.Fatal(err)
 			}
-			// Advance clock by 1ns.
-			// Locking the TxnCoordSender to prevent a data race.
-			tc.mu.Lock()
-			s.Manual.Increment(1)
-			tc.mu.Unlock()
-			if lastActive := txn.LastActive(); heartbeatTS.Less(lastActive) {
-				heartbeatTS = lastActive
+			if err := initialTxn.Put(ctx, keyC, []byte("value")); err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify 3 heartbeats.
+			var heartbeatTS hlc.Timestamp
+			for i := 0; i < 3; i++ {
+				testutils.SucceedsSoon(t, func() error {
+					txn, pErr := getTxn(ctx, initialTxn)
+					if pErr != nil {
+						t.Fatal(pErr)
+					}
+					// Advance clock by 1ns.
+					// Locking the TxnCoordSender to prevent a data race.
+					tc.mu.Lock()
+					s.Manual.Increment(1)
+					tc.mu.Unlock()
+					if lastActive := txn.LastActive(); heartbeatTS.Less(lastActive) {
+						heartbeatTS = lastActive
+						return nil
+					}
+					return errors.Errorf("expected heartbeat")
+				})
+			}
+
+			// Push our txn with another high-priority txn.
+			{
+				if err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+					if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+						return err
+					}
+					return txn.Put(ctx, pusherKey, []byte("pusher val"))
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Verify that the abort is discovered and the heartbeat discontinued.
+			// This relies on the heartbeat loop stopping once it figures out that the txn
+			// has been aborted.
+			testutils.SucceedsSoon(t, func() error {
+				tc.mu.Lock()
+				done := tc.mu.txnEnd == nil
+				tc.mu.Unlock()
+				if !done {
+					return fmt.Errorf("transaction is not aborted")
+				}
 				return nil
-			}
-			return errors.Errorf("expected heartbeat")
+			})
+
+			// Trying to do something else should give us a TransactionAbortedError.
+			_, err := initialTxn.Get(ctx, "a")
+			assertTransactionAbortedError(t, err)
 		})
 	}
-
-	// Sneakily send an ABORT right to DistSender (bypassing TxnCoordSender).
-	{
-		var ba roachpb.BatchRequest
-		ba.Add(&roachpb.EndTransactionRequest{
-			RequestHeader: roachpb.RequestHeader{Key: initialTxn.Proto().Key},
-			Commit:        false,
-			Poison:        true,
-		})
-		ba.Txn = initialTxn.Proto()
-		if _, pErr := tc.TxnCoordSenderFactory.wrapped.Send(context.Background(), ba); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
-	// Verify that the abort is discovered and the heartbeat discontinued.
-	// This relies on the heartbeat loop stopping once it figures out that the txn
-	// has been aborted.
-	testutils.SucceedsSoon(t, func() error {
-		tc.mu.Lock()
-		done := tc.mu.txnEnd == nil
-		tc.mu.Unlock()
-		if !done {
-			return fmt.Errorf("transaction is not aborted")
-		}
-		return nil
-	})
-
-	// Trying to do something else should give us a TransactionAbortedError.
-	_, err := initialTxn.Get(context.TODO(), "a")
-	assertTransactionAbortedError(t, err)
 }
 
 // getTxn fetches the requested key and returns the transaction info.
