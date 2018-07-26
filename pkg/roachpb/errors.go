@@ -62,7 +62,22 @@ func NewError(err error) *Error {
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else {
-		e.setGoError(err)
+		if sErr, ok := err.(ErrorDetailInterface); ok {
+			e.Message = sErr.message(e)
+		} else {
+			e.Message = err.Error()
+		}
+		var isTxnError bool
+		if r, ok := err.(transactionRestartError); ok {
+			isTxnError = true
+			e.TransactionRestart = r.canRestartTransaction()
+		}
+		// If the specific error type exists in the detail union, set it.
+		if !e.Detail.SetInner(err) {
+			if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
+			}
+		}
 	}
 
 	return e
@@ -130,29 +145,6 @@ func (e *Error) GoError() error {
 		}
 	}
 	return e.GetDetail()
-}
-
-// setGoError sets Error using err.
-func (e *Error) setGoError(err error) {
-	if e.Message != "" {
-		panic("cannot re-use roachpb.Error")
-	}
-	if sErr, ok := err.(ErrorDetailInterface); ok {
-		e.Message = sErr.message(e)
-	} else {
-		e.Message = err.Error()
-	}
-	var isTxnError bool
-	if r, ok := err.(transactionRestartError); ok {
-		isTxnError = true
-		e.TransactionRestart = r.canRestartTransaction()
-	}
-	// If the specific error type exists in the detail union, set it.
-	if !e.Detail.SetInner(err) {
-		if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
-			panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
-		}
-	}
 }
 
 // SetTxn sets the txn and resets the error message. txn is cloned before being
