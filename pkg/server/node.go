@@ -447,25 +447,13 @@ func (n *Node) start(
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	// Initialize the stores we're going to start.
-	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-
-	if err := n.startStores(ctx, stores, n.stopper); err != nil {
+	if err := n.startStoresInitNodeIDConnectGossip(ctx, bootstrappedEngines); err != nil {
 		return err
 	}
 
 	// Bootstrap any uninitialized stores.
 	if len(emptyEngines) > 0 {
-		// Initialize the stores we need to bootstrap first.
-		bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
-		if err != nil {
-			return err
-		}
-
-		if err := n.bootstrapStores(ctx, bootstraps, n.stopper); err != nil {
+		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -532,11 +520,22 @@ func (n *Node) initStores(
 	return stores, nil
 }
 
-func (n *Node) startStores(
-	ctx context.Context, stores []*storage.Store, stopper *stop.Stopper,
+// startStoresInitNodeIDConnectGossip starts the existing (i.e. bootstrapped)
+// stores of this node. If there are any stores, they contain the NodeID and we
+// initialize it from there. Otherwise, a new node ID is allocated. In either
+// case, Gossip will have been connected when this method returns, which means
+// that the cluster ID is known.
+func (n *Node) startStoresInitNodeIDConnectGossip(
+	ctx context.Context, bootstrappedEngines []engine.Engine,
 ) error {
+	// Initialize the stores we're going to start.
+	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
+	if err != nil {
+		return err
+	}
+
 	for _, s := range stores {
-		if err := s.Start(ctx, stopper); err != nil {
+		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
 		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
@@ -630,10 +629,16 @@ func (n *Node) validateStores(ctx context.Context) error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(
-	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
+	ctx context.Context, emptyEngines []engine.Engine, stopper *stop.Stopper,
 ) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
+	}
+
+	// Initialize the stores we need to bootstrap first.
+	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
+	if err != nil {
+		return err
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for
