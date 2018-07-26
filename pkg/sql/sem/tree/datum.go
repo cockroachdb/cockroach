@@ -1873,6 +1873,9 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
+	_, offset := t.Zone()
+	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
