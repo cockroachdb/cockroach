@@ -3236,6 +3236,10 @@ func TestReplicaTooOldGC(t *testing.T) {
 				return nil
 			}
 			return err
+		} else if replica != nil {
+			// Make sure the replica is unquiesced so that it will tick and
+			// contact the leader to discover it's no longer part of the range.
+			replica.UnquiesceAndWakeLeader()
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})

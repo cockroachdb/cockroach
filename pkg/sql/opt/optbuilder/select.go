@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // buildTable builds a set of memo groups that represent the given table
@@ -310,8 +312,12 @@ func (b *Builder) buildSelectClause(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) (outScope *scope) {
+	// The root AS OF clause is recognized and handled by the executor. The only
+	// thing that must be done at this point is to ensure that if any timestamps
+	// are specified, the root SELECT was an AS OF SYSTEM TIME and that the time
+	// specified matches the one found at the root.
 	if from.AsOf.Expr != nil {
-		panic(unimplementedf("AS OF clause not supported"))
+		b.validateAsOf(from.AsOf)
 	}
 
 	var joinTables map[string]struct{}
@@ -373,4 +379,21 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	}
 
 	return outScope
+}
+
+// validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
+// that of the root statement.
+func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
+	ts, err := tree.EvalAsOfTimestamp(asOf, hlc.MaxTimestamp, b.semaCtx, b.evalCtx)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	if b.semaCtx.AsOfTimestamp == nil {
+		panic(builderError{errors.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")})
+	}
+
+	if *b.semaCtx.AsOfTimestamp != ts {
+		panic(builderError{errors.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")})
+	}
 }

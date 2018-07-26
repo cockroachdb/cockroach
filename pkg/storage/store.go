@@ -2436,11 +2436,9 @@ func (s *Store) MergeRange(
 // this store. addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized range %s", repl)
+		return errors.Errorf("attempted to add uninitialized replica %s", repl)
 	}
 
-	// TODO(spencer): will need to determine which range is
-	// newer, and keep that one.
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		return err
 	}
@@ -2509,13 +2507,18 @@ func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.Range
 }
 
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
-// addReplicaToRangeMapLocked requires that the store lock is held.
 func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
+	// Check whether the replica is unquiesced but not in the map. This
+	// can happen during splits and merges, where the uninitialized (but
+	// also unquiesced) replica is removed from the unquiesced replica
+	// map in advance of this method being called.
 	s.unquiescedReplicas.Lock()
-	s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+	if _, ok := s.unquiescedReplicas.m[repl.RangeID]; !repl.mu.quiescent && !ok {
+		s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+	}
 	s.unquiescedReplicas.Unlock()
 	return nil
 }

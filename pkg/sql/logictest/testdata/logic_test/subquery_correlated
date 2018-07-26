@@ -790,7 +790,7 @@ FROM c
 INNER JOIN o
 ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
 
-statement error HINT: some correlated subqueries are not supported yet
+statement error AS OF SYSTEM TIME must be provided on a top-level statement
 SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-0ns')
 FROM c
 WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)

@@ -1824,6 +1824,128 @@ project
 #DROP VIEW revenue0;
 #----
 
+opt
+SELECT
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+FROM
+    supplier,
+    (
+        SELECT
+            l_suppkey AS supplier_no,
+            sum(l_extendedprice * (1 - l_discount)) AS total_revenue
+        FROM
+            lineitem
+        WHERE
+            l_shipdate >= DATE '1996-01-01'
+            AND l_shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH
+        GROUP BY
+            l_suppkey
+    )
+WHERE
+    s_suppkey = supplier_no
+    AND total_revenue = (
+        SELECT
+            max(total_revenue)
+        FROM (
+            SELECT
+                l_suppkey AS supplier_no,
+                sum(l_extendedprice * (1 - l_discount)) AS total_revenue
+            FROM
+                lineitem
+            WHERE
+                l_shipdate >= DATE '1996-01-01'
+                AND l_shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH
+            GROUP BY
+                l_suppkey
+        )
+    )
+ORDER BY
+    s_suppkey;
+----
+project
+ ├── columns: s_suppkey:1(int!null) s_name:2(string) s_address:3(string) s_phone:5(string) total_revenue:25(float!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,5,25)
+ ├── ordering: +1
+ └── inner-join (merge)
+      ├── columns: s_suppkey:1(int!null) s_name:2(string) s_address:3(string) s_phone:5(string) lineitem.l_suppkey:10(int!null) total_revenue:25(float!null)
+      ├── key: (10)
+      ├── fd: (1)-->(2,3,5), (10)-->(25), (1)==(10), (10)==(1)
+      ├── ordering: +(1|10)
+      ├── scan supplier
+      │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_address:3(string) s_phone:5(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3,5)
+      │    └── ordering: +1
+      ├── sort
+      │    ├── columns: lineitem.l_suppkey:10(int!null) total_revenue:25(float!null)
+      │    ├── key: (10)
+      │    ├── fd: (10)-->(25)
+      │    ├── ordering: +10
+      │    └── select
+      │         ├── columns: lineitem.l_suppkey:10(int!null) total_revenue:25(float!null)
+      │         ├── key: (10)
+      │         ├── fd: (10)-->(25)
+      │         ├── group-by
+      │         │    ├── columns: lineitem.l_suppkey:10(int!null) total_revenue:25(float)
+      │         │    ├── grouping columns: lineitem.l_suppkey:10(int!null)
+      │         │    ├── key: (10)
+      │         │    ├── fd: (10)-->(25)
+      │         │    ├── project
+      │         │    │    ├── columns: column24:24(float) lineitem.l_suppkey:10(int!null)
+      │         │    │    ├── select
+      │         │    │    │    ├── columns: lineitem.l_suppkey:10(int!null) lineitem.l_extendedprice:13(float) lineitem.l_discount:14(float) lineitem.l_shipdate:18(date!null)
+      │         │    │    │    ├── scan lineitem
+      │         │    │    │    │    └── columns: lineitem.l_suppkey:10(int!null) lineitem.l_extendedprice:13(float) lineitem.l_discount:14(float) lineitem.l_shipdate:18(date)
+      │         │    │    │    └── filters [type=bool, outer=(18), constraints=(/18: [/'1996-01-01' - ])]
+      │         │    │    │         ├── lineitem.l_shipdate >= '1996-01-01' [type=bool, outer=(18), constraints=(/18: [/'1996-01-01' - ]; tight)]
+      │         │    │    │         └── lineitem.l_shipdate < ('1996-01-01' + '3mon') [type=bool, outer=(18), constraints=(/18: (/NULL - ])]
+      │         │    │    └── projections [outer=(10,13,14)]
+      │         │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(13,14)]
+      │         │    └── aggregations [outer=(24)]
+      │         │         └── sum [type=float, outer=(24)]
+      │         │              └── variable: column24 [type=float, outer=(24)]
+      │         └── filters [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
+      │              └── eq [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
+      │                   ├── variable: total_revenue [type=float, outer=(25)]
+      │                   └── subquery [type=float]
+      │                        └── scalar-group-by
+      │                             ├── columns: max:44(float)
+      │                             ├── cardinality: [1 - 1]
+      │                             ├── key: ()
+      │                             ├── fd: ()-->(44)
+      │                             ├── group-by
+      │                             │    ├── columns: lineitem.l_suppkey:28(int!null) total_revenue:43(float)
+      │                             │    ├── grouping columns: lineitem.l_suppkey:28(int!null)
+      │                             │    ├── key: (28)
+      │                             │    ├── fd: (28)-->(43)
+      │                             │    ├── project
+      │                             │    │    ├── columns: column42:42(float) lineitem.l_suppkey:28(int!null)
+      │                             │    │    ├── select
+      │                             │    │    │    ├── columns: lineitem.l_suppkey:28(int!null) lineitem.l_extendedprice:31(float) lineitem.l_discount:32(float) lineitem.l_shipdate:36(date!null)
+      │                             │    │    │    ├── scan lineitem
+      │                             │    │    │    │    └── columns: lineitem.l_suppkey:28(int!null) lineitem.l_extendedprice:31(float) lineitem.l_discount:32(float) lineitem.l_shipdate:36(date)
+      │                             │    │    │    └── filters [type=bool, outer=(36), constraints=(/36: [/'1996-01-01' - ])]
+      │                             │    │    │         ├── lineitem.l_shipdate >= '1996-01-01' [type=bool, outer=(36), constraints=(/36: [/'1996-01-01' - ]; tight)]
+      │                             │    │    │         └── lineitem.l_shipdate < ('1996-01-01' + '3mon') [type=bool, outer=(36), constraints=(/36: (/NULL - ])]
+      │                             │    │    └── projections [outer=(28,31,32)]
+      │                             │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(31,32)]
+      │                             │    └── aggregations [outer=(42)]
+      │                             │         └── sum [type=float, outer=(42)]
+      │                             │              └── variable: column42 [type=float, outer=(42)]
+      │                             └── aggregations [outer=(43)]
+      │                                  └── max [type=float, outer=(43)]
+      │                                       └── variable: total_revenue [type=float, outer=(43)]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +10
+           └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+                └── supplier.s_suppkey = lineitem.l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+
 # --------------------------------------------------
 # Q16
 # Parts/Supplier Relationship
@@ -1873,6 +1995,99 @@ project
 #    p_type,
 #    p_size;
 #----
+
+opt
+SELECT
+    p_brand,
+    p_type,
+    p_size,
+    count(ps_suppkey) AS supplier_cnt
+FROM (
+    SELECT DISTINCT
+        p_brand,
+        p_type,
+        p_size,
+        ps_suppkey
+    FROM
+        partsupp,
+        part
+    WHERE
+        p_partkey = ps_partkey
+        AND p_brand <> 'Brand#45'
+        AND p_type NOT LIKE 'MEDIUM POLISHED %'
+        AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9)
+        AND ps_suppkey NOT IN (
+            SELECT
+                s_suppkey
+            FROM
+                supplier
+            WHERE
+                s_comment LIKE '%Customer%Complaints%'
+        )
+    )
+GROUP BY
+    p_brand,
+    p_type,
+    p_size
+ORDER BY
+    supplier_cnt DESC,
+    p_brand,
+    p_type,
+    p_size;
+----
+sort
+ ├── columns: p_brand:9(string!null) p_type:10(string) p_size:11(int!null) supplier_cnt:22(int)
+ ├── key: (9-11)
+ ├── fd: (9-11)-->(22)
+ ├── ordering: -22,+9,+10,+11
+ └── group-by
+      ├── columns: p_brand:9(string!null) p_type:10(string) p_size:11(int!null) supplier_cnt:22(int)
+      ├── grouping columns: p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
+      ├── key: (9-11)
+      ├── fd: (9-11)-->(22)
+      ├── group-by
+      │    ├── columns: ps_suppkey:2(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
+      │    ├── grouping columns: ps_suppkey:2(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
+      │    ├── key: (2,9-11)
+      │    └── inner-join
+      │         ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:6(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
+      │         ├── key: (2,6)
+      │         ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)
+      │         ├── anti-join
+      │         │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null)
+      │         │    ├── key: (1,2)
+      │         │    ├── scan partsupp
+      │         │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null)
+      │         │    │    └── key: (1,2)
+      │         │    ├── select
+      │         │    │    ├── columns: s_suppkey:15(int!null) s_comment:21(string)
+      │         │    │    ├── key: (15)
+      │         │    │    ├── fd: (15)-->(21)
+      │         │    │    ├── scan supplier
+      │         │    │    │    ├── columns: s_suppkey:15(int!null) s_comment:21(string)
+      │         │    │    │    ├── key: (15)
+      │         │    │    │    └── fd: (15)-->(21)
+      │         │    │    └── filters [type=bool, outer=(21)]
+      │         │    │         └── supplier.s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21)]
+      │         │    └── filters [type=bool, outer=(2,15)]
+      │         │         └── (partsupp.ps_suppkey = supplier.s_suppkey) IS NOT false [type=bool, outer=(2,15)]
+      │         ├── select
+      │         │    ├── columns: p_partkey:6(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
+      │         │    ├── key: (6)
+      │         │    ├── fd: (6)-->(9-11)
+      │         │    ├── scan part
+      │         │    │    ├── columns: p_partkey:6(int!null) p_brand:9(string) p_type:10(string) p_size:11(int)
+      │         │    │    ├── key: (6)
+      │         │    │    └── fd: (6)-->(9-11)
+      │         │    └── filters [type=bool, outer=(9-11), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; /11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49])]
+      │         │         ├── part.p_brand != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
+      │         │         ├── part.p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10)]
+      │         │         └── part.p_size IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
+      │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │              └── part.p_partkey = partsupp.ps_partkey [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── aggregations [outer=(2)]
+           └── count [type=int, outer=(2)]
+                └── variable: partsupp.ps_suppkey [type=int, outer=(2)]
 
 # --------------------------------------------------
 # Q17
