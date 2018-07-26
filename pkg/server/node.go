@@ -453,23 +453,19 @@ func (n *Node) start(
 		return err
 	}
 
-	// Initialize the stores we need to bootstrap first.
-	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-
 	if err := n.startStores(ctx, stores, n.stopper); err != nil {
 		return err
 	}
 
-	// Bootstrap any uninitialized stores asynchronously.
-	if len(bootstraps) > 0 {
-		log.Infof(ctx, "%s: asynchronously bootstrapping engine(s) %v", n, emptyEngines)
+	// Bootstrap any uninitialized stores.
+	if len(emptyEngines) > 0 {
+		// Initialize the stores we need to bootstrap first.
+		bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
+		if err != nil {
+			return err
+		}
 
-		if err := n.stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
-			n.bootstrapStores(ctx, bootstraps, n.stopper)
-		}); err != nil {
+		if err := n.bootstrapStores(ctx, bootstraps, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -636,9 +632,9 @@ func (n *Node) validateStores(ctx context.Context) error {
 // node.
 func (n *Node) bootstrapStores(
 	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
-) {
+) error {
 	if n.clusterID.Get() == uuid.Nil {
-		panic("ClusterID missing during store bootstrap of auxiliary store")
+		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for
@@ -646,7 +642,7 @@ func (n *Node) bootstrapStores(
 	inc := int64(len(bootstraps))
 	firstID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, inc, n.storeCfg.DB)
 	if err != nil {
-		log.Fatalf(ctx, "error allocating store ids: %+v", err)
+		return errors.Errorf("error allocating store ids: %s", err)
 	}
 	sIdent := roachpb.StoreIdent{
 		ClusterID: n.clusterID.Get(),
@@ -666,15 +662,15 @@ func (n *Node) bootstrapStores(
 	// that still need it.
 	cv, err := n.stores.SynthesizeClusterVersion(ctx)
 	if err != nil {
-		log.Fatalf(ctx, "error retrieving cluster version for bootstrap: %s", err)
+		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)
 	}
 
 	for _, s := range bootstraps {
 		if err := s.Bootstrap(ctx, sIdent, cv); err != nil {
-			log.Fatal(ctx, err)
+			return err
 		}
 		if err := s.Start(ctx, stopper); err != nil {
-			log.Fatal(ctx, err)
+			return err
 		}
 		n.addStore(s)
 		sIdent.StoreID++
@@ -693,6 +689,8 @@ func (n *Node) bootstrapStores(
 	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
+
+	return nil
 }
 
 // connectGossip connects to gossip network and reads cluster ID. If
