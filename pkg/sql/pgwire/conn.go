@@ -837,8 +837,7 @@ func (c *conn) bufferRow(
 	ctx context.Context,
 	row tree.Datums,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
@@ -849,9 +848,9 @@ func (c *conn) bufferRow(
 		}
 		switch fmtCode {
 		case pgwirebase.FormatText:
-			c.msgBuilder.writeTextDatum(ctx, col, loc, be)
+			c.msgBuilder.writeTextDatum(ctx, col, conv)
 		case pgwirebase.FormatBinary:
-			c.msgBuilder.writeBinaryDatum(ctx, col, loc)
+			c.msgBuilder.writeBinaryDatum(ctx, col, conv.Location)
 		default:
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
@@ -1117,10 +1116,9 @@ func (c *conn) CreateStatementResult(
 	descOpt sql.RowDescOpt,
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
-	loc *time.Location,
-	be sessiondata.BytesEncodeFormat,
+	conv sessiondata.DataConversionConfig,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, loc, be)
+	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv)
 	return &res
 }
 

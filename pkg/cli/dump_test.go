@@ -211,6 +211,7 @@ func TestDumpRandom(t *testing.T) {
 			j json,
 			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b, u, ip)
 		);
+		SET extra_float_digits = 3;
 	`, nil); err != nil {
 		t.Fatal(err)
 	}

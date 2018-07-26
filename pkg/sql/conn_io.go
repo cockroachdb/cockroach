@@ -568,8 +568,7 @@ type ClientComm interface {
 		descOpt RowDescOpt,
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
-		loc *time.Location,
-		be sessiondata.BytesEncodeFormat,
+		conv sessiondata.DataConversionConfig,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult

@@ -46,8 +46,6 @@ type SessionData struct {
 	// lookup join where the left side is scanned and index lookups are done on
 	// the right side. Will emit a warning if a lookup join can't be planned.
 	LookupJoinEnabled bool
-	// Location indicates the current time zone.
-	Location *time.Location
 	// OptimizerMode indicates whether to use the experimental optimizer for
 	// query planning.
 	OptimizerMode OptimizerMode
@@ -63,18 +61,66 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
-	RemoteAddr  net.Addr
+	// RemoteAddr is used to generate logging events.
+	RemoteAddr net.Addr
 	// ZigzagJoinEnabled indicates whether the planner should try and plan a
 	// zigzag join. Will emit a warning if a zigzag join can't be planned.
 	ZigzagJoinEnabled bool
+	// SequenceState gives access to the SQL sequences that have been manipulated
+	// by the session.
+	SequenceState *SequenceState
+	// DataConversion gives access to the data conversion configuration.
+	DataConversion DataConversionConfig
+}
+
+// DataConversionConfig contains the parameters that influence
+// the conversion between SQL data types and strings/byte arrays.
+type DataConversionConfig struct {
+	// Location indicates the current time zone.
+	Location *time.Location
 
 	// BytesEncodeFormat indicates how to encode byte arrays when converting
 	// to string.
 	BytesEncodeFormat BytesEncodeFormat
 
-	// SequenceState gives access to the SQL sequences that have been manipulated
-	// by the session.
-	SequenceState *SequenceState
+	// ExtraFloatDigits indicates the number of digits beyond the
+	// standard number to use for float conversions.
+	// This must be set to a value between -15 and 3, inclusive.
+	ExtraFloatDigits int
+}
+
+// GetFloatPrec computes a precision suitable for a call to
+// strconv.FormatFloat() or for use with '%.*g' in a printf-like
+// function.
+func (c DataConversionConfig) GetFloatPrec() int {
+	// The user-settable parameter ExtraFloatDigits indicates the number
+	// of digits to be used to format the float value. PostgreSQL
+	// combines this with %g.
+	// The formula is <type>_DIG + extra_float_digits,
+	// where <type> is either FLT (float4) or DBL (float8).
+
+	// Also the value "3" in PostgreSQL is special and meant to mean
+	// "all the precision needed to reproduce the float exactly". The Go
+	// formatter uses the special value -1 for this and activates a
+	// separate path in the formatter. We compare >= 3 here
+	// just in case the value is not gated properly in the implementation
+	// of SET.
+	if c.ExtraFloatDigits >= 3 {
+		return -1
+	}
+
+	// CockroachDB only implements float8 at this time and Go does not
+	// expose DBL_DIG, so we use the standard literal constant for
+	// 64bit floats.
+	const StdDoubleDigits = 15
+
+	nDigits := StdDoubleDigits + c.ExtraFloatDigits
+	if nDigits < 1 {
+		// Ensure the value is clamped at 1: printf %g does not allow
+		// values lower than 1. PostgreSQL does this too.
+		nDigits = 1
+	}
+	return nDigits
 }
 
 // Copy performs a deep copy of SessionData.

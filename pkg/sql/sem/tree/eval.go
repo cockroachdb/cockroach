@@ -20,6 +20,7 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -2675,10 +2676,10 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	if ctx.SessionData.Location == nil {
+	if ctx.SessionData.DataConversion.Location == nil {
 		return time.UTC
 	}
-	return ctx.SessionData.Location
+	return ctx.SessionData.DataConversion.Location
 }
 
 // Ctx returns the session's context.
@@ -3056,7 +3057,10 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
 		var s string
 		switch t := d.(type) {
-		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
+		case *DFloat:
+			s = strconv.FormatFloat(float64(*t), 'g',
+				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
+		case *DBool, *DInt, *DDecimal, dNull:
 			s = d.String()
 		case *DTimestamp, *DTimestampTZ, *DDate, *DTime, *DTimeTZ:
 			s = AsStringWithFlags(d, FmtBareStrings)
@@ -3075,7 +3079,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			s = t.Contents
 		case *DBytes:
 			s = lex.EncodeByteArrayToRawBytes(string(*t),
-				ctx.SessionData.BytesEncodeFormat, false /* skipHexPrefix */)
+				ctx.SessionData.DataConversion.BytesEncodeFormat, false /* skipHexPrefix */)
 		case *DOid:
 			s = t.name
 		case *DJSON:

@@ -35,7 +35,7 @@ default_transaction_read_only   off
 distsql                         off
 experimental_force_lookup_join  off
 experimental_force_zigzag_join  off
-extra_float_digits              ·
+extra_float_digits              0
 intervalstyle                   postgres
 max_index_keys                  32
 node_id                         1

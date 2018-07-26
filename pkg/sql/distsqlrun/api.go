@@ -23,7 +23,7 @@ import (
 // distsqlrun.EvalContext proto.
 func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
-	switch evalCtx.SessionData.BytesEncodeFormat {
+	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
 	case sessiondata.BytesEncodeHex:
 		be = BytesEncodeFormat_HEX
 	case sessiondata.BytesEncodeEscape:
@@ -41,6 +41,7 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		User:               evalCtx.SessionData.User,
 		ApplicationName:    evalCtx.SessionData.ApplicationName,
 		BytesEncodeFormat:  be,
+		ExtraFloatDigits:   int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
 	}
 
 	// Populate the search path.
