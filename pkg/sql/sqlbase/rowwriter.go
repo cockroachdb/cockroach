@@ -990,7 +990,9 @@ func MakeRowDeleter(
 		if err != nil {
 			return RowDeleter{}, err
 		}
-		rowDeleter.cascader.fkHelper = rowDeleter.FKHelper
+		if rowDeleter.cascader != nil {
+			rowDeleter.cascader.fkHelper = fkHelper
+		}
 	}
 	return rowDeleter, nil
 }

@@ -428,6 +428,11 @@ func TablesNeededForFKsNew(
 	for {
 		tableLookup, curUsage, exists := queue.dequeue()
 		if !exists {
+			var tableLookupIds []ID
+			for id := range queue.tableLookups {
+				tableLookupIds = append(tableLookupIds, id)
+			}
+			log.Warningf(ctx, "final tableLookups = %s", tableLookupIds)
 			fkHelper, err := makeFKHelper(
 				evalCtx,
 				txn,
