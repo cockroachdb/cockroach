@@ -1304,6 +1304,7 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 // during connection initialization.
 var statusReportParams = map[string]string{
 	"client_encoding": "UTF8",
+	"server_encoding": "UTF8",
 	"DateStyle":       "ISO",
 	// All datetime binary formats expect 64-bit integer microsecond values.
 	// This param needs to be provided to clients or some may provide 64-bit
