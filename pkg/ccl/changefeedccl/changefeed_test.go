@@ -219,7 +219,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#26661")
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
