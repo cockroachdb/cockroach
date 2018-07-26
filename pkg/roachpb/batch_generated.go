@@ -9,6 +9,74 @@ import (
 	"strconv"
 )
 
+// GetInner returns the error contained in the union.
+func (ru ErrorDetail) GetInner() error {
+	switch t := ru.GetValue().(type) {
+	case *ErrorDetail_NotLeaseHolder:
+		return t.NotLeaseHolder
+	case *ErrorDetail_RangeNotFound:
+		return t.RangeNotFound
+	case *ErrorDetail_RangeKeyMismatch:
+		return t.RangeKeyMismatch
+	case *ErrorDetail_ReadWithinUncertaintyInterval:
+		return t.ReadWithinUncertaintyInterval
+	case *ErrorDetail_TransactionAborted:
+		return t.TransactionAborted
+	case *ErrorDetail_TransactionPush:
+		return t.TransactionPush
+	case *ErrorDetail_TransactionRetry:
+		return t.TransactionRetry
+	case *ErrorDetail_TransactionReplay:
+		return t.TransactionReplay
+	case *ErrorDetail_TransactionStatus:
+		return t.TransactionStatus
+	case *ErrorDetail_WriteIntent:
+		return t.WriteIntent
+	case *ErrorDetail_WriteTooOld:
+		return t.WriteTooOld
+	case *ErrorDetail_OpRequiresTxn:
+		return t.OpRequiresTxn
+	case *ErrorDetail_ConditionFailed:
+		return t.ConditionFailed
+	case *ErrorDetail_LeaseRejected:
+		return t.LeaseRejected
+	case *ErrorDetail_NodeUnavailable:
+		return t.NodeUnavailable
+	case *ErrorDetail_Send:
+		return t.Send
+	case *ErrorDetail_RaftGroupDeleted:
+		return t.RaftGroupDeleted
+	case *ErrorDetail_ReplicaCorruption:
+		return t.ReplicaCorruption
+	case *ErrorDetail_ReplicaTooOld:
+		return t.ReplicaTooOld
+	case *ErrorDetail_AmbiguousResult:
+		return t.AmbiguousResult
+	case *ErrorDetail_StoreNotFound:
+		return t.StoreNotFound
+	case *ErrorDetail_HandledRetryableTxnError:
+		return t.HandledRetryableTxnError
+	case *ErrorDetail_TxnAbortedAsyncErr:
+		return t.TxnAbortedAsyncErr
+	case *ErrorDetail_IntegerOverflow:
+		return t.IntegerOverflow
+	case *ErrorDetail_UnsupportedRequest:
+		return t.UnsupportedRequest
+	case *ErrorDetail_MixedSuccess:
+		return t.MixedSuccess
+	case *ErrorDetail_TimestampBefore:
+		return t.TimestampBefore
+	case *ErrorDetail_TxnAlreadyEncounteredError:
+		return t.TxnAlreadyEncounteredError
+	case *ErrorDetail_IntentMissing:
+		return t.IntentMissing
+	case *ErrorDetail_MergeInProgress:
+		return t.MergeInProgress
+	default:
+		return nil
+	}
+}
+
 // GetInner returns the Request contained in the union.
 func (ru RequestUnion) GetInner() Request {
 	switch t := ru.GetValue().(type) {
@@ -181,6 +249,77 @@ func (ru ResponseUnion) GetInner() Response {
 	default:
 		return nil
 	}
+}
+
+// SetInner sets the error in the union.
+func (ru *ErrorDetail) SetInner(r error) bool {
+	var union isErrorDetail_Value
+	switch t := r.(type) {
+	case *NotLeaseHolderError:
+		union = &ErrorDetail_NotLeaseHolder{t}
+	case *RangeNotFoundError:
+		union = &ErrorDetail_RangeNotFound{t}
+	case *RangeKeyMismatchError:
+		union = &ErrorDetail_RangeKeyMismatch{t}
+	case *ReadWithinUncertaintyIntervalError:
+		union = &ErrorDetail_ReadWithinUncertaintyInterval{t}
+	case *TransactionAbortedError:
+		union = &ErrorDetail_TransactionAborted{t}
+	case *TransactionPushError:
+		union = &ErrorDetail_TransactionPush{t}
+	case *TransactionRetryError:
+		union = &ErrorDetail_TransactionRetry{t}
+	case *TransactionReplayError:
+		union = &ErrorDetail_TransactionReplay{t}
+	case *TransactionStatusError:
+		union = &ErrorDetail_TransactionStatus{t}
+	case *WriteIntentError:
+		union = &ErrorDetail_WriteIntent{t}
+	case *WriteTooOldError:
+		union = &ErrorDetail_WriteTooOld{t}
+	case *OpRequiresTxnError:
+		union = &ErrorDetail_OpRequiresTxn{t}
+	case *ConditionFailedError:
+		union = &ErrorDetail_ConditionFailed{t}
+	case *LeaseRejectedError:
+		union = &ErrorDetail_LeaseRejected{t}
+	case *NodeUnavailableError:
+		union = &ErrorDetail_NodeUnavailable{t}
+	case *SendError:
+		union = &ErrorDetail_Send{t}
+	case *RaftGroupDeletedError:
+		union = &ErrorDetail_RaftGroupDeleted{t}
+	case *ReplicaCorruptionError:
+		union = &ErrorDetail_ReplicaCorruption{t}
+	case *ReplicaTooOldError:
+		union = &ErrorDetail_ReplicaTooOld{t}
+	case *AmbiguousResultError:
+		union = &ErrorDetail_AmbiguousResult{t}
+	case *StoreNotFoundError:
+		union = &ErrorDetail_StoreNotFound{t}
+	case *HandledRetryableTxnError:
+		union = &ErrorDetail_HandledRetryableTxnError{t}
+	case *TxnPrevAttemptError:
+		union = &ErrorDetail_TxnAbortedAsyncErr{t}
+	case *IntegerOverflowError:
+		union = &ErrorDetail_IntegerOverflow{t}
+	case *UnsupportedRequestError:
+		union = &ErrorDetail_UnsupportedRequest{t}
+	case *MixedSuccessError:
+		union = &ErrorDetail_MixedSuccess{t}
+	case *BatchTimestampBeforeGCError:
+		union = &ErrorDetail_TimestampBefore{t}
+	case *TxnAlreadyEncounteredErrorError:
+		union = &ErrorDetail_TxnAlreadyEncounteredError{t}
+	case *IntentMissingError:
+		union = &ErrorDetail_IntentMissing{t}
+	case *MergeInProgressError:
+		union = &ErrorDetail_MergeInProgress{t}
+	default:
+		return false
+	}
+	ru.Value = union
+	return true
 }
 
 // SetInner sets the Request in the union.

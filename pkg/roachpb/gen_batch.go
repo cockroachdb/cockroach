@@ -41,6 +41,7 @@ type variantInfo struct {
 	msgType string
 }
 
+var errVariants []variantInfo
 var reqVariants []variantInfo
 var resVariants []variantInfo
 var reqResVariantMapping map[variantInfo]variantInfo
@@ -56,6 +57,12 @@ func initVariant(varInstance interface{}) variantInfo {
 }
 
 func initVariants() {
+	_, _, _, errVars := (&roachpb.ErrorDetail{}).XXX_OneofFuncs()
+	for _, v := range errVars {
+		errInfo := initVariant(v)
+		errVariants = append(errVariants, errInfo)
+	}
+
 	_, _, _, resVars := (&roachpb.ResponseUnion{}).XXX_OneofFuncs()
 	resVarInfos := make(map[string]variantInfo, len(resVars))
 	for _, v := range resVars {
@@ -85,12 +92,12 @@ func initVariants() {
 	}
 }
 
-func genGetInner(w io.Writer, unionName string, variants []variantInfo) {
+func genGetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
 	fmt.Fprintf(w, `
-// GetInner returns the %[1]s contained in the union.
-func (ru %[1]sUnion) GetInner() %[1]s {
+// GetInner returns the %[2]s contained in the union.
+func (ru %[1]s) GetInner() %[2]s {
 	switch t := ru.GetValue().(type) {
-`, unionName)
+`, unionName, variantName)
 
 	for _, v := range variants {
 		fmt.Fprintf(w, `	case *%s:
@@ -105,13 +112,13 @@ func (ru %[1]sUnion) GetInner() %[1]s {
 `)
 }
 
-func genSetInner(w io.Writer, unionName string, variants []variantInfo) {
+func genSetInner(w io.Writer, unionName, variantName string, variants []variantInfo) {
 	fmt.Fprintf(w, `
-// SetInner sets the %[1]s in the union.
-func (ru *%[1]sUnion) SetInner(r %[1]s) bool {
-	var union is%[1]sUnion_Value
+// SetInner sets the %[2]s in the union.
+func (ru *%[1]s) SetInner(r %[2]s) bool {
+	var union is%[1]s_Value
 	switch t := r.(type) {
-`, unionName)
+`, unionName, variantName)
 
 	for _, v := range variants {
 		fmt.Fprintf(w, `	case *%s:
@@ -153,12 +160,14 @@ import (
 `)
 
 	// Generate GetInner methods.
-	genGetInner(f, "Request", reqVariants)
-	genGetInner(f, "Response", resVariants)
+	genGetInner(f, "ErrorDetail", "error", errVariants)
+	genGetInner(f, "RequestUnion", "Request", reqVariants)
+	genGetInner(f, "ResponseUnion", "Response", resVariants)
 
 	// Generate SetInner methods.
-	genSetInner(f, "Request", reqVariants)
-	genSetInner(f, "Response", resVariants)
+	genSetInner(f, "ErrorDetail", "error", errVariants)
+	genSetInner(f, "RequestUnion", "Request", reqVariants)
+	genSetInner(f, "ResponseUnion", "Response", resVariants)
 
 	fmt.Fprintf(f, `
 type reqCounts [%d]int32

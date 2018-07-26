@@ -406,45 +406,45 @@ message MergeInProgressError {
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
-  option (gogoproto.onlyone) = true;
 
-  optional NotLeaseHolderError not_lease_holder = 1;
-  optional RangeNotFoundError range_not_found = 2;
-  optional RangeKeyMismatchError range_key_mismatch = 3;
-  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-  optional TransactionAbortedError transaction_aborted = 5;
-  optional TransactionPushError transaction_push = 6;
-  optional TransactionRetryError transaction_retry = 7;
-  optional TransactionReplayError transaction_replay = 22;
-  optional TransactionStatusError transaction_status = 8;
-  optional WriteIntentError write_intent = 9;
-  optional WriteTooOldError write_too_old = 10;
-  optional OpRequiresTxnError op_requires_txn = 11;
-  optional ConditionFailedError condition_failed = 12;
-  optional LeaseRejectedError lease_rejected = 13;
-  optional NodeUnavailableError node_unavailable = 14;
-  optional SendError send = 15;
-  // TODO(kaneda): Following three are added to preserve the type when
-  // converting Go errors from/to proto Errors. Revisit this design.
-  optional RaftGroupDeletedError raft_group_deleted = 16;
-  optional ReplicaCorruptionError replica_corruption = 17;
-  optional ReplicaTooOldError replica_too_old = 18;
-  reserved 25;
-  optional AmbiguousResultError ambiguous_result = 26;
-  optional StoreNotFoundError store_not_found = 27;
-  // The following three are ErrorDetails (and proto messages) because they
-  // needs to be communicated from the TxnCoordSender and Txn to the upper
-  // layers through the Sender interface.
-  optional HandledRetryableTxnError handled_retryable_txn_error = 28;
-  reserved 29;
-  optional TxnPrevAttemptError txn_aborted_async_err = 30;
-  optional IntegerOverflowError integer_overflow = 31;
-  optional UnsupportedRequestError unsupported_request = 32;
-  optional MixedSuccessError mixed_success = 33;
-  optional BatchTimestampBeforeGCError timestamp_before = 34;
-  optional TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
-  optional IntentMissingError intent_missing = 36;
-  optional MergeInProgressError merge_in_progress = 37;
+  reserved 25, 29;
+  oneof value {
+    NotLeaseHolderError not_lease_holder = 1;
+    RangeNotFoundError range_not_found = 2;
+    RangeKeyMismatchError range_key_mismatch = 3;
+    ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
+    TransactionAbortedError transaction_aborted = 5;
+    TransactionPushError transaction_push = 6;
+    TransactionRetryError transaction_retry = 7;
+    TransactionReplayError transaction_replay = 22;
+    TransactionStatusError transaction_status = 8;
+    WriteIntentError write_intent = 9;
+    WriteTooOldError write_too_old = 10;
+    OpRequiresTxnError op_requires_txn = 11;
+    ConditionFailedError condition_failed = 12;
+    LeaseRejectedError lease_rejected = 13;
+    NodeUnavailableError node_unavailable = 14;
+    SendError send = 15;
+    // TODO(kaneda): Following three are added to preserve the type when
+    // converting Go errors from/to proto Errors. Revisit this design.
+    RaftGroupDeletedError raft_group_deleted = 16;
+    ReplicaCorruptionError replica_corruption = 17;
+    ReplicaTooOldError replica_too_old = 18;
+    AmbiguousResultError ambiguous_result = 26;
+    StoreNotFoundError store_not_found = 27;
+    // The following three are ErrorDetails (and proto messages) because they
+    // needs to be communicated from the TxnCoordSender and Txn to the upper
+    // layers through the Sender interface.
+    HandledRetryableTxnError handled_retryable_txn_error = 28;
+    TxnPrevAttemptError txn_aborted_async_err = 30;
+    IntegerOverflowError integer_overflow = 31;
+    UnsupportedRequestError unsupported_request = 32;
+    MixedSuccessError mixed_success = 33;
+    BatchTimestampBeforeGCError timestamp_before = 34;
+    TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
+    IntentMissingError intent_missing = 36;
+    MergeInProgressError merge_in_progress = 37;
+  }
 }
 
 // TransactionRestart indicates how an error should be handled in a
@@ -496,11 +496,11 @@ message Error {
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
-  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 6;
+  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false];
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.
