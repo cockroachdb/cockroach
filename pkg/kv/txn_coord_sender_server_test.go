@@ -17,20 +17,25 @@ package kv_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Test that a transaction gets cleaned up when the heartbeat loop finds out
@@ -46,12 +51,30 @@ import (
 func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, origDB := serverutils.StartServer(t, base.TestServerArgs{})
+	var cleanupSeen int64
+	key := roachpb.Key("a")
+	key2 := roachpb.Key("b")
+	s, _, origDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+					// We'll eventually expect to see an EndTransaction(commit=false) with
+					// the right intents.
+					if args.Req.IsSingleEndTransactionRequest() {
+						et := args.Req.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+						if !et.Commit && et.Key.Equal(key) &&
+							reflect.DeepEqual(et.IntentSpans, []roachpb.Span{{Key: key}, {Key: key2}}) {
+							atomic.StoreInt64(&cleanupSeen, 1)
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	key := roachpb.Key("a")
-	key2 := roachpb.Key("b")
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes the above transaction.
 		conflictTxn := client.NewTxn(origDB, 0 /* gatewayNodeID */, client.RootTxn)
@@ -100,17 +123,11 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		return nil
 	})
 
-	// Now check that the intent on key2 has been cleared. We'll do a
-	// READ_UNCOMMITTED Get for that.
+	// Check that an EndTransaction(commit=false) with the right intents has been
+	// sent.
 	testutils.SucceedsSoon(t, func() error {
-		reply, err := client.SendWrappedWith(ctx, origDB.NonTransactionalSender(), roachpb.Header{
-			ReadConsistency: roachpb.READ_UNCOMMITTED,
-		}, roachpb.NewGet(key2))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if reply.(*roachpb.GetResponse).IntentValue != nil {
-			return fmt.Errorf("intent still present on key: %s", key2)
+		if atomic.LoadInt64(&cleanupSeen) == 0 {
+			return fmt.Errorf("no cleanup sent yet")
 		}
 		return nil
 	})
