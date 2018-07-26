@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -196,7 +197,7 @@ func Example() {
 
 // mlaiString converts an mlai map into a string. Avoids randomized ordering of
 // map elements in string output.
-func mlaiString(mlai map[roachpb.RangeID]int64) string {
+func mlaiString(mlai map[roachpb.RangeID]ctpb.LAI) string {
 	var rangeIDs []roachpb.RangeID
 	for rangeID := range mlai {
 		rangeIDs = append(rangeIDs, rangeID)

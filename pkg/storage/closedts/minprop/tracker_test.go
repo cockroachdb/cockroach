@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -100,9 +101,9 @@ type modelClient struct {
 	lai map[roachpb.RangeID]*int64 // read-only map, values accessed atomically
 	mu  struct {
 		syncutil.Mutex
-		closed   []hlc.Timestamp             // closed timestamps
-		released []map[roachpb.RangeID]int64 // known released LAIs, rotated on Close
-		m        map[roachpb.RangeID]int64   // max over all maps returned from Close()
+		closed   []hlc.Timestamp                // closed timestamps
+		released []map[roachpb.RangeID]ctpb.LAI // known released LAIs, rotated on Close
+		m        map[roachpb.RangeID]ctpb.LAI   // max over all maps returned from Close()
 	}
 }
 
@@ -120,18 +121,18 @@ func TestTrackerConcurrentUse(t *testing.T) {
 	)
 
 	var mc modelClient
-	mc.mu.m = map[roachpb.RangeID]int64{}
+	mc.mu.m = map[roachpb.RangeID]ctpb.LAI{}
 	mc.mu.closed = make([]hlc.Timestamp, 1)
-	mc.mu.released = []map[roachpb.RangeID]int64{{}, {}, {}}
+	mc.mu.released = []map[roachpb.RangeID]ctpb.LAI{{}, {}, {}}
 
 	mc.lai = map[roachpb.RangeID]*int64{}
 	for i := roachpb.RangeID(1); i <= numRanges; i++ {
 		mc.lai[i] = new(int64)
 	}
 
-	get := func(i int) (roachpb.RangeID, int64) {
+	get := func(i int) (roachpb.RangeID, ctpb.LAI) {
 		rangeID := roachpb.RangeID(1 + (i % numRanges))
-		return rangeID, atomic.AddInt64(mc.lai[rangeID], 1)
+		return rangeID, ctpb.LAI(atomic.AddInt64(mc.lai[rangeID], 1))
 	}
 
 	// It becomes a lot more complicated to collect the released indexes
@@ -182,7 +183,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
 			// weaken the test overall.
 			released := mc.mu.released[len(mc.mu.released)-3]
 			// Rotate released commands bucket.
-			mc.mu.released = append(mc.mu.released, map[roachpb.RangeID]int64{})
+			mc.mu.released = append(mc.mu.released, map[roachpb.RangeID]ctpb.LAI{})
 
 			for rangeID, mlai := range m {
 				// Intuitively you expect mc.mu.m[rangeID] < mlai, but this
@@ -230,7 +231,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		runtime.Gosched()
 
 		var rangeID roachpb.RangeID
-		var lai int64
+		var lai ctpb.LAI
 		switch i % 3 {
 		case 0:
 			// Successful evaluation.
@@ -283,7 +284,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
 	t.Log(tracker)
 
 	for rangeID, addr := range mc.lai {
-		assignedMLAI := atomic.LoadInt64(addr)
+		assignedMLAI := ctpb.LAI(atomic.LoadInt64(addr))
 		mlai := mc.mu.m[rangeID]
 
 		if assignedMLAI > mlai {
