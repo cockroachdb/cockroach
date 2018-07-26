@@ -1881,7 +1881,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				}
 			} else {
 				// Emit the actual results.
-				for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+				for _, line := range t.formatValues(actualResults, query.valsPerLine) {
 					t.emit(line)
 				}
 			}
