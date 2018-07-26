@@ -255,7 +255,7 @@ COMMIT
 
 # We can't set isolation level to an unsupported one.
 
-statement error unsupported isolation level "read committed"
+statement error invalid value for parameter "transaction_isolation": "read committed"
 SET transaction_isolation = 'read committed'
 
 # We can explicitly start a transaction with isolation level
