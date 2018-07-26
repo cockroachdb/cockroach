@@ -57,6 +57,9 @@ func (c *rowFetcherCache) TableDescForKey(
 		if err := c.leaseMgr.Release(tableDesc); err != nil {
 			return nil, err
 		}
+		if err := validateChangefeedTable(tableDesc); err != nil {
+			return nil, err
+		}
 		// Skip over the column data.
 		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
 			l, err := encoding.PeekLength(remaining)
