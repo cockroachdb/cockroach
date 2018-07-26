@@ -556,14 +556,18 @@ func (tc *TxnCoordSender) Send(
 	txnIDStr := ba.Txn.ID.String()
 	sp.SetBaggageItem("txnID", txnIDStr)
 
+	// If there's a BeginTransaction, we need to start the heartbeat loop.
+	// Perhaps surprisingly, this needs to be done even if the batch has both
+	// a BeginTransaction and an EndTransaction. Although on batch success the
+	// heartbeat loop will be stopped right away, on retriable errors we need the
+	// heartbeat loop: the intents and txn record should be kept in place just
+	// like for non-1PC txns.
+	//
+	// Note that we don't start the heartbeat loop if the loop is already running.
+	// That can happen because of send BeginTransaction again after retriable
+	// errors.
 	_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
-	if hasBegin {
-		// If there's a BeginTransaction, we need to start the heartbeat loop.
-		// Perhaps surprisingly, this needs to be done even if the batch has both
-		// a BeginTransaction and an EndTransaction. Although on batch success the
-		// heartbeat loop will be stopped right away, on retriable errors we need the
-		// heartbeat loop: the intents and txn record should be kept in place just
-		// like for non-1PC txns.
+	if hasBegin && (tc.mu.txnEnd == nil) {
 		if err := tc.startHeartbeatLoopLocked(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -926,6 +930,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
 func (tc *TxnCoordSender) startHeartbeatLoopLocked(ctx context.Context) error {
+	if tc.mu.txnEnd != nil {
+		log.Fatal(ctx, "attempting to start a second heartbeat loop ")
+	}
+
 	tc.mu.hbRunning = true
 	tc.mu.firstUpdateNanos = tc.clock.PhysicalNow()
 
