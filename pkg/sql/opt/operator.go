@@ -105,24 +105,25 @@ var UnaryOpReverseMap = map[Operator]tree.UnaryOperator{
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an
 // aggregation function.
 var AggregateOpReverseMap = map[Operator]string{
-	AnyNotNullOp: "any_not_null",
-	ArrayAggOp:   "array_agg",
-	AvgOp:        "avg",
-	BoolAndOp:    "bool_and",
-	BoolOrOp:     "bool_or",
-	ConcatAggOp:  "concat_agg",
-	CountOp:      "count",
-	CountRowsOp:  "count_rows",
-	MaxOp:        "max",
-	MinOp:        "min",
-	SumIntOp:     "sum_int",
-	SumOp:        "sum",
-	SqrDiffOp:    "sqrdiff",
-	VarianceOp:   "variance",
-	StdDevOp:     "stddev",
-	XorAggOp:     "xor_agg",
-	JsonAggOp:    "json_agg",
-	JsonbAggOp:   "jsonb_agg",
+	ArrayAggOp:        "array_agg",
+	AvgOp:             "avg",
+	BoolAndOp:         "bool_and",
+	BoolOrOp:          "bool_or",
+	ConcatAggOp:       "concat_agg",
+	CountOp:           "count",
+	CountRowsOp:       "count_rows",
+	MaxOp:             "max",
+	MinOp:             "min",
+	SumIntOp:          "sum_int",
+	SumOp:             "sum",
+	SqrDiffOp:         "sqrdiff",
+	VarianceOp:        "variance",
+	StdDevOp:          "stddev",
+	XorAggOp:          "xor_agg",
+	JsonAggOp:         "json_agg",
+	JsonbAggOp:        "jsonb_agg",
+	ConstAggOp:        "any_not_null",
+	ConstNotNullAggOp: "any_not_null",
 }
 
 // NegateOpMap maps from a comparison operator type to its negated operator
@@ -170,7 +171,7 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
 	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, AnyNotNullOp:
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp:
 		return true
 	}
 	return false
@@ -184,7 +185,7 @@ func AggregateIgnoresNulls(op Operator) bool {
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
 	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, AnyNotNullOp:
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp:
 		return true
 	}
 	return false
