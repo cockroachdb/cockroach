@@ -476,7 +476,7 @@ func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (firstValueWindow) Compute(
 	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows[wfr.FrameStartIdx()].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows.GetRow(wfr.FrameStartIdx()).GetDatum(wfr.ArgIdxStart), nil
 }
 
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -491,7 +491,7 @@ func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (lastValueWindow) Compute(
 	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	return wfr.Rows[wfr.FrameEndIdx()-1].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows.GetRow(wfr.FrameEndIdx() - 1).GetDatum(wfr.ArgIdxStart), nil
 }
 
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -523,7 +523,7 @@ func (nthValueWindow) Compute(
 	if nth > wfr.FrameSize() {
 		return tree.DNull, nil
 	}
-	return wfr.Rows[wfr.FrameStartIdx()+nth-1].Row[wfr.ArgIdxStart], nil
+	return wfr.Rows.GetRow(wfr.FrameStartIdx() + nth - 1).GetDatum(wfr.ArgIdxStart), nil
 }
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}
