@@ -542,14 +542,28 @@ func (sc *SchemaChanger) backfillIndexes(
 ) error {
 	// Pick a read timestamp for our index backfill, or reuse the previously
 	// stored one.
-	details := sc.job.Details().(jobspb.SchemaChangeDetails)
-	if details.ReadAsOf == (hlc.Timestamp{}) {
-		details.ReadAsOf = sc.clock.Now()
-		if err := sc.job.SetDetails(ctx, details); err != nil {
-			return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
+	if details := sc.job.Details().(jobspb.SchemaChangeDetails); details.ReadAsOf == (hlc.Timestamp{}) {
+		// Update the job details to reflect a new read-as-of timestamp.
+		var job *jobs.Job
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			job, err = sc.jobRegistry.LoadJobWithTxn(ctx, *sc.job.ID(), txn)
+			if err != nil {
+				return err
+			}
+			details := job.Details().(jobspb.SchemaChangeDetails)
+			details.ReadAsOf = sc.clock.Now()
+			if err := job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+				return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
+			}
+			job.WithTxn(nil)
+			return nil
+		}); err != nil {
+			return err
 		}
+		sc.job = job
 	}
-	sc.readAsOf = details.ReadAsOf
+	sc.readAsOf = sc.job.Details().(jobspb.SchemaChangeDetails).ReadAsOf
 
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
