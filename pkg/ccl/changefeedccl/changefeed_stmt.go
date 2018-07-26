@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -231,6 +232,14 @@ func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDeta
 }
 
 func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
+	// Technically, the only non-user table known not to work is system.jobs
+	// (which creates a cycle since the resolved timestamp highwater mark is
+	// saved in it), but there are subtle differences in the way many of them
+	// work and this will be under-tested, so disallow them all until demand
+	// dictates.
+	if tableDesc.ID < keys.MinUserDescID {
+		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	}
 	if len(tableDesc.Families) != 1 {
 		return errors.Errorf(
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
