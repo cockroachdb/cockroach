@@ -15,7 +15,6 @@
 package status
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -112,17 +111,18 @@ func TestSubtractDiskCounters(t *testing.T) {
 		writeCount:     1,
 	}
 	expected := diskStats{
-		readBytes:      2,
-		readTimeMs:     2,
-		readCount:      2,
-		writeBytes:     2,
-		writeTimeMs:    2,
-		writeCount:     2,
-		iopsInProgress: 2,
+		readBytes:   2,
+		readTimeMs:  2,
+		readCount:   2,
+		writeBytes:  2,
+		writeTimeMs: 2,
+		writeCount:  2,
+		// Don't touch iops in progress; it is a gauge, not a counter.
+		iopsInProgress: 3,
 	}
 	subtractDiskCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
-		fmt.Println()
+		t.Fatalf("expected %+v; got %+v", expected, from)
 	}
 }
 
@@ -149,6 +149,6 @@ func TestSubtractNetCounters(t *testing.T) {
 	}
 	subtractNetworkCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
-		fmt.Println()
+		t.Fatalf("expected %+v; got %+v", expected, from)
 	}
 }
