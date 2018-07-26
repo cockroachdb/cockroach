@@ -98,13 +98,25 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 	runQueueWorkload(10*time.Second, true)
 	scanTimeBefore := getQueueScanTime()
 
+	// Set TTL on table queue.queue to 0, so that rows are deleted immediately
+	db := c.Conn(ctx, 1)
+	if _, err := db.ExecContext(
+		ctx, `ALTER TABLE queue.queue EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 30}'`,
+	); err != nil {
+		t.Fatalf("error setting zone config TTL: %s", err)
+	}
+	// Truncate table to avoid duplicate key constraints.
+	if _, err := db.Exec("DELETE FROM queue.queue"); err != nil {
+		t.Fatalf("error deleting rows after initial insertion: %s", err)
+	}
+
 	t.Status("running primary workload")
 	runQueueWorkload(10*time.Minute, false)
 
 	// Sanity Check: ensure that the queue has actually been deleting rows. There
 	// may be some entries left over from the end of the workflow, but the number
 	// should not exceed the computed maxRows.
-	db := c.Conn(ctx, 1)
+
 	row := db.QueryRow("SELECT count(*) FROM queue.queue")
 	var queueCount int
 	if err := row.Scan(&queueCount); err != nil {
