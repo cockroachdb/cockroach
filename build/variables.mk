@@ -122,6 +122,7 @@ define VALID_VARS
   TARGET
   TARGET_TRIPLE
   TAR_XFORM_FLAG
+  TESTCONFIG
   TESTFLAGS
   TESTS
   TESTTIMEOUT
@@ -165,6 +166,7 @@ define VALID_VARS
   libroach-inputs
   logictest-package
   logictestccl-package
+  logictestopt-package
   macos-version
   native-tag
   optgen-defs

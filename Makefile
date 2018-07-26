@@ -51,8 +51,12 @@ TESTS := .
 ## Benchmarks to run for use with `make bench`.
 BENCHES :=
 
-## Space delimited list of logic test files to run, for make testlogic and testccllogic.
+## Space delimited list of logic test files to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
 FILES :=
+
+## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
+## (default: all configs. It's not possible yet to specify multiple configs in this way.)
+TESTCONFIG :=
 
 ## Regex for matching logic test subtests. This is always matched after "FILES"
 ## if they are provided.
@@ -831,14 +835,22 @@ stress stressrace:
 	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 testlogic: ## Run SQL Logic Tests.
-testlogic: bin/logictest
+testlogic: bin/logictest testoptlogic testplannerlogic
+
+testplannerlogic: ## Run SQL Logic Tests for the heuristic planner.
+testplannerlogic: bin/logictest
 
 testccllogic: ## Run SQL CCL Logic Tests.
 testccllogic: bin/logictestccl
 
-testlogic testccllogic: TESTS := Test\w*Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
-testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
-testlogic testccllogic:
+testoptlogic: ## Run SQL Logic Tests from opt package.
+testoptlogic: bin/logictestopt
+
+testlogic testccllogic: TESTS := TestLogic/$(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testplannerlogic: TESTS := TestPlannerLogic/$(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testoptlogic: TESTS := TestExecBuild/$(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testlogic testccllogic testplannerlogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
+testlogic testccllogic testplannerlogic testoptlogic:
 	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
@@ -1357,6 +1369,7 @@ bins = \
 
 testbins = \
   bin/logictest \
+  bin/logictestopt \
   bin/logictestccl
 
 # Mappings for binaries that don't live in pkg/cmd.
@@ -1364,6 +1377,7 @@ langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
+logictestopt-package = ./pkg/sql/opt/exec/execbuilder
 
 # Additional dependencies for binaries that depend on generated code.
 bin/workload bin/docgen bin/roachtest: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
