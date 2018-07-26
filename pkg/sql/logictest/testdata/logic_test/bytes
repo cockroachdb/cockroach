@@ -1,4 +1,4 @@
-# LogicTest: local local-opt
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 query T
 SHOW bytea_output
@@ -118,3 +118,21 @@ SELECT e'a\\bcde'::STRING::BYTEA
 
 query error bytea encoded value ends with incomplete escape sequence
 SELECT e'a\\01'::STRING::BYTEA
+
+# Regression test for #27950.
+
+statement ok
+CREATE TABLE t(b BYTES); INSERT INTO t(b) VALUES ('\xe697a5e69cace8aa9e'::BYTES)
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \xe697a5e69cace8aa9e
+
+statement ok
+set bytea_output = escape
+
+query TT
+SELECT b, b::STRING FROM t
+----
+日本語  \346\227\245\346\234\254\350\252\236
