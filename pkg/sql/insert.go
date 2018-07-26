@@ -354,8 +354,7 @@ func (n *insertNode) startExec(params runParams) error {
 	if n.run.rowsNeeded {
 		n.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(n.columns),
-			maxInsertBatchSize)
+			sqlbase.ColTypeInfoFromResCols(n.columns), 0)
 
 		// In some cases (e.g. `INSERT INTO t (a) ...`) the data source
 		// does not provide all the table columns. However we do need to

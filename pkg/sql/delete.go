@@ -217,8 +217,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	if d.run.rowsNeeded {
 		d.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(d.columns),
-			maxDeleteBatchSize)
+			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
 	}
 	return d.run.td.init(params.p.txn, params.EvalContext())
 }
