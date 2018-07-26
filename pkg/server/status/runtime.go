@@ -146,7 +146,7 @@ var (
 	}
 	metaHostDiskReadTime = metric.Metadata{
 		Name:        "sys.host.disk.read.time",
-		Unit:        metric.Unit_TIMESTAMP_NS,
+		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Disk time",
 		Help:        "Time spent reading from all disks since this process started",
 	}
@@ -165,7 +165,7 @@ var (
 	}
 	metaHostDiskWriteTime = metric.Metadata{
 		Name:        "sys.host.disk.write.time",
-		Unit:        metric.Unit_TIMESTAMP_NS,
+		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Disk time",
 		Help:        "Time spent writing to all disks since this process started",
 	}
@@ -459,13 +459,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 }
 
 type diskStats struct {
-	readBytes  int64
-	readTimeMs int64
-	readCount  int64
+	readBytes int64
+	readTime  time.Duration
+	readCount int64
 
-	writeBytes  int64
-	writeTimeMs int64
-	writeCount  int64
+	writeBytes int64
+	writeTime  time.Duration
+	writeCount int64
 
 	iopsInProgress int64
 }
@@ -488,10 +488,10 @@ func (rsr *RuntimeStatSampler) sampleDiskStats(ctx context.Context) error {
 	subtractDiskCounters(&summedDiskCounters, rsr.initialDiskCounters)
 
 	rsr.HostDiskReadBytes.Update(summedDiskCounters.readBytes)
-	rsr.HostDiskReadTime.Update(summedDiskCounters.readTimeMs * 1e6) // ms to ns
+	rsr.HostDiskReadTime.Update(int64(summedDiskCounters.readTime))
 	rsr.HostDiskReadCount.Update(summedDiskCounters.readCount)
 	rsr.HostDiskWriteBytes.Update(summedDiskCounters.writeBytes)
-	rsr.HostDiskWriteTime.Update(summedDiskCounters.writeTimeMs * 1e6) // ms to ns
+	rsr.HostDiskWriteTime.Update(int64(summedDiskCounters.writeTime))
 	rsr.HostDiskWriteCount.Update(summedDiskCounters.writeCount)
 	rsr.IopsInProgress.Update(summedDiskCounters.iopsInProgress)
 
@@ -529,11 +529,11 @@ func sumDiskCounters(disksStats []diskStats) diskStats {
 	output := diskStats{}
 	for _, stats := range disksStats {
 		output.readBytes += stats.readBytes
-		output.readTimeMs += stats.readTimeMs
+		output.readTime += stats.readTime
 		output.readCount += stats.readCount
 
 		output.writeBytes += stats.writeBytes
-		output.writeTimeMs += stats.writeTimeMs
+		output.writeTime += stats.writeTime
 		output.writeCount += stats.writeCount
 
 		output.iopsInProgress += stats.iopsInProgress
@@ -545,11 +545,11 @@ func sumDiskCounters(disksStats []diskStats) diskStats {
 // saving the results in `from`.
 func subtractDiskCounters(from *diskStats, sub diskStats) {
 	from.writeCount -= sub.writeCount
-	from.writeTimeMs -= sub.writeTimeMs
+	from.writeTime -= sub.writeTime
 	from.writeBytes -= sub.writeBytes
 
 	from.readCount -= sub.readCount
-	from.readTimeMs -= sub.readTimeMs
+	from.readTime -= sub.readTime
 	from.readBytes -= sub.readBytes
 }
 
