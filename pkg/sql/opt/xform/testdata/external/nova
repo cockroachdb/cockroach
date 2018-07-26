@@ -279,26 +279,26 @@ left-join (merge)
  │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │    ├── ordering: +1
  │    └── limit
- │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         ├── ordering: +1
  │         ├── offset
- │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    ├── ordering: +1
  │         │    ├── sort
- │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    │    ├── ordering: +1
  │         │    │    └── select
- │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │         ├── key: (1)
  │         │    │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    │         ├── group-by
- │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
  │         │    │         │    ├── key: (1)
  │         │    │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -339,36 +339,36 @@ left-join (merge)
  │         │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
  │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
  │         │    │         │    └── aggregations [outer=(2-12,14,15,22)]
- │         │    │         │         ├── any-not-null [type=bool, outer=(22)]
+ │         │    │         │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │         │         │    └── variable: true [type=bool, outer=(22)]
- │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │         │         ├── const-agg [type=string, outer=(2)]
  │         │    │         │         │    └── variable: flavors.name [type=string, outer=(2)]
- │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │         │         ├── const-agg [type=int, outer=(3)]
  │         │    │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
- │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │         │         ├── const-agg [type=int, outer=(4)]
  │         │    │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
- │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │         │         ├── const-agg [type=int, outer=(5)]
  │         │    │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
- │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │         │         ├── const-agg [type=int, outer=(6)]
  │         │    │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
- │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │         │         ├── const-agg [type=string, outer=(7)]
  │         │    │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
- │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │         │         ├── const-agg [type=int, outer=(8)]
  │         │    │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
- │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │         │         ├── const-agg [type=float, outer=(9)]
  │         │    │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
- │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │         │         ├── const-agg [type=int, outer=(10)]
  │         │    │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
- │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │         │         ├── const-agg [type=bool, outer=(11)]
  │         │    │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
- │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │         │         ├── const-agg [type=bool, outer=(12)]
  │         │    │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
- │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
- │         │    │         │         └── any-not-null [type=timestamp, outer=(15)]
+ │         │    │         │         └── const-agg [type=timestamp, outer=(15)]
  │         │    │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
  │         │    │         └── filters [type=bool, outer=(12,23)]
- │         │    │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+ │         │    │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  ├── sort
@@ -459,25 +459,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │    └── limit
-      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:32(bool)
+      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         ├── key: (1)
       │         ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         ├── offset
-      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:32(bool)
+      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         │    ├── ordering: +7 opt(11)
       │         │    ├── sort
-      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:32(bool)
+      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         │    │    ├── ordering: +7 opt(11)
       │         │    │    └── select
-      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:32(bool)
+      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: ()-->(11), (1)-->(2-10,12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:32(bool)
+      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: ()-->(11), (1)-->(2-12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
@@ -494,11 +494,11 @@ sort
       │         │    │         │    │    │         ├── key: (1)
       │         │    │         │    │    │         ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         │    │         │    │    │         └── select
-      │         │    │         │    │    │              ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:29(bool)
+      │         │    │         │    │    │              ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    │         │    │    │              ├── key: (1)
       │         │    │         │    │    │              ├── fd: ()-->(11), (1)-->(2-10,12,14,15,29), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
       │         │    │         │    │    │              ├── group-by
-      │         │    │         │    │    │              │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:29(bool)
+      │         │    │         │    │    │              │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    │         │    │    │              │    ├── grouping columns: flavors.id:1(int!null)
       │         │    │         │    │    │              │    ├── key: (1)
       │         │    │         │    │    │              │    ├── fd: ()-->(11), (1)-->(2-12,14,15,29), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
@@ -539,36 +539,36 @@ sort
       │         │    │         │    │    │              │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
       │         │    │         │    │    │              │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
       │         │    │         │    │    │              │    └── aggregations [outer=(2-12,14,15,28)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(28)]
+      │         │    │         │    │    │              │         ├── const-not-null-agg [type=bool, outer=(28)]
       │         │    │         │    │    │              │         │    └── variable: true [type=bool, outer=(28)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │    │    │              │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │    │    │              │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │    │    │              │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │    │    │              │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │    │    │              │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │    │    │              │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │    │    │              │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │    │    │              │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │    │    │              │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │    │    │              │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │    │    │              │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │    │    │              │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │    │    │              │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │    │    │              │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │    │    │              │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │    │    │              │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │    │    │              │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │    │    │              │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │    │         │    │    │              │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │    │    │              │         └── const-agg [type=timestamp, outer=(15)]
       │         │    │         │    │    │              │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         │    │         │    │    │              └── filters [type=bool, outer=(12,29)]
-      │         │    │         │    │    │                   └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,29)]
+      │         │    │         │    │    │                   └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,29)]
       │         │    │         │    │    ├── project
       │         │    │         │    │    │    ├── columns: true:31(bool!null) flavor_projects.flavor_id:23(int!null)
       │         │    │         │    │    │    ├── fd: ()-->(31)
@@ -591,36 +591,36 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
       │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-12,14,15,31)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(31)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(31)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(31)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(15)]
       │         │    │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         │    │         └── filters [type=bool, outer=(12,32)]
-      │         │    │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,32)]
+      │         │    │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,32)]
       │         │    └── placeholder: $3 [type=int]
       │         └── placeholder: $4 [type=int]
       └── filters [type=bool, outer=(1,37), constraints=(/1: (/NULL - ]; /37: (/NULL - ]), fd=(1)==(37), (37)==(1)]
@@ -710,25 +710,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    └── limit
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         ├── offset
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    ├── ordering: +7,+1
       │         │    ├── sort
-      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │    ├── ordering: +7,+1
       │         │    │    └── select
-      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -769,40 +769,40 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │         │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(25)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         └── filters [type=bool, outer=(12,26)]
-      │         │    │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+      │         │    │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
       │         │    └── placeholder: $5 [type=int]
       │         └── placeholder: $6 [type=int]
       └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -870,11 +870,11 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    └── select
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:34(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-16,34), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         ├── group-by
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:34(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
       │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,34), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -914,40 +914,40 @@ sort
       │         │    │         └── filters [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
       │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ])]
       │         │    └── aggregations [outer=(2-16,33)]
-      │         │         ├── any-not-null [type=bool, outer=(33)]
+      │         │         ├── const-not-null-agg [type=bool, outer=(33)]
       │         │         │    └── variable: true [type=bool, outer=(33)]
-      │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │         ├── const-agg [type=string, outer=(2)]
       │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │         ├── const-agg [type=int, outer=(3)]
       │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │         ├── const-agg [type=int, outer=(4)]
       │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │         ├── const-agg [type=int, outer=(5)]
       │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │         ├── const-agg [type=int, outer=(6)]
       │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │         ├── const-agg [type=string, outer=(7)]
       │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │         ├── const-agg [type=int, outer=(8)]
       │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │         ├── const-agg [type=float, outer=(9)]
       │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │         ├── const-agg [type=int, outer=(10)]
       │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │         ├── const-agg [type=bool, outer=(11)]
       │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │         ├── const-agg [type=bool, outer=(12)]
       │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │         ├── const-agg [type=bool, outer=(13)]
       │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         └── filters [type=bool, outer=(12,34)]
-      │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,34)]
+      │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,34)]
       └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
            └── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
 
@@ -1027,19 +1027,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
  │    └── limit
- │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
  │         ├── offset
- │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
  │         │    ├── select
- │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
@@ -1077,40 +1077,40 @@ right-join
  │         │    │    │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
  │         │    │    │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-16,25)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(25)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: instance_types.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: instance_types.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(13)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(13)]
  │         │    │    │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(15)]
  │         │    │    │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(16)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(16)]
  │         │    │    │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
  │         │    │    └── filters [type=bool, outer=(12,26)]
- │         │    │         └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+ │         │    │         └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │         │    └── placeholder: $5 [type=int]
  │         └── placeholder: $6 [type=int]
  └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -1192,19 +1192,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │    └── limit
- │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         ├── offset
- │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         │    ├── select
- │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -1246,40 +1246,40 @@ right-join
  │         │    │    │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
  │         │    │    │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-16,25)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(25)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: instance_types.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: instance_types.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(13)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(13)]
  │         │    │    │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(15)]
  │         │    │    │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(16)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(16)]
  │         │    │    │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
  │         │    │    └── filters [type=bool, outer=(12,26)]
- │         │    │         └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+ │         │    │         └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │         │    └── placeholder: $5 [type=int]
  │         └── placeholder: $6 [type=int]
  └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -1346,19 +1346,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │    └── limit
- │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         ├── offset
- │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    ├── select
- │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1399,36 +1399,36 @@ right-join
  │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
  │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(22)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: flavors.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: flavors.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(15)]
  │         │    │    │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
  │         │    │    └── filters [type=bool, outer=(12,23)]
- │         │    │         └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+ │         │    │         └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
@@ -1495,19 +1495,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │    └── limit
- │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         ├── offset
- │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    ├── select
- │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1548,36 +1548,36 @@ right-join
  │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
  │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(22)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: flavors.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: flavors.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(15)]
  │         │    │    │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
  │         │    │    └── filters [type=bool, outer=(12,23)]
- │         │    │         └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+ │         │    │         └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
@@ -1653,25 +1653,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    └── limit
-      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         ├── offset
-      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    ├── ordering: +7
       │         │    ├── sort
-      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    │    ├── ordering: +7
       │         │    │    └── select
-      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1712,36 +1712,36 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
       │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-12,14,15,22)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(22)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(22)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(15)]
       │         │    │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         │    │         └── filters [type=bool, outer=(12,23)]
-      │         │    │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+      │         │    │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
       │         │    └── placeholder: $5 [type=int]
       │         └── placeholder: $6 [type=int]
       └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
@@ -1830,25 +1830,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    └── limit
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         ├── offset
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    ├── ordering: +7,+1
       │         │    ├── sort
-      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │    ├── ordering: +7,+1
       │         │    │    └── select
-      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -1888,40 +1888,40 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │         │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(25)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         └── filters [type=bool, outer=(12,26)]
-      │         │    │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+      │         │    │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
       │         │    └── placeholder: $4 [type=int]
       │         └── placeholder: $5 [type=int]
       └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -2003,19 +2003,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │    └── limit
- │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         ├── offset
- │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         │    ├── select
- │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+ │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -2053,40 +2053,40 @@ right-join
  │         │    │    │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
  │         │    │    │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-16,25)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(25)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: instance_types.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: instance_types.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(13)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(13)]
  │         │    │    │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(15)]
  │         │    │    │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(16)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(16)]
  │         │    │    │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
  │         │    │    └── filters [type=bool, outer=(12,26)]
- │         │    │         └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+ │         │    │         └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │         │    └── placeholder: $5 [type=int]
  │         └── placeholder: $6 [type=int]
  └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -2141,11 +2141,11 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    └── select
-      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:29(bool)
+      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-12,14,15,29), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         ├── group-by
-      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:29(bool)
+      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-12,14,15,29), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -2179,36 +2179,36 @@ sort
       │         │    │         └── filters [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
       │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ])]
       │         │    └── aggregations [outer=(2-12,14,15,28)]
-      │         │         ├── any-not-null [type=bool, outer=(28)]
+      │         │         ├── const-not-null-agg [type=bool, outer=(28)]
       │         │         │    └── variable: true [type=bool, outer=(28)]
-      │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │         ├── const-agg [type=string, outer=(2)]
       │         │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │         ├── const-agg [type=int, outer=(3)]
       │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │         ├── const-agg [type=int, outer=(4)]
       │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │         ├── const-agg [type=int, outer=(5)]
       │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │         ├── const-agg [type=int, outer=(6)]
       │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │         ├── const-agg [type=string, outer=(7)]
       │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │         ├── const-agg [type=int, outer=(8)]
       │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │         ├── const-agg [type=float, outer=(9)]
       │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │         ├── const-agg [type=int, outer=(10)]
       │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │         ├── const-agg [type=bool, outer=(11)]
       │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │         ├── const-agg [type=bool, outer=(12)]
       │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │         └── const-agg [type=timestamp, outer=(15)]
       │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         └── filters [type=bool, outer=(12,29)]
-      │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,29)]
+      │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,29)]
       └── filters [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
            └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ])]
 
@@ -2298,25 +2298,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    └── limit
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         ├── offset
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    ├── ordering: +7,+1
       │         │    ├── sort
-      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │    ├── ordering: +7,+1
       │         │    │    └── select
-      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -2354,40 +2354,40 @@ sort
       │         │    │         │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │         │    │         │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(25)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         └── filters [type=bool, outer=(12,26)]
-      │         │    │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+      │         │    │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
       │         │    └── placeholder: $7 [type=int]
       │         └── placeholder: $8 [type=int]
       └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -2460,25 +2460,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │    └── limit
-      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         ├── offset
-      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    ├── ordering: +7
       │         │    ├── sort
-      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    │    ├── ordering: +7
       │         │    │    └── select
-      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -2512,36 +2512,36 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
       │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-12,14,15,22)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(22)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(22)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(15)]
       │         │    │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         │    │         └── filters [type=bool, outer=(12,23)]
-      │         │    │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+      │         │    │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
       │         │    └── placeholder: $2 [type=int]
       │         └── placeholder: $3 [type=int]
       └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
@@ -2638,25 +2638,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │    └── limit
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:37(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
       │         ├── key: (1)
       │         ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         ├── offset
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:37(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         │    ├── ordering: +7,+1 opt(11)
       │         │    ├── sort
-      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:37(bool)
+      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         │    │    ├── ordering: +7,+1 opt(11)
       │         │    │    └── select
-      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:37(bool)
+      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: ()-->(11), (1)-->(2-10,12-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:37(bool)
+      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: ()-->(11), (1)-->(2-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
@@ -2673,11 +2673,11 @@ sort
       │         │    │         │    │    │         ├── key: (1)
       │         │    │         │    │    │         ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         │    │         │    │    │         └── select
-      │         │    │         │    │    │              ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:34(bool)
+      │         │    │         │    │    │              ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
       │         │    │         │    │    │              ├── key: (1)
       │         │    │         │    │    │              ├── fd: ()-->(11), (1)-->(2-10,12-16,34), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
       │         │    │         │    │    │              ├── group-by
-      │         │    │         │    │    │              │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:34(bool)
+      │         │    │         │    │    │              │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
       │         │    │         │    │    │              │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    │    │              │    ├── key: (1)
       │         │    │         │    │    │              │    ├── fd: ()-->(11), (1)-->(2-16,34), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
@@ -2718,40 +2718,40 @@ sort
       │         │    │         │    │    │              │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │         │    │         │    │    │              │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
       │         │    │         │    │    │              │    └── aggregations [outer=(2-16,33)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(33)]
+      │         │    │         │    │    │              │         ├── const-not-null-agg [type=bool, outer=(33)]
       │         │    │         │    │    │              │         │    └── variable: true [type=bool, outer=(33)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │    │    │              │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │    │    │              │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │    │    │              │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │    │    │              │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │    │    │              │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │    │    │              │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │    │    │              │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │    │    │              │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │    │    │              │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │    │    │              │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │    │    │              │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │    │    │              │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │    │    │              │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │    │    │              │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         │    │    │              └── filters [type=bool, outer=(12,34)]
-      │         │    │         │    │    │                   └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,34)]
+      │         │    │         │    │    │                   └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,34)]
       │         │    │         │    │    ├── project
       │         │    │         │    │    │    ├── columns: true:36(bool!null) instance_type_projects.instance_type_id:26(int!null)
       │         │    │         │    │    │    ├── fd: ()-->(36)
@@ -2774,40 +2774,40 @@ sort
       │         │    │         │    │         └── filters [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
       │         │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-16,36)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(36)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(36)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(36)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         └── filters [type=bool, outer=(12,37)]
-      │         │    │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,37)]
+      │         │    │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,37)]
       │         │    └── placeholder: $7 [type=int]
       │         └── placeholder: $8 [type=int]
       └── filters [type=bool, outer=(1,42), constraints=(/1: (/NULL - ]; /42: (/NULL - ]), fd=(1)==(42), (42)==(1)]
@@ -2897,25 +2897,25 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │    └── limit
-      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         ├── offset
-      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    ├── ordering: +13,+1
       │         │    ├── sort
-      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │    ├── key: (1)
       │         │    │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │    ├── ordering: +13,+1
       │         │    │    └── select
-      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         ├── key: (1)
       │         │    │         ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
       │         │    │         ├── group-by
-      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) any_not_null:26(bool)
+      │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -2953,40 +2953,40 @@ sort
       │         │    │         │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │         │    │         │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(25)]
+      │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │    │         │         ├── const-agg [type=string, outer=(2)]
       │         │    │         │         │    └── variable: instance_types.name [type=string, outer=(2)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │    │         │         ├── const-agg [type=int, outer=(3)]
       │         │    │         │         │    └── variable: instance_types.memory_mb [type=int, outer=(3)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │    │         │         ├── const-agg [type=int, outer=(4)]
       │         │    │         │         │    └── variable: instance_types.vcpus [type=int, outer=(4)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │    │         │         ├── const-agg [type=int, outer=(5)]
       │         │    │         │         │    └── variable: instance_types.root_gb [type=int, outer=(5)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │    │         │         ├── const-agg [type=int, outer=(6)]
       │         │    │         │         │    └── variable: instance_types.ephemeral_gb [type=int, outer=(6)]
-      │         │    │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │    │         │         ├── const-agg [type=string, outer=(7)]
       │         │    │         │         │    └── variable: instance_types.flavorid [type=string, outer=(7)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │    │         │         ├── const-agg [type=int, outer=(8)]
       │         │    │         │         │    └── variable: instance_types.swap [type=int, outer=(8)]
-      │         │    │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │    │         │         ├── const-agg [type=float, outer=(9)]
       │         │    │         │         │    └── variable: instance_types.rxtx_factor [type=float, outer=(9)]
-      │         │    │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │    │         │         ├── const-agg [type=int, outer=(10)]
       │         │    │         │         │    └── variable: instance_types.vcpu_weight [type=int, outer=(10)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(11)]
       │         │    │         │         │    └── variable: instance_types.disabled [type=bool, outer=(11)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(12)]
       │         │    │         │         │    └── variable: instance_types.is_public [type=bool, outer=(12)]
-      │         │    │         │         ├── any-not-null [type=bool, outer=(13)]
+      │         │    │         │         ├── const-agg [type=bool, outer=(13)]
       │         │    │         │         │    └── variable: instance_types.deleted [type=bool, outer=(13)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │    │         │         │    └── variable: instance_types.deleted_at [type=timestamp, outer=(14)]
-      │         │    │         │         ├── any-not-null [type=timestamp, outer=(15)]
+      │         │    │         │         ├── const-agg [type=timestamp, outer=(15)]
       │         │    │         │         │    └── variable: instance_types.created_at [type=timestamp, outer=(15)]
-      │         │    │         │         └── any-not-null [type=timestamp, outer=(16)]
+      │         │    │         │         └── const-agg [type=timestamp, outer=(16)]
       │         │    │         │              └── variable: instance_types.updated_at [type=timestamp, outer=(16)]
       │         │    │         └── filters [type=bool, outer=(12,26)]
-      │         │    │              └── (instance_types.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,26)]
+      │         │    │              └── (instance_types.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
       │         │    └── placeholder: $5 [type=int]
       │         └── placeholder: $6 [type=int]
       └── filters [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ]), fd=(1)==(31), (31)==(1)]
@@ -3053,19 +3053,19 @@ right-join
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │    └── limit
- │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         ├── offset
- │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    ├── select
- │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
  │         │    │    ├── group-by
- │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+ │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -3107,36 +3107,36 @@ right-join
  │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
  │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(22)]
+ │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
- │         │    │    │         ├── any-not-null [type=string, outer=(2)]
+ │         │    │    │         ├── const-agg [type=string, outer=(2)]
  │         │    │    │         │    └── variable: flavors.name [type=string, outer=(2)]
- │         │    │    │         ├── any-not-null [type=int, outer=(3)]
+ │         │    │    │         ├── const-agg [type=int, outer=(3)]
  │         │    │    │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
- │         │    │    │         ├── any-not-null [type=int, outer=(4)]
+ │         │    │    │         ├── const-agg [type=int, outer=(4)]
  │         │    │    │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
- │         │    │    │         ├── any-not-null [type=int, outer=(5)]
+ │         │    │    │         ├── const-agg [type=int, outer=(5)]
  │         │    │    │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
- │         │    │    │         ├── any-not-null [type=int, outer=(6)]
+ │         │    │    │         ├── const-agg [type=int, outer=(6)]
  │         │    │    │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
- │         │    │    │         ├── any-not-null [type=string, outer=(7)]
+ │         │    │    │         ├── const-agg [type=string, outer=(7)]
  │         │    │    │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
- │         │    │    │         ├── any-not-null [type=int, outer=(8)]
+ │         │    │    │         ├── const-agg [type=int, outer=(8)]
  │         │    │    │         │    └── variable: flavors.swap [type=int, outer=(8)]
- │         │    │    │         ├── any-not-null [type=float, outer=(9)]
+ │         │    │    │         ├── const-agg [type=float, outer=(9)]
  │         │    │    │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
- │         │    │    │         ├── any-not-null [type=int, outer=(10)]
+ │         │    │    │         ├── const-agg [type=int, outer=(10)]
  │         │    │    │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(11)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(11)]
  │         │    │    │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
- │         │    │    │         ├── any-not-null [type=bool, outer=(12)]
+ │         │    │    │         ├── const-agg [type=bool, outer=(12)]
  │         │    │    │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
- │         │    │    │         ├── any-not-null [type=timestamp, outer=(14)]
+ │         │    │    │         ├── const-agg [type=timestamp, outer=(14)]
  │         │    │    │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
- │         │    │    │         └── any-not-null [type=timestamp, outer=(15)]
+ │         │    │    │         └── const-agg [type=timestamp, outer=(15)]
  │         │    │    │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
  │         │    │    └── filters [type=bool, outer=(12,23)]
- │         │    │         └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+ │         │    │         └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
  │         │    └── placeholder: $3 [type=int]
  │         └── placeholder: $4 [type=int]
  └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
@@ -3210,20 +3210,20 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15)
       │    └── limit
-      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
       │         ├── sort
-      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
       │         │    ├── ordering: +7
       │         │    └── select
-      │         │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │         ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │         ├── key: (1)
       │         │         ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
       │         │         ├── group-by
-      │         │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) any_not_null:23(bool)
+      │         │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │         │    ├── grouping columns: flavors.id:1(int!null)
       │         │         │    ├── key: (1)
       │         │         │    ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
@@ -3257,38 +3257,38 @@ sort
       │         │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
       │         │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
       │         │         │    └── aggregations [outer=(2-15,22)]
-      │         │         │         ├── any-not-null [type=bool, outer=(22)]
+      │         │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │         │         │    └── variable: true [type=bool, outer=(22)]
-      │         │         │         ├── any-not-null [type=string, outer=(2)]
+      │         │         │         ├── const-agg [type=string, outer=(2)]
       │         │         │         │    └── variable: flavors.name [type=string, outer=(2)]
-      │         │         │         ├── any-not-null [type=int, outer=(3)]
+      │         │         │         ├── const-agg [type=int, outer=(3)]
       │         │         │         │    └── variable: flavors.memory_mb [type=int, outer=(3)]
-      │         │         │         ├── any-not-null [type=int, outer=(4)]
+      │         │         │         ├── const-agg [type=int, outer=(4)]
       │         │         │         │    └── variable: flavors.vcpus [type=int, outer=(4)]
-      │         │         │         ├── any-not-null [type=int, outer=(5)]
+      │         │         │         ├── const-agg [type=int, outer=(5)]
       │         │         │         │    └── variable: flavors.root_gb [type=int, outer=(5)]
-      │         │         │         ├── any-not-null [type=int, outer=(6)]
+      │         │         │         ├── const-agg [type=int, outer=(6)]
       │         │         │         │    └── variable: flavors.ephemeral_gb [type=int, outer=(6)]
-      │         │         │         ├── any-not-null [type=string, outer=(7)]
+      │         │         │         ├── const-agg [type=string, outer=(7)]
       │         │         │         │    └── variable: flavors.flavorid [type=string, outer=(7)]
-      │         │         │         ├── any-not-null [type=int, outer=(8)]
+      │         │         │         ├── const-agg [type=int, outer=(8)]
       │         │         │         │    └── variable: flavors.swap [type=int, outer=(8)]
-      │         │         │         ├── any-not-null [type=float, outer=(9)]
+      │         │         │         ├── const-agg [type=float, outer=(9)]
       │         │         │         │    └── variable: flavors.rxtx_factor [type=float, outer=(9)]
-      │         │         │         ├── any-not-null [type=int, outer=(10)]
+      │         │         │         ├── const-agg [type=int, outer=(10)]
       │         │         │         │    └── variable: flavors.vcpu_weight [type=int, outer=(10)]
-      │         │         │         ├── any-not-null [type=bool, outer=(11)]
+      │         │         │         ├── const-agg [type=bool, outer=(11)]
       │         │         │         │    └── variable: flavors.disabled [type=bool, outer=(11)]
-      │         │         │         ├── any-not-null [type=bool, outer=(12)]
+      │         │         │         ├── const-agg [type=bool, outer=(12)]
       │         │         │         │    └── variable: flavors.is_public [type=bool, outer=(12)]
-      │         │         │         ├── any-not-null [type=string, outer=(13)]
+      │         │         │         ├── const-agg [type=string, outer=(13)]
       │         │         │         │    └── variable: flavors.description [type=string, outer=(13)]
-      │         │         │         ├── any-not-null [type=timestamp, outer=(14)]
+      │         │         │         ├── const-agg [type=timestamp, outer=(14)]
       │         │         │         │    └── variable: flavors.created_at [type=timestamp, outer=(14)]
-      │         │         │         └── any-not-null [type=timestamp, outer=(15)]
+      │         │         │         └── const-agg [type=timestamp, outer=(15)]
       │         │         │              └── variable: flavors.updated_at [type=timestamp, outer=(15)]
       │         │         └── filters [type=bool, outer=(12,23)]
-      │         │              └── (flavors.is_public = true) OR (any_not_null IS NOT NULL) [type=bool, outer=(12,23)]
+      │         │              └── (flavors.is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,23)]
       │         └── placeholder: $2 [type=int]
       └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
            └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ])]

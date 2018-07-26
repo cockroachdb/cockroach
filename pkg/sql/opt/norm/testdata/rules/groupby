@@ -198,9 +198,9 @@ group-by
  └── aggregations [outer=(2-4)]
       ├── min [type=int, outer=(2)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── any-not-null [type=float, outer=(3)]
+      ├── const-agg [type=float, outer=(3)]
       │    └── variable: a.f [type=float, outer=(3)]
-      └── any-not-null [type=string, outer=(4)]
+      └── const-agg [type=string, outer=(4)]
            └── variable: a.s [type=string, outer=(4)]
 
 # Eliminated columns are not part of projection.
@@ -240,5 +240,5 @@ group-by
  └── aggregations [outer=(2,3)]
       ├── sum [type=float, outer=(3)]
       │    └── variable: a.f [type=float, outer=(3)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
