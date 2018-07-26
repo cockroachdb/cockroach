@@ -354,48 +354,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// initNodeID updates the internal NodeDescriptor with the given ID. If zero is
-// supplied, a new NodeID is allocated with the first invocation. For all other
-// values, the supplied ID is stored into the descriptor (unless one has been
-// set previously, in which case a fatal error occurs).
-//
-// Upon setting a new NodeID, the descriptor is gossiped and the NodeID is
-// stored into the gossip instance.
-func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
-	ctx = n.AnnotateCtx(ctx)
-	if id < 0 {
-		log.Fatalf(ctx, "NodeID must not be negative")
-	}
-
-	if o := n.Descriptor.NodeID; o > 0 {
-		if id == 0 {
-			return
-		}
-		log.Fatalf(ctx, "cannot initialize NodeID to %d, already have %d", id, o)
-	}
-	var err error
-	if id == 0 {
-		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
-		id, err = allocateNodeID(ctxWithSpan, n.storeCfg.DB)
-		if err != nil {
-			log.Fatal(ctxWithSpan, err)
-		}
-		log.Infof(ctxWithSpan, "new node allocated ID %d", id)
-		if id == 0 {
-			log.Fatal(ctxWithSpan, "new node allocated illegal ID 0")
-		}
-		span.Finish()
-	} else {
-		log.Infof(ctx, "node ID %d initialized", id)
-	}
-	// Gossip the node descriptor to make this node addressable by node ID.
-	n.storeCfg.Gossip.NodeID.Set(ctx, id)
-	n.Descriptor.NodeID = id
-	if err = n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		log.Fatalf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
-	}
-}
-
 func (n *Node) bootstrap(
 	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) error {
@@ -436,22 +394,16 @@ func (n *Node) start(
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	n.Descriptor = roachpb.NodeDescriptor{
-		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		Attrs:         attrs,
-		Locality:      locality,
-		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
-	}
-
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
+	var nodeID roachpb.NodeID
 	if len(bootstrappedEngines) > 0 {
 		firstIdent, err := storage.ReadStoreIdent(ctx, bootstrappedEngines[0])
 		if err != nil {
 			return err
 		}
-		n.initNodeID(ctx, firstIdent.NodeID)
+		nodeID = firstIdent.NodeID
 	} else {
 		n.initialBoot = true
 		// Wait until Gossip is connected before trying to allocate a NodeID.
@@ -460,10 +412,28 @@ func (n *Node) start(
 		if err := n.connectGossip(ctx); err != nil {
 			return err
 		}
-		// If no NodeID has been assigned yet, allocate a new node ID by
-		// supplying 0 to initNodeID.
-		n.initNodeID(ctx, 0)
-		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
+		// If no NodeID has been assigned yet, allocate a new node ID.
+		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
+		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
+		span.Finish()
+		nodeID = newID
+	}
+	n.Descriptor = roachpb.NodeDescriptor{
+		NodeID:        nodeID,
+		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		Attrs:         attrs,
+		Locality:      locality,
+		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
+	}
+
+	// Gossip the node descriptor to make this node addressable by node ID.
+	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
+	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 
 	// Initialize the stores we're going to start.
@@ -617,9 +587,7 @@ func (n *Node) addStore(store *storage.Store) {
 // cluster ID consistency is checked elsewhere in inspectEngines.
 func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if n.Descriptor.NodeID == 0 {
-			n.initNodeID(ctx, s.Ident.NodeID)
-		} else if n.Descriptor.NodeID != s.Ident.NodeID {
+		if n.Descriptor.NodeID != s.Ident.NodeID {
 			return errors.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
 		return nil
