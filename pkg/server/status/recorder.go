@@ -69,6 +69,8 @@ var recordHistogramQuantiles = []quantile{
 	{"-p90", 90},
 	{"-p75", 75},
 	{"-p50", 50},
+	{"-p25", 25},
+	{"-min", 0},
 }
 
 // storeMetrics is the minimum interface of the storage.Store object needed by
