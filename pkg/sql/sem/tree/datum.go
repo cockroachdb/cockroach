@@ -82,7 +82,7 @@ type Datum interface {
 	// was involved in the comparison.
 	// Note: do not use this directly. Instead use the functions in
 	// compare.go.
-	internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) int
+	internalCompare(ctx *EvalContext, flags internalCmpFlags, other Datum) internalCmpResult
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
 	// The previous datum satisfies the following definition: if the receiver is
