@@ -111,6 +111,9 @@ SET application_name = 'hello'
 statement ok
 SET extra_float_digits = 3
 
+statement error set extra_float_digits: only values between -15 and 3 are supported
+SET extra_float_digits = 123
+
 statement ok
 SET client_min_messages = 'debug'
 

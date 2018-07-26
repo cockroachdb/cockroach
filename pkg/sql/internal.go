@@ -19,7 +19,6 @@ import (
 	"math"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -526,8 +525,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ RowDescOpt,
 	pos CmdPos,
 	_ []pgwirebase.FormatCode,
-	_ *time.Location,
-	_ sessiondata.BytesEncodeFormat,
+	_ sessiondata.DataConversionConfig,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -118,7 +119,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.BytesEncodeFormat.String()
+			return evalCtx.SessionData.DataConversion.BytesEncodeFormat.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
 			m.SetBytesEncodeFormat(sessiondata.BytesEncodeHex)
@@ -355,9 +356,34 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
-	`extra_float_digits`: nopVar,
+	`extra_float_digits`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getIntVal(&evalCtx.EvalContext, `extra_float_digits`, values)
+			if err != nil {
+				return err
+			}
+			// Note: this is the range allowed by PostgreSQL.
+			// See also the documentation around (DataConversionConfig).GetFloatPrec()
+			// in session_data.go.
+			if s < -15 || s > 3 {
+				return errors.New("set extra_float_digits: only values between -15 and 3 are supported")
+			}
+			m.SetExtraFloatDigits(int(s))
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return fmt.Sprintf("%d", evalCtx.SessionData.DataConversion.ExtraFloatDigits)
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetExtraFloatDigits(0)
+			return nil
+		},
+	},
 
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
@@ -500,11 +526,12 @@ var varGen = map[string]sessionVar{
 			// and not a standard name, then we use a magic format in the Location's
 			// name. We attempt to parse that here and retrieve the original offset
 			// specified by the user.
-			_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(evalCtx.SessionData.Location.String())
+			locStr := evalCtx.SessionData.DataConversion.Location.String()
+			_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(locStr)
 			if parsed {
 				return origRepr
 			}
-			return evalCtx.SessionData.Location.String()
+			return locStr
 		},
 		Set: setTimeZone,
 		Reset: func(m *sessionDataMutator) error {

@@ -153,6 +153,7 @@ func TestCopyRandom(t *testing.T) {
 			ip INET,
 			tz TIMESTAMP WITH TIME ZONE
 		);
+		SET extra_float_digits = 3; -- to preserve floats entirely
 	`); err != nil {
 		t.Fatal(err)
 	}

@@ -64,6 +64,7 @@ message EvalContext {
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
   optional string application_name = 9 [(gogoproto.nullable) = false];
   optional BytesEncodeFormat bytes_encode_format = 10 [(gogoproto.nullable) = false];
+  optional int32 extra_float_digits = 11 [(gogoproto.nullable) = false];
 }
 
 // BytesEncodeFormat is the configuration for bytes to string conversions.
