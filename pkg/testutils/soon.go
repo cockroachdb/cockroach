@@ -15,11 +15,16 @@
 package testutils
 
 import (
+	"context"
 	"runtime/debug"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // DefaultSucceedsSoonDuration is the maximum amount of time unittests
@@ -29,11 +34,18 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied
 // function runs without error within a preset maximum duration. The
 // function is invoked immediately at first and then successively with
-// an exponential backoff starting at 1ns and ending at the maximum
-// duration (currently 15s).
+// an exponential backoff starting at 1ns and ending at around 1s.
 func SucceedsSoon(t testing.TB, fn func() error) {
 	t.Helper()
-	if err := retry.ForDuration(DefaultSucceedsSoonDuration, fn); err != nil {
+	tBegin := timeutil.Now()
+	wrappedFn := func() error {
+		err := fn()
+		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
+			log.InfoDepth(context.Background(), 3, errors.Wrap(err, "SucceedsSoon"))
+		}
+		return err
+	}
+	if err := retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn); err != nil {
 		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
 			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
 	}
