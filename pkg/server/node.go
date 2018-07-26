@@ -354,15 +354,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// initDescriptor initializes the node descriptor with the server
-// address, the node attributes and locality.
-func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality roachpb.Locality) {
-	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	n.Descriptor.Attrs = attrs
-	n.Descriptor.Locality = locality
-	n.Descriptor.ServerVersion = n.storeCfg.Settings.Version.ServerVersion
-}
-
 // initNodeID updates the internal NodeDescriptor with the given ID. If zero is
 // supplied, a new NodeID is allocated with the first invocation. For all other
 // values, the supplied ID is stored into the descriptor (unless one has been
@@ -445,7 +436,12 @@ func (n *Node) start(
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	n.initDescriptor(addr, attrs, locality)
+	n.Descriptor = roachpb.NodeDescriptor{
+		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		Attrs:         attrs,
+		Locality:      locality,
+		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
+	}
 
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
