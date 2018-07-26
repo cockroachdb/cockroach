@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -154,6 +155,12 @@ func changefeedPlanHook(
 			return runChangefeedFlow(
 				ctx, p.ExecCfg(), details, progress, resultsCh, nil, /* progressedFn */
 			)
+		}
+
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+		); err != nil {
+			return err
 		}
 
 		// Make a channel for runChangefeedFlow to signal once everything has

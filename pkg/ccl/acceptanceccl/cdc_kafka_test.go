@@ -65,6 +65,7 @@ func TestCDC(t *testing.T) {
 
 		t.Run(`PauseUnpause`, func(t *testing.T) { testPauseUnpause(ctx, t, c, k) })
 		t.Run(`Bank`, func(t *testing.T) { testBank(ctx, t, c, k) })
+		t.Run(`Errors`, func(t *testing.T) { testErrors(ctx, t) })
 	})
 }
 
@@ -214,6 +215,20 @@ func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *do
 
 	if err := g.Wait(); err != nil {
 		t.Errorf(`%+v`, err)
+	}
+}
+
+func testErrors(ctx context.Context, t *testing.T) {
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
+	); !testutils.IsError(err, `client has run out of available brokers`) {
+		t.Errorf(`expected 'client has run out of available brokers' error got: %+v`, err)
 	}
 }
 
