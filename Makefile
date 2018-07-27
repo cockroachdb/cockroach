@@ -818,6 +818,7 @@ bench: ## Run benchmarks.
 bench benchshort: TESTS := -
 bench benchshort: BENCHES := .
 bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
+bench benchshort: override TESTFLAGS += -logtostderr=NONE
 
 # -benchtime=1ns runs one iteration of each benchmark. The -short flag is set so
 # that longer running benchmarks can skip themselves.
