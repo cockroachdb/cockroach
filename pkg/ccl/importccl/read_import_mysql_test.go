@@ -176,6 +176,13 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 		got := readMysqlCreateFrom(t, files.wholeDB, "simple", 51, NoFKs)
 		compareTables(t, expected, got)
 	})
+
+	t.Run("third-in-multi", func(t *testing.T) {
+		skip := fkHandler{allowed: true, skip: true}
+		expected := descForTable(t, readFile(t, `third.cockroach-schema.sql`), expectedParent, 51, skip)
+		got := readMysqlCreateFrom(t, files.wholeDB, "third", 51, skip)
+		compareTables(t, expected, got)
+	})
 }
 
 func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
