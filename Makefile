@@ -51,8 +51,12 @@ TESTS := .
 ## Benchmarks to run for use with `make bench`.
 BENCHES :=
 
-## Space delimited list of logic test files to run, for make testlogic and testccllogic.
+## Space delimited list of logic test files to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
 FILES :=
+
+## Name of a logic test configuration to run, for make testlogic/testccllogic/testoptlogic/testplannerlogic.
+## (default: all configs. It's not possible yet to specify multiple configs in this way.)
+TESTCONFIG :=
 
 ## Regex for matching logic test subtests. This is always matched after "FILES"
 ## if they are provided.
@@ -819,7 +823,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
-.PHONY: check test testshort testrace testlogic testccllogic bench benchshort
+.PHONY: check test testshort testrace testlogic testbaselogic testplannerlogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
 check test testshort testrace bench benchshort:
 	$(xgo) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
@@ -830,15 +834,33 @@ stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
 	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
-testlogic: ## Run SQL Logic Tests.
-testlogic: bin/logictest
+testlogic: testbaselogic testplannerlogic testoptlogic
+
+testbaselogic: ## Run SQL Logic Tests.
+testbaselogic: bin/logictest
+
+testplannerlogic: ## Run SQL Logic Tests for the heuristic planner.
+testplannerlogic: bin/logictest
 
 testccllogic: ## Run SQL CCL Logic Tests.
 testccllogic: bin/logictestccl
 
-testlogic testccllogic: TESTS := Test\w*Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
-testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
-testlogic testccllogic:
+testoptlogic: ## Run SQL Logic Tests from opt package.
+testoptlogic: bin/logictestopt
+
+logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testbaselogic testccllogic: TESTS := TestLogic/$(logic-test-selector)
+testplannerlogic: TESTS := TestPlannerLogic/$(logic-test-selector)
+testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
+
+# Note: we specify -config here in addition to the filter on TESTS
+# above. This is because if we only restrict in TESTS, this will
+# merely cause Go to skip the sub-tests that match the pattern. It
+# does not prevent loading and initializing every default config in
+# turn (including setting up the test clusters, etc.). By specifying
+# -config, the extra initialization overhead is averted.
+testbaselogic testccllogic testplannerlogic testoptlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql) $(if $(TESTCONFIG),-config $(TESTCONFIG))
+testbaselogic testccllogic testplannerlogic testoptlogic:
 	cd $($(<F)-package) && $(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
@@ -1357,6 +1379,7 @@ bins = \
 
 testbins = \
   bin/logictest \
+  bin/logictestopt \
   bin/logictestccl
 
 # Mappings for binaries that don't live in pkg/cmd.
@@ -1364,6 +1387,7 @@ langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
+logictestopt-package = ./pkg/sql/opt/exec/execbuilder
 
 # Additional dependencies for binaries that depend on generated code.
 bin/workload bin/docgen bin/roachtest: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
