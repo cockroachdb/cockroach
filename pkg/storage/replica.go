@@ -5632,10 +5632,8 @@ func checkIfTxnAborted(
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
-		if log.V(1) {
-			log.Infof(ctx, "found AbortSpan entry for %s with priority %d",
-				txn.ID.Short(), entry.Priority)
-		}
+		log.VEventf(ctx, 1, "found AbortSpan entry for %s with priority %d",
+			txn.ID.Short(), entry.Priority)
 		newTxn := txn.Clone()
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority
