@@ -70,6 +70,10 @@ const (
 // based on its logical properties as well as the cost of its children. Each
 // expression's cost must always be >= the total costs of its children, so that
 // branch-and-bound pruning will work properly.
+//
+// Note: each custom function to compute the cost of an operator calculates
+// the cost based on Big-O estimated complexity. Most constant factors are
+// ignored for now.
 func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	var cost memo.Cost
 	switch candidate.Operator() {
@@ -84,6 +88,9 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 
 	case opt.SelectOp:
 		cost = c.computeSelectCost(candidate, logical)
+
+	case opt.ProjectOp:
+		cost = c.computeProjectCost(candidate, logical)
 
 	case opt.ValuesOp:
 		cost = c.computeValuesCost(candidate, logical)
@@ -103,7 +110,24 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 	case opt.LookupJoinOp:
 		cost = c.computeLookupJoinCost(candidate, logical)
 
-	// TODO(rytaft): Add linear cost functions for GROUP BY, set ops, etc.
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
+		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
+		cost = c.computeSetOpCost(candidate, logical)
+
+	case opt.GroupByOp, opt.ScalarGroupByOp:
+		cost = c.computeGroupByCost(candidate, logical)
+
+	case opt.LimitOp:
+		cost = c.computeLimitCost(candidate, logical)
+
+	case opt.OffsetOp:
+		cost = c.computeOffsetCost(candidate, logical)
+
+	case opt.RowNumberOp:
+		cost = c.computeRowNumberCost(candidate, logical)
+
+	case opt.ZipOp:
+		cost = c.computeZipCost(candidate, logical)
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -122,17 +146,22 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 		// crash with an unknown operation. We'd rather detect this early.
 		panic(fmt.Sprintf("operator %s with MaxCost added to the memo", candidate.Operator()))
 	}
+
 	return cost
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
 	rowCount := logical.Relational.Stats.RowCount
 	cost := memo.Cost(rowCount) * cpuCostFactor
+
 	if rowCount > 1 {
 		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
 		// certain amount of memory is used, distsql switches to a disk-based sort
 		// with a temp RocksDB store.
-		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCostFactor
+		physical := c.mem.LookupPhysicalProps(candidate.Required())
+		perRowCost := c.rowSortCost(len(physical.Ordering.Columns))
+		cost += memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
 	}
 
 	return cost + c.computeChildrenCost(candidate)
@@ -143,12 +172,15 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
-	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
+	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {
-		perRowCost *= 2
+		if rowCount > 1 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
+		}
 	}
-	return rowCount * (seqIOCostFactor + perRowCost)
+	return memo.Cost(rowCount) * (seqIOCostFactor + perRowCost)
 }
 
 func (c *coster) computeVirtualScanCost(
@@ -158,6 +190,14 @@ func (c *coster) computeVirtualScanCost(
 	// is assumed to be in memory.
 	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
 	return rowCount * cpuCostFactor
+}
+
+// rowSortCost is the CPU cost to sort one row, which depends on the number of
+// columns in the sort key.
+func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
+	// We multiply by 2 to ensure that a sort is almost always
+	// more expensive than a reverse scan or an index scan.
+	return 2 * memo.Cost(numKeyCols) * cpuCostFactor
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
@@ -177,6 +217,17 @@ func (c *coster) computeSelectCost(candidate *memo.BestExpr, logical *props.Logi
 	// The filter has to be evaluated on each input row.
 	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 	cost := memo.Cost(inputRowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeProjectCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Each synthesized column causes an expression to be evaluated on each row.
+	rowCount := logical.Relational.Stats.RowCount
+	synthesizedColCount := memo.MakeExprView(c.mem, candidate.Child(1)).ChildCount()
+	cost := memo.Cost(rowCount) * memo.Cost(synthesizedColCount) * cpuCostFactor
+
+	// Add the CPU cost of emitting the rows.
+	cost += memo.Cost(rowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
@@ -253,6 +304,60 @@ func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.
 	perRowCost := seqIOCostFactor + c.rowScanCost(def.Table, def.Index, def.LookupCols.Len())
 	cost += memo.Cost(logical.Relational.Stats.RowCount) * perRowCost
 	return cost
+}
+
+func (c *coster) computeSetOpCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+
+	// A set operation must process every row from both tables once.
+	// UnionAll can avoid any extra computation, but all other set operations
+	// must perform a hash table lookup or update for each input row.
+	if candidate.Operator() != opt.UnionAllOp {
+		leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+		rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
+		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
+	}
+
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeGroupByCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+
+	// GroupBy must process each input row once. Cost per row depends on the
+	// number of grouping columns and the number of aggregates.
+	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	aggsCount := memo.MakeExprView(c.mem, candidate.Child(1)).ChildCount()
+	def := candidate.Private(c.mem).(*memo.GroupByDef)
+	groupingColCount := def.GroupingCols.Len()
+	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeLimitCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeOffsetCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeRowNumberCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeZipCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
+	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {
