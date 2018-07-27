@@ -2732,6 +2732,9 @@ func (r *Replica) limitTxnMaxTimestamp(
 // maybeWatchForMerge checks whether a merge of this replica into its left
 // neighbor is in its critical phase and, if so, arranges to block all requests
 // until the merge completes.
+//
+// TODO(benesch): now that merges require collocation, it might be cleaner to
+// fold this function into store.MergeRange.
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -2769,7 +2772,8 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	r.mu.mergeComplete = mergeCompleteCh
 	r.mu.Unlock()
 
-	err = r.store.stopper.RunAsyncTask(context.Background(), "wait-for-merge", func(ctx context.Context) {
+	taskCtx := r.AnnotateCtx(context.Background())
+	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
 		rs, _, err := client.RangeLookup(ctx, r.DB().NonTransactionalSender(), desc.StartKey.AsRawKey(),
 			roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 		if err != nil {
@@ -2789,21 +2793,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		}
 		if len(rs) != 1 {
 			log.Fatalf(ctx, "expected 1 range descriptor, got %d", len(rs))
-		}
-		replyDesc := rs[0]
-		if replyDesc.RangeID != desc.RangeID {
-			// Merge successful. Remove the replica.
-			err := r.store.RemoveReplica(ctx, r, desc.NextReplicaID, RemoveOptions{DestroyData: true})
-			// It's not a problem if the replica is already gone. It may have been
-			// cleaned up when the merge transaction committed if it was collocated
-			// with a replica of the left-hand side of the merge.
-			if _, ok := err.(*roachpb.RangeNotFoundError); err != nil && !ok {
-				log.Fatalf(ctx, "unexpected error when removing merged replica: %s", err)
-			}
-
-			// Clear the wait queue to redirect the queued transactions to the
-			// left-hand replica, if necessary.
-			r.txnWaitQueue.Clear(true /* disable */)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
@@ -5242,6 +5231,35 @@ func (r *Replica) processRaftCommand(
 			tmpBatch.Close()
 		}
 
+		if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
+			// The merge trigger contains an up-to-date copy of the RHS that we're
+			// about to apply, but we must ensure that we install that copy into empty
+			// keyspace. Otherwise we'll end up merging the out-of-date data with the
+			// up-to-date data, instead of outright replacing it with the up-to-date
+			// data, leading to consistency violations.
+			//
+			// To that end, we inject ClearRange commands into the beginning of the
+			// write batch for the key spans that make up the RHS. This ensures that
+			// the up-to-date state replaces the RHS atomically.
+			//
+			// TODO(benesch): This will be unnecessary once we mandate that followers
+			// are up-to-date before the merge transaction commits. As such, this is
+			// an incredibly naive implementation. A real implementation would a)
+			// avoid rewriting the whole batch and b) avoid range deletion tombstones
+			// when there are only a few keys to delete.
+			tmpBatch := r.store.engine.NewBatch()
+			for _, keyRange := range rditer.MakeAllKeyRanges(&merge.RightDesc) {
+				if err := tmpBatch.ClearRange(keyRange.Start, keyRange.End); err != nil {
+					log.Fatal(ctx, err)
+				}
+			}
+			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
+				log.Fatal(ctx, err)
+			}
+			writeBatch.Data = tmpBatch.Repr()
+			tmpBatch.Close()
+		}
+
 		var delta enginepb.MVCCStats
 		{
 			var err error
@@ -5421,52 +5439,24 @@ func (r *Replica) acquireSplitLock(
 func (r *Replica) acquireMergeLock(
 	ctx context.Context, merge *roachpb.MergeTrigger,
 ) (func(storagebase.ReplicatedEvalResult), error) {
-	// The merge lock is the right-hand replica's raftMu. If the right-hand
-	// replica does not exist, we create one. This is required for correctness.
-	// Without a right-hand replica on this store, an incoming snapshot could
+	// The merge lock is the right-hand replica's raftMu. The right-hand replica
+	// is required to exist on this store. Otherwise, an incoming snapshot could
 	// create the right-hand replica before the merge trigger has a chance to
 	// widen the left-hand replica's end key. The merge trigger would then fatal
 	// the node upon realizing the right-hand replica already exists. With a
 	// right-hand replica in place, any snapshots for the right-hand range will
 	// block on raftMu, waiting for the merge to complete, after which the replica
 	// will realize it has been destroyed and reject the snapshot.
-	rightRepl, created, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil, err
 	}
-	var placeholder *ReplicaPlaceholder
-	if created {
-		// rightRepl does not know its start and end keys. It can only block
-		// incoming snapshots with the same range ID. This is an insufficient lock:
-		// it's possible for this store to receive a snapshot with a different range
-		// ID that overlaps the right-hand keyspace while the merge is in progress.
-		// Consider the case where this replica is behind and the merged range
-		// resplits before this replica processes the merge. An up-to-date member of
-		// the new right-hand range could send this store a snapshot that would
-		// incorrectly sneak past rightRepl.
-		//
-		// So install a placeholder for the right range's keyspace in the
-		// replicasByKey map to block any intersecting snapshots.
-		placeholder = &ReplicaPlaceholder{rangeDesc: merge.RightDesc}
-		if err := r.store.addPlaceholder(placeholder); err != nil {
-			return nil, err
-		}
+	rightDesc := rightRepl.Desc()
+	if !rightDesc.StartKey.Equal(merge.RightDesc.StartKey) || !rightDesc.EndKey.Equal(merge.RightDesc.EndKey) {
+		log.Fatalf(ctx, "RHS of merge %s <- %s not present on store; found %s in place of the RHS",
+			merge.LeftDesc, merge.RightDesc, rightDesc)
 	}
-
 	return func(storagebase.ReplicatedEvalResult) {
-		if created {
-			// Sanity check that the merge cleaned up the placeholder created above.
-			r.store.mu.Lock()
-			if _, ok := r.store.mu.replicasByKey.Get(placeholder).(*ReplicaPlaceholder); ok {
-				r.store.mu.Unlock()
-				log.Fatalf(ctx, "merge did not remove placeholder %+v from replicasByKey", placeholder)
-			}
-			if _, ok := r.store.mu.replicaPlaceholders[rightRepl.RangeID]; ok {
-				r.store.mu.Unlock()
-				log.Fatalf(ctx, "merge did not remove placeholder %+v from replicaPlaceholders", placeholder)
-			}
-			r.store.mu.Unlock()
-		}
 		rightRepl.raftMu.Unlock()
 	}, nil
 }

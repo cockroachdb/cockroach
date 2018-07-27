@@ -239,16 +239,10 @@ func (rgcq *replicaGCQueue) process(
 	} else if desc.RangeID != replyDesc.RangeID {
 		// If we get a different range ID back, then the range has been merged
 		// away. But currentMember is true, so we are still a member of the
-		// subsuming range. Shut down raft processing for the former range
-		// and delete any remaining metadata, but do not delete the data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
+		// subsuming range. The subsuming range will clean up the subsumed range
+		// when it applies the merge trigger.
 		if log.V(1) {
-			log.Infof(ctx, "removing merged range")
-		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
-			DestroyData: false,
-		}); err != nil {
-			return err
+			log.Infof(ctx, "range merged away; allowing merge trigger on LHS to clean up")
 		}
 	} else {
 		// This replica is a current member of the raft group. Set the last replica

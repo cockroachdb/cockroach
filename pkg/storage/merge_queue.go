@@ -248,6 +248,33 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
+	if !replicaSetsEqual(lhsDesc.Replicas, rhsDesc.Replicas) {
+		var targets []roachpb.ReplicationTarget
+		for _, lhsReplDesc := range lhsDesc.Replicas {
+			targets = append(targets, roachpb.ReplicationTarget{
+				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
+			})
+		}
+		lease, _ := lhsRepl.GetLease()
+		for i := range targets {
+			if targets[i].NodeID == lease.Replica.NodeID && targets[i].StoreID == lease.Replica.StoreID {
+				if i > 0 {
+					targets[0], targets[i] = targets[i], targets[0]
+				}
+				break
+			}
+		}
+		// TODO(benesch): RelocateRange needs to be made more robust. It cannot
+		// currently handle certain edge cases, like multiple stores on one node. It
+		// also adds all new replicas before removing any old replicas, rather than
+		// performing interleaved adds/removes, resulting in a moment where the
+		// number of replicas is potentially double the configured replication
+		// factor.
+		if err := RelocateRange(ctx, mq.db, rhsDesc, targets); err != nil {
+			return err
+		}
+	}
+
 	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{})
 	switch err := pErr.GoError(); err.(type) {
 	case nil:

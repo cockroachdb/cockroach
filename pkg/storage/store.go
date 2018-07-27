@@ -2427,7 +2427,9 @@ func (s *Store) MergeRange(
 		leftRepl.writeStats.resetRequestCounts()
 	}
 
-	// TODO(benesch): drain the RHS txn wait queue.
+	// Clear the wait queue to redirect the queued transactions to the
+	// left-hand replica, if necessary.
+	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
@@ -3350,6 +3352,9 @@ func (s *Store) processRaftRequestWithReplica(
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
 // the request's specified replica. This snapshot can be preemptive or not. If
 // not, the function makes sure to handle any updated Raft Ready state.
+//
+// TODO(benesch): handle snapshots that widen EndKey. These can occur if this
+// replica was behind when the range committed a merge.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot,
 ) *roachpb.Error {

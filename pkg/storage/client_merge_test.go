@@ -203,16 +203,14 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, colocate := range []bool{false, true} {
-		for _, retries := range []int64{0, 3} {
-			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
-				mergeWithData(t, colocate, retries)
-			})
-		}
+	for _, retries := range []int64{0, 3} {
+		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
+			mergeWithData(t, retries)
+		})
 	}
 }
 
-func mergeWithData(t *testing.T, colocate bool, retries int64) {
+func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
@@ -240,24 +238,13 @@ func mergeWithData(t *testing.T, colocate bool, retries int64) {
 	mtc = &multiTestContext{storeConfig: &storeCfg}
 
 	var store1, store2 *storage.Store
-	if colocate {
-		mtc.Start(t, 1)
-		store1, store2 = mtc.stores[0], mtc.stores[0]
-	} else {
-		mtc.Start(t, 2)
-		store1, store2 = mtc.stores[0], mtc.stores[1]
-	}
+	mtc.Start(t, 1)
+	store1, store2 = mtc.stores[0], mtc.stores[0]
 	defer mtc.Stop()
 
 	lhsDesc, rhsDesc, pErr := createSplitRanges(ctx, store1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-
-	if !colocate {
-		mtc.replicateRange(rhsDesc.RangeID, 1)
-		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
-		mtc.unreplicateRange(rhsDesc.RangeID, 0)
 	}
 
 	content := []byte("testing!")
@@ -594,21 +581,16 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
-	mtc.Start(t, 2)
+	mtc.Start(t, 1)
 	defer mtc.Stop()
-	store := mtc.stores[0]
+	store := mtc.Store(0)
 
-	// Create two adjacent ranges. The left-hand range has exactly one replica,
-	// on the first store, and the right-hand range has exactly one replica,
-	// on the second store
+	// Create two adjacent ranges.
 	setupReplicas := func() (lhsDesc, rhsDesc *roachpb.RangeDescriptor, err error) {
 		lhsDesc, rhsDesc, err = createSplitRanges(ctx, store)
 		if err != nil {
 			return nil, nil, err
 		}
-		mtc.replicateRange(rhsDesc.RangeID, 1)
-		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
-		mtc.unreplicateRange(rhsDesc.RangeID, 0)
 		return lhsDesc, rhsDesc, nil
 	}
 
@@ -721,7 +703,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Wait for txn2 to realize it conflicts with txn1 and enter its wait queue.
 		{
-			repl, err := mtc.stores[1].GetReplica(rhsDesc.RangeID)
+			repl, err := store.GetReplica(rhsDesc.RangeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -818,14 +800,15 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
-	// Create the ranges to be merged. Put the LHS on only the first store. Put
-	// the RHS on both stores and give the second store the lease. The LHS is
-	// largely irrelevant. What matters is that the RHS exists on two stores so we
-	// can transfer its lease during the merge.
+	// Create the ranges to be merged. Put both ranges on both stores, but give
+	// the second store the lease on the RHS. The LHS is largely irrelevant. What
+	// matters is that the RHS exists on two stores so we can transfer its lease
+	// during the merge.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, mtc.stores[0])
 	if err != nil {
 		t.Fatal(err)
 	}
+	mtc.replicateRange(lhsDesc.RangeID, 1)
 	mtc.replicateRange(rhsDesc.RangeID, 1)
 	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
 
@@ -1226,11 +1209,13 @@ func TestMergeQueue(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
-	sv := &store.ClusterSettings().SV
+	sv := &storeCfg.Settings.SV
 	storage.MergeQueueEnabled.Override(sv, true)
+	var mtc multiTestContext
+	mtc.storeConfig = &storeCfg
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	split := func(t *testing.T, key roachpb.Key) {
 		t.Helper()
@@ -1243,16 +1228,16 @@ func TestMergeQueue(t *testing.T) {
 	split(t, roachpb.Key("a"))
 	split(t, roachpb.Key("b"))
 	split(t, roachpb.Key("c"))
-	lhs := store.LookupReplica(roachpb.RKey("a"), nil)
-	rhs := store.LookupReplica(roachpb.RKey("b"), nil)
-	lhsDesc := lhs.Desc()
-	rhsDesc := rhs.Desc()
+	lhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("a"), nil) }
+	rhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("b"), nil) }
+	lhsDesc := lhs().Desc()
+	rhsDesc := rhs().Desc()
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
 	setThresholds := func(minBytes, maxBytes int64) {
-		lhs.SetByteThresholds(minBytes, maxBytes)
-		rhs.SetByteThresholds(minBytes, maxBytes)
+		lhs().SetByteThresholds(minBytes, maxBytes)
+		rhs().SetByteThresholds(minBytes, maxBytes)
 	}
 
 	defaultZone := config.DefaultZoneConfig()
@@ -1365,6 +1350,15 @@ func TestMergeQueue(t *testing.T) {
 		verifyUnmerged(t)
 
 		setThresholds(200, 400)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("non-collocated", func(t *testing.T) {
+		reset(t)
+		mtc.replicateRange(rhs().Desc().RangeID, 1)
+		mtc.transferLease(ctx, rhs().Desc().RangeID, 0, 1)
+		mtc.unreplicateRange(rhs().Desc().RangeID, 0)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
