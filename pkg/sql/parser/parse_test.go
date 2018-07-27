@@ -1030,11 +1030,12 @@ func TestParse(t *testing.T) {
 		{`SET ROW (1, true, NULL)`},
 
 		{`CREATE CHANGEFEED FOR TABLE foo`},
+		{`CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo`},
 		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 		// TODO(dan): Implement.
 		// {`CREATE CHANGEFEED FOR TABLE foo VALUES FROM (1) TO (2) INTO 'sink'`},
 		// {`CREATE CHANGEFEED FOR TABLE foo PARTITION bar, baz INTO 'sink'`},
-		{`CREATE CHANGEFEED FOR DATABASE foo INTO 'sink'`},
+		// {`CREATE CHANGEFEED FOR DATABASE foo INTO 'sink'`},
 		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'`},
 
 		// Regression for #15926

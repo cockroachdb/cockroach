@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,11 +52,12 @@ type poller struct {
 }
 
 func makePoller(
+	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
 	startTime hlc.Timestamp,
 	buf *buffer,
-) *poller {
+) (*poller, error) {
 	p := &poller{
 		settings:  execCfg.Settings,
 		db:        execCfg.DB,
@@ -64,10 +66,25 @@ func makePoller(
 		highWater: startTime,
 		buf:       buf,
 	}
-	for _, tableDesc := range details.TableDescs {
-		p.spans = append(p.spans, tableDesc.PrimaryIndexSpan())
+
+	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		p.spans = nil
+		if startTime != (hlc.Timestamp{}) {
+			txn.SetFixedTimestamp(ctx, startTime)
+		}
+		// Note that all targets are currently guaranteed to be tables.
+		for tableID := range details.Targets {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			p.spans = append(p.spans, tableDesc.PrimaryIndexSpan())
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return p
+	return p, nil
 }
 
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a

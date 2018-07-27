@@ -87,12 +87,12 @@ func TestChangefeedEnvelope(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
 
 	t.Run(`envelope=row`, func(t *testing.T) {
-		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR DATABASE d WITH envelope='row'`)
+		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH envelope='row'`)
 		defer closeFeedRowsHack(t, sqlDB, rows)
 		assertPayloads(t, rows, []string{`foo: [1]->{"a": 1, "b": "a"}`})
 	})
 	t.Run(`envelope=key_only`, func(t *testing.T) {
-		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR DATABASE d WITH envelope='key_only'`)
+		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH envelope='key_only'`)
 		defer closeFeedRowsHack(t, sqlDB, rows)
 		assertPayloads(t, rows, []string{`foo: [1]->`})
 	})
@@ -117,7 +117,7 @@ func TestChangefeedMultiTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO bar VALUES (2, 'b')`)
 
-	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR DATABASE d`)
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo, bar`)
 	defer closeFeedRowsHack(t, sqlDB, rows)
 
 	assertPayloads(t, rows, []string{
@@ -435,6 +435,29 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR system.jobs`,
 	); !testutils.IsError(err, `CHANGEFEEDs are not supported on system tables`) {
 		t.Errorf(`expected 'CHANGEFEEDs are not supported on system tables' error got: %+v`, err)
+	}
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR bar`,
+	); !testutils.IsError(err, `table "bar" does not exist`) {
+		t.Errorf(`expected 'table "bar" does not exist' error got: %+v`, err)
+	}
+	sqlDB.Exec(t, `CREATE SEQUENCE seq`)
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR seq`,
+	); !testutils.IsError(err, `CHANGEFEED cannot target sequences: seq`) {
+		t.Errorf(`expected 'CHANGEFEED cannot target sequences: seq' error got: %+v`, err)
+	}
+	sqlDB.Exec(t, `CREATE VIEW vw AS SELECT a, b FROM foo`)
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR vw`,
+	); !testutils.IsError(err, `CHANGEFEED cannot target views: vw`) {
+		t.Errorf(`expected 'CHANGEFEED cannot target views: vw' error got: %+v`, err)
+	}
+	// Backup has the same bad error message #28170.
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR information_schema.tables`,
+	); !testutils.IsError(err, `table "information_schema.tables" does not exist`) {
+		t.Errorf(`expected 'table "information_schema.tables" does not exist' error got: %+v`, err)
 	}
 }
 
