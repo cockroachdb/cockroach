@@ -519,7 +519,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: []
-experimental_lease_preferences: [[+duck=foo]]
+lease_preferences: [[+duck=foo]]
 `,
 		},
 		{
@@ -565,7 +565,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: [+duck=foo]
-experimental_lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
+lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 `,
 		},
 	}
@@ -590,6 +590,86 @@ experimental_lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 				t.Errorf("yaml.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
 			}
 		})
+	}
+}
+
+// TestExperimentalLeasePreferencesYAML makes sure that we accept the
+// lease_preferences YAML field both with and without the "experimental_"
+// prefix.
+func TestExperimentalLeasePreferencesYAML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	originalPrefs := []LeasePreference{
+		{Constraints: []Constraint{{Value: "original", Type: Constraint_REQUIRED}}},
+	}
+	originalZone := ZoneConfig{
+		LeasePreferences: originalPrefs,
+	}
+
+	testCases := []struct {
+		input    string
+		expected []LeasePreference
+	}{
+		{
+			input:    "",
+			expected: originalPrefs,
+		},
+		{
+			input:    "lease_preferences: []",
+			expected: []LeasePreference{},
+		},
+		{
+			input:    "experimental_lease_preferences: []",
+			expected: []LeasePreference{},
+		},
+		{
+			input: "lease_preferences: [[+a=b]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+			},
+		},
+		{
+			input: "experimental_lease_preferences: [[+a=b]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+			},
+		},
+		{
+			input: "lease_preferences: [[+a=b],[-c=d]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+				{Constraints: []Constraint{{Key: "c", Value: "d", Type: Constraint_PROHIBITED}}},
+			},
+		},
+		{
+			input: "experimental_lease_preferences: [[+a=b],[-c=d]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+				{Constraints: []Constraint{{Key: "c", Value: "d", Type: Constraint_PROHIBITED}}},
+			},
+		},
+		{
+			input: "lease_preferences: [[+c=d]]\nexperimental_lease_preferences: [[+a=b]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+			},
+		},
+		{
+			input: "experimental_lease_preferences: [[+a=b]]\nlease_preferences: [[+c=d]]",
+			expected: []LeasePreference{
+				{Constraints: []Constraint{{Key: "a", Value: "b", Type: Constraint_REQUIRED}}},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		zone := originalZone
+		if err := yaml.UnmarshalStrict([]byte(tc.input), &zone); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(zone.LeasePreferences, tc.expected) {
+			t.Errorf("unmarshaling %q got %+v; want %+v", tc.input, zone.LeasePreferences, tc.expected)
+		}
 	}
 }
 
