@@ -552,22 +552,24 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 
 type partitionSorter struct {
 	evalCtx       *tree.EvalContext
-	rows          []tree.IndexedRow
+	rows          indexedRows
 	windowDefVals *sqlbase.RowContainer
 	ordering      sqlbase.ColumnOrdering
 }
 
 // partitionSorter implements the sort.Interface interface.
-func (n *partitionSorter) Len() int           { return len(n.rows) }
-func (n *partitionSorter) Swap(i, j int)      { n.rows[i], n.rows[j] = n.rows[j], n.rows[i] }
+func (n *partitionSorter) Len() int { return n.rows.Len() }
+func (n *partitionSorter) Swap(i, j int) {
+	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
+}
 func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 
 // partitionSorter implements the peerGroupChecker interface.
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
-	ra, rb := n.rows[i], n.rows[j]
-	defa, defb := n.windowDefVals.At(ra.Idx), n.windowDefVals.At(rb.Idx)
+	ra, rb := n.rows.rows[i], n.rows.rows[j]
+	defa, defb := n.windowDefVals.At(ra.idx), n.windowDefVals.At(rb.idx)
 	for _, o := range n.ordering {
 		da := defa[o.ColIdx]
 		db := defb[o.ColIdx]
@@ -668,16 +670,16 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			}
 		}
 
-		partitions := make(map[string][]tree.IndexedRow)
+		partitions := make(map[string]indexedRows)
 
 		if len(windowFn.partitionIdxs) == 0 {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
-			sz := int64(uintptr(rowCount) * unsafe.Sizeof(tree.IndexedRow{}))
+			sz := int64(uintptr(rowCount)*unsafe.Sizeof(indexedRow{}) + unsafe.Sizeof(indexedRows{}))
 			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
-			partitions[""] = make([]tree.IndexedRow, rowCount)
+			partitions[""] = indexedRows{rows: make([]indexedRow, rowCount)}
 		}
 
 		if num := len(windowFn.partitionIdxs); num > cap(scratchDatum) {
@@ -699,11 +701,11 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.run.wrappedRenderVals.At(rowI)
 			sourceVals := row[:n.sourceCols]
-			entry := tree.IndexedRow{Idx: rowI, Row: sourceVals}
+			entry := indexedRow{idx: rowI, row: sourceVals}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
-				partitions[""][rowI] = entry
+				partitions[""].rows[rowI] = entry
 			} else {
 				// If the window function has partition indexes, we hash the values of each
 				// of these indexes for each row, and partition based on this hashed value.
@@ -720,7 +722,9 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 					return err
 				}
-				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
+				partition := partitions[string(encoded)]
+				partition.rows = append(partition.rows, entry)
+				partitions[string(encoded)] = partition
 				scratchBytes = encoded[:0]
 			}
 		}
@@ -787,7 +791,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				builtins.ShouldReset(builtin)
 			}
 
-			for frameRun.RowIdx < len(partition) {
+			for frameRun.RowIdx < partition.Len() {
 				// Compute the size of the current peer group.
 				frameRun.FirstPeerIdx = frameRun.RowIdx
 				frameRun.PeerRowCount = 1
@@ -812,7 +816,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					}
 
 					// Save result into n.run.windowValues, indexed by original row index.
-					valRowIdx := partition[frameRun.RowIdx].Idx
+					valRowIdx := partition.rows[frameRun.RowIdx].idx
 					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
 			}
@@ -1070,4 +1074,40 @@ func (c *windowNodeColAndAggContainer) IndexedVarNodeFormatter(idx int) tree.Nod
 	}
 	// Avoid duplicating the type annotation by calling .Format directly.
 	return c.sourceInfo.NodeFormatter(idx)
+}
+
+// indexedRows are rows with the corresponding indices.
+type indexedRows struct {
+	rows []indexedRow
+}
+
+// Len implements tree.IndexedRows interface.
+func (ir indexedRows) Len() int {
+	return len(ir.rows)
+}
+
+// GetRow implements tree.IndexedRows interface.
+func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
+	return ir.rows[idx]
+}
+
+// indexedRow is a row with a corresponding index.
+type indexedRow struct {
+	idx int
+	row tree.Datums
+}
+
+// GetIdx implements tree.IndexedRow interface.
+func (ir indexedRow) GetIdx() int {
+	return ir.idx
+}
+
+// GetDatum implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
+	return ir.row[colIdx]
+}
+
+// GetDatum implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
+	return ir.row[firstColIdx:lastColIdx]
 }
