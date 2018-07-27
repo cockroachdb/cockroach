@@ -96,7 +96,7 @@ func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
 		return true
 	}
 
-	if c.HasCorrelatedSubquery(src) {
+	if c.HasHoistableSubquery(src) {
 		return false
 	}
 

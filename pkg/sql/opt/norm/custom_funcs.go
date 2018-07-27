@@ -221,12 +221,6 @@ func (c *CustomFuncs) CanHaveZeroRows(group memo.GroupID) bool {
 	return c.f.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
 }
 
-// HasCorrelatedSubquery returns true if the given scalar group contains a
-// subquery within its subtree that has at least one outer column.
-func (c *CustomFuncs) HasCorrelatedSubquery(group memo.GroupID) bool {
-	return c.LookupScalar(group).HasCorrelatedSubquery
-}
-
 // ----------------------------------------------------------------------
 //
 // Ordering functions
