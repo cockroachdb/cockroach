@@ -18,16 +18,23 @@ import (
 	"context"
 )
 
+// IndexedRows are rows with the corresponding indices.
+type IndexedRows interface {
+	Len() int                  // returns number of rows
+	GetRow(idx int) IndexedRow // returns a row at the given index
+}
+
 // IndexedRow is a row with a corresponding index.
-type IndexedRow struct {
-	Idx int
-	Row Datums
+type IndexedRow interface {
+	GetIdx() int                           // returns index of the row
+	GetDatum(idx int) Datum                // returns a datum at the given index
+	GetDatums(startIdx, endIdx int) Datums // returns datums at indices [startIdx, endIdx)
 }
 
 // WindowFrameRun contains the runtime state of window frame during calculations.
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
-	Rows             []IndexedRow
+	Rows             IndexedRows
 	ArgIdxStart      int          // the index which arguments to the window function begin
 	ArgCount         int          // the number of window function arguments
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
@@ -177,7 +184,7 @@ func (wfr WindowFrameRun) Rank() int {
 
 // PartitionSize returns the number of rows in the current partition.
 func (wfr WindowFrameRun) PartitionSize() int {
-	return len(wfr.Rows)
+	return wfr.Rows.Len()
 }
 
 // unboundedFollowing returns the index of the "first row beyond" the partition
@@ -204,12 +211,12 @@ func (wfr WindowFrameRun) Args() Datums {
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
 func (wfr WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
-	return wfr.Rows[wfr.RowIdx+offset].Row[wfr.ArgIdxStart : wfr.ArgIdxStart+wfr.ArgCount]
+	return wfr.Rows.GetRow(wfr.RowIdx+offset).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
 func (wfr WindowFrameRun) ArgsByRowIdx(idx int) Datums {
-	return wfr.Rows[idx].Row[wfr.ArgIdxStart : wfr.ArgIdxStart+wfr.ArgCount]
+	return wfr.Rows.GetRow(idx).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
 }
 
 // WindowFunc performs a computation on each row using data from a provided WindowFrameRun.

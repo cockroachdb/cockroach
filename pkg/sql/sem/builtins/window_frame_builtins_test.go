@@ -29,6 +29,35 @@ const maxCount = 1000
 const maxInt = 1000000
 const maxOffset = 100
 
+type indexedRows struct {
+	rows []indexedRow
+}
+
+func (ir indexedRows) Len() int {
+	return len(ir.rows)
+}
+
+func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
+	return ir.rows[idx]
+}
+
+type indexedRow struct {
+	idx int
+	row tree.Datums
+}
+
+func (ir indexedRow) GetIdx() int {
+	return ir.idx
+}
+
+func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
+	return ir.row[colIdx]
+}
+
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
+	return ir.row[firstColIdx:lastColIdx]
+}
+
 func testSlidingWindow(t *testing.T, count int) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
@@ -64,7 +93,7 @@ func testMin(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows[idx].Row[0])
+				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
 				if el < naiveMin {
 					naiveMin = el
 				}
@@ -99,7 +128,7 @@ func testMax(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun) 
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows[idx].Row[0])
+				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
 				if el > naiveMax {
 					naiveMax = el
 				}
@@ -137,7 +166,7 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 				if idx < 0 || idx >= wfr.PartitionSize() {
 					continue
 				}
-				el, _ := tree.AsDInt(wfr.Rows[idx].Row[0])
+				el, _ := tree.AsDInt(wfr.Rows.GetRow(idx).GetDatum(0))
 				naiveSum += int64(el)
 			}
 			s, err := sumResult.Int64()
@@ -172,19 +201,19 @@ func makeTestWindowFrameRun(count int) *tree.WindowFrameRun {
 	}
 }
 
-func makeTestPartition(count int) []tree.IndexedRow {
-	partition := make([]tree.IndexedRow, count)
+func makeTestPartition(count int) tree.IndexedRows {
+	partition := indexedRows{rows: make([]indexedRow, count)}
 	for idx := 0; idx < count; idx++ {
-		partition[idx] = tree.IndexedRow{Idx: idx, Row: tree.Datums{tree.NewDInt(tree.DInt(rand.Int31n(maxInt)))}}
+		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDInt(tree.DInt(rand.Int31n(maxInt)))}}
 	}
 	return partition
 }
 
-func partitionToString(partition []tree.IndexedRow) string {
+func partitionToString(partition tree.IndexedRows) string {
 	var buf bytes.Buffer
 	buf.WriteString("\n=====Partition=====\n")
-	for idx := 0; idx < len(partition); idx++ {
-		buf.WriteString(fmt.Sprintf("%v\n", partition[idx]))
+	for idx := 0; idx < partition.Len(); idx++ {
+		buf.WriteString(fmt.Sprintf("%v\n", partition.GetRow(idx)))
 	}
 	buf.WriteString("====================\n")
 	return buf.String()
@@ -196,7 +225,7 @@ func testRingBuffer(t *testing.T, count int) {
 	partition := makeTestPartition(count)
 	ring := ringBuffer{}
 	naiveBuffer := make([]*indexedValue, 0, count)
-	for idx, row := range partition {
+	for rowIdx := 0; rowIdx < partition.Len(); rowIdx++ {
 		if ring.len() != len(naiveBuffer) {
 			t.Errorf("Ring ring returned incorrect len: expected %v, found %v", len(naiveBuffer), ring.len())
 			panic("")
@@ -204,7 +233,7 @@ func testRingBuffer(t *testing.T, count int) {
 
 		op := rand.Float64()
 		if op < 0.5 {
-			iv := &indexedValue{idx: idx, value: row.Row[0]}
+			iv := &indexedValue{idx: rowIdx, value: partition.GetRow(rowIdx).GetDatum(0)}
 			ring.add(iv)
 			naiveBuffer = append(naiveBuffer, iv)
 		} else if op < 0.75 {
