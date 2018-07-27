@@ -613,14 +613,14 @@ project
  ├── columns: r:1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.01
+ ├── cost: 0.0100004
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 0.01
+ │    ├── cost: 0.0100001
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections

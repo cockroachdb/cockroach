@@ -23,7 +23,7 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2(float!null)
  ├── stats: [rows=1000]
- ├── cost: 1149.65784
+ ├── cost: 1159.65784
  ├── ordering: -2
  └── scan a
       ├── columns: f:2(float!null)
@@ -37,15 +37,15 @@ SELECT f FROM a WHERE k < 0 AND k > 10 ORDER BY f DESC
 sort
  ├── columns: f:2(float!null)
  ├── stats: [rows=0]
- ├── cost: 0
+ ├── cost: 4e-07
  ├── ordering: -2
  └── project
       ├── columns: f:2(float!null)
       ├── stats: [rows=0]
-      ├── cost: 0
+      ├── cost: 3e-07
       └── scan a
            ├── columns: k:1(int!null) f:2(float!null)
            ├── constraint: /1/-2: contradiction
            ├── stats: [rows=0]
-           ├── cost: 0
+           ├── cost: 1e-07
            └── key: (1,2)

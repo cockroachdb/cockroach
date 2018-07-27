@@ -123,7 +123,8 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 		panic(fmt.Sprintf("operator %s with MaxCost added to the memo", candidate.Operator()))
 	}
 
-	// Add a tiny cost per operator to break ties.
+	// Add a tiny cost per operator to break ties. If the cost is otherwise
+	// equal, the optimizer will prefer plans with fewer operators.
 	return cost + cpuCostFactor/100000
 }
 
@@ -131,14 +132,14 @@ func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logica
 	physical := c.mem.LookupPhysicalProps(candidate.Required())
 	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowSortCost(len(physical.Ordering.Columns))
-	cost := memo.Cost(rowCount) * perRowCost
-	if rowCount > 2 {
+	if rowCount > 1 {
 		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
 		// certain amount of memory is used, distsql switches to a disk-based sort
 		// with a temp RocksDB store.
-		cost = memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
+		perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
 	}
 
+	cost := memo.Cost(rowCount) * perRowCost
 	return cost + c.computeChildrenCost(candidate)
 }
 
@@ -150,9 +151,9 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {
-		if rowCount > 2 {
+		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
-			perRowCost *= memo.Cost(math.Log2(rowCount))
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
 		}
 	}
 	return memo.Cost(rowCount) * (seqIOCostFactor + perRowCost)

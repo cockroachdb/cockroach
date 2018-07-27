@@ -145,17 +145,17 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 7439.89
+ │    │    └── cost: 7773.23
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 7439.89
+ │         └── cost: 7773.23
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 7439.89
+ │    │    └── cost: 7773.23
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 7439.89
+ │         └── cost: 7773.23
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
  │    ├── ""
@@ -163,7 +163,7 @@ memo (optimized)
  │    │    └── cost: 2431.67
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 7439.89
+ │         └── cost: 7773.23
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (scan b,cols=(3)) (scan b,rev,cols=(3))
@@ -249,7 +249,7 @@ memo (optimized)
  ├── G7: (scan a,rev,constrained)
  │    └── ""
  │         ├── best: (scan a,rev,constrained)
- │         └── cost: 1.08
+ │         └── cost: 1.04
  ├── G8: (filters G10)
  ├── G9: (eq G13 G12)
  ├── G10: (eq G11 G12)
@@ -293,7 +293,7 @@ memo (optimized)
  └── G16: (scan a,rev,constrained)
       └── ""
            ├── best: (scan a,rev,constrained)
-           └── cost: 1.08
+           └── cost: 1.04
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
@@ -366,14 +366,14 @@ memo (optimized)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1139.66
+ │         └── cost: 1149.66
  ├── G2: (scan a) (scan a,rev)
  │    ├── ""
  │    │    ├── best: (scan a)
  │    │    └── cost: 1040.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1139.66
+ │         └── cost: 1149.66
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
