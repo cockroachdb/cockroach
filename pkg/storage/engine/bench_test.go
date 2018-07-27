@@ -722,6 +722,9 @@ func runBenchmarkClearRange(
 }
 
 func BenchmarkClearRange_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	runBenchmarkClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearRange(start, end)
 	})
@@ -736,6 +739,9 @@ func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCGarbageCollect(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
 	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)

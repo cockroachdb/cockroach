@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQuery(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
@@ -53,6 +55,7 @@ func BenchmarkPgbenchQuery(b *testing.B) {
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQueryParallel(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
@@ -108,6 +111,7 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 }
 
 func BenchmarkPgbenchExec(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	b.Run("Cockroach", func(b *testing.B) {
 		s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
 		defer s.Stopper().Stop(context.TODO())
