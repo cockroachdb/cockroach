@@ -150,17 +150,12 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── limit
+ ├── scan xyz@zyx
  │    ├── columns: y:2(int!null) z:3(float!null)
- │    ├── cardinality: [0 - 1]
+ │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
+ │    ├── limit: 1
  │    ├── key: ()
- │    ├── fd: ()-->(2,3)
- │    ├── scan xyz@zyx
- │    │    ├── columns: y:2(int!null) z:3(float!null)
- │    │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
- │    │    ├── fd: ()-->(3)
- │    │    └── ordering: +2 opt(3)
- │    └── const: 1 [type=int]
+ │    └── fd: ()-->(2,3)
  └── aggregations [outer=(2)]
       └── any-not-null [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
@@ -175,20 +170,12 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4)
- ├── limit
+ ├── scan xyz@zyx,rev
  │    ├── columns: y:2(int!null) z:3(float!null)
- │    ├── cardinality: [0 - 1]
+ │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
+ │    ├── limit: 1
  │    ├── key: ()
- │    ├── fd: ()-->(2,3)
- │    ├── sort
- │    │    ├── columns: y:2(int!null) z:3(float!null)
- │    │    ├── fd: ()-->(3)
- │    │    ├── ordering: -2 opt(3)
- │    │    └── scan xyz@zyx
- │    │         ├── columns: y:2(int!null) z:3(float!null)
- │    │         ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
- │    │         └── fd: ()-->(3)
- │    └── const: 1 [type=int]
+ │    └── fd: ()-->(2,3)
  └── aggregations [outer=(2)]
       └── any-not-null [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
@@ -585,12 +572,12 @@ memo (optimized)
  ├── G1: (scalar-group-by G6 G2 cols=()) (scalar-group-by G3 G4 cols=())
  │    └── "[presentation: max:5]"
  │         ├── best: (scalar-group-by G3 G4 cols=())
- │         └── cost: 1.10
+ │         └── cost: 1.05
  ├── G2: (aggregations G5)
  ├── G3: (limit G6 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1)
  │    └── ""
  │         ├── best: (scan abc,rev,cols=(1),lim=1)
- │         └── cost: 1.10
+ │         └── cost: 1.05
  ├── G4: (aggregations G8)
  ├── G5: (max G9)
  ├── G6: (scan abc,cols=(1)) (scan abc,rev,cols=(1))
@@ -598,8 +585,8 @@ memo (optimized)
  │    │    ├── best: (scan abc,cols=(1))
  │    │    └── cost: 1050.00
  │    └── "[ordering: -1]"
- │         ├── best: (scan abc,rev,cols=(1))
- │         └── cost: 1100.00
+ │         ├── best: (sort G6)
+ │         └── cost: 1149.66
  ├── G7: (const 1)
  ├── G8: (any-not-null G9)
  └── G9: (variable abc.a)

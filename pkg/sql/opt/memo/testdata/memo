@@ -249,7 +249,7 @@ memo (optimized)
  ├── G7: (scan a,rev,constrained)
  │    └── ""
  │         ├── best: (scan a,rev,constrained)
- │         └── cost: 1.08
+ │         └── cost: 1.04
  ├── G8: (filters G10)
  ├── G9: (eq G13 G12)
  ├── G10: (eq G11 G12)
@@ -293,7 +293,7 @@ memo (optimized)
  └── G16: (scan a,rev,constrained)
       └── ""
            ├── best: (scan a,rev,constrained)
-           └── cost: 1.08
+           └── cost: 1.04
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a

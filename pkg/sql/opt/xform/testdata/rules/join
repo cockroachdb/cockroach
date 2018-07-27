@@ -638,7 +638,7 @@ memo (optimized)
  ├── G7: (scan abc@ab,rev,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@ab,rev,cols=(1-3),constrained)
- │         └── cost: 380.00
+ │         └── cost: 528.89
  ├── G8: (scan abc@bc,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@bc,cols=(1-3),constrained)
@@ -646,7 +646,7 @@ memo (optimized)
  ├── G9: (scan abc@bc,rev,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@bc,rev,cols=(1-3),constrained)
- │         └── cost: 380.00
+ │         └── cost: 528.89
  ├── G10: (filters G11)
  ├── G11: (eq G12 G13)
  ├── G12: (variable abc.a)

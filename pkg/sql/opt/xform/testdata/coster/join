@@ -84,13 +84,13 @@ SELECT * FROM abc WHERE c = 1
 index-join abc
  ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  ├── stats: [rows=1.42857143, distinct(3)=1]
- ├── cost: 7.3
+ ├── cost: 7.3000002
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1(int!null) c:3(int!null)
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=1.42857143, distinct(3)=1]
-      ├── cost: 1.48571429
+      ├── cost: 1.48571439
       ├── key: (1)
       └── fd: ()-->(3)
