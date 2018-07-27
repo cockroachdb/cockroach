@@ -390,3 +390,298 @@ project
                 │    ├── variable: tab0.col0 [type=int, outer=(2)]
                 │    └── const: 1 [type=int]
                 └── variable: case [type=bool, outer=(27)]
+
+
+exec-ddl
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING, state STRING)
+----
+TABLE customers
+ ├── id int not null
+ ├── name string
+ ├── state string
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+CREATE TABLE order_history (order_id INT, item_id INT, customer_id INT, year INT)
+----
+TABLE order_history
+ ├── order_id int
+ ├── item_id int
+ ├── customer_id int
+ ├── year int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE district (d_id INT, d_w_id INT, d_name STRING, PRIMARY KEY(d_id, d_w_id))
+----
+TABLE district
+ ├── d_id int not null
+ ├── d_w_id int not null
+ ├── d_name string
+ └── INDEX primary
+      ├── d_id int not null
+      └── d_w_id int not null
+
+exec-ddl
+ALTER TABLE district INJECT STATISTICS '[
+{
+  "columns": ["d_id"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 10
+},
+{
+  "columns": ["d_w_id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 10
+},
+{
+  "columns": ["d_name"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 100,
+  "distinct_count": 100
+}
+]'
+----
+
+# This tests selectivityFromReducedCols.
+# Since the reduced column set is (d_id, d_name), and
+# both columns have distinct count 1, we expect this
+# to calculate selectivity through selectivityFromReducedCols.
+# The output is the same as the naive approach.
+norm
+SELECT * FROM district WHERE d_id = 1 AND d_name='bobs_burgers'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── stats: [rows=0.1, distinct(1)=0.1, distinct(3)=0.1]
+ ├── key: (2)
+ ├── fd: ()-->(1,3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, distinct(3)=100]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters [type=bool, outer=(1,3), constraints=(/1: [/1 - /1]; /3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(1,3)]
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │    ├── variable: district.d_id [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight)]
+           ├── variable: district.d_name [type=string, outer=(3)]
+           └── const: 'bobs_burgers' [type=string]
+
+# In this case we expect to use unknownFilterSelectivity
+# to estimate the selectivity on d_name, and use
+# the ratio of current/input distinct counts for d_id
+norm
+SELECT * FROM district WHERE d_id = 1 and d_name LIKE 'bob'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ ├── stats: [rows=3.33333333, distinct(1)=1]
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters [type=bool, outer=(1,3), constraints=(/1: [/1 - /1]), fd=()-->(1)]
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │    ├── variable: district.d_id [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── like [type=bool, outer=(3)]
+           ├── variable: district.d_name [type=string, outer=(3)]
+           └── const: 'bob' [type=string]
+
+# This tests selectivityFromReducedCols.
+# Since (1,2)-->(3) in order to use selectivityFromReducedCols,
+# both (1,2) must have distinct=1 after applying the filter. Since
+# d_id is a range constraint, this fails, and we fall back to the
+# naive estimation for selectivity.
+norm
+SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bobs_burgers'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── stats: [rows=0.08, distinct(1)=0.08, distinct(2)=0.08, distinct(3)=0.08]
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, distinct(2)=10, distinct(3)=100]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters [type=bool, outer=(1-3), constraints=(/1: [/2 - /9]; /2: [/10 - /10]; /3: [/'bobs_burgers' - /'bobs_burgers']; tight), fd=()-->(2,3)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: district.d_id [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+      │    ├── variable: district.d_id [type=int, outer=(1)]
+      │    └── const: 10 [type=int]
+      ├── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
+      │    ├── variable: district.d_w_id [type=int, outer=(2)]
+      │    └── const: 10 [type=int]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/'bobs_burgers' - /'bobs_burgers']; tight)]
+           ├── variable: district.d_name [type=string, outer=(3)]
+           └── const: 'bobs_burgers' [type=string]
+
+# This tests selectivityFromReducedCols
+# We don't apply the selectivity on d_name since (1,2)-->3.
+norm
+SELECT * FROM district WHERE d_id = 1 AND d_w_id=10 AND d_name='hello'
+----
+select
+ ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan district
+ │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
+ │    ├── stats: [rows=100, distinct(1)=10, distinct(2)=10, distinct(3)=100]
+ │    ├── key: (1,2)
+ │    └── fd: (1,2)-->(3)
+ └── filters [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/10 - /10]; /3: [/'hello' - /'hello']; tight), fd=()-->(1-3)]
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │    ├── variable: district.d_id [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
+      │    ├── variable: district.d_w_id [type=int, outer=(2)]
+      │    └── const: 10 [type=int]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/'hello' - /'hello']; tight)]
+           ├── variable: district.d_name [type=string, outer=(3)]
+           └── const: 'hello' [type=string]
+
+exec-ddl
+ALTER TABLE customers INJECT STATISTICS '[
+{
+  "columns": ["name"],
+  "created_at": "2018-01-01 1:00:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 500
+},
+{
+  "columns": ["id"],
+  "created_at": "2018-01-01 1:30:00.00000+00:00",
+  "row_count": 10000,
+  "distinct_count": 10000
+}
+]'
+----
+
+# This tests selectivityFromReducedCols
+# The following two tests cases are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# After the join we expect cardinality 1111111,
+# then we expect selectivity 1/400 on the filter.
+# 1/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ ├── stats: [rows=2222.22222, distinct(2)=1]
+ ├── fd: ()-->(2), (1)-->(3), (1)==(6), (6)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ │    ├── stats: [rows=1111111.11, distinct(2)=500]
+ │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
+ │         ├── stats: [rows=1111111.11, distinct(2)=500]
+ │         ├── key: (8)
+ │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
+ │         ├── inner-join
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    ├── stats: [rows=10000000, distinct(2)=500]
+ │         │    ├── key: (1,8)
+ │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
+ │         │    │    ├── stats: [rows=10000, distinct(2)=500]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2,3)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(4-7)
+ │         │    └── true [type=bool]
+ │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │                   ├── variable: customers.id [type=int, outer=(1)]
+ │                   └── variable: order_history.customer_id [type=int, outer=(6)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight), fd=()-->(2)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight)]
+           ├── variable: customers.name [type=string, outer=(2)]
+           └── const: 'andy' [type=string]
+
+# This tests selectivityFromReducedCols
+# The previous tests case and the following are paired together. The first has
+# one constraint, one on single non-key column. The second  query has two
+# constraints on columns which form a determinant, dependent FD pair.
+# The dependent column in this FD pair is from the first test case.
+# This series of tests demonstrates that the selectivity
+# contribution for a pair of (determinant, dependent) FDs is the
+# selectivity of the determinant.
+# After the join we expect cardinality 1111111,
+# then we expect selectivity 1/600 on the filter.
+# 2/2 join-subquery-selectivityFromReducedCols tests
+
+build
+SELECT * FROM (SELECT * FROM customers, order_history WHERE id = customer_id)
+WHERE id = 1 AND name='andy'
+----
+select
+ ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ ├── stats: [rows=111.111111, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1-3,6), (1)==(6), (6)==(1)
+ ├── project
+ │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
+ │    ├── stats: [rows=1111111.11, distinct(1)=10000, distinct(2)=500]
+ │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
+ │    └── select
+ │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
+ │         ├── stats: [rows=1111111.11, distinct(1)=10000, distinct(2)=500]
+ │         ├── key: (8)
+ │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
+ │         ├── inner-join
+ │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500]
+ │         │    ├── key: (1,8)
+ │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, distinct(2)=500]
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2,3)
+ │         │    ├── scan order_history
+ │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
+ │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── key: (8)
+ │         │    │    └── fd: (8)-->(4-7)
+ │         │    └── true [type=bool]
+ │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │                   ├── variable: customers.id [type=int, outer=(1)]
+ │                   └── variable: order_history.customer_id [type=int, outer=(6)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight), fd=()-->(1,2)]
+      └── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/'andy' - /'andy']; tight)]
+           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           │    ├── variable: customers.id [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           └── eq [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight)]
+                ├── variable: customers.name [type=string, outer=(2)]
+                └── const: 'andy' [type=string]

@@ -408,14 +408,19 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 	//     TODO(rytaft): we may be able to get a more precise estimate than
 	//     1/3 for certain types of filters. For example, the selectivity of
 	//     x=y can be estimated as 1/(max(distinct(x), distinct(y)).
+
 	sb.s.Selectivity = 1
+	numUnappliedConstraints := 0
 	sel := func(constraintSet *constraint.Set, tight bool) {
 		if constraintSet != nil {
-			childSelectivity := sb.applyConstraintSet(constraintSet, &inputStatsBuilder)
-			if !tight && childSelectivity > unknownFilterSelectivity {
-				childSelectivity = unknownFilterSelectivity
+			n, isContradiction := sb.applyConstraintSet(constraintSet, &inputStatsBuilder)
+			numUnappliedConstraints += n
+			if !tight && n == 0 {
+				numUnappliedConstraints++
 			}
-			sb.s.Selectivity *= childSelectivity
+			if isContradiction {
+				sb.s.Selectivity *= 0
+			}
 		} else {
 			sb.s.Selectivity *= unknownFilterSelectivity
 		}
@@ -435,6 +440,9 @@ func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Stat
 			sel(constraintSet, tight)
 		}
 	}
+
+	sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+	sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 
 	sb.applySelectivity(inputStats.RowCount)
 }
@@ -1106,30 +1114,30 @@ func (sb *statisticsBuilder) applyConstraint(
 
 func (sb *statisticsBuilder) applyConstraintSet(
 	cs *constraint.Set, inputStatsBuilder *statisticsBuilder,
-) (selectivity float64) {
+) (numUnappliedConstraints int, isContradiction bool) {
 	if cs.IsUnconstrained() {
-		return 1 /* selectivity */
+		return 0, false /* numUnappliedConstraints, contradiction */
 	}
 
 	if cs == constraint.Contradiction {
 		// A contradiction results in 0 rows.
-		return 0 /* selectivity */
+		return 0, true /* numUnappliedConstraints, contradiction */
 	}
 
-	adjustedSelectivity := 1.0
+	numUnappliedConstraints = 0
 	for i := 0; i < cs.Length(); i++ {
 		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), inputStatsBuilder)
 		if !applied {
-			// If a constraint cannot be applied, it probably represents an
+			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
-			// represent the selectivity of the constraint set. Adjust the
-			// selectivity to account for this constraint.
-			adjustedSelectivity *= unknownFilterSelectivity
+			// represent the selectivity of the constraint set.
+			// We return the number of unapplied constraints to the caller
+			// function to be used for selectivity calculation.
+			numUnappliedConstraints++
 		}
 	}
 
-	selectivity = sb.selectivityFromDistinctCounts(inputStatsBuilder)
-	return selectivity * adjustedSelectivity
+	return numUnappliedConstraints, false
 }
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
@@ -1241,8 +1249,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 }
 
 // selectivityFromDistinctCounts calculates the selectivity of a filter by
-// taking the product of selectivities of each constrained column. This can be
-// represented by the formula:
+// taking the product of selectivities of each constrained column. In the general case,
+// this can be represented by the formula:
 //
 //                  ┬-┬ ⎛ new distinct(i) ⎞
 //   selectivity =  │ │ ⎜ --------------- ⎟
@@ -1254,15 +1262,26 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 // This selectivity will be used later to update the row count and the
 // distinct count for the unconstrained columns in applySelectivityToColStat.
 //
-// TODO(rytaft): This formula assumes that the columns are completely
-// independent. Improve this estimate to take functional dependencies and/or
-// column correlations into account.
+// In the general case this algorithm assumes the columns are completely
+// independent. It considers one case where correlations are implied
+// by functional dependencies.
+// Briefly, if the distinct count of all determinant columns in the columnStatistics
+// is one, then we should ignore the selectivities of the dependent columns since the
+// columns are fully correlated with the determinant columns.
+// See statisticsBuilder.selectivityFromReducedCols for a more detailed
+// explanation.
+//
 func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 	inputStatsBuilder *statisticsBuilder,
 ) (selectivity float64) {
+
+	var allConstant bool
+	if selectivity, allConstant = sb.selectivityFromReducedCols(inputStatsBuilder); allConstant {
+		return selectivity
+	}
 	selectivity = 1.0
-	for col, colStat := range sb.s.ColStats {
-		inputStat := inputStatsBuilder.colStat(util.MakeFastIntSet(int(col)))
+	for _, colStat := range sb.s.ColStats {
+		inputStat := inputStatsBuilder.colStat(colStat.Cols)
 		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
 			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
 		}
@@ -1322,4 +1341,60 @@ func (sb *statisticsBuilder) updateStatsFromContradiction() {
 	for i := range sb.s.MultiColStats {
 		sb.s.MultiColStats[i].DistinctCount = 0
 	}
+}
+
+func (sb *statisticsBuilder) selectivityFromUnappliedConstraints(
+	numUnappliedConstraints int,
+) (selectivity float64) {
+	return math.Pow(unknownFilterSelectivity, float64(numUnappliedConstraints))
+}
+
+// selectivityFromReducedCols is used for selectivity calculation.
+// When columns in the colStats are functionally determined by other columns,
+// and the determinant columns each have distinctCount = 1, we should consider
+// the implied correlations for selectivity calculation. Consider the query:
+//
+//   SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
+//
+// If id is the primary key of customer, then name is functionally determined by id. We
+// only need to consider the selectivity of id, not name, since id and name
+// are fully correlated. To determine if we have a case such as this one,
+// we functionally reduce the set of columns which have column statistics,
+// eliminating columns that can be functionally determined by other columns.
+// If the distinct count on all of these reduced columns is one, then we apply
+// only the selectivities implied by this reduced column set.
+//
+func (sb *statisticsBuilder) selectivityFromReducedCols(
+	inputStatsBuilder *statisticsBuilder,
+) (selectivity float64, allConstant bool) {
+	var cols opt.ColSet
+
+	// We consider only single column stats for now
+	// in our selectivity calculations.
+	for col := range sb.s.ColStats {
+		cols.Add(int(col))
+	}
+
+	reducedCols := inputStatsBuilder.props.FuncDeps.ReduceCols(cols)
+	if reducedCols.Len() == 0 {
+		// We return selectivity of 1 since the selectivity hasn't changed.
+		// There are no reduced columns and so allConstant is vacuously false.
+		return 1, false
+	}
+
+	allConstant = true
+	selectivity = 1.0
+	for i, ok := reducedCols.Next(0); ok; i, ok = reducedCols.Next(i + 1) {
+		colStat := sb.s.ColStats[opt.ColumnID(i)]
+		if colStat.DistinctCount != 1 {
+			allConstant = false
+			break
+		}
+		inputStat := inputStatsBuilder.colStat(colStat.Cols)
+		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
+			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
+		}
+	}
+
+	return selectivity, allConstant
 }
