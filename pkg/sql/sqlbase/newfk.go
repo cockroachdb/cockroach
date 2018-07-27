@@ -441,7 +441,7 @@ func TablesNeededForFKsNew(
 				usage,
 			)
 			if err != nil {
-				return FKHelper{}, err
+				return fkHelper, err
 			}
 			return fkHelper, nil
 		}
