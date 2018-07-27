@@ -15,9 +15,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,7 +70,24 @@ func runChangefeedFlow(
 	resultsCh chan<- tree.Datums,
 	progressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 ) error {
-	details, err := validateChangefeed(details)
+	// Grab the current version of each table and fail fast if any are a virtual
+	// table, view, etc.
+	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for _, tableID := range details.TableIDs {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			if err := validateChangefeedTable(tableDesc); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	details, err := validateDetails(details)
 	if err != nil {
 		return err
 	}
@@ -95,7 +112,10 @@ func runChangefeedFlow(
 	//
 	// TODO(dan): Make this into a DistSQL flow.
 	buf := makeBuffer()
-	poller := makePoller(execCfg, details, highWater, buf)
+	poller, err := makePoller(ctx, execCfg, details, highWater, buf)
+	if err != nil {
+		return err
+	}
 	rowsFn := kvsToRows(execCfg, details, buf.Get)
 	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {
@@ -129,8 +149,8 @@ func kvsToRows(
 ) func(context.Context) ([]emitRow, error) {
 	rfCache := newRowFetcherCache(execCfg.LeaseManager)
 	watchedIDs := make(map[sqlbase.ID]struct{})
-	for _, d := range details.TableDescs {
-		watchedIDs[d.ID] = struct{}{}
+	for _, tableID := range details.TableIDs {
+		watchedIDs[tableID] = struct{}{}
 	}
 
 	var kvs sqlbase.SpanKVFetcher

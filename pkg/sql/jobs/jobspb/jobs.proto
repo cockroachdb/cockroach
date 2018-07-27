@@ -127,10 +127,17 @@ message SchemaChangeProgress {
 }
 
 message ChangefeedDetails {
-  reserved 1;
-  repeated sqlbase.TableDescriptor table_descs = 2 [(gogoproto.nullable) = false];
+  // Changefeeds target a list of tables, which are identified here by ID. Table
+  // IDs can change over time, such as with TRUNCATE, and the changefeed is
+  // responsible for detecting this or preventing it.
+  repeated uint32 table_ids = 5 [
+    (gogoproto.customname) = "TableIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
+
+  reserved 1, 2;
 }
 
 message ChangefeedProgress {
