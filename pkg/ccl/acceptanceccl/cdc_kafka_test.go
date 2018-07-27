@@ -172,7 +172,11 @@ func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *do
 		partitions[i] = strconv.Itoa(int(p))
 	}
 
-	const requestedResolved = 100
+	// TODO(dan): This should be higher (it was 100 initially) but a change that
+	// tuned the kafka producer config raised the running time of this test to
+	// tens of minutes. While I'm figuring out the right tunings, lower this to
+	// speed the test up.
+	const requestedResolved = 5
 	var numResolved, rowsSinceResolved int
 	v := changefeedccl.Validators{
 		changefeedccl.NewOrderValidator(`Bank_bank`),
