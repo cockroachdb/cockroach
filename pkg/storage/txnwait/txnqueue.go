@@ -532,13 +532,15 @@ func (q *Queue) MaybeWaitForPush(
 			}
 
 		case updatedPusher := <-queryPusherCh:
-			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
+				log.VEventf(ctx, 1, "pusher committed: %v", updatedPusher)
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
 			case roachpb.ABORTED:
+				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedPusher)
 			}
+			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
 			if updatedPusher.Priority > pusherPriority {
 				pusherPriority = updatedPusher.Priority
 			}
@@ -572,15 +574,14 @@ func (q *Queue) MaybeWaitForPush(
 				// Break the deadlock if the pusher has higher priority.
 				p1, p2 := pusheePriority, pusherPriority
 				if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
-					if log.V(1) {
-						log.Infof(
-							ctx,
-							"%s breaking deadlock by force push of %s; dependencies=%s",
-							req.PusherTxn.ID.Short(),
-							req.PusheeTxn.ID.Short(),
-							dependents,
-						)
-					}
+					log.VEventf(
+						ctx,
+						1,
+						"%s breaking deadlock by force push of %s; dependencies=%s",
+						req.PusherTxn.ID.Short(),
+						req.PusheeTxn.ID.Short(),
+						dependents,
+					)
 					return nil, ErrDeadlock
 
 				}
