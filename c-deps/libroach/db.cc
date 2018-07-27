@@ -35,6 +35,7 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
+#include "timebound.h"
 
 using namespace cockroach;
 
@@ -703,6 +704,11 @@ DBSstFileWriter* DBSstFileWriterNew() {
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;
   options->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+
+  // Use the TablePropertiesCollector hook to store the min and max MVCC
+  // timestamps present in each sstable in the metadata for that sstable. Used
+  // by the time bounded iterator optimization.
+  options->table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
 
   std::unique_ptr<rocksdb::Env> memenv;
   memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));

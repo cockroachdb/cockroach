@@ -1528,3 +1528,56 @@ func TestMakeBatchGroup(t *testing.T) {
 		})
 	}
 }
+
+// Verify that RocksDBSstFileWriter works with time bounded iterators.
+func TestSstFileWriterTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	db := setupMVCCInMemRocksDB(t, "sstwriter-timebound").(InMem)
+	defer db.Close()
+
+	for walltime := int64(1); walltime < 5; walltime++ {
+		sst, err := MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(sst)
+		}
+		defer sst.Close()
+		if err := sst.Add(MVCCKeyValue{
+			Key:   MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}},
+			Value: []byte("value"),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.WriteFile(`ingest`, sstContents); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.IngestExternalFiles(ctx, []string{`ingest`}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	it := db.NewIterator(IterOptions{
+		UpperBound:       keys.MaxKey,
+		MinTimestampHint: hlc.Timestamp{WallTime: 2},
+		MaxTimestampHint: hlc.Timestamp{WallTime: 3},
+		WithStats:        true,
+	})
+	defer it.Close()
+	for it.Seek(MVCCKey{Key: keys.MinKey}); ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+	}
+	if s := it.Stats(); s.TimeBoundNumSSTs != 2 {
+		t.Errorf(`expected 2 sstables got %d`, s.TimeBoundNumSSTs)
+	}
+}
