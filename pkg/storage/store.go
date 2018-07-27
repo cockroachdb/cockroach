@@ -2422,7 +2422,9 @@ func (s *Store) MergeRange(
 		leftRepl.writeStats.resetRequestCounts()
 	}
 
-	// TODO(benesch): drain the RHS txn wait queue.
+	// Clear the wait queue to redirect the queued transactions to the
+	// left-hand replica, if necessary.
+	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
