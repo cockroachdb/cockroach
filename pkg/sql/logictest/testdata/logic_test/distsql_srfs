@@ -52,3 +52,14 @@ SELECT a, generate_series(1, 2), generate_series(1, 4) FROM data WHERE a < 2 ORD
 1  NULL  4
 1  1     1
 1  2     2
+
+statement ok
+CREATE TABLE groups(
+  id SERIAL,
+  data jsonb,
+  primary key (id)
+)
+
+query TT
+SELECT g.data->>'name' AS group_name, jsonb_array_elements(g.data->'members') FROM groups g;
+----
