@@ -127,10 +127,30 @@ message SchemaChangeProgress {
 }
 
 message ChangefeedDetails {
-  reserved 1;
-  repeated sqlbase.TableDescriptor table_descs = 2 [(gogoproto.nullable) = false];
+  // Targets contains the user-specified tables and databases to watch, mapping
+  // the descriptor id to the name at the time of changefeed creating. There is
+  // a 1:1 correspondance between unique targets in the original sql query and
+  // entries in this map.
+  //
+  // - A watched table is stored here under its table id
+  // - TODO(dan): A watched database is stored here under its database id
+  // - TODO(dan): A db.* expansion is treated identicially to watching the
+  //   database
+  //
+  // Note that the TODOs mean this field currently is guaranteed to only hold
+  // table ids and a cluster version check will be added when this changes.
+  //
+  // The names at resolution time are included so that table and database
+  // renames can be detected. They are also used to construct an error message
+  // if the descriptor id no longer exists when the jobs is unpaused (which can
+  // happen if it was dropped or truncated).
+  map<uint32, string> targets = 5 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
+
+  reserved 1, 2;
 }
 
 message ChangefeedProgress {

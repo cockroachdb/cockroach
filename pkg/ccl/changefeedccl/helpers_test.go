@@ -50,10 +50,9 @@ func createBenchmarkChangefeed(
 		Clock:        feedClock,
 		LeaseManager: s.LeaseManager().(*sql.LeaseManager),
 	}
+	tableDesc := sqlbase.GetTableDescriptor(execCfg.DB, database, table)
 	details := jobspb.ChangefeedDetails{
-		TableDescs: []sqlbase.TableDescriptor{
-			*sqlbase.GetTableDescriptor(execCfg.DB, database, table),
-		},
+		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
 	}
 	progress := jobspb.Progress{}
 
