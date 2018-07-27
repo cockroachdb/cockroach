@@ -57,10 +57,32 @@ func InitFactoryForLocalTestCluster(
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
 ) client.TxnSenderFactory {
+	return NewTxnCoordSenderFactory(
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+			Settings:   st,
+			Clock:      clock,
+			Stopper:    stopper,
+		},
+		NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip),
+	)
+}
+
+// NewDistSenderForLocalTestCluster creates a DistSender for a LocalTestCluster.
+func NewDistSenderForLocalTestCluster(
+	st *cluster.Settings,
+	nodeDesc *roachpb.NodeDescriptor,
+	tracer opentracing.Tracer,
+	clock *hlc.Clock,
+	latency time.Duration,
+	stores client.Sender,
+	stopper *stop.Stopper,
+	gossip *gossip.Gossip,
+) *DistSender {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	distSender := NewDistSender(DistSenderConfig{
+	return NewDistSender(DistSenderConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
 		Settings:        st,
 		Clock:           clock,
@@ -81,14 +103,4 @@ func InitFactoryForLocalTestCluster(
 			},
 		},
 	}, gossip)
-
-	return NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
-			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-			Settings:   st,
-			Clock:      clock,
-			Stopper:    stopper,
-		},
-		distSender,
-	)
 }
