@@ -360,7 +360,12 @@ func (s *Store) canApplySnapshotLocked(
 ) (*ReplicaPlaceholder, error) {
 	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
 		(*Replica)(v).IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
+		replDesc := (*Replica)(v).Desc()
+		if !replDesc.EndKey.Equal(rangeDescriptor.EndKey) {
+			return nil, errors.New("existing replica is awaiting merge")
+		}
+		// We have the range, it's initialized, and it's not awaiting a merge,
+		// so let the snapshot through.
 		return nil, nil
 	}
 

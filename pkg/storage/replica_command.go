@@ -456,6 +456,9 @@ func (r *Replica) AdminMerge(
 			// TODO(bdarnell): needs a test.
 			return errors.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
+		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
+			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
+		}
 
 		b := txn.NewBatch()
 
