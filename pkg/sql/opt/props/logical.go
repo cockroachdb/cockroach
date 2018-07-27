@@ -48,8 +48,13 @@ type Logical struct {
 type AvailableRuleProps int
 
 const (
-	// UnfilteredCols is set when the Rule.UnfilteredCols field is populated.
+	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
+	// populated.
 	UnfilteredCols AvailableRuleProps = 1 << iota
+
+	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
+	// is populated.
+	HasHoistableSubquery
 )
 
 // Relational properties are the subset of logical properties that are computed
@@ -244,14 +249,6 @@ type Scalar struct {
 	// This field is populated lazily, as necessary.
 	TightConstraints bool
 
-	// HasCorrelatedSubquery is true if the scalar expression tree contains a
-	// subquery having one or more outer columns. The subquery can be a Subquery,
-	// Exists, or Any operator. These operators need to be hoisted out of scalar
-	// expression trees and turned into top-level apply joins. This property makes
-	// detection fast and easy so that the hoister doesn't waste time searching
-	// subtrees that don't contain subqueries.
-	HasCorrelatedSubquery bool
-
 	// FuncDeps is a set of functional dependencies (FDs) inferred from a
 	// boolean expression. This field is only populated for Filters expressions.
 	// FDs that can be inferred from Filters expressions include:
@@ -274,12 +271,49 @@ type Scalar struct {
 	//
 	// For more details, see the header comment for FuncDepSet.
 	FuncDeps FuncDepSet
+
+	// Rule encapsulates the set of properties that are maintained to assist
+	// with specific sets of transformation rules. See the Relational.Rule
+	// comment for more details.
+	Rule struct {
+		// Available contains bits that indicate whether lazily-populated Rule
+		// properties have been initialized. For example, if the
+		// HasHoistableSubquery bit is set, then the Rule.HasHoistableSubquery
+		// field has been initialized and is ready for use.
+		Available AvailableRuleProps
+
+		// HasHoistableSubquery is true if the scalar expression tree contains a
+		// subquery having one or more outer columns, and if the subquery needs
+		// to be hoisted up into its parent query as part of query decorrelation.
+		// The subquery can be a Subquery, Exists, or Any operator. These operators
+		// need to be hoisted out of scalar expression trees and turned into top-
+		// level apply joins. This property makes detection fast and easy so that
+		// the hoister doesn't waste time searching subtrees that don't contain
+		// subqueries.
+		//
+		// HasHoistableSubquery is lazily populated by rules in decorrelate.opt.
+		// It is only valid once the Rule.Available.HasHoistableSubquery bit has
+		// been set.
+		HasHoistableSubquery bool
+	}
 }
 
 // IsAvailable returns true if the specified rule property has been populated
 // on this relational properties instance.
 func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
 	return (r.Rule.Available & p) != 0
+}
+
+// IsAvailable returns true if the specified rule property has been populated
+// on this scalar properties instance.
+func (s *Scalar) IsAvailable(p AvailableRuleProps) bool {
+	return (s.Rule.Available & p) != 0
+}
+
+// SetAvailable sets the available bits for the given properties, in order to
+// mark them as populated on this scalar properties instance.
+func (s *Scalar) SetAvailable(p AvailableRuleProps) {
+	s.Rule.Available |= p
 }
 
 // OuterCols is a helper method that returns either the relational or scalar

@@ -1022,9 +1022,6 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 			scalar.OuterCols = scalar.OuterCols.Union(cols)
 		}
 
-		if !scalar.OuterCols.Empty() {
-			scalar.HasCorrelatedSubquery = true
-		}
 		return logical
 	}
 
@@ -1032,11 +1029,6 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	for i := 0; i < ev.ChildCount(); i++ {
 		childLogical := &ev.childGroup(i).logical
 		scalar.OuterCols.UnionWith(childLogical.OuterCols())
-
-		// Propagate HasCorrelatedSubquery up the scalar expression tree.
-		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
-			scalar.HasCorrelatedSubquery = true
-		}
 	}
 
 	switch ev.Operator() {

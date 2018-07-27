@@ -19,10 +19,40 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+// HasHoistableSubquery returns true if the given scalar group contains a
+// subquery within its subtree that has at least one outer column, and if that
+// subquery needs to be hoisted up into its parent query as part of query
+// decorrelation.
+func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
+	// Lazily calculate and store the HasHoistableSubquery value.
+	scalar := c.LookupScalar(group)
+	if scalar.IsAvailable(props.HasHoistableSubquery) {
+		return scalar.Rule.HasHoistableSubquery
+	}
+	scalar.SetAvailable(props.HasHoistableSubquery)
+
+	ev := memo.MakeNormExprView(c.f.mem, group)
+	switch ev.Operator() {
+	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+		scalar.Rule.HasHoistableSubquery = !scalar.OuterCols.Empty()
+		return scalar.Rule.HasHoistableSubquery
+	}
+
+	// If HasHoistableSubquery is true for any child, then it's true for this
+	// expression as well.
+	for i, end := 0, ev.ChildCount(); i < end; i++ {
+		if c.HasHoistableSubquery(ev.ChildGroup(i)) {
+			scalar.Rule.HasHoistableSubquery = true
+			return true
+		}
+	}
+	return false
+}
 
 // HoistSelectSubquery searches the Select operator's filter for correlated
 // subqueries. Any found queries are hoisted into LeftJoinApply or
@@ -38,7 +68,7 @@ import (
 //
 func (c *CustomFuncs) HoistSelectSubquery(input, filter memo.GroupID) memo.GroupID {
 	var hoister subqueryHoister
-	hoister.init(c.f.evalCtx, c.f, input)
+	hoister.init(c, input)
 	replaced := hoister.hoistAll(filter)
 	sel := c.f.ConstructSelect(hoister.input(), replaced)
 	return c.f.ConstructSimpleProject(sel, c.OutputCols(input))
@@ -57,7 +87,7 @@ func (c *CustomFuncs) HoistSelectSubquery(input, filter memo.GroupID) memo.Group
 //
 func (c *CustomFuncs) HoistProjectSubquery(input, projections memo.GroupID) memo.GroupID {
 	var hoister subqueryHoister
-	hoister.init(c.f.evalCtx, c.f, input)
+	hoister.init(c, input)
 	replaced := hoister.hoistAll(projections)
 	return c.f.ConstructProject(hoister.input(), replaced)
 }
@@ -86,7 +116,7 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	op opt.Operator, left, right, on memo.GroupID,
 ) memo.GroupID {
 	var hoister subqueryHoister
-	hoister.init(c.f.evalCtx, c.f, right)
+	hoister.init(c, right)
 	replaced := hoister.hoistAll(on)
 	join := c.ConstructApplyJoin(op, left, hoister.input(), replaced)
 	return c.f.ConstructSimpleProject(join, c.OutputCols(left).Union(c.OutputCols(right)))
@@ -115,7 +145,7 @@ func (c *CustomFuncs) HoistJoinSubquery(
 // it's not worth the extra code complication.
 func (c *CustomFuncs) HoistValuesSubquery(rows memo.ListID, cols memo.PrivateID) memo.GroupID {
 	var hoister subqueryHoister
-	hoister.init(c.f.evalCtx, c.f, c.constructNoColsRow())
+	hoister.init(c, c.constructNoColsRow())
 
 	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
 	for _, item := range c.f.mem.LookupList(rows) {
@@ -404,16 +434,16 @@ func (c *CustomFuncs) referenceSingleColumn(group memo.GroupID) memo.GroupID {
 // subqueries which will be pulled up and joined to a higher level relational
 // query. See the  hoistAll comment for more details on how this is done.
 type subqueryHoister struct {
-	evalCtx *tree.EvalContext
+	c       *CustomFuncs
 	f       *Factory
 	mem     *memo.Memo
 	hoisted memo.GroupID
 }
 
-func (r *subqueryHoister) init(evalCtx *tree.EvalContext, f *Factory, input memo.GroupID) {
-	r.evalCtx = evalCtx
-	r.f = f
-	r.mem = f.mem
+func (r *subqueryHoister) init(c *CustomFuncs, input memo.GroupID) {
+	r.c = c
+	r.f = c.f
+	r.mem = c.f.mem
 	r.hoisted = input
 }
 
@@ -505,10 +535,9 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 		return r.f.ConstructVariable(r.mem.InternColumnID(opt.ColumnID(colID)))
 	}
 
-	return ev.Replace(r.evalCtx, func(child memo.GroupID) memo.GroupID {
+	return ev.Replace(r.f.evalCtx, func(child memo.GroupID) memo.GroupID {
 		// Recursively hoist subqueries in each child that contains them.
-		scalar := r.mem.GroupProperties(child).Scalar
-		if scalar != nil && scalar.HasCorrelatedSubquery {
+		if r.c.HasHoistableSubquery(child) {
 			return r.hoistAll(child)
 		}
 
