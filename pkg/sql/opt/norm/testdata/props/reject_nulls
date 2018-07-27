@@ -416,8 +416,8 @@ project
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
-# Ignore AnyNotNull aggregates on other columns. "opt" command is needed to
-# decorrelate and trigger creation of AnyNotNull aggregates. The LeftJoin should
+# Ignore ConstAgg aggregates on other columns. "opt" command is needed to
+# decorrelate and trigger creation of ConstAgg aggregates. The LeftJoin should
 # have been turned into InnerJoin by the RejectNullsLeftJoin rule.
 opt
 SELECT *
@@ -476,11 +476,11 @@ project
       │    └── aggregations [outer=(2-4,6)]
       │         ├── min [type=int, outer=(6)]
       │         │    └── variable: xy.y [type=int, outer=(6)]
-      │         ├── any-not-null [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
-      │         ├── any-not-null [type=float, outer=(3)]
+      │         ├── const-agg [type=float, outer=(3)]
       │         │    └── variable: a.f [type=float, outer=(3)]
-      │         └── any-not-null [type=string, outer=(4)]
+      │         └── const-agg [type=string, outer=(4)]
       │              └── variable: a.s [type=string, outer=(4)]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
            └── a.i = min [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]

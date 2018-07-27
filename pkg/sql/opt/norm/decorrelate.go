@@ -181,11 +181,14 @@ func (c *CustomFuncs) ConstructApplyJoin(
 // values on its own (they're included in the count). But it can be mapped to a
 // Count function over a non-null column, so it's treated as a null-ignoring
 // aggregate function here.
+//
+// Similarly, ConstAgg does not ignore nulls, but it can be converted to
+// ConstNotNullAgg.
 func (c *CustomFuncs) CanAggsIgnoreNulls(aggs memo.GroupID) bool {
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	for _, elem := range c.f.mem.LookupList(aggsExpr.Aggs()) {
 		op := c.f.mem.NormExpr(elem).Operator()
-		if op != opt.CountRowsOp && !opt.AggregateIgnoresNulls(op) {
+		if op != opt.CountRowsOp && op != opt.ConstAggOp && !opt.AggregateIgnoresNulls(op) {
 			return false
 		}
 	}
@@ -231,54 +234,69 @@ func (c *CustomFuncs) EnsureNotNullIfCountRows(in, aggs memo.GroupID) memo.Group
 	return in
 }
 
-// TranslateCountRows scans the aggregate list for CountRows functions. These
-// are converted to Count functions that operate over a not-null column from the
-// given input group. The EnsureNotNullIfCountRows method should already have
-// been called in order to guarantee such a column exists.
+// EnsureAggsIgnoreNulls scans the aggregate list to aggregation functions that
+// don't ignore nulls but can be remapped so that they do:
+//   - CountRows functions are are converted to Count functions that operate
+//     over a not-null column from the given input group. The
+//     EnsureNotNullIfCountRows method should already have been called in order
+//     to guarantee such a column exists.
+//   - ConstAgg is remapped to ConstNotNullAgg.
+//
+// CanAggsIgnoreNulls should already have been called in order to guarantee that
+// remapping is possible.
 //
 // See the TryDecorrelateScalarGroupBy rule comment for more details.
-func (c *CustomFuncs) TranslateCountRows(in, aggs memo.GroupID) memo.GroupID {
+func (c *CustomFuncs) EnsureAggsIgnoreNulls(in, aggs memo.GroupID) memo.GroupID {
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
 
 	var outElems []memo.GroupID
 	for i, elem := range aggsElems {
-		// Translate CountRows() to Count(notNullCol).
-		if c.f.mem.NormExpr(elem).Operator() == opt.CountRowsOp {
+		newElem := elem
+		expr := c.f.mem.NormExpr(elem)
+		switch expr.Operator() {
+		case opt.ConstAggOp:
+			// Translate ConstAgg(...) to ConstNotNullAgg(...).
+			newElem = c.f.ConstructConstNotNullAgg(expr.ChildGroup(c.f.mem, 0))
+
+		case opt.CountRowsOp:
+			// Translate CountRows() to Count(notNullCol).
 			id, ok := c.LookupLogical(in).Relational.NotNullCols.Next(0)
 			if !ok {
 				panic("expected input expression to have not-null column")
 			}
 			notNullColID := c.f.InternColumnID(opt.ColumnID(id))
-			if outElems == nil {
-				outElems = make([]memo.GroupID, len(aggsElems))
-				copy(outElems, aggsElems[:i])
-			}
-			outElems[i] = c.f.ConstructCount(c.f.ConstructVariable(notNullColID))
-		} else if outElems != nil {
-			outElems[i] = elem
+			newElem = c.f.ConstructCount(c.f.ConstructVariable(notNullColID))
+		}
+		if newElem != elem && outElems == nil {
+			outElems = make([]memo.GroupID, len(aggsElems))
+			copy(outElems, aggsElems[:i])
+		}
+		if outElems != nil {
+			outElems[i] = newElem
 		}
 	}
 	if outElems == nil {
-		outElems = aggsElems
+		// No changes.
+		return aggs
 	}
 
 	return c.f.ConstructAggregations(c.f.InternList(outElems), aggsExpr.Cols())
 }
 
 // AggregateNonKeyCols constructs a new Aggregations operator containing an
-// AnyNotNull aggregate function for each non-key column in the given group.
+// ConstAgg aggregate function for each non-key column in the given group.
 // For example, if the group has output columns (1,2,3), with a key of (1),
 // then the following operator is returned:
 //
 //   (Aggregations
-//     [(AnyNotNull (Variable 2)) (AnyNotNull (Variable 3))]
+//     [(ConstAgg (Variable 2)) (ConstAgg (Variable 3))]
 //     [2,3]
 //   )
 //
 // This is used when grouping by key columns. Non-key columns are functionally
 // dependent on the key columns, and so are constant within each group (and
-// therefore can be aggregated using AnyNotNull). See the TryDecorrelateSemiJoin
+// therefore can be aggregated using ConstAgg). See the TryDecorrelateSemiJoin
 // rule.
 func (c *CustomFuncs) AggregateNonKeyCols(group memo.GroupID) memo.GroupID {
 	keyCols, ok := c.CandidateKey(group)
@@ -286,23 +304,23 @@ func (c *CustomFuncs) AggregateNonKeyCols(group memo.GroupID) memo.GroupID {
 		panic("expected input expression to have key")
 	}
 	nonKeyCols := c.OutputCols(group).Difference(keyCols)
-	return c.appendAnyNotNullCols(0, nonKeyCols)
+	return c.appendConstAggCols(0, nonKeyCols)
 }
 
 // AppendAggregatedNonKeyCols constructs a new Aggregations operator containing
-// aggregate functions from the given Aggregations operator, plus an AnyNotNull
+// aggregate functions from the given Aggregations operator, plus a ConstAgg
 // aggregate function for each non-key column in the given input group. For
 // example, if the group has output columns (1,2,3), with a key of (1), and an
 // existing SUM aggregate, then the following operator is returned:
 //
 //   (Aggregations
-//     [(Sum (Variable 4)) (AnyNotNull (Variable 2)) (AnyNotNull (Variable 3))]
+//     [(Sum (Variable 4)) (ConstAgg (Variable 2)) (ConstAgg (Variable 3))]
 //     [4,2,3]
 //   )
 //
 // This is used when grouping by key columns. Non-key columns are functionally
 // dependent on the key columns, and so are constant within each group (and
-// therefore can be aggregated using AnyNotNull). See the
+// therefore can be aggregated using ConstAgg). See the
 // TryDecorrelateScalarGroupBy rule.
 func (c *CustomFuncs) AppendAggregatedNonKeyCols(aggs, in memo.GroupID) memo.GroupID {
 	keyCols, ok := c.CandidateKey(in)
@@ -310,7 +328,7 @@ func (c *CustomFuncs) AppendAggregatedNonKeyCols(aggs, in memo.GroupID) memo.Gro
 		panic("expected input expression to have key")
 	}
 	nonKeyCols := c.OutputCols(in).Difference(keyCols)
-	return c.appendAnyNotNullCols(aggs, nonKeyCols)
+	return c.appendConstAggCols(aggs, nonKeyCols)
 }
 
 // GroupByKey constructs a new unordered GroupByDef using the candidate key
@@ -431,7 +449,7 @@ func (r *subqueryHoister) input() memo.GroupID {
 //   ON True
 //   INNER JOIN LATERAL
 //   (
-//     SELECT (ANY_NOT_NULL(True) IS NOT NULL) AS exists FROM jk WHERE j=x
+//     SELECT (CONST_AGG(True) IS NOT NULL) AS exists FROM jk WHERE j=x
 //   )
 //   ON True
 //   WHERE u IS NOT NULL OR exists
@@ -445,7 +463,7 @@ func (r *subqueryHoister) input() memo.GroupID {
 //
 // See the comments for constructGroupByExists and constructGroupByAny for more
 // details on how EXISTS and ANY subqueries are hoisted, including usage of the
-// ANY_NOT_NULL function.
+// CONST_AGG function.
 func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 	// Match correlated subqueries.
 	ev := memo.MakeNormExprView(r.mem, root)
@@ -505,31 +523,31 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 //
 // into a scalar GroupBy expression that returns a one row, one column relation:
 //
-//   SELECT (ANY_NOT_NULL(True) IS NOT NULL) AS exists
+//   SELECT (CONST_AGG(True) IS NOT NULL) AS exists
 //   FROM (SELECT * FROM a WHERE a.x=b.x)
 //
-// The expression uses an internally-defined ANY_NOT_NULL aggregation function,
+// The expression uses an internally-defined CONST_AGG aggregation function,
 // since it's able to short-circuit on the first non-null it encounters. The
 // above expression is equivalent to:
 //
 //   SELECT COUNT(True) > 0 FROM (SELECT * FROM a WHERE a.x=b.x)
 //
-// ANY_NOT_NULL (and COUNT) always return exactly one boolean value in the
-// context of a scalar GroupBy expression. Because its operand is always True,
-// the only way the final expression is False is when the input set is empty
-// (since ANY_NOT_NULL returns NULL, which IS NOT NULL maps to False).
+// CONST_AGG (and COUNT) always return exactly one boolean value in the context
+// of a scalar GroupBy expression. Because its operand is always True, the only
+// way the final expression is False is when the input set is empty (since
+// CONST_AGG returns NULL, which IS NOT NULL maps to False).
 //
 // However, later on, the TryDecorrelateScalarGroupBy rule will push a left join
 // into the GroupBy, and null values produced by the join will flow into the
-// ANY_NOT_NULL. It's defined to ignore those nulls so that its result will be
-// unaffected.
+// CONST_AGG which will need to be changed to a CONST_NOT_NULL_AGG (which is
+// defined to ignore those nulls so that its result will be unaffected).
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
 	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
 	pb := projectionsBuilder{f: r.f}
 	pb.addSynthesized(r.f.ConstructTrue(), trueColID)
 	trueProjection := pb.buildProjections()
 
-	aggColID := r.f.Metadata().AddColumn("any_not_null", types.Bool)
+	aggColID := r.f.Metadata().AddColumn("true_agg", types.Bool)
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
 	aggVar := r.f.ConstructVariable(r.f.InternColumnID(aggColID))
 
@@ -546,7 +564,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 			),
 			r.f.ConstructAggregations(
 				r.f.funcs.InternSingletonList(
-					r.f.ConstructAnyNotNull(
+					r.f.ConstructConstAgg(
 						r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
 					),
 				),

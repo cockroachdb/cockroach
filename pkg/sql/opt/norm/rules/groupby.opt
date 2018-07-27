@@ -32,11 +32,11 @@ $input
 )
 
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
-# operator and replaces them by AnyNotNull aggregate functions. A grouping
+# operator and replaces them by ConstAgg aggregate functions. A grouping
 # column is redundant if it is functionally determined by the other grouping
 # columns. If that's true, then its value must be constant within a group.
 # Therefore, it has no effect on the grouping and can instead be represented as
-# an AnyNotNull aggregate, since all rows in the group have the same value for
+# an ConstAgg aggregate, since all rows in the group have the same value for
 # that column.
 [ReduceGroupingCols, Normalize]
 (GroupBy

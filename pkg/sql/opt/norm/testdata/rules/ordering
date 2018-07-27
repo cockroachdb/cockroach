@@ -115,7 +115,7 @@ sort
       └── aggregations [outer=(2,3)]
            ├── array-agg [type=int[], outer=(2)]
            │    └── variable: abcde.b [type=int, outer=(2)]
-           └── any-not-null [type=int, outer=(3)]
+           └── const-agg [type=int, outer=(3)]
                 └── variable: abcde.c [type=int, outer=(3)]
 
 # Scalar GroupBy case.

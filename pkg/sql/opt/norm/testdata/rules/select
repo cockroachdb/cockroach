@@ -905,7 +905,7 @@ group-by
  │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  └── aggregations [outer=(2)]
       ├── count-rows [type=int]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
 
 # Push down into GroupBy with no aggregations.
@@ -925,7 +925,7 @@ group-by
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
 
 # Push down only conditions that do not depend on aggregations.
@@ -954,7 +954,7 @@ select
  │    └── aggregations [outer=(2,4)]
  │         ├── max [type=string, outer=(4)]
  │         │    └── variable: a.s [type=string, outer=(4)]
- │         └── any-not-null [type=int, outer=(2)]
+ │         └── const-agg [type=int, outer=(2)]
  │              └── variable: a.i [type=int, outer=(2)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
       └── m = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]

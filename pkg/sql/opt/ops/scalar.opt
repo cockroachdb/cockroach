@@ -145,6 +145,14 @@ define Aggregations {
     Cols ColList
 }
 
+# MergeOn contains the ON condition and the metadata for a merge join; it is
+# always a child of MergeJoin.
+[Scalar]
+define MergeOn {
+    On Expr
+    Def MergeOnDef
+}
+
 # Exists takes a relational query as its input, and evaluates to true if the
 # query returns at least one row.
 [Scalar]
@@ -615,21 +623,26 @@ define JsonbAgg {
     Input Expr
 }
 
-# AnyNotNull returns any non-null value in the grouping set, or null if there
-# are no non-null values. This is particularly useful for "passing through" the
-# value of a column that is known to be constant within a grouping set.
+# ConstAgg is used in the special case when the value of a column is known to be
+# constant within a grouping set; it returns that value. If there are no rows
+# in the grouping set, then ConstAgg returns NULL.
 #
-# AnyNotNull is not part of SQL, but it's used internally to rewrite correlated
+# ConstAgg is not part of SQL, but it's used internally to rewrite correlated
 # subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
-define AnyNotNull {
+define ConstAgg {
     Input Expr
 }
 
-# MergeOn contains the ON condition and the metadata for a merge join; it is
-# always a child of MergeJoin.
-[Scalar]
-define MergeOn {
-    On Expr
-    Def MergeOnDef
+# ConstNotNullAgg is used in the special case when the value of a column is
+# known to be constant within a grouping set, except on some rows where it can
+# have a NULL value; it returns the non-NULL constant value. If there are no
+# rows in the grouping set, or all rows have a NULL value, then ConstNotNullAgg
+# returns NULL.
+#
+# ConstNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define ConstNotNullAgg {
+    Input Expr
 }

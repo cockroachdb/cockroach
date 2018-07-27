@@ -131,10 +131,11 @@ func init() {
 		// Override default typeAsAggregate behavior for aggregate functions with
 		// a large number of possible overloads or where ReturnType depends on
 		// argument types.
-		opt.ArrayAggOp:   typeArrayAgg,
-		opt.MaxOp:        typeAsFirstArg,
-		opt.MinOp:        typeAsFirstArg,
-		opt.AnyNotNullOp: typeAsFirstArg,
+		opt.ArrayAggOp:        typeArrayAgg,
+		opt.MaxOp:             typeAsFirstArg,
+		opt.MinOp:             typeAsFirstArg,
+		opt.ConstAggOp:        typeAsFirstArg,
+		opt.ConstNotNullAggOp: typeAsFirstArg,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -224,7 +225,7 @@ func typeAsAggregate(ev ExprView) types.T {
 	_, overload := FindAggregateOverload(ev)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic("unknown aggregate return type")
+		panic(fmt.Sprintf("unknown aggregate return type. ev:\n%s", ev))
 	}
 	return t
 }

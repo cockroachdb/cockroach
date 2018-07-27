@@ -281,34 +281,31 @@ func (b *rulePropsBuilder) buildZipProps(ev memo.ExprView) {
 //
 //   1. The aggregate function ignores null values, meaning that its value
 //      would not change if input null values are filtered.
+//
 //   2. The aggregate function returns null if its input is empty. And since
 //      by #1, the presence of nulls does not alter the result, the aggregate
 //      function would return null if its input contains only null values.
-//   3. The aggregate function is not AnyNotNull. While the AnyNotNull aggregate
-//      does qualify according to #1 and #2, it is only generated as a side-
-//      effect of other rules, and is difficult to test. Therefore, for now
-//      it will never qualify for null rejection, though it may be ignored
-//      according to criteria #4.
-//   4. No other input columns are referenced by other aggregate functions in
+//
+//   3. No other input columns are referenced by other aggregate functions in
 //      the GroupBy (all functions must refer to the same column), with the
-//      possible exception of AnyNotNull. An AnyNotNull aggregate can be
-//      ignored if its input column is functionally determined by the grouping
-//      columns (use the input operator's FD set to check that). If true, then
-//      input rows in each group must have the same value for this column
-//      (i.e. the column is constant per group). In that case, it doesn't
-//      matter which rows are filtered.
+//      possible exception of ConstAgg. A ConstAgg aggregate can be safely
+//      ignored because all rows in each group must have the same value for this
+//      column, so it doesn't matter which rows are filtered.
 //
 func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 	inputProps := ev.Child(0).Logical().Relational
 	aggs := ev.Child(1)
 	aggColList := aggs.Private().(opt.ColList)
-	groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols
 
-	var rejectNullCols, anyNotNullCols opt.ColSet
+	var rejectNullCols opt.ColSet
 	var savedInColID opt.ColumnID
 	for i, end := 0, aggs.ChildCount(); i < end; i++ {
 		agg := aggs.Child(i)
 		aggOp := agg.Operator()
+
+		if aggOp == opt.ConstAggOp {
+			continue
+		}
 
 		// Criteria #1 and #2.
 		if !opt.AggregateIgnoresNulls(aggOp) || !opt.AggregateIsNullOnEmpty(aggOp) {
@@ -319,18 +316,7 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 		// Get column ID of aggregate's Variable operator input.
 		inColID := agg.Child(0).Private().(opt.ColumnID)
 
-		// Criteria #3 (and AnyNotNull check for criteria #4).
-		if aggOp == opt.AnyNotNullOp {
-			anyNotNullCols.Add(int(inColID))
-			if !inputProps.FuncDeps.InClosureOf(anyNotNullCols, groupingColSet) {
-				// Column is not functionally determined by grouping columns, so
-				// can't reject any nulls.
-				return opt.ColSet{}
-			}
-			continue
-		}
-
-		// Criteria #4.
+		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {
 			// Multiple columns used by aggregate functions, so can't reject nulls
 			// for any of them.
