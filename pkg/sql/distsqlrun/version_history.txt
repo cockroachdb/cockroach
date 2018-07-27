@@ -74,3 +74,5 @@
     - New EvalContext field.
 - Version: 19 (MinAcceptedVersion: 6)
     - More EvalContext fields.
+- Version: 20 (MinAcceptedVersion: 6)
+    - Add labels to tuple types.
