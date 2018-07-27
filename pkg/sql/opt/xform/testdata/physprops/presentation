@@ -70,5 +70,5 @@ group-by
  └── aggregations
       ├── max [type=int]
       │    └── variable: a.y [type=int]
-      └── any-not-null [type=int]
+      └── const-agg [type=int]
            └── variable: a.y [type=int]

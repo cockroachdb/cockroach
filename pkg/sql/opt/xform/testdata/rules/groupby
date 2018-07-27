@@ -28,7 +28,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=string, outer=(1)]
+      └── const-agg [type=string, outer=(1)]
            └── variable: abc.a [type=string, outer=(1)]
 
 opt
@@ -68,7 +68,7 @@ memo (optimized)
  │         ├── best: (sort G6)
  │         └── cost: 1087.94
  ├── G7: (const 1)
- ├── G8: (any-not-null G12)
+ ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(2))
@@ -95,7 +95,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=string, outer=(1)]
+      └── const-agg [type=string, outer=(1)]
            └── variable: abc.a [type=string, outer=(1)]
 
 opt
@@ -162,7 +162,7 @@ scalar-group-by
  │    │    └── ordering: +2 opt(3)
  │    └── const: 1 [type=int]
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit has the same behavior with max() as
@@ -190,7 +190,7 @@ scalar-group-by
  │    │         └── fd: ()-->(3)
  │    └── const: 1 [type=int]
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
 # We expect ReplaceMinWithLimit not to be preferred here.
@@ -247,7 +247,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=int, outer=(1)]
+      └── const-agg [type=int, outer=(1)]
            └── variable: xyz.x [type=int, outer=(1)]
 
 opt
@@ -264,7 +264,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=int, outer=(1)]
+      └── const-agg [type=int, outer=(1)]
            └── variable: xyz.x [type=int, outer=(1)]
 
 opt
@@ -282,7 +282,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=int, outer=(1)]
+      └── const-agg [type=int, outer=(1)]
            └── variable: xyz.x [type=int, outer=(1)]
 
 opt
@@ -300,7 +300,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
-      └── any-not-null [type=int, outer=(1)]
+      └── const-agg [type=int, outer=(1)]
            └── variable: xyz.x [type=int, outer=(1)]
 
 opt
@@ -318,7 +318,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
 opt
@@ -336,7 +336,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: xyz.y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply when there is
@@ -539,7 +539,7 @@ memo (optimized)
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1050.00
  ├── G7: (const 1)
- ├── G8: (any-not-null G9)
+ ├── G8: (const-agg G9)
  └── G9: (variable abc.a)
 
 memo
@@ -565,7 +565,7 @@ memo (optimized)
  │         ├── best: (sort G6)
  │         └── cost: 1087.94
  ├── G7: (const 1)
- ├── G8: (any-not-null G12)
+ ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(2))
@@ -601,7 +601,7 @@ memo (optimized)
  │         ├── best: (scan abc,rev,cols=(1))
  │         └── cost: 1100.00
  ├── G7: (const 1)
- ├── G8: (any-not-null G9)
+ ├── G8: (const-agg G9)
  └── G9: (variable abc.a)
 
 memo
@@ -627,7 +627,7 @@ memo (optimized)
  │         ├── best: (sort G6)
  │         └── cost: 1087.94
  ├── G7: (const 1)
- ├── G8: (any-not-null G12)
+ ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(2))

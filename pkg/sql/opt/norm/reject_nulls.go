@@ -40,20 +40,21 @@ func (c *CustomFuncs) NullRejectCols(group memo.GroupID) opt.ColSet {
 }
 
 // NullRejectAggVar scans through the list of aggregate functions and returns
-// the Variable input of the first aggregate that is not AnyNotNull. Such an
-// aggregate must exist, since this is only called if the NullRejectCols
-// property was populated by the rulePropsBuilder in deriveGroupByRejectNullCols
-// (see comment for that function for more details on criteria).
+// the Variable input of the first aggregate that is not ConstAgg or
+// ConstNotNullAgg. Such an aggregate must exist, since this is only called if
+// the NullRejectCols property was populated by the rulePropsBuilder in
+// deriveGroupByRejectNullCols (see comment for that function for more details
+// on criteria).
 func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
 
 	for i := len(aggsElems) - 1; i >= 0; i-- {
 		agg := c.f.mem.NormExpr(aggsElems[i])
-		if agg.Operator() != opt.AnyNotNullOp {
+		if agg.Operator() != opt.ConstAggOp && agg.Operator() != opt.ConstNotNullAggOp {
 			// Return the input Variable operator.
 			return agg.ChildGroup(c.f.mem, 0)
 		}
 	}
-	panic("couldn't find an aggregate that is not AnyNotNull")
+	panic("couldn't find an aggregate that is not ConstAgg/ConstNotNullAgg")
 }

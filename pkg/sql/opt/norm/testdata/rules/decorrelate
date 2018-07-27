@@ -479,7 +479,7 @@ project
  │    └── aggregations [outer=(2,9)]
  │         ├── bool-or [type=bool, outer=(9)]
  │         │    └── variable: notnull [type=bool, outer=(9)]
- │         └── any-not-null [type=int, outer=(2)]
+ │         └── const-agg [type=int, outer=(2)]
  │              └── variable: a.i [type=int, outer=(2)]
  └── projections [outer=(2,10)]
       └── CASE WHEN bool_or AND (a.i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,10)]
@@ -532,7 +532,7 @@ project
  │    └── aggregations [outer=(9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
  │         │    └── variable: notnull [type=bool, outer=(10)]
- │         └── any-not-null [type=decimal, outer=(9)]
+ │         └── const-agg [type=decimal, outer=(9)]
  │              └── variable: scalar [type=decimal, outer=(9)]
  └── projections [outer=(9,11)]
       └── CASE WHEN bool_or AND (scalar IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(9,11)]
@@ -1069,24 +1069,24 @@ group-by
  │    │    │    └── true [type=bool]
  │    │    └── aggregations [outer=(2-5)]
  │    │         ├── count-rows [type=int]
- │    │         ├── any-not-null [type=int, outer=(2)]
+ │    │         ├── const-agg [type=int, outer=(2)]
  │    │         │    └── variable: a.i [type=int, outer=(2)]
- │    │         ├── any-not-null [type=float, outer=(3)]
+ │    │         ├── const-agg [type=float, outer=(3)]
  │    │         │    └── variable: a.f [type=float, outer=(3)]
- │    │         ├── any-not-null [type=string, outer=(4)]
+ │    │         ├── const-agg [type=string, outer=(4)]
  │    │         │    └── variable: a.s [type=string, outer=(4)]
- │    │         └── any-not-null [type=jsonb, outer=(5)]
+ │    │         └── const-agg [type=jsonb, outer=(5)]
  │    │              └── variable: a.j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
  │         └── xy.x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
  └── aggregations [outer=(2-5)]
-      ├── any-not-null [type=int, outer=(2)]
+      ├── const-agg [type=int, outer=(2)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── any-not-null [type=float, outer=(3)]
+      ├── const-agg [type=float, outer=(3)]
       │    └── variable: a.f [type=float, outer=(3)]
-      ├── any-not-null [type=string, outer=(4)]
+      ├── const-agg [type=string, outer=(4)]
       │    └── variable: a.s [type=string, outer=(4)]
-      └── any-not-null [type=jsonb, outer=(5)]
+      └── const-agg [type=jsonb, outer=(5)]
            └── variable: a.j [type=jsonb, outer=(5)]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
@@ -1141,11 +1141,11 @@ project
       │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: a.i [type=int, outer=(6)]
-      │         ├── any-not-null [type=int, outer=(4)]
+      │         ├── const-agg [type=int, outer=(4)]
       │         │    └── variable: uv.v [type=int, outer=(4)]
-      │         ├── any-not-null [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: xy.y [type=int, outer=(2)]
-      │         └── any-not-null [type=int, outer=(1)]
+      │         └── const-agg [type=int, outer=(1)]
       │              └── variable: xy.x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
            └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
@@ -1198,9 +1198,9 @@ project
       │    └── aggregations [outer=(2,4,6)]
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: a.i [type=int, outer=(6)]
-      │         ├── any-not-null [type=int, outer=(4)]
+      │         ├── const-agg [type=int, outer=(4)]
       │         │    └── variable: uv.v [type=int, outer=(4)]
-      │         └── any-not-null [type=int, outer=(2)]
+      │         └── const-agg [type=int, outer=(2)]
       │              └── variable: xy.y [type=int, outer=(2)]
       └── filters [type=bool, outer=(3,10)]
            └── uv.u IS DISTINCT FROM max [type=bool, outer=(3,10)]
@@ -1246,7 +1246,7 @@ project
  │    │    └── aggregations [outer=(2,7)]
  │    │         ├── max [type=string, outer=(7)]
  │    │         │    └── variable: a.s [type=string, outer=(7)]
- │    │         └── any-not-null [type=int, outer=(2)]
+ │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: xy.y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight), fd=()-->(9)]
  │         └── max = 'bar' [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight)]
@@ -1304,24 +1304,24 @@ group-by
  │    │    └── aggregations [outer=(2-5,12)]
  │    │         ├── count [type=int, outer=(12)]
  │    │         │    └── variable: notnull [type=bool, outer=(12)]
- │    │         ├── any-not-null [type=int, outer=(2)]
+ │    │         ├── const-agg [type=int, outer=(2)]
  │    │         │    └── variable: a.i [type=int, outer=(2)]
- │    │         ├── any-not-null [type=float, outer=(3)]
+ │    │         ├── const-agg [type=float, outer=(3)]
  │    │         │    └── variable: a.f [type=float, outer=(3)]
- │    │         ├── any-not-null [type=string, outer=(4)]
+ │    │         ├── const-agg [type=string, outer=(4)]
  │    │         │    └── variable: a.s [type=string, outer=(4)]
- │    │         └── any-not-null [type=jsonb, outer=(5)]
+ │    │         └── const-agg [type=jsonb, outer=(5)]
  │    │              └── variable: a.j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
  │         └── xy.x = cnt [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
  └── aggregations [outer=(2-5)]
-      ├── any-not-null [type=int, outer=(2)]
+      ├── const-agg [type=int, outer=(2)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── any-not-null [type=float, outer=(3)]
+      ├── const-agg [type=float, outer=(3)]
       │    └── variable: a.f [type=float, outer=(3)]
-      ├── any-not-null [type=string, outer=(4)]
+      ├── const-agg [type=string, outer=(4)]
       │    └── variable: a.s [type=string, outer=(4)]
-      └── any-not-null [type=jsonb, outer=(5)]
+      └── const-agg [type=jsonb, outer=(5)]
            └── variable: a.j [type=jsonb, outer=(5)]
 
 # Synthesize key when one is not present.
@@ -1365,7 +1365,7 @@ project
  │    │    └── aggregations [outer=(2,8)]
  │    │         ├── max [type=int, outer=(8)]
  │    │         │    └── variable: xy.y [type=int, outer=(8)]
- │    │         └── any-not-null [type=int, outer=(2)]
+ │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: a.i [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
  │         └── max = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
@@ -1437,7 +1437,7 @@ project
       │    │    │    │    └── aggregations [outer=(7,9)]
       │    │    │    │         ├── max [type=int, outer=(9)]
       │    │    │    │         │    └── variable: uv.v [type=int, outer=(9)]
-      │    │    │    │         └── any-not-null [type=int, outer=(7)]
+      │    │    │    │         └── const-agg [type=int, outer=(7)]
       │    │    │    │              └── variable: xy.y [type=int, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
       │    │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
@@ -1445,13 +1445,13 @@ project
       │    └── aggregations [outer=(2-5,7)]
       │         ├── max [type=int, outer=(7)]
       │         │    └── variable: xy.y [type=int, outer=(7)]
-      │         ├── any-not-null [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
-      │         ├── any-not-null [type=float, outer=(3)]
+      │         ├── const-agg [type=float, outer=(3)]
       │         │    └── variable: a.f [type=float, outer=(3)]
-      │         ├── any-not-null [type=string, outer=(4)]
+      │         ├── const-agg [type=string, outer=(4)]
       │         │    └── variable: a.s [type=string, outer=(4)]
-      │         └── any-not-null [type=jsonb, outer=(5)]
+      │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: a.j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
            └── max IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
@@ -1579,7 +1579,7 @@ project
       │    │    │         │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │    │    │         └── const: 1 [type=int]
       │    │    └── aggregations [outer=(9)]
-      │    │         └── any-not-null [type=string, outer=(9)]
+      │    │         └── const-agg [type=string, outer=(9)]
       │    │              └── variable: column9 [type=string, outer=(9)]
       │    └── filters [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight), fd=()-->(10)]
       │         └── max = 'foo' [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight)]
@@ -1638,14 +1638,14 @@ group-by
  │    │    └── aggregations [outer=(2,4,9)]
  │    │         ├── max [type=int, outer=(9)]
  │    │         │    └── variable: a.i [type=int, outer=(9)]
- │    │         ├── any-not-null [type=int, outer=(4)]
+ │    │         ├── const-agg [type=int, outer=(4)]
  │    │         │    └── variable: a.i [type=int, outer=(4)]
- │    │         └── any-not-null [type=int, outer=(2)]
+ │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: xy.y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]
  │         └── a.i = max [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ])]
  └── aggregations [outer=(2)]
-      └── any-not-null [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(2)]
            └── variable: xy.y [type=int, outer=(2)]
 
 # Right input of SemiJoin is Project.
@@ -2103,13 +2103,13 @@ project
       │    │    └── aggregations [outer=(2-5,7)]
       │    │         ├── count [type=int, outer=(7)]
       │    │         │    └── variable: xy.y [type=int, outer=(7)]
-      │    │         ├── any-not-null [type=int, outer=(2)]
+      │    │         ├── const-agg [type=int, outer=(2)]
       │    │         │    └── variable: a.i [type=int, outer=(2)]
-      │    │         ├── any-not-null [type=float, outer=(3)]
+      │    │         ├── const-agg [type=float, outer=(3)]
       │    │         │    └── variable: a.f [type=float, outer=(3)]
-      │    │         ├── any-not-null [type=string, outer=(4)]
+      │    │         ├── const-agg [type=string, outer=(4)]
       │    │         │    └── variable: a.s [type=string, outer=(4)]
-      │    │         └── any-not-null [type=jsonb, outer=(5)]
+      │    │         └── const-agg [type=jsonb, outer=(5)]
       │    │              └── variable: a.j [type=jsonb, outer=(5)]
       │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
       │         └── count > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
@@ -2170,13 +2170,13 @@ project
       │    └── aggregations [outer=(2-6)]
       │         ├── count [type=int, outer=(6)]
       │         │    └── variable: uv.u [type=int, outer=(6)]
-      │         ├── any-not-null [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
-      │         ├── any-not-null [type=float, outer=(3)]
+      │         ├── const-agg [type=float, outer=(3)]
       │         │    └── variable: a.f [type=float, outer=(3)]
-      │         ├── any-not-null [type=string, outer=(4)]
+      │         ├── const-agg [type=string, outer=(4)]
       │         │    └── variable: a.s [type=string, outer=(4)]
-      │         └── any-not-null [type=jsonb, outer=(5)]
+      │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: a.j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,8)]
            └── ((0, length(count::STRING)) > (0, 1)) OR (a.i = 1) [type=bool, outer=(2,8)]
@@ -2190,11 +2190,11 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) any_not_null:9(bool)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) true_agg:9(bool)
       ├── key: (1)
       ├── fd: (1)-->(2-5,9)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) any_not_null:9(bool)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) true_agg:9(bool)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,9)
@@ -2215,18 +2215,18 @@ project
       │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
       │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,8)]
-      │         ├── any-not-null [type=bool, outer=(8)]
+      │         ├── const-not-null-agg [type=bool, outer=(8)]
       │         │    └── variable: true [type=bool, outer=(8)]
-      │         ├── any-not-null [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
-      │         ├── any-not-null [type=float, outer=(3)]
+      │         ├── const-agg [type=float, outer=(3)]
       │         │    └── variable: a.f [type=float, outer=(3)]
-      │         ├── any-not-null [type=string, outer=(4)]
+      │         ├── const-agg [type=string, outer=(4)]
       │         │    └── variable: a.s [type=string, outer=(4)]
-      │         └── any-not-null [type=jsonb, outer=(5)]
+      │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: a.j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,9)]
-           └── (a.i = 1) OR (any_not_null IS NOT NULL) [type=bool, outer=(2,9)]
+           └── (a.i = 1) OR (true_agg IS NOT NULL) [type=bool, outer=(2,9)]
 
 # Any with IS NULL.
 opt
@@ -2268,13 +2268,13 @@ project
       │    │    └── aggregations [outer=(2-5,8)]
       │    │         ├── bool-or [type=bool, outer=(8)]
       │    │         │    └── variable: notnull [type=bool, outer=(8)]
-      │    │         ├── any-not-null [type=int, outer=(2)]
+      │    │         ├── const-agg [type=int, outer=(2)]
       │    │         │    └── variable: a.i [type=int, outer=(2)]
-      │    │         ├── any-not-null [type=float, outer=(3)]
+      │    │         ├── const-agg [type=float, outer=(3)]
       │    │         │    └── variable: a.f [type=float, outer=(3)]
-      │    │         ├── any-not-null [type=string, outer=(4)]
+      │    │         ├── const-agg [type=string, outer=(4)]
       │    │         │    └── variable: a.s [type=string, outer=(4)]
-      │    │         └── any-not-null [type=jsonb, outer=(5)]
+      │    │         └── const-agg [type=jsonb, outer=(5)]
       │    │              └── variable: a.j [type=jsonb, outer=(5)]
       │    └── projections [outer=(1-5,9)]
       │         └── CASE WHEN bool_or AND (a.i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,9)]
@@ -2317,9 +2317,9 @@ project
  │    └── aggregations [outer=(4,9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
  │         │    └── variable: notnull [type=bool, outer=(10)]
- │         ├── any-not-null [type=string, outer=(4)]
+ │         ├── const-agg [type=string, outer=(4)]
  │         │    └── variable: a.s [type=string, outer=(4)]
- │         └── any-not-null [type=decimal, outer=(9)]
+ │         └── const-agg [type=decimal, outer=(9)]
  │              └── variable: scalar [type=decimal, outer=(9)]
  └── projections [outer=(4,9,11)]
       └── NOT CASE WHEN bool_or AND (scalar IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(9,11)]
@@ -2465,7 +2465,7 @@ SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 project
  ├── columns: exists:8(bool)
  ├── group-by
- │    ├── columns: any_not_null:10(bool) rownum:12(int!null)
+ │    ├── columns: true_agg:10(bool) rownum:12(int!null)
  │    ├── grouping columns: rownum:12(int!null)
  │    ├── key: (12)
  │    ├── fd: (12)-->(10)
@@ -2488,10 +2488,10 @@ project
  │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
- │         └── any-not-null [type=bool, outer=(9)]
+ │         └── const-not-null-agg [type=bool, outer=(9)]
  │              └── variable: true [type=bool, outer=(9)]
  └── projections [outer=(10)]
-      └── any_not_null IS NOT NULL [type=bool, outer=(10)]
+      └── true_agg IS NOT NULL [type=bool, outer=(10)]
 
 # Any in projection list.
 opt
@@ -2601,7 +2601,7 @@ project
       │    ├── key: (6)
       │    ├── fd: (6)-->(12)
       │    ├── group-by
-      │    │    ├── columns: x:6(int!null) any_not_null:11(bool)
+      │    │    ├── columns: x:6(int!null) true_agg:11(bool)
       │    │    ├── grouping columns: x:6(int!null)
       │    │    ├── key: (6)
       │    │    ├── fd: (6)-->(11)
@@ -2625,10 +2625,10 @@ project
       │    │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
       │    │    │         └── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
       │    │    └── aggregations [outer=(10)]
-      │    │         └── any-not-null [type=bool, outer=(10)]
+      │    │         └── const-not-null-agg [type=bool, outer=(10)]
       │    │              └── variable: true [type=bool, outer=(10)]
       │    └── projections [outer=(6,11)]
-      │         └── any_not_null IS NOT NULL [type=bool, outer=(11)]
+      │         └── true_agg IS NOT NULL [type=bool, outer=(11)]
       └── filters [type=bool, outer=(1,6,12)]
            └── exists OR (a.k = xy.x) [type=bool, outer=(1,6,12)]
 
@@ -2679,7 +2679,7 @@ inner-join
  │         │    │    └── aggregations [outer=(7,10)]
  │         │    │         ├── bool-or [type=bool, outer=(10)]
  │         │    │         │    └── variable: notnull [type=bool, outer=(10)]
- │         │    │         └── any-not-null [type=int, outer=(7)]
+ │         │    │         └── const-agg [type=int, outer=(7)]
  │         │    │              └── variable: xy.y [type=int, outer=(7)]
  │         │    └── projections [outer=(6,7,11)]
  │         │         └── CASE WHEN bool_or AND (xy.x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(6,11)]
@@ -2775,7 +2775,7 @@ project
  │    │         │    ├── key: ()
  │    │         │    ├── fd: ()-->(11)
  │    │         │    ├── group-by
- │    │         │    │    ├── columns: any_not_null:10(bool)
+ │    │         │    │    ├── columns: true_agg:10(bool)
  │    │         │    │    ├── outer: (1)
  │    │         │    │    ├── cardinality: [0 - 1]
  │    │         │    │    ├── key: ()
@@ -2801,10 +2801,10 @@ project
  │    │         │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │         │    │    └── aggregations [outer=(9)]
- │    │         │    │         └── any-not-null [type=bool, outer=(9)]
+ │    │         │    │         └── const-not-null-agg [type=bool, outer=(9)]
  │    │         │    │              └── variable: true [type=bool, outer=(9)]
  │    │         │    └── projections [outer=(10)]
- │    │         │         └── any_not_null IS NOT NULL [type=bool, outer=(10)]
+ │    │         │         └── true_agg IS NOT NULL [type=bool, outer=(10)]
  │    │         ├── values
  │    │         │    ├── columns: column1:8(bool)
  │    │         │    ├── outer: (11)

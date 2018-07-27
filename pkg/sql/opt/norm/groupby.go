@@ -43,27 +43,27 @@ func (c *CustomFuncs) ReduceGroupingCols(input memo.GroupID, def memo.PrivateID)
 
 // AppendReducedGroupingCols will take columns discarded by ReduceGroupingCols
 // and append them to the end of the given aggregate function list, wrapped in
-// AnyNotNull aggregate functions. AppendReducedGroupingCols returns a new
+// ConstAgg aggregate functions. AppendReducedGroupingCols returns a new
 // Aggregations operator containing the combined set of existing aggregate
-// functions and the new AnyNotNull aggregate functions.
+// functions and the new ConstAgg aggregate functions.
 func (c *CustomFuncs) AppendReducedGroupingCols(
 	input, aggs memo.GroupID, def memo.PrivateID,
 ) memo.GroupID {
 	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
 	fdset := c.LookupLogical(input).Relational.FuncDeps
 	appendCols := groupingCols.Difference(fdset.ReduceCols(groupingCols))
-	return c.appendAnyNotNullCols(aggs, appendCols)
+	return c.appendConstAggCols(aggs, appendCols)
 }
 
-// appendAnyNotNullCols constructs a new Aggregations operator containing the
-// given aggregate functions plus new AnyNotNull aggregates that wrap the given
+// appendConstAggCols constructs a new Aggregations operator containing the
+// given aggregate functions plus new ConstAgg aggregates that wrap the given
 // set of appendCols. If the aggregate group is 0, then the result contains only
-// the appended AnyNotNull aggregates.
+// the appended ConstAgg aggregates.
 //
 // This method is useful when the appendCols are known to have constant values
 // within any group; therefore, a value from any of the rows in the group can be
 // used.
-func (c *CustomFuncs) appendAnyNotNullCols(aggs memo.GroupID, appendCols opt.ColSet) memo.GroupID {
+func (c *CustomFuncs) appendConstAggCols(aggs memo.GroupID, appendCols opt.ColSet) memo.GroupID {
 	var outElems []memo.GroupID
 	var outColList opt.ColList
 
@@ -81,9 +81,9 @@ func (c *CustomFuncs) appendAnyNotNullCols(aggs memo.GroupID, appendCols opt.Col
 		copy(outColList, aggsColList)
 	}
 
-	// Append AnyNotNull aggregate functions wrapping each appendCol.
+	// Append ConstAgg aggregate functions wrapping each appendCol.
 	for i, ok := appendCols.Next(0); ok; i, ok = appendCols.Next(i + 1) {
-		outAgg := c.f.ConstructAnyNotNull(
+		outAgg := c.f.ConstructConstAgg(
 			c.f.ConstructVariable(
 				c.f.mem.InternColumnID(opt.ColumnID(i)),
 			),

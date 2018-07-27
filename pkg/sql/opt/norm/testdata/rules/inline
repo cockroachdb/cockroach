@@ -191,7 +191,7 @@ SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 project
  ├── columns: exists:9(bool)
  ├── group-by
- │    ├── columns: any_not_null:11(bool) rownum:13(int!null)
+ │    ├── columns: true_agg:11(bool) rownum:13(int!null)
  │    ├── grouping columns: rownum:13(int!null)
  │    ├── key: (13)
  │    ├── fd: (13)-->(11)
@@ -218,7 +218,7 @@ project
  │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
  │    │         └── expr < 0 [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
  │    └── aggregations [outer=(10)]
- │         └── any-not-null [type=bool, outer=(10)]
+ │         └── const-not-null-agg [type=bool, outer=(10)]
  │              └── variable: true [type=bool, outer=(10)]
  └── projections [outer=(11)]
-      └── any_not_null IS NOT NULL [type=bool, outer=(11)]
+      └── true_agg IS NOT NULL [type=bool, outer=(11)]
