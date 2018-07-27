@@ -628,6 +628,11 @@ message HeartbeatTxnRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // now is the client's timestamp. It will be recorded as the transaction's
+  // last active time.
+  // If not set, then the heartbeat doesn't update the transaction, and just
+  // returns the transaction record. This serves as a convenience for reading a
+  // transaction record used by some tests.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 

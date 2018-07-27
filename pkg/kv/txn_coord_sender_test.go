@@ -467,6 +467,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachpb.Error) {
+	// Note that this HeartbeatTxnRequest doesn't set the Now field, so it doesn't
+	// update the txn. It acts simply as an easy way to read the txn record.
 	hb := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Proto().Key,
