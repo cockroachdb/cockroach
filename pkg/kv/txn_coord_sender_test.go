@@ -409,6 +409,24 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Make a db with a short heartbeat interval.
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tsf := NewTxnCoordSenderFactory(
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			// Short heartbeat interval.
+			HeartbeatInterval: time.Millisecond,
+			Settings:          s.Cfg.Settings,
+			Clock:             s.Clock,
+			Stopper:           s.Stopper,
+		},
+		NewDistSenderForLocalTestCluster(
+			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
+			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper, s.Gossip,
+		),
+	)
+	quickHeartbeatDB := client.NewDB(ambient, tsf, s.Clock)
+
 	// We're going to test twice. In both cases the heartbeat is supposed to
 	// notice that its transaction is aborted, but:
 	// - once the abort span is populated on the txn's range.
@@ -420,9 +438,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	// abort span.
 	for _, pusherKey := range []roachpb.Key{keyA, keyC} {
 		t.Run(fmt.Sprintf("pusher:%s", pusherKey), func(t *testing.T) {
-			initialTxn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+			// Make a db with a short heartbeat interval.
+			initialTxn := client.NewTxn(quickHeartbeatDB, 0 /* gatewayNodeID */, client.RootTxn)
 			tc := initialTxn.Sender().(*TxnCoordSender)
-			tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
 
 			if err := initialTxn.Put(ctx, keyA, []byte("value")); err != nil {
 				t.Fatal(err)
@@ -440,10 +458,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 						t.Fatal(pErr)
 					}
 					// Advance clock by 1ns.
-					// Locking the TxnCoordSender to prevent a data race.
-					tc.mu.Lock()
 					s.Manual.Increment(1)
-					tc.mu.Unlock()
 					if lastActive := txn.LastActive(); heartbeatTS.Less(lastActive) {
 						heartbeatTS = lastActive
 						return nil
