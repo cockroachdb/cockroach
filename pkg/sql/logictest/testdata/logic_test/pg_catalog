@@ -556,8 +556,8 @@ FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-586319999   4183203597  true       false           3 4     {0,0}         {0,0}     {0,0}      NULL      NULL
-4084598994  226054345   true       false           1 2     {0,0}         {0,0}     {0,0}      NULL      NULL
+586319999   4183203597  true       false           3 4     0 0           0 0       0 0        NULL      NULL
+4084598994  226054345   true       false           1 2     0 0           0 0       0 0        NULL      NULL
 
 statement ok
 SET DATABASE = system
@@ -567,26 +567,26 @@ SELECT *
 FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
-indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation             indclass  indoption  indexprs  indpred
-27122201    2904033927  2         true         true          false           true          false           true        false         false       true       false           1 6      {0,0}                    {0,0}      {0,0}      NULL      NULL
-235043584   971623778   2         true         true          false           true          false           true        false         false       true       false           1 2      {1661428263,1661428263}  {0,0}      {0,0}      NULL      NULL
-235043586   971623778   1         false        false         false           false         false           true        false         false       true       false           2        {1661428263}             {0}        {0}        NULL      NULL
-235043587   971623778   1         false        false         false           false         false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
-553144061   2568924675  2         true         true          false           true          false           true        false         false       true       false           1 2      {0,0}                    {0,0}      {0,0}      NULL      NULL
-633004884   1455563232  1         false        false         false           false         false           true        false         false       true       false           4        {0}                      {0}        {0}        NULL      NULL
-633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        {0}                      {0}        {0}        NULL      NULL
-633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
-961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
-1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      {0,0}                    {0,0}      {0,0}      NULL      NULL
-1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
-1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      {1661428263,0}           {0,0}      {0,0}      NULL      NULL
-2151986803  504491171   1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
-2490277766  936526412   1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
-2516644345  13912245    1         true         true          false           true          false           true        false         false       true       false           1        {0}                      {0}        {0}        NULL      NULL
-2795406519  4084372773  1         true         true          false           true          false           true        false         false       true       false           1        {1661428263}             {0}        {0}        NULL      NULL
-2916809960  3412769920  2         true         true          false           true          false           true        false         false       true       false           1 2      {0,1661428263}           {0,0}      {0,0}      NULL      NULL
-3042779560  1692823172  2         true         true          false           true          false           true        false         false       true       false           1 2      {1661428263,1661428263}  {0,0}      {0,0}      NULL      NULL
-4083294912  4199044472  4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  {0,0,0,0}                {0,0,0,0}  {0,0,0,0}  NULL      NULL
+indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation           indclass  indoption  indexprs  indpred
+27122201    2904033927  2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                    0 0       0 0        NULL      NULL
+235043584   971623778   2         true         true          false           true          false           true        false         false       true       false           1 2      1661428263 1661428263  0 0       0 0        NULL      NULL
+235043586   971623778   1         false        false         false           false         false           true        false         false       true       false           2        1661428263             0         0          NULL      NULL
+235043587   971623778   1         false        false         false           false         false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
+553144061   2568924675  2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                    0 0       0 0        NULL      NULL
+633004884   1455563232  1         false        false         false           false         false           true        false         false       true       false           4        0                      0         0          NULL      NULL
+633004885   1455563232  1         false        false         false           false         false           true        false         false       true       false           5        0                      0         0          NULL      NULL
+633004886   1455563232  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+961325075   2492394317  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1168848597  1038690067  2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                    0 0       0 0        NULL      NULL
+1849259112  3649853378  1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+1849259115  3649853378  2         false        false         false           false         false           true        false         false       true       false           2 3      1661428263 0           0 0       0 0        NULL      NULL
+2151986803  504491171   1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
+2490277766  936526412   1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
+2516644345  13912245    1         true         true          false           true          false           true        false         false       true       false           1        0                      0         0          NULL      NULL
+2795406519  4084372773  1         true         true          false           true          false           true        false         false       true       false           1        1661428263             0         0          NULL      NULL
+2916809960  3412769920  2         true         true          false           true          false           true        false         false       true       false           1 2      0 1661428263           0 0       0 0        NULL      NULL
+3042779560  1692823172  2         true         true          false           true          false           true        false         false       true       false           1 2      1661428263 1661428263  0 0       0 0        NULL      NULL
+4083294912  4199044472  4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                0 0 0 0   0 0 0 0    NULL      NULL
 
 # From #26504
 query OOI colnames

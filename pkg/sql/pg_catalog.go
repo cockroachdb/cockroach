@@ -912,23 +912,23 @@ CREATE TABLE pg_catalog.pg_foreign_table (
 }
 
 func makeZeroedOidVector(size int) (tree.Datum, error) {
-	oidVector := tree.NewDArray(types.Oid)
+	oidArray := tree.NewDArray(types.Oid)
 	for i := 0; i < size; i++ {
-		if err := oidVector.Append(oidZero); err != nil {
+		if err := oidArray.Append(oidZero); err != nil {
 			return nil, err
 		}
 	}
-	return oidVector, nil
+	return tree.NewDOidVectorFromDArray(oidArray), nil
 }
 
-func makeZeroedIntArray(size int) (tree.Datum, error) {
+func makeZeroedIntVector(size int) (tree.Datum, error) {
 	intArray := tree.NewDArray(types.Int)
 	for i := 0; i < size; i++ {
 		if err := intArray.Append(zeroVal); err != nil {
 			return nil, err
 		}
 	}
-	return intArray, nil
+	return tree.NewDIntVectorFromDArray(intArray), nil
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
@@ -981,13 +981,14 @@ CREATE TABLE pg_catalog.pg_index (
 							return err
 						}
 					}
+					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
 					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
 					if err != nil {
 						return err
 					}
-					indoption, err := makeZeroedIntArray(len(index.ColumnIDs))
+					indoption, err := makeZeroedIntVector(len(index.ColumnIDs))
 					if err != nil {
 						return err
 					}
@@ -1006,7 +1007,7 @@ CREATE TABLE pg_catalog.pg_index (
 						tree.DBoolTrue,                           // indislive
 						tree.DBoolFalse,                          // indisreplident
 						indkey,                                   // indkey
-						collationOids,                            // indcollation
+						collationOidVector,                       // indcollation
 						indclass,                                 // indclass
 						indoption,                                // indoption
 						tree.DNull,                               // indexprs
