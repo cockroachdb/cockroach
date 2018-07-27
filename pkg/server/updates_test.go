@@ -163,7 +163,6 @@ func TestReportUsage(t *testing.T) {
 		{"TABLE system.rangelog", `{gc: {ttlseconds: 1}}`},
 		{"DATABASE system", `num_replicas: 5`},
 		{"DATABASE system", fmt.Sprintf(`constraints: {"+zone=%[1]s,+%[1]s": 2, +%[1]s: 1}`, elemName)},
-		{"DATABASE system", fmt.Sprintf(`experimental_lease_preferences: [[+zone=%[1]s,+%[1]s], [+%[1]s]]`, elemName)},
 	} {
 		if _, err := db.Exec(
 			fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE '%s'`, cmd.resource, cmd.config),
@@ -508,19 +507,6 @@ func TestReportUsage(t *testing.T) {
 				},
 			}; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected zone %d Constraints = %+v; got %+v", id, e, a)
-			}
-			if a, e := zone.LeasePreferences, []config.LeasePreference{
-				{
-					Constraints: []config.Constraint{
-						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
-						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
-					},
-				},
-				{
-					Constraints: []config.Constraint{{Value: hashedElemName, Type: config.Constraint_REQUIRED}},
-				},
-			}; !reflect.DeepEqual(a, e) {
-				t.Errorf("expected zone %d LeasePreferences = %+v; got %+v", id, e, a)
 			}
 		}
 	}

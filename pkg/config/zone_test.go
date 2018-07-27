@@ -189,48 +189,6 @@ func TestZoneConfigValidate(t *testing.T) {
 			},
 			"only required constraints .+ can be applied to a subset of replicas",
 		},
-		{
-			ZoneConfig{
-				NumReplicas:   1,
-				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
-				GC:            GCPolicy{TTLSeconds: 1},
-				LeasePreferences: []LeasePreference{
-					{
-						Constraints: []Constraint{},
-					},
-				},
-			},
-			"every lease preference must include at least one constraint",
-		},
-		{
-			ZoneConfig{
-				NumReplicas:   1,
-				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
-				GC:            GCPolicy{TTLSeconds: 1},
-				LeasePreferences: []LeasePreference{
-					{
-						Constraints: []Constraint{{Value: "a", Type: Constraint_DEPRECATED_POSITIVE}},
-					},
-				},
-			},
-			"lease preference constraints must either be required .+ or prohibited .+",
-		},
-		{
-			ZoneConfig{
-				NumReplicas:   1,
-				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
-				GC:            GCPolicy{TTLSeconds: 1},
-				LeasePreferences: []LeasePreference{
-					{
-						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
-					},
-					{
-						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
-					},
-				},
-			},
-			"",
-		},
 	}
 
 	for i, c := range testCases {
