@@ -37,6 +37,9 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 }
 
 func BenchmarkClusterBackup(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -91,6 +94,9 @@ func BenchmarkClusterRestore(b *testing.B) {
 }
 
 func BenchmarkLoadRestore(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -139,6 +145,9 @@ func BenchmarkLoadSQL(b *testing.B) {
 }
 
 func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	const numStatements = 100000
 
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)

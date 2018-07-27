@@ -1429,6 +1429,9 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 }
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 

@@ -48,6 +48,7 @@ func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect1(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, runBenchmarkSelect1)
 }
 
@@ -107,6 +108,7 @@ func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect2(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, runBenchmarkSelect2)
 }
 
@@ -120,10 +122,15 @@ func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect3(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, runBenchmarkSelect3)
 }
 
 func BenchmarkCount(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		defer func() {
 			if _, err := db.Exec(`DROP TABLE IF EXISTS bench.count`); err != nil {
@@ -164,6 +171,10 @@ func BenchmarkCount(b *testing.B) {
 }
 
 func BenchmarkSort(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		defer func() {
 			if _, err := db.Exec(`DROP TABLE IF EXISTS bench.sort`); err != nil {
@@ -335,6 +346,10 @@ func runBenchmarkInsertSecondaryIndex(b *testing.B, db *gosql.DB, count int) {
 }
 
 func BenchmarkSQL(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, runFn := range []func(*testing.B, *gosql.DB, int){
 			runBenchmarkDelete,
@@ -545,6 +560,10 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 }
 
 func BenchmarkScan(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, count := range []int{1, 10, 100, 1000, 10000} {
 			b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
@@ -610,6 +629,7 @@ func runBenchmarkScanFilter(
 }
 
 func BenchmarkScanFilter(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const count1 = 25
 	const count2 = 400
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
@@ -754,6 +774,10 @@ func runBenchmarkOrderBy(b *testing.B, db *gosql.DB, count int, limit int, disti
 }
 
 func BenchmarkOrderBy(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	const count = 100000
 	const limit = 10
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
@@ -998,6 +1022,10 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 }
 
 func BenchmarkWideTable(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	const count = 10
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
@@ -1011,6 +1039,10 @@ func BenchmarkWideTable(b *testing.B) {
 }
 
 func BenchmarkWideTableIgnoreColumns(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		if _, err := db.Exec(wideTableSchema); err != nil {
 			b.Fatal(err)
@@ -1032,6 +1064,9 @@ func BenchmarkWideTableIgnoreColumns(b *testing.B) {
 // BenchmarkPlanning runs some queries on an empty table. The purpose is to
 // benchmark (and get memory allocation statistics) the planning process.
 func BenchmarkPlanning(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		sr := sqlutils.MakeSQLRunner(db)
 		sr.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
@@ -1056,6 +1091,7 @@ func BenchmarkPlanning(b *testing.B) {
 
 // BenchmarkIndexJoin measure an index-join with 1000 rows.
 func BenchmarkIndexJoin(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		// The table will have an extra column not contained in the index to force a
 		// join with the PK.
@@ -1091,8 +1127,7 @@ func BenchmarkIndexJoin(b *testing.B) {
 }
 
 func BenchmarkSortJoinAggregation(b *testing.B) {
-	s := log.Scope(b)
-	defer s.Close(b)
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		tables := []struct {
 			create   string
