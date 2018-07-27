@@ -122,17 +122,21 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 		// crash with an unknown operation. We'd rather detect this early.
 		panic(fmt.Sprintf("operator %s with MaxCost added to the memo", candidate.Operator()))
 	}
-	return cost
+
+	// Add a tiny cost per operator to break ties.
+	return cost + cpuCostFactor/100000
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	physical := c.mem.LookupPhysicalProps(candidate.Required())
 	rowCount := logical.Relational.Stats.RowCount
-	cost := memo.Cost(rowCount) * cpuCostFactor
-	if rowCount > 1 {
+	perRowCost := c.rowSortCost(len(physical.Ordering.Columns))
+	cost := memo.Cost(rowCount) * perRowCost
+	if rowCount > 2 {
 		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
 		// certain amount of memory is used, distsql switches to a disk-based sort
 		// with a temp RocksDB store.
-		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCostFactor
+		cost = memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
 	}
 
 	return cost + c.computeChildrenCost(candidate)
@@ -143,12 +147,15 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
-	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
+	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {
-		perRowCost *= 2
+		if rowCount > 2 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost *= memo.Cost(math.Log2(rowCount))
+		}
 	}
-	return rowCount * (seqIOCostFactor + perRowCost)
+	return memo.Cost(rowCount) * (seqIOCostFactor + perRowCost)
 }
 
 func (c *coster) computeVirtualScanCost(
@@ -158,6 +165,12 @@ func (c *coster) computeVirtualScanCost(
 	// is assumed to be in memory.
 	rowCount := memo.Cost(logical.Relational.Stats.RowCount)
 	return rowCount * cpuCostFactor
+}
+
+// rowSortCost is the CPU cost to sort one row, which depends on the number of
+// columns in the sort key.
+func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
+	return memo.Cost(numKeyCols) * cpuCostFactor
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
