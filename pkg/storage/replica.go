@@ -2032,10 +2032,10 @@ func (r *Replica) sendWithRangeID(
 // declared in the SpanSet; this is OK because it can never change the
 // evaluation of a batch, only allow or disallow it.
 func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
-	r.mu.Lock()
+	r.mu.RLock()
 	desc := r.mu.state.Desc
 	threshold := r.mu.state.GCThreshold
-	r.mu.Unlock()
+	r.mu.RUnlock()
 	if !threshold.Less(ts) {
 		return &roachpb.BatchTimestampBeforeGCError{
 			Timestamp: ts,
