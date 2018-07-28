@@ -119,6 +119,8 @@ type tpccBenchLoadConfig int
 const (
 	// A single load generator is run.
 	singleLoadgen tpccBenchLoadConfig = iota
+	// A single load generator is run with partitioning enabled.
+	singlePartitionedLoadgen
 	// A load generator is run in each zone.
 	multiLoadgen
 )
@@ -128,6 +130,8 @@ const (
 func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 	switch l {
 	case singleLoadgen:
+		return 1
+	case singlePartitionedLoadgen:
 		return 1
 	case multiLoadgen:
 		return len(d.zones())
@@ -159,6 +163,29 @@ type tpccBenchSpec struct {
 	StoreDirVersion string
 }
 
+// partitions returns the number of partitions specified to the load generator.
+func (s tpccBenchSpec) partitions() int {
+	switch s.LoadConfig {
+	case singleLoadgen:
+		return 0
+	case singlePartitionedLoadgen:
+		return s.Nodes / 3
+	case multiLoadgen:
+		return len(s.Distribution.zones())
+	default:
+		panic("unexpected")
+	}
+}
+
+// startOpts returns any extra start options that the spec requires.
+func (s tpccBenchSpec) startOpts() []option {
+	var opts []option
+	if s.LoadConfig == singlePartitionedLoadgen {
+		opts = append(opts, racks(s.partitions()))
+	}
+	return opts
+}
+
 func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 	nameParts := []string{
 		"tpccbench",
@@ -179,6 +206,17 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 	case multiRegion:
 		nameParts = append(nameParts, "multi-region")
 		opts = append(opts, geo(), zones(strings.Join(b.Distribution.zones(), ",")))
+	default:
+		panic("unexpected")
+	}
+
+	switch b.LoadConfig {
+	case singleLoadgen:
+		// No specifier.
+	case singlePartitionedLoadgen:
+		nameParts = append(nameParts, "partition")
+	case multiLoadgen:
+		// No specifier.
 	default:
 		panic("unexpected")
 	}
@@ -226,7 +264,7 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, append(b.startOpts(), roachNodes)...)
 	} else if pqErr, ok := err.(*pq.Error); !ok ||
 		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
 		return err
@@ -260,12 +298,14 @@ func loadTPCCBench(
 	switch b.LoadConfig {
 	case singleLoadgen:
 		c.l.printf("splitting and scattering\n")
+	case singlePartitionedLoadgen:
+		c.l.printf("splitting, scattering, and partitioning\n")
+		partArgs = fmt.Sprintf(`--partitions=%d`, b.partitions())
+		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	case multiLoadgen:
 		c.l.printf("splitting, scattering, and partitioning\n")
-		partitions := b.LoadConfig.numLoadNodes(b.Distribution)
-		zoneStr := strings.Join(b.Distribution.zones(), ",")
 		partArgs = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`,
-			partitions, zoneStr)
+			b.partitions(), strings.Join(b.Distribution.zones(), ","))
 		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
 	default:
 		panic("unexpected")
@@ -274,14 +314,14 @@ func loadTPCCBench(
 	// Split and scatter the tables. Set duration to 1ms so that the load
 	// generation doesn't actually run.
 	cmd = fmt.Sprintf("ulimit -n 32768; "+
-		"./workload run tpcc --warehouses=%d --split --scatter "+
-		"--duration=3m %s {pgurl:1}", b.LoadWarehouses, partArgs)
+		"./workload run tpcc --warehouses=%d --split --scatter %s "+
+		"--duration=3m --tolerate-errors {pgurl:1}", b.LoadWarehouses, partArgs)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
 
 	c.l.printf("waiting %v for rebalancing\n", rebalanceWait)
-	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='24MiB'`)
+	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
 	if err != nil {
 		return err
 	}
@@ -343,7 +383,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNodes)
-	c.Start(ctx, roachNodes)
+	c.Start(ctx, append(b.startOpts(), roachNodes)...)
 
 	useHAProxy := b.Chaos
 	if useHAProxy {
@@ -376,11 +416,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			// inter-trial interactions.
 			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
-			c.Start(ctx, roachNodes)
+			c.Start(ctx, append(b.startOpts(), roachNodes)...)
 			time.Sleep(10 * time.Second)
 
 			// Set up the load generation configuration.
-			rampDur := 1 * time.Minute
+			rampDur := 5 * time.Minute
 			loadDur := 10 * time.Minute
 			loadDone := make(chan time.Time, numLoadGroups)
 
@@ -417,12 +457,19 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						sqlGateways = group.loadNodes
 					}
 
-					extraZoneFlags := ""
+					extraFlags := ""
 					activeWarehouses := warehouses
-					if len(loadGroup) > 1 {
-						extraZoneFlags = fmt.Sprintf(" --split --partitions=%d --partition-affinity=%d",
-							numLoadGroups, groupIdx)
+					switch b.LoadConfig {
+					case singleLoadgen:
+						// Nothing.
+					case singlePartitionedLoadgen:
+						extraFlags = fmt.Sprintf(` --partitions=%d --split`, b.partitions())
+					case multiLoadgen:
+						extraFlags = fmt.Sprintf(" --partitions=%d --partition-affinity=%d --split",
+							b.partitions(), groupIdx)
 						activeWarehouses = warehouses / numLoadGroups
+					default:
+						panic("unexpected")
 					}
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
@@ -431,7 +478,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						"./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s}",
 						b.LoadWarehouses, activeWarehouses, rampDur,
-						loadDur, extraZoneFlags, sqlGateways)
+						loadDur, extraFlags, sqlGateways)
 					out, err := c.RunWithBuffer(ctx, c.l, group.loadNodes, cmd)
 					loadDone <- timeutil.Now()
 					if err != nil {
@@ -526,13 +573,22 @@ func registerTPCCBench(r *registry) {
 			LoadWarehouses: 2000,
 			EstimatedMax:   1300,
 		},
-		// objective 1, key result 1 & 2.
+		// objective 1, key result 1.
 		{
 			Nodes: 30,
 			CPUs:  16,
 
 			LoadWarehouses: 10000,
 			EstimatedMax:   5300,
+		},
+		// objective 1, key result 2.
+		{
+			Nodes:      18,
+			CPUs:       16,
+			LoadConfig: singlePartitionedLoadgen,
+
+			LoadWarehouses: 10000,
+			EstimatedMax:   8000,
 		},
 		// objective 2, key result 1.
 		{
