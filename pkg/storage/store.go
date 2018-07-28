@@ -4029,25 +4029,21 @@ func (s *Store) tryGetOrCreateReplica(
 			}
 		}
 
-		repl.raftMu.Lock()
-		repl.mu.RLock()
-		destroyed := repl.mu.destroyStatus
-		repl.mu.RUnlock()
-		if destroyed.reason == destroyReasonRemoved {
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
-		}
-		if destroyed.reason == destroyReasonCorrupted {
-			repl.raftMu.Unlock()
-			return nil, false, destroyed.err
-		}
+		repl.raftMu.Lock() // not unlocked
 		repl.mu.Lock()
-		if err := repl.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
-			repl.mu.Unlock()
+		var err error
+		if ds := repl.mu.destroyStatus; ds.reason == destroyReasonRemoved {
+			err = errRetry
+		} else if ds.reason == destroyReasonCorrupted {
+			err = ds.err
+		} else {
+			err = repl.setReplicaIDRaftMuLockedMuLocked(replicaID)
+		}
+		repl.mu.Unlock()
+		if err != nil {
 			repl.raftMu.Unlock()
 			return nil, false, err
 		}
-		repl.mu.Unlock()
 		return repl, false, nil
 	}
 
@@ -4069,7 +4065,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// Create a new replica and lock it for raft processing.
 	repl := newReplica(rangeID, s)
 	repl.creatingReplica = creatingReplica
-	repl.raftMu.Lock()
+	repl.raftMu.Lock() // not unlocked
 
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
