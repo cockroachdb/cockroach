@@ -101,7 +101,7 @@ func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), RemoveOptions{
+	if err := tc.store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -537,7 +537,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(context.Background(), repl1, *repl1.Desc(), RemoveOptions{
+	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Error(err)

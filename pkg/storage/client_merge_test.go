@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -28,9 +29,12 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -40,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -999,6 +1004,147 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	// very conservative estimate that is unlikely to be flaky.
 	if n := atomic.LoadInt64(&numGets); n < numGetWorkers*numMerges {
 		t.Fatalf("suspiciously low numGets (expected at least %d): %d", numGetWorkers*numMerges, n)
+	}
+}
+
+// TestStoreReplicaGCAfterMerge verifies that the replica GC queue writes the
+// correct tombstone when it GCs a replica of range that has been merged away.
+//
+// Consider the following sequence of events observed in a real cluster:
+//
+//     1. Adjacent ranges Q and R are slated to be merged. Q has replicas on
+//        stores S1, S2, and S3, while R has replicas on S1, S2, and S4.
+//     2. To collocate Q and R, the merge queue adds a replica of R on S3 and
+//        removes the replica on S4. The replica on S4 is queued for garbage
+//        collection, but is not yet processed.
+//     3. The merge transaction commits, deleting R's range descriptor from the
+//        meta2 index.
+//     4. The replica GC queue processes the former replica of R on S4. It
+//        performs a consistent lookup of R's start key in the meta2 index to
+//        determine whether the replica is still a member of R. Since R has been
+//        deleted, the lookup returns Q's range descriptor, not R's.
+//
+// The replica GC queue would previously fail to notice that it had received Q's
+// range descriptor, not R's. It would then proceed to call store.RemoveReplica
+// with Q's descriptor, which would write a replica tombstone for Q, when in
+// fact the replica tombstone needed to be written for R. Without the correct
+// replica tombstone, if S4 received a slow Raft message for the now-GC'd
+// replica, it would incorrectly construct an uninitialized replica and panic.
+//
+// This test's approach to simulating this sequence of events is based on
+// TestReplicaGCRace.
+func TestStoreReplicaGCAfterMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store0, store1 := mtc.Store(0), mtc.Store(1)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.unreplicateRange(lhsDesc.RangeID, 1)
+	mtc.unreplicateRange(rhsDesc.RangeID, 1)
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rhsRepl1, err := store1.GetReplica(rhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store1.ManualReplicaGC(rhsRepl1); err != nil {
+		t.Fatal(err)
+	}
+
+	rhsReplDesc0, ok := rhsDesc.GetReplicaDescriptor(store0.StoreID())
+	if !ok {
+		t.Fatalf("expected %s to have a replica on %s", rhsDesc, store0)
+	}
+	rhsReplDesc1, ok := rhsDesc.GetReplicaDescriptor(store1.StoreID())
+	if !ok {
+		t.Fatalf("expected %s to have a replica on %s", rhsDesc, store1)
+	}
+
+	transport0 := storage.NewRaftTransport(
+		log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
+		cluster.MakeTestingClusterSettings(),
+		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
+		nil, /* grpcServer */
+		mtc.transportStopper,
+	)
+	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
+	transport0.Listen(store0.StoreID(), errChan)
+
+	sendHeartbeat := func(toReplDesc roachpb.ReplicaDescriptor) {
+		// Try several times, as the message may be dropped (see #18355).
+		for i := 0; i < 5; i++ {
+			if sent := transport0.SendAsync(&storage.RaftMessageRequest{
+				FromReplica: rhsReplDesc0,
+				ToReplica:   toReplDesc,
+				Heartbeats: []storage.RaftHeartbeat{
+					{
+						RangeID:       rhsDesc.RangeID,
+						FromReplicaID: rhsReplDesc0.ReplicaID,
+						ToReplicaID:   toReplDesc.ReplicaID,
+						Commit:        42,
+					},
+				},
+			}); !sent {
+				t.Fatal("failed to send heartbeat")
+			}
+			select {
+			case pErr := <-errChan:
+				switch pErr.GetDetail().(type) {
+				case *roachpb.RaftGroupDeletedError:
+					return
+				default:
+					t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
+				}
+			case <-time.After(time.Second):
+			}
+		}
+		t.Fatal("did not get expected RaftGroupDeleted error")
+	}
+
+	// Send a heartbeat to the now-GC'd replica on store1. If the replica
+	// tombstone was not written correctly when the replica was GC'd, this will
+	// cause a panic.
+	sendHeartbeat(rhsReplDesc1)
+
+	// Send a heartbeat to a fictional replica on store1 with a large replica ID.
+	// This tests an implementation detail: the replica tombstone that gets
+	// written in this case will use the maximum possible replica ID, so store1
+	// should ignore heartbeats for replicas of the range with _any_ replica ID.
+	sendHeartbeat(roachpb.ReplicaDescriptor{
+		NodeID:    store1.Ident.NodeID,
+		StoreID:   store1.Ident.StoreID,
+		ReplicaID: 123456,
+	})
+
+	// Be extra paranoid and verify the exact value of the replica tombstone.
+	var rhsTombstone1 roachpb.RaftTombstone
+	rhsTombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
+	ok, err = engine.MVCCGetProto(ctx, store1.Engine(), rhsTombstoneKey, hlc.Timestamp{},
+		true /* consistent */, nil /* txn */, &rhsTombstone1)
+	if err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatalf("missing raft tombstone at key %s", rhsTombstoneKey)
+	}
+	if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone1.NextReplicaID; e != a {
+		t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
 	}
 }
 
