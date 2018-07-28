@@ -71,7 +71,7 @@ type RemoteClockMonitor struct {
 	offsetTTL time.Duration
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		offsets        map[string]RemoteOffset
 		latenciesNanos map[string]ewma.MovingAverage
 	}
@@ -110,8 +110,8 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 // given node address. Returns true if the measurement is valid, or false if
 // we don't have enough samples to compute a reliable average.
 func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if avg, ok := r.mu.latenciesNanos[addr]; ok && avg.Value() != 0.0 {
 		return time.Duration(int64(avg.Value())), true
 	}
@@ -120,8 +120,8 @@ func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
 
 // AllLatencies returns a map of all currently valid latency measurements.
 func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	result := make(map[string]time.Duration)
 	for addr, avg := range r.mu.latenciesNanos {
 		if avg.Value() != 0.0 {
@@ -203,7 +203,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 
 		healthyOffsetCount := 0
 
-		r.mu.Lock()
+		r.mu.RLock()
 		// Each measurement is recorded as its minimum and maximum value.
 		offsets := make(stats.Float64Data, 0, 2*len(r.mu.offsets))
 		for addr, offset := range r.mu.offsets {
@@ -218,7 +218,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 			}
 		}
 		numClocks := len(r.mu.offsets)
-		r.mu.Unlock()
+		r.mu.RUnlock()
 
 		mean, err := offsets.Mean()
 		if err != nil && err != stats.EmptyInput {
