@@ -19,12 +19,17 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -123,8 +128,8 @@ type windower struct {
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
-	scratch []byte
-
+	memAcc        mon.BoundAccount
+	scratch       []byte
 	cancelChecker *sqlbase.CancelChecker
 
 	partitionBy       []uint32
@@ -155,6 +160,14 @@ func newWindower(
 		input: input,
 	}
 	w.inputTypes = input.OutputTypes()
+	// TODO: why not w.ctx?
+	ctx := flowCtx.EvalCtx.Ctx()
+	memMonitor := newMonitor(ctx, flowCtx.EvalCtx.Mon, "windower-mem")
+	w.memAcc = memMonitor.MakeBoundAccount()
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		w.input = NewInputStatCollector(w.input)
+		w.finishTrace = w.outputStatsToTrace
+	}
 
 	windowFns := spec.WindowFns
 	w.encodedPartitions = make(map[string][]sqlbase.EncDatumRow)
@@ -207,8 +220,12 @@ func newWindower(
 		flowCtx,
 		processorID,
 		output,
-		nil, /* memMonitor */
-		procStateOpts{inputsToDrain: []RowSource{w.input}},
+		memMonitor,
+		procStateOpts{inputsToDrain: []RowSource{w.input},
+			trailingMetaCallback: func() []ProducerMetadata {
+				w.close()
+				return nil
+			}},
 	); err != nil {
 		return nil, err
 	}
@@ -255,7 +272,14 @@ func (w *windower) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (w *windower) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
+	w.close()
+}
+
+func (w *windower) close() {
+	// Need to close the mem accounting while the context is still valid.
+	w.memAcc.Close(w.ctx)
 	w.internalClose()
+	w.memMonitor.Stop(w.ctx)
 }
 
 // accumulateRows continually reads rows from the input and accumulates them
@@ -279,6 +303,10 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 			break
 		}
 
+		if err := w.memAcc.Grow(w.ctx, int64(row.Size())); err != nil {
+			w.moveToDraining(err)
+			return windowerStateUnknown, nil, nil
+		}
 		if len(w.partitionBy) == 0 {
 			w.encodedPartitions[""] = append(w.encodedPartitions[""], w.rowAlloc.CopyRow(row))
 		} else {
@@ -310,6 +338,10 @@ func (w *windower) decodePartitions() error {
 		for _, encRow := range encodedPartition {
 			for i := range encRow {
 				if err := encRow[i].EnsureDecoded(&w.inputTypes[i], &w.datumAlloc); err != nil {
+					return err
+				}
+				// TODO: how can we learn the size of Datum before decoding it?
+				if err := w.memAcc.Grow(w.ctx, int64(encRow[i].Datum.Size())); err != nil {
 					return err
 				}
 			}
@@ -365,6 +397,10 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 // are also simply appended to corresponding rows in outputRows.
 func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
 	var peerGrouper peerGroupChecker
+	usage := int(unsafe.Sizeof([][]tree.Datum{}))*len(w.windowFns) + int(sizeOfIndexedRowsStruct)*len(w.encodedPartitions)
+	if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+		return err
+	}
 	w.windowValues = make([][][]tree.Datum, len(w.windowFns))
 	partitions := make([]indexedRows, len(w.encodedPartitions))
 
@@ -373,6 +409,10 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		// We want to fix some order of iteration over encoded partitions
 		// to be consistent.
 		w.bucketToPartitionIdx[bucket] = partitionIdx
+		usage = int(sizeOfIndexedRowStruct) * len(encodedPartition)
+		if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+			return err
+		}
 		rows := make([]indexedRow, 0, len(encodedPartition))
 		for idx := 0; idx < len(encodedPartition); idx++ {
 			rows = append(rows, indexedRow{idx: idx, row: encodedPartition[idx]})
@@ -384,6 +424,10 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	// partitionPreviouslySortedFuncIdx maps index of a window function f1
 	// to the index of another window function f2 with the same ORDER BY
 	// clause such that f2 will have been processed before f1.
+	usage = int(unsafe.Sizeof(int(0))+unsafe.Sizeof([]indexedRows{})+unsafe.Sizeof(false)) * len(w.windowFns)
+	if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+		return err
+	}
 	partitionPreviouslySortedFuncIdx := make([]int, len(w.windowFns))
 	for i := 0; i < len(w.windowFns); i++ {
 		partitionPreviouslySortedFuncIdx[i] = -1
@@ -405,6 +449,10 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	}
 
 	for windowFnIdx, windowFn := range w.windowFns {
+		usage = int(unsafe.Sizeof([]tree.Datum{})) * len(w.encodedPartitions)
+		if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+			return err
+		}
 		w.windowValues[windowFnIdx] = make([][]tree.Datum, len(w.encodedPartitions))
 
 		frameRun := &tree.WindowFrameRun{
@@ -432,6 +480,10 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			defer builtin.Close(ctx, evalCtx)
 
 			partition := partitions[partitionIdx]
+			usage = int(unsafe.Sizeof(tree.Datum(nil))) * partition.Len()
+			if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+				return err
+			}
 			w.windowValues[windowFnIdx][partitionIdx] = make([]tree.Datum, partition.Len())
 
 			if len(windowFn.ordering.Columns) > 0 {
@@ -457,10 +509,18 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						// Later window functions will need rows in the same order,
 						// so we cache copies of all sorted partitions.
 						if sortedPartitionsCache[windowFnIdx] == nil {
+							usage = int(sizeOfIndexedRowsStruct) * len(partitions)
+							if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+								return err
+							}
 							sortedPartitionsCache[windowFnIdx] = make([]indexedRows, len(partitions))
 						}
 						// TODO(yuzefovich): we should figure out how to avoid making this
 						// deep copy.
+						usage = int(sizeOfIndexedRowStruct) * partition.Len()
+						if err := w.memAcc.Grow(w.ctx, int64(usage)); err != nil {
+							return err
+						}
 						sortedPartitionsCache[windowFnIdx][partitionIdx] = partition.makeCopy()
 					}
 				}
@@ -591,6 +651,9 @@ type peerGroupChecker interface {
 	InSameGroup(i, j int) bool
 }
 
+const sizeOfIndexedRowsStruct = unsafe.Sizeof(indexedRows{})
+const sizeOfIndexedRowStruct = unsafe.Sizeof(indexedRow{})
+
 // indexedRows are rows with the corresponding indices.
 type indexedRows struct {
 	rows []indexedRow
@@ -635,4 +698,38 @@ func (ir indexedRow) GetDatums(startColIdx, endColIdx int) tree.Datums {
 		datums = append(datums, ir.row[idx].Datum)
 	}
 	return datums
+}
+
+var _ DistSQLSpanStats = &WindowerStats{}
+
+const windowerTagPrefix = "windower."
+
+// Stats implements the SpanStats interface.
+func (ws *WindowerStats) Stats() map[string]string {
+	inputStatsMap := ws.InputStats.Stats(windowerTagPrefix)
+	inputStatsMap[windowerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
+	return inputStatsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (ws *WindowerStats) StatsForQueryPlan() []string {
+	return append(
+		ws.InputStats.StatsForQueryPlan("" /* prefix */),
+		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
+	)
+}
+func (w *windower) outputStatsToTrace() {
+	is, ok := getInputStats(w.flowCtx, w.input)
+	if !ok {
+		return
+	}
+	if sp := opentracing.SpanFromContext(w.ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&WindowerStats{
+				InputStats:      is,
+				MaxAllocatedMem: w.memMonitor.MaximumBytes(),
+			},
+		)
+	}
 }

@@ -156,3 +156,9 @@ query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE]
 ----
 true
+
+# This query verifies stat collection for the tableReader and windower.
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT avg(k) OVER () FROM kv]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkcFKw0AQhu8-xfKfFBaa7XFP0YsUwUoRPUgOa3Yoi0k2zGxsS8m7S7IHrVCpx_lnvpkP5oguenp0LQnsGwwqjZ5jTSKRpygPrPwettAIXT-kKa406sgEe0QKqSFYPLv3hjbkPPGigIan5EIzr-05tI4P5ccnNDjuRDE5b5WBhiTXNCqFlqwqBBrrIVlVGlSjRhzS90FJbkuwZtSXS72Gzscd8cKcGt2-3F-X5uYCndbtVUtt5IMahKapQj2Eu7N6y__obUj62AmdyJ3bXIyVBvkt5b9IHLimJ471fCaX65mbA0-SctfkYtXl1iT4EzZ_wstfcDVefQUAAP__PmW4OA==

@@ -70,6 +70,7 @@
 		JoinReaderStats
 		OutboxStats
 		RouterOutputStats
+		WindowerStats
 */
 package distsqlrun
 
