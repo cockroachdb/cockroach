@@ -2418,7 +2418,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 }
 
 func createProjectSetSpec(
-	planCtx *planningCtx, n *projectSetNode,
+	planCtx *planningCtx, n *projectSetNode, indexVarMap []int,
 ) (*distsqlrun.ProjectSetSpec, error) {
 	spec := distsqlrun.ProjectSetSpec{
 		Exprs:            make([]distsqlrun.Expression, len(n.exprs)),
@@ -2426,7 +2426,7 @@ func createProjectSetSpec(
 		NumColsPerGen:    make([]uint32, len(n.exprs)),
 	}
 	for i, expr := range n.exprs {
-		spec.Exprs[i] = distsqlplan.MakeExpression(expr, &planCtx.extendedEvalCtx.EvalContext, nil)
+		spec.Exprs[i] = distsqlplan.MakeExpression(expr, &planCtx.extendedEvalCtx.EvalContext, indexVarMap)
 	}
 	for i, col := range n.columns[n.numColsInSource:] {
 		columnType, err := sqlbase.DatumTypeToColumnType(col.Typ)
@@ -2450,8 +2450,11 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	}
 	numResults := len(plan.ResultTypes)
 
+	indexVarMap := makePlanToStreamColMap(len(n.columns))
+	copy(indexVarMap, plan.planToStreamColMap)
+
 	// Create the project set processor spec.
-	projectSetSpec, err := createProjectSetSpec(planCtx, n)
+	projectSetSpec, err := createProjectSetSpec(planCtx, n, indexVarMap)
 	if err != nil {
 		return physicalPlan{}, err
 	}
