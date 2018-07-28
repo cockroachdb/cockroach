@@ -354,57 +354,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// initDescriptor initializes the node descriptor with the server
-// address, the node attributes and locality.
-func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality roachpb.Locality) {
-	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	n.Descriptor.Attrs = attrs
-	n.Descriptor.Locality = locality
-	n.Descriptor.ServerVersion = n.storeCfg.Settings.Version.ServerVersion
-}
-
-// initNodeID updates the internal NodeDescriptor with the given ID. If zero is
-// supplied, a new NodeID is allocated with the first invocation. For all other
-// values, the supplied ID is stored into the descriptor (unless one has been
-// set previously, in which case a fatal error occurs).
-//
-// Upon setting a new NodeID, the descriptor is gossiped and the NodeID is
-// stored into the gossip instance.
-func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
-	ctx = n.AnnotateCtx(ctx)
-	if id < 0 {
-		log.Fatalf(ctx, "NodeID must not be negative")
-	}
-
-	if o := n.Descriptor.NodeID; o > 0 {
-		if id == 0 {
-			return
-		}
-		log.Fatalf(ctx, "cannot initialize NodeID to %d, already have %d", id, o)
-	}
-	var err error
-	if id == 0 {
-		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
-		id, err = allocateNodeID(ctxWithSpan, n.storeCfg.DB)
-		if err != nil {
-			log.Fatal(ctxWithSpan, err)
-		}
-		log.Infof(ctxWithSpan, "new node allocated ID %d", id)
-		if id == 0 {
-			log.Fatal(ctxWithSpan, "new node allocated illegal ID 0")
-		}
-		span.Finish()
-		n.storeCfg.Gossip.NodeID.Set(ctx, id)
-	} else {
-		log.Infof(ctx, "node ID %d initialized", id)
-	}
-	// Gossip the node descriptor to make this node addressable by node ID.
-	n.Descriptor.NodeID = id
-	if err = n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		log.Fatalf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
-	}
-}
-
 func (n *Node) bootstrap(
 	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) error {
@@ -440,15 +389,123 @@ func (n *Node) start(
 	locality roachpb.Locality,
 	cv cluster.ClusterVersion,
 ) error {
-	n.initDescriptor(addr, attrs, locality)
-
 	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
 	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
 		return errors.Wrap(err, "while initializing cluster version")
 	}
 
-	if err := n.startStoresInitNodeIDConnectGossip(ctx, bootstrappedEngines); err != nil {
+	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
+	// stores, the NodeID is persisted in each of them. If not, then we'll need to
+	// use the KV store to get a NodeID assigned.
+	var nodeID roachpb.NodeID
+	if len(bootstrappedEngines) > 0 {
+		firstIdent, err := storage.ReadStoreIdent(ctx, bootstrappedEngines[0])
+		if err != nil {
+			return err
+		}
+		nodeID = firstIdent.NodeID
+	} else {
+		n.initialBoot = true
+		// Wait until Gossip is connected before trying to allocate a NodeID.
+		// This isn't strictly necessary but avoids trying to use the KV store
+		// before it can possibly work.
+		if err := n.connectGossip(ctx); err != nil {
+			return err
+		}
+		// If no NodeID has been assigned yet, allocate a new node ID.
+		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
+		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
+		span.Finish()
+		nodeID = newID
+	}
+	n.Descriptor = roachpb.NodeDescriptor{
+		NodeID:        nodeID,
+		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		Attrs:         attrs,
+		Locality:      locality,
+		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
+	}
+
+	// Gossip the node descriptor to make this node addressable by node ID.
+	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
+	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+	}
+
+	// Initialize the stores we're going to start.
+	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
+	if err != nil {
 		return err
+	}
+
+	for _, s := range stores {
+		if err := s.Start(ctx, n.stopper); err != nil {
+			return errors.Errorf("failed to start store: %s", err)
+		}
+		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
+			return errors.Errorf("unidentified store: %s", s)
+		}
+		capacity, err := s.Capacity(false /* useCached */)
+		if err != nil {
+			return errors.Errorf("could not query store capacity: %s", err)
+		}
+		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
+
+		n.addStore(s)
+	}
+
+	// Verify all initialized stores agree on cluster and node IDs.
+	if err := n.validateStores(ctx); err != nil {
+		return err
+	}
+	log.Event(ctx, "validated stores")
+
+	// Compute the time this node was last up; this is done by reading the
+	// "last up time" from every store and choosing the most recent timestamp.
+	var mostRecentTimestamp hlc.Timestamp
+	if err := n.stores.VisitStores(func(s *storage.Store) error {
+		timestamp, err := s.ReadLastUpTimestamp(ctx)
+		if err != nil {
+			return err
+		}
+		if mostRecentTimestamp.Less(timestamp) {
+			mostRecentTimestamp = timestamp
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "failed to read last up timestamp from stores")
+	}
+	n.lastUp = mostRecentTimestamp.WallTime
+
+	// Set the stores map as the gossip persistent storage, so that
+	// gossip can bootstrap using the most recently persisted set of
+	// node addresses.
+	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
+		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
+	}
+
+	// Read persisted ClusterVersion from each configured store to
+	// verify there are no stores with data too old or too new for this
+	// binary.
+	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
+		return err
+	}
+
+	if len(bootstrappedEngines) != 0 {
+		// Connect gossip before starting bootstrap. This will be necessary
+		// to bootstrap new stores. We do it before initializing the NodeID
+		// as well (if needed) to avoid awkward error messages until Gossip
+		// has connected.
+		//
+		// NB: if we have no bootstrapped engines, then we've done this above
+		// already.
+		if err := n.connectGossip(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Bootstrap any uninitialized stores.
@@ -520,91 +577,6 @@ func (n *Node) initStores(
 	return stores, nil
 }
 
-// startStoresInitNodeIDConnectGossip starts the existing (i.e. bootstrapped)
-// stores of this node. If there are any stores, they contain the NodeID and we
-// initialize it from there. Otherwise, a new node ID is allocated. In either
-// case, Gossip will have been connected when this method returns, which means
-// that the cluster ID is known.
-func (n *Node) startStoresInitNodeIDConnectGossip(
-	ctx context.Context, bootstrappedEngines []engine.Engine,
-) error {
-	// Initialize the stores we're going to start.
-	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range stores {
-		if err := s.Start(ctx, n.stopper); err != nil {
-			return errors.Errorf("failed to start store: %s", err)
-		}
-		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
-			return errors.Errorf("unidentified store: %s", s)
-		}
-		capacity, err := s.Capacity(false /* useCached */)
-		if err != nil {
-			return errors.Errorf("could not query store capacity: %s", err)
-		}
-		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
-
-		n.addStore(s)
-	}
-
-	// Verify all initialized stores agree on cluster and node IDs.
-	if err := n.validateStores(ctx); err != nil {
-		return err
-	}
-	log.Event(ctx, "validated stores")
-
-	// Compute the time this node was last up; this is done by reading the
-	// "last up time" from every store and choosing the most recent timestamp.
-	var mostRecentTimestamp hlc.Timestamp
-	if err := n.stores.VisitStores(func(s *storage.Store) error {
-		timestamp, err := s.ReadLastUpTimestamp(ctx)
-		if err != nil {
-			return err
-		}
-		if mostRecentTimestamp.Less(timestamp) {
-			mostRecentTimestamp = timestamp
-		}
-		return nil
-	}); err != nil {
-		return errors.Wrapf(err, "failed to read last up timestamp from stores")
-	}
-	n.lastUp = mostRecentTimestamp.WallTime
-
-	// Set the stores map as the gossip persistent storage, so that
-	// gossip can bootstrap using the most recently persisted set of
-	// node addresses.
-	if err := n.storeCfg.Gossip.SetStorage(n.stores); err != nil {
-		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
-	}
-
-	// Read persisted ClusterVersion from each configured store to
-	// verify there are no stores with data too old or too new for this
-	// binary.
-	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
-		return err
-	}
-
-	// Connect gossip before starting bootstrap. For new nodes, connecting
-	// to the gossip network is necessary to get the cluster ID.
-	if err := n.connectGossip(ctx); err != nil {
-		return err
-	}
-	log.Event(ctx, "connected to gossip")
-
-	// If no NodeID has been assigned yet, allocate a new node ID by
-	// supplying 0 to initNodeID.
-	if n.Descriptor.NodeID == 0 {
-		n.initNodeID(ctx, 0)
-		n.initialBoot = true
-		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
-	}
-
-	return nil
-}
-
 func (n *Node) addStore(store *storage.Store) {
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
@@ -615,9 +587,7 @@ func (n *Node) addStore(store *storage.Store) {
 // cluster ID consistency is checked elsewhere in inspectEngines.
 func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if n.Descriptor.NodeID == 0 {
-			n.initNodeID(ctx, s.Ident.NodeID)
-		} else if n.Descriptor.NodeID != s.Ident.NodeID {
+		if n.Descriptor.NodeID != s.Ident.NodeID {
 			return errors.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
 		return nil
