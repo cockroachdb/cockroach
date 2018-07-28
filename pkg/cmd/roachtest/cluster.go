@@ -705,6 +705,12 @@ func startArgs(extraArgs ...string) option {
 // encryption enabled.
 var startArgsDontEncrypt = startArgs("--encrypt=false")
 
+// racks is an option which specifies the number of racks to partition the nodes
+// into.
+func racks(n int) option {
+	return startArgs(fmt.Sprintf("--racks=%d", n))
+}
+
 // stopArgs specifies extra arguments that are passed to `roachprod` during `c.Stop`.
 func stopArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
