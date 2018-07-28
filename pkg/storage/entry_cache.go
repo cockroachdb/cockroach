@@ -47,6 +47,49 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 	}
 }
 
+const defaultEntryCacheFreeListSize = 16
+
+// entryCacheFreeList represents a free list of raftEntryCache cache.Entry
+// objects. The free list is initially empty and is populated as entries are
+// freed.
+type entryCacheFreeList []*cache.Entry
+
+func makeEntryCacheFreeList(size int) entryCacheFreeList {
+	return make(entryCacheFreeList, 0, size)
+}
+
+func (f *entryCacheFreeList) newEntry(key entryCacheKey, value raftpb.Entry) *cache.Entry {
+	i := len(*f) - 1
+	if i < 0 {
+		alloc := struct {
+			key   entryCacheKey
+			value raftpb.Entry
+			entry cache.Entry
+		}{
+			key:   key,
+			value: value,
+		}
+		alloc.entry.Key = &alloc.key
+		alloc.entry.Value = &alloc.value
+		return &alloc.entry
+	}
+	e := (*f)[i]
+	(*f)[i] = nil
+	(*f) = (*f)[:i]
+
+	*e.Key.(*entryCacheKey) = key
+	*e.Value.(*raftpb.Entry) = value
+	return e
+}
+
+func (f *entryCacheFreeList) freeEntry(e *cache.Entry) {
+	if len(*f) < cap(*f) {
+		*e.Key.(*entryCacheKey) = entryCacheKey{}
+		*e.Value.(*raftpb.Entry) = raftpb.Entry{}
+		*f = append(*f, e)
+	}
+}
+
 // A raftEntryCache maintains a global cache of Raft group log entries. The
 // cache mostly prevents unnecessary reads from disk of recently-written log
 // entries between log append and application to the FSM.
@@ -54,19 +97,21 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 // This cache stores entries with sideloaded proposals inlined (i.e. ready to
 // be sent to followers).
 type raftEntryCache struct {
-	syncutil.RWMutex                     // protects Cache for concurrent access.
+	syncutil.RWMutex                     // protects Cache for concurrent access
 	bytes            uint64              // total size of the cache in bytes
 	cache            *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
+	freeList         entryCacheFreeList  // used to avoid allocations on insertion
 }
 
 // newRaftEntryCache returns a new RaftEntryCache with the given
 // maximum size in bytes.
 func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	rec := &raftEntryCache{
-		cache: cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
+		cache:    cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
+		freeList: makeEntryCacheFreeList(defaultEntryCacheFreeListSize),
 	}
 	// The raft entry cache mutex will be held when the ShouldEvict
-	// and OnEvicted callbacks are invoked.
+	// and OnEvictedEntry callbacks are invoked.
 	//
 	// On ShouldEvict, compare the total size of the cache in bytes to the
 	// configured maxBytes. We also insist that at least one entry remains
@@ -75,26 +120,13 @@ func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	rec.cache.Config.ShouldEvict = func(n int, k, v interface{}) bool {
 		return rec.bytes > maxBytes && n >= 1
 	}
-	rec.cache.Config.OnEvicted = func(k, v interface{}) {
-		ent := v.(*raftpb.Entry)
+	rec.cache.Config.OnEvictedEntry = func(e *cache.Entry) {
+		ent := e.Value.(*raftpb.Entry)
 		rec.bytes -= uint64(ent.Size())
+		rec.freeList.freeEntry(e)
 	}
 
 	return rec
-}
-
-func (rec *raftEntryCache) makeCacheEntry(key entryCacheKey, value raftpb.Entry) *cache.Entry {
-	alloc := struct {
-		key   entryCacheKey
-		value raftpb.Entry
-		entry cache.Entry
-	}{
-		key:   key,
-		value: value,
-	}
-	alloc.entry.Key = &alloc.key
-	alloc.entry.Value = &alloc.value
-	return &alloc.entry
 }
 
 // addEntries adds the slice of raft entries, using the range ID and the
@@ -107,9 +139,10 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 	defer rec.Unlock()
 
 	for _, e := range ents {
-		rec.bytes += uint64(e.Size())
-		entry := rec.makeCacheEntry(entryCacheKey{RangeID: rangeID, Index: e.Index}, e)
+		key := entryCacheKey{RangeID: rangeID, Index: e.Index}
+		entry := rec.freeList.newEntry(key, e)
 		rec.cache.AddEntry(entry)
+		rec.bytes += uint64(e.Size())
 	}
 }
 
