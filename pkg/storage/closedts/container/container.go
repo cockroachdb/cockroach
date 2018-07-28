@@ -15,11 +15,11 @@
 package container
 
 import (
-	"context"
+	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
@@ -35,27 +35,25 @@ import (
 // Config is a container that holds references to all of the components required
 // to set up a full closed timestamp subsystem.
 type Config struct {
-	NodeID   roachpb.NodeID
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
 	Clock    closedts.LiveClockFn
 	Refresh  closedts.RefreshFn
 	Dialer   closedts.Dialer
-
-	// GRPCServer specifies an (optional) server to register the CT update server
-	// with.
-	GRPCServer *grpc.Server
 }
 
 // A Container is a full closed timestamp subsystem along with the Config it was
 // created from.
 type Container struct {
 	Config
-	Tracker  *minprop.Tracker
-	Storage  closedts.Storage
-	Provider closedts.Provider
-	Server   ctpb.Server
-	Clients  closedts.ClientRegistry
+	// Initialized on Start().
+	Tracker       closedts.TrackerI
+	Storage       closedts.Storage
+	Provider      closedts.Provider
+	Server        ctpb.Server
+	Clients       closedts.ClientRegistry
+	nodeID        roachpb.NodeID
+	delayedServer *delayedServer
 }
 
 const (
@@ -75,8 +73,44 @@ const (
 )
 
 // NewContainer initializes a Container from the given Config. The Container
-// will need to be started separately.
+// will need to be started separately, and will only be populated during Start().
+//
+// However, its RegisterClosedTimestampServer method can only be called before
+// the Container is started.
 func NewContainer(cfg Config) *Container {
+	return &Container{
+		Config: cfg,
+	}
+}
+
+type delayedServer struct {
+	active int32 // atomic
+	s      ctpb.ClosedTimestampServer
+}
+
+func (s *delayedServer) Start() {
+	atomic.StoreInt32(&s.active, 1)
+}
+
+func (s delayedServer) Get(client ctpb.ClosedTimestamp_GetServer) error {
+	if atomic.LoadInt32(&s.active) == 0 {
+		return errors.New("not available yet")
+	}
+	return s.Get(client)
+}
+
+// RegisterClosedTimestampServer registers the Server contained in the container
+// with gRPC.
+func (c *Container) RegisterClosedTimestampServer(s *grpc.Server) {
+	c.delayedServer = &delayedServer{s: ctpb.ServerShim{Server: c.Server}}
+	ctpb.RegisterClosedTimestampServer(s, c.delayedServer)
+}
+
+// Start starts the Container. The Stopper used to create the Container is in
+// charge of stopping it.
+func (c *Container) Start(nodeID roachpb.NodeID) {
+	cfg := c.Config
+
 	storage := storage.NewMultiStorage(func() storage.SingleStorage {
 		return storage.NewMemStorage(StorageBucketScale, storageBucketNum)
 	})
@@ -84,20 +118,17 @@ func NewContainer(cfg Config) *Container {
 	tracker := minprop.NewTracker()
 
 	pConf := provider.Config{
-		NodeID:   cfg.NodeID,
+		NodeID:   nodeID,
 		Settings: cfg.Settings,
 		Stopper:  cfg.Stopper,
 		Storage:  storage,
 		Clock:    cfg.Clock,
-		Close:    tracker.CloseFn(),
+		Close:    closedts.AsCloseFn(tracker),
 	}
+
 	provider := provider.NewProvider(&pConf)
 
 	server := transport.NewServer(cfg.Stopper, provider, cfg.Refresh)
-
-	if cfg.GRPCServer != nil {
-		ctpb.RegisterClosedTimestampServer(cfg.GRPCServer, ctpb.ServerShim{Server: server})
-	}
 
 	rConf := transport.Config{
 		Settings: cfg.Settings,
@@ -106,39 +137,14 @@ func NewContainer(cfg Config) *Container {
 		Sink:     provider,
 	}
 
-	return &Container{
-		Config:   cfg,
-		Storage:  storage,
-		Provider: provider,
-		Tracker:  tracker,
-		Server:   server,
-		Clients:  transport.NewClients(rConf),
-	}
-}
-
-// Start starts the Container. The Stopper used to create the Container is in
-// charge of stopping it.
-func (c *Container) Start() {
+	c.nodeID = nodeID
+	c.Storage = storage
+	c.Tracker = tracker
+	c.Server = server
+	c.Clients = transport.NewClients(rConf)
+	c.Provider = provider
 	c.Provider.Start()
-}
-
-type dialerAdapter nodedialer.Dialer
-
-func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
-	return (*nodedialer.Dialer)(da).GetCircuitBreaker(nodeID).Ready()
-}
-
-func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
-	c, err := (*nodedialer.Dialer)(da).Dial(ctx, nodeID)
-	if err != nil {
-		return nil, err
+	if c.delayedServer != nil {
+		c.delayedServer.Start()
 	}
-	return ctpb.NewClosedTimestampClient(c).Get(ctx)
 }
-
-// DialerAdapter turns a node dialer into a closedts.Dialer.
-func DialerAdapter(dialer *nodedialer.Dialer) closedts.Dialer {
-	return (*dialerAdapter)(dialer)
-}
-
-var _ closedts.Dialer = DialerAdapter(nil)

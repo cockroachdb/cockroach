@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -993,4 +995,21 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		}
 	}
 	return liveNodes
+}
+
+// AsLiveClock returns a closedts.LiveClockFn that takes a current timestamp off
+// the clock and returns it only if node liveness indicates that the node is live
+// at that timestamp and the returned epoch.
+func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
+	return func(nodeID roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
+		now := nl.clock.Now()
+		liveness, err := nl.GetLiveness(nodeID)
+		if err != nil {
+			return hlc.Timestamp{}, 0, err
+		}
+		if !liveness.IsLive(now, nl.clock.MaxOffset()) {
+			return hlc.Timestamp{}, 0, errors.New("not live")
+		}
+		return now, ctpb.Epoch(liveness.Epoch), nil
+	}
 }

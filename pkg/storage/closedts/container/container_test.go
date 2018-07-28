@@ -53,6 +53,7 @@ func (d *LateBoundDialer) Ready(nodeID roachpb.NodeID) bool {
 
 type TestContainer struct {
 	*container.Container
+	NodeID    roachpb.NodeID
 	Refreshed struct {
 		syncutil.Mutex
 		RangeIDs []roachpb.RangeID
@@ -61,7 +62,7 @@ type TestContainer struct {
 	TestClock *providertestutils.TestClock
 }
 
-func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
+func prepareContainer() *TestContainer {
 	stopper := stop.NewStopper()
 
 	tc := &TestContainer{}
@@ -91,7 +92,6 @@ func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
 
 	cfg := container.Config{
 		Settings: st,
-		NodeID:   nodeID,
 		Stopper:  stopper,
 		Clock:    tc.TestClock.LiveNow,
 		Refresh:  refresh,
@@ -103,14 +103,18 @@ func prepareContainer(nodeID roachpb.NodeID) *TestContainer {
 }
 
 func setupTwoNodeTest() (_ *TestContainer, _ *TestContainer, shutdown func()) {
-	c1 := prepareContainer(roachpb.NodeID(1))
-	c2 := prepareContainer(roachpb.NodeID(2))
+	c1 := prepareContainer()
+	c2 := prepareContainer()
 
+	c1.NodeID = roachpb.NodeID(1)
+	c2.NodeID = roachpb.NodeID(2)
+
+	c1.Start(c1.NodeID)
+	c2.Start(c2.NodeID)
+
+	// Link the containers.
 	c1.Dialer.Wrapped = transporttestutils.NewChanDialer(c1.Stopper, c2.Server)
 	c2.Dialer.Wrapped = transporttestutils.NewChanDialer(c2.Stopper, c1.Server)
-
-	c1.Start()
-	c2.Start()
 
 	return c1, c2, func() {
 		// Oh, the joy of multiple stoppers.
