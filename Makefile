@@ -1256,9 +1256,9 @@ pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/all_keywords.awk
 
 # This target will print unreserved_keywords which are not actually
 # used in the grammar.
-.PHONY: unused_unreserved_keywords
-unused_unreserved_keywords: pkg/sql/parser/sql.y pkg/sql/parser/unreserved_keywords.awk
-	@for kw in $$(awk -f unreserved_keywords.awk < $<); do \
+.PHONY: sqlparser-unused-unreserved-keywords
+sqlparser-unused-unreserved-keywords: pkg/sql/parser/sql.y pkg/sql/parser/unreserved_keywords.awk
+	@for kw in $$(awk -f pkg/sql/parser/unreserved_keywords.awk < $<); do \
 	  if [ $$(grep -c $${kw} $<) -le 2 ]; then \
 	    echo $${kw}; \
 	  fi \
