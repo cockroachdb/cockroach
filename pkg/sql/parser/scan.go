@@ -114,7 +114,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	}
 
 	switch lval.id {
-	case NOT, NULLS, WITH, AS:
+	case NOT, WITH, AS:
 	default:
 		s.lastTok = *lval
 		return lval.id
