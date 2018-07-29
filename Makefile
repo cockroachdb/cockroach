@@ -1391,6 +1391,7 @@ logictestopt-package = ./pkg/sql/opt/exec/execbuilder
 
 # Additional dependencies for binaries that depend on generated code.
 bin/workload bin/docgen bin/roachtest: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/roachtest: $(C_LIBS_CCL) $(CGO_FLAGS_FILES)
 bin/roachtest: $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
