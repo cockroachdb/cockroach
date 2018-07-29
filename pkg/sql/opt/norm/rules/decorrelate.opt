@@ -252,7 +252,7 @@
     $left:*
     $right:* &
         (HasOuterCols $right) &
-        (GroupBy
+        (GroupBy | DistinctOn
             $input:*
             $aggregations:*
             $def:*
@@ -262,7 +262,7 @@
 )
 =>
 (Select
-    (GroupBy
+    ((OpName $right)
         (InnerJoinApply
             $newLeft:(EnsureKey $left)
             $input
@@ -274,11 +274,11 @@
     $on
 )
 
-# TryDecorrelateScalarGroupBy "pushes down" a Join into a GroupBy operator, in
-# an attempt to keep "digging" down to find and eliminate unnecessary
-# correlation. The eventual hope is to trigger the DecorrelateJoin rule to turn
-# a JoinApply operator into a non-apply Join operator. This rule has several
-# requirements:
+# TryDecorrelateScalarGroupBy "pushes down" a Join into a ScalarGroupBy
+# operator, in an attempt to keep "digging" down to find and eliminate
+# unnecessary correlation. The eventual hope is to trigger the DecorrelateJoin
+# rule to turn a JoinApply operator into a non-apply Join operator. This rule
+# has several requirements:
 #
 #   1. The left input must have a strict key. If not already present, a key can
 #      be synthesized by using the RowNumber operator to uniquely number the
@@ -359,7 +359,7 @@
     $right:* &
         (HasOuterCols $right) &
         (CanHaveZeroRows $right) & # Let EliminateExistsGroupBy match instead.
-        (GroupBy | Project)
+        (GroupBy | DistinctOn | Project)
     $on:*
 )
 =>

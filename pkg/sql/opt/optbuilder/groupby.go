@@ -117,16 +117,19 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs, orderBy tree.OrderBy) 
 }
 
 func (b *Builder) constructGroupBy(
-	input memo.GroupID, groupingColSet opt.ColSet, cols []scopeColumn, ordering props.OrderingChoice,
+	input memo.GroupID,
+	groupingColSet opt.ColSet,
+	aggCols []scopeColumn,
+	ordering props.OrderingChoice,
 ) memo.GroupID {
-	colList := make(opt.ColList, 0, len(cols))
-	groupList := make([]memo.GroupID, 0, len(cols))
+	colList := make(opt.ColList, 0, len(aggCols))
+	groupList := make([]memo.GroupID, 0, len(aggCols))
 
 	// Deduplicate the columns; we don't need to produce the same aggregation
 	// multiple times.
 	colSet := opt.ColSet{}
-	for i := range cols {
-		if id, group := cols[i].id, cols[i].group; !colSet.Contains(int(id)) {
+	for i := range aggCols {
+		if id, group := aggCols[i].id, aggCols[i].group; !colSet.Contains(int(id)) {
 			if group == 0 {
 				// A "pass through" column (i.e. a VariableOp) is not legal as an
 				// aggregation.

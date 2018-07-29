@@ -68,7 +68,7 @@ func (c *CustomFuncs) RejectNullCols(group memo.GroupID) opt.ColSet {
 		// Request null-rejection on all output columns.
 		relational.Rule.RejectNullCols = relational.OutputCols
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.DistinctOnOp:
 		relational.Rule.RejectNullCols = c.deriveGroupByRejectNullCols(ev)
 	}
 
