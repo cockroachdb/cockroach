@@ -21,13 +21,13 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -49,7 +49,7 @@ func TestWriteResumeSpan(t *testing.T) {
 				},
 			},
 			// Disable backfill migrations, we still need the jobs table migration.
-			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 				DisableBackfillMigrations: true,
 			},
 		},

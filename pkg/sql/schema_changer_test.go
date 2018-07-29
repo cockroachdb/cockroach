@@ -31,13 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -772,7 +772,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1039,7 +1039,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1339,7 +1339,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 		},
 		DistSQL: &distsqlrun.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1428,7 +1428,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1540,7 +1540,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1661,7 +1661,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -1977,7 +1977,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}
@@ -2042,7 +2042,7 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}

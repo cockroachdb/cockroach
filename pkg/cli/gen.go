@@ -22,9 +22,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -195,7 +195,7 @@ Output the list of cluster settings known to this binary.
 				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
 			}
 			defaultVal := setting.String(&s.SV)
-			if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+			if override, ok := migrations.SettingsDefaultOverrides[name]; ok {
 				defaultVal = override
 			}
 			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}

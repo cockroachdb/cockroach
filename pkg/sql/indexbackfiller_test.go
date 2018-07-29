@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -58,7 +58,7 @@ func TestIndexBackfiller(t *testing.T) {
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}

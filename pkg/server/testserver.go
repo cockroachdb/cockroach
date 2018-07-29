@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -373,7 +373,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
+	descriptorIDs, err := migrations.ExpectedDescriptorIDs(context.Background(), db)
 	if err != nil {
 		return 0, err
 	}

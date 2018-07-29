@@ -25,10 +25,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -95,7 +95,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(ctx, kvDB)
+		descriptorIDs, err := migrations.ExpectedDescriptorIDs(ctx, kvDB)
 		if err != nil {
 			t.Fatal(err)
 		}

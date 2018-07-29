@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -699,7 +699,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 			},
 			AsyncExecQuickly: true,
 		},
-		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+		SQLMigrationManager: &migrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
 		},
 	}

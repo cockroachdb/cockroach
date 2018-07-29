@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -66,7 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -1564,11 +1564,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
-	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
+	var mmKnobs migrations.MigrationManagerTestingKnobs
 	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
-		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+		mmKnobs = *migrationManagerTestingKnobs.(*migrations.MigrationManagerTestingKnobs)
 	}
-	migMgr := sqlmigrations.NewManager(
+	migMgr := migrations.NewManager(
 		s.stopper,
 		s.db,
 		s.internalExecutor,
