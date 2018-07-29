@@ -206,7 +206,6 @@ func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c clus
 //
 // See https://github.com/cockroachdb/cockroach/issues/18027.
 func TestGossipRestartFirstNodeNeedsIncoming(t *testing.T) {
-	t.Skip("#28004")
 	s := log.Scope(t)
 	defer s.Close(t)
 
