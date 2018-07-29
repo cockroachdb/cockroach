@@ -17,7 +17,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
-import "sql/jobs/jobspb/jobs.proto";
+import "jobs/jobspb/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
 import "storage/log.proto";
@@ -740,7 +740,7 @@ service Admin {
       get: "/_admin/v1/data_distribution"
     };
   }
-  
+
   // URL: /_admin/v1/metricmetadata
   rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
