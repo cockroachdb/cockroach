@@ -908,7 +908,7 @@ group-by
       └── const-agg [type=int, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
 
-# Push down into GroupBy with no aggregations.
+# Push down into DistinctOn.
 opt
 SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 ----

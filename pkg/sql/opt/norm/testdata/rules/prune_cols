@@ -1270,6 +1270,18 @@ scalar-group-by
       └── sum [type=decimal, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
 
+opt
+SELECT i FROM (SELECT DISTINCT i, s FROM a)
+----
+project
+ ├── columns: i:2(int)
+ └── distinct-on
+      ├── columns: i:2(int) s:4(string)
+      ├── grouping columns: i:2(int) s:4(string)
+      ├── key: (2,4)
+      └── scan a
+           └── columns: i:2(int) s:4(string)
+
 # --------------------------------------------------
 # PruneGroupByCols
 # --------------------------------------------------
@@ -1368,7 +1380,7 @@ group-by
       └── min [type=decimal, outer=(5)]
            └── variable: sm [type=decimal, outer=(5)]
 
-# Distinct (GroupBy operator with no aggregates).
+# DistinctOn.
 opt
 SELECT DISTINCT s, f FROM a
 ----

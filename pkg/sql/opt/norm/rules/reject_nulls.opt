@@ -119,6 +119,9 @@
 # This rule is marked as low priority so that it runs after Select filter
 # pushdown rules. If a filter can be pushed down in its entirety, that's
 # preferable to synthesizing a new "col IS NOT NULL" filter.
+#
+# Note that this rule doesn't need to handle DistinctOn because filters can
+# always be pushed down into DistinctOn.
 [RejectNullsGroupBy, Normalize, LowPriority]
 (Select
     $input:(GroupBy
