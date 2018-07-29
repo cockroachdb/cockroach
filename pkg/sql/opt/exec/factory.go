@@ -116,6 +116,13 @@ type Factory interface {
 	// group) and has exactly one result row (even when there are no input rows).
 	ConstructScalarGroupBy(input Node, aggregations []AggInfo) (Node, error)
 
+	// ConstructDistinct returns a node that filters out rows such that only the
+	// first row is kept for each set of values along the distinct columns.
+	// The orderedCols are a subset of distinctCols; the input is required to be
+	// ordered along these columns (i.e. all rows with the same values on these
+	// columns are a contiguous part of the input).
+	ConstructDistinct(input Node, distinctCols, orderedCols ColumnOrdinalSet) (Node, error)
+
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
 	// operation (either the ALL or the DISTINCT version). The left and right
 	// nodes must have the same number of columns.

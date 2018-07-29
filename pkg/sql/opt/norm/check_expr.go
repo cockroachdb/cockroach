@@ -55,24 +55,48 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 		}
 		for i := 0; i < n; i++ {
 			if child := ev.Child(i); child.Operator() == opt.VariableOp {
-				if ev.Operator() == opt.AggregationsOp {
-					panic("aggregation contains bare variable")
-				}
+				panic("aggregation contains bare variable")
 			}
 		}
 
-	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
-		var ordering *props.OrderingChoice
-		switch ev.Operator() {
-		case opt.LimitOp, opt.OffsetOp:
-			ordering = ev.Private().(*props.OrderingChoice)
-		case opt.RowNumberOp:
-			ordering = &ev.Private().(*memo.RowNumberDef).Ordering
-		case opt.GroupByOp, opt.ScalarGroupByOp:
-			ordering = &ev.Private().(*memo.GroupByDef).Ordering
+	case opt.DistinctOnOp:
+		// Aggregates can be only FirstAgg or ConstAgg.
+		agg := ev.Child(1)
+		for i := 0; i < agg.ChildCount(); i++ {
+			if childOp := agg.Child(i).Operator(); childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
+				panic(fmt.Sprintf("distinct-on contains %s", childOp))
+			}
 		}
-		if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {
-			panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, ev.Operator(), outCols))
+
+	case opt.GroupByOp, opt.ScalarGroupByOp:
+		// Aggregates cannot be FirstAgg.
+		agg := ev.Child(1)
+		for i := 0; i < agg.ChildCount(); i++ {
+			if childOp := agg.Child(i).Operator(); childOp == opt.FirstAggOp {
+				panic(fmt.Sprintf("group-by contains %s", childOp))
+			}
 		}
+	}
+
+	f.checkExprOrdering(ev)
+}
+
+// checkExprOrdering runs checks on orderings stored inside operators.
+func (f *Factory) checkExprOrdering(ev memo.ExprView) {
+	// Verify that orderings stored in operators only refer to columns produced by
+	// their input.
+	var ordering *props.OrderingChoice
+	switch ev.Operator() {
+	case opt.LimitOp, opt.OffsetOp:
+		ordering = ev.Private().(*props.OrderingChoice)
+	case opt.RowNumberOp:
+		ordering = &ev.Private().(*memo.RowNumberDef).Ordering
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
+		ordering = &ev.Private().(*memo.GroupByDef).Ordering
+	default:
+		return
+	}
+	if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {
+		panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, ev.Operator(), outCols))
 	}
 }
