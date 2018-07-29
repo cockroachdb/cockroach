@@ -1700,12 +1700,11 @@ func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached b
 
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
-	// This should always return immediately and acts as a sanity check that we
-	// don't try to gossip before we're connected.
 	select {
 	case <-s.cfg.Gossip.Connected:
 	default:
-		log.Fatalf(ctx, "not connected to gossip")
+		// Nothing to do if gossip is not connected.
+		return nil
 	}
 
 	// Temporarily indicate that we're gossiping the store capacity to avoid
