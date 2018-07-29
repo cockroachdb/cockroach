@@ -250,7 +250,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return sb.colStatSetOp(colSet)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		return sb.colStatGroupBy(colSet)
 
 	case opt.LimitOp:

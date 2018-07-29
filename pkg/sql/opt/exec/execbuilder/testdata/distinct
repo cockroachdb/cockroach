@@ -111,6 +111,19 @@ scan  ·      ·            (x, y, z)  ·
 ·     table  xyz@primary  ·          ·
 ·     spans  ALL          ·          ·
 
+# Test the case when the DistinctOn operator is projecting away a column.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
+----
+distinct        ·            ·            (z)     weak-key(z)
+ │              distinct on  z            ·       ·
+ └── render     ·            ·            (z)     ·
+      │         render 0     z            ·       ·
+      └── scan  ·            ·            (y, z)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
+·               filter       y > 1        ·       ·
+
 statement ok
 CREATE TABLE abcd (
   a INT,

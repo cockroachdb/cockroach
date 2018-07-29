@@ -232,11 +232,33 @@ define GroupBy {
 # null or zero, depending on the function). ScalarGroupBy always returns exactly
 # one row - either the single-group aggregates or the default aggregate values.
 #
-# ScalarGroupBy uses the same GroupByDef private so that it's possible to treat
-# both operators polymorphically. In the ScalarGroupBy case, the grouping column
-# field in GroupByDef is always empty.
+# ScalarGroupBy uses the same GroupByDef private so that it's polymorphic with
+# GroupBy and can be used in the same rules (when appropriate). In the
+# ScalarGroupBy case, the grouping column field in GroupByDef is always empty.
 [Relational]
 define ScalarGroupBy {
+    Input        Expr
+    Aggregations Expr
+    Def          GroupByDef
+}
+
+# DistinctOn filters out rows that are identical on the set of grouping columns;
+# only the first row (according to an ordering) is kept for each set of possible
+# values. It is roughly equivalent with a GroupBy on the same grouping columns
+# except that it uses FirstAgg functions that ensure the value on the first row
+# is chosen (across all aggregations).
+#
+# In addition, the value on that first row must be chosen for all the grouping
+# columns as well; this is relevant in the case of equal but non-identical
+# values, like decimals. For example, if we have rows (1, 2.0) and (1.0, 2) and
+# we are grouping on these two columns, the values output can be either (1, 2.0)
+# or (1.0, 2), but not (1.0, 2.0).
+#
+# DistinctOn uses an Aggregations child and the GroupByDef private so that it's
+# polymorphic with GroupBy and can be used in the same rules (when appropriate).
+# In the DistinctOn case, the aggregations can be only FirstAgg or ConstAgg.
+[Relational]
+define DistinctOn {
     Input        Expr
     Aggregations Expr
     Def          GroupByDef

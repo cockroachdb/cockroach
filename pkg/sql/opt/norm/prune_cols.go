@@ -285,7 +285,7 @@ func DerivePruneCols(ev memo.ExprView) opt.ColSet {
 		relational.Rule.PruneCols.DifferenceWith(ev.Child(1).Logical().OuterCols())
 		relational.Rule.PruneCols.DifferenceWith(ev.Child(2).Logical().OuterCols())
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		// Grouping columns can't be pruned, because they were used to group rows.
 		// However, aggregation columns can potentially be pruned.
 		groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols

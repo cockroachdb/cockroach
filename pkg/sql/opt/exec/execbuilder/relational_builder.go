@@ -103,6 +103,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		ep, err = b.buildGroupBy(ev)
 
+	case opt.DistinctOnOp:
+		ep, err = b.buildDistinct(ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		ep, err = b.buildSetOp(ev)
@@ -530,6 +533,62 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
+}
+
+func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// The DistinctOn operator can effectively project away columns if they don't
+	// have a corresponding aggregation. Introduce that project before the
+	// distinct.
+	def := ev.Private().(*memo.GroupByDef)
+	aggs := ev.Child(1)
+	if n := def.GroupingCols.Len() + aggs.ChildCount(); n != input.outputCols.Len() {
+		cols := make(opt.ColList, 0, n)
+		for i, ok := def.GroupingCols.Next(0); ok; i, ok = def.GroupingCols.Next(i + 1) {
+			cols = append(cols, opt.ColumnID(i))
+		}
+		cols = append(cols, aggs.Private().(opt.ColList)...)
+		input.root, err = b.ensureColumns(input, cols)
+		if err != nil {
+			return execPlan{}, err
+		}
+		input.outputCols = opt.ColMap{}
+		for i, col := range cols {
+			input.outputCols.Set(int(col), i)
+		}
+	}
+
+	ordering := def.Ordering
+	var orderedColSet opt.ColSet
+	for i := range ordering.Columns {
+		g := ordering.Columns[i].Group
+		if !g.Intersects(def.GroupingCols) {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		orderedColSet.UnionWith(g)
+	}
+	orderedColSet.IntersectionWith(def.GroupingCols)
+
+	var distinctCols, orderedCols exec.ColumnOrdinalSet
+	for i, ok := def.GroupingCols.Next(0); ok; i, ok = def.GroupingCols.Next(i + 1) {
+		ordinal := input.getColumnOrdinal(opt.ColumnID(i))
+		distinctCols.Add(int(ordinal))
+		if orderedColSet.Contains(i) {
+			orderedCols.Add(int(ordinal))
+		}
+	}
+
+	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 func (b *Builder) buildSetOp(ev memo.ExprView) (execPlan, error) {

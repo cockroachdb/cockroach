@@ -291,7 +291,7 @@
 # Citations: [2]
 [PushSelectIntoGroupBy, Normalize]
 (Select
-    (GroupBy
+    $groupOp:(GroupBy | DistinctOn
         $input:*
         $aggregations:*
         $def:*
@@ -307,7 +307,7 @@
 )
 =>
 (Select
-    (GroupBy
+    ((OpName $groupOp)
         (Select
             $input
             (Filters (ExtractBoundConditions $list $passthroughCols))

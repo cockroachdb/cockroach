@@ -41,7 +41,7 @@
 # SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
 # input ordering.
 [SimplifyGroupByOrdering, Normalize]
-(GroupBy | ScalarGroupBy
+(GroupBy | ScalarGroupBy | DistinctOn
     $input:*
     $aggregations:*
     $def:* & (CanSimplifyGroupByOrdering $input $def)

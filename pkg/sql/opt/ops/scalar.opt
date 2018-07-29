@@ -646,3 +646,12 @@ define ConstAgg {
 define ConstNotNullAgg {
     Input Expr
 }
+
+# FirstAgg is used only by DistinctOn; it returns the value on the first row
+# according to an ordering; if the ordering is unspecified (or partially
+# specified), it is an arbitrary ordering but it must be the same across all
+# FirstAggs in a DistinctOn.
+[Scalar, Aggregate]
+define FirstAgg {
+    Input Expr
+}
