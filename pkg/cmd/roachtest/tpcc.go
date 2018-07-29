@@ -412,7 +412,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				tpmC += partialTpMc
 			}
 			// Determine the fraction of the maximum possible tpmC realized.
-			maxTpmC := 12.8 * float64(warehouses)
+			maxTpmC := 12.86 * float64(warehouses)
 			tpmCRatio := tpmC / maxTpmC
 
 			// Determine whether this means the test passed or not. We use a
