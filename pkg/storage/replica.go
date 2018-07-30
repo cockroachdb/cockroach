@@ -782,7 +782,7 @@ func (r *Replica) String() string {
 // will be deleted. Otherwise, only data in the range-ID local keyspace will be
 // deleted. Requires that Replica.raftMu is held.
 func (r *Replica) destroyRaftMuLocked(
-	ctx context.Context, consistentDesc roachpb.RangeDescriptor, destroyData bool,
+	ctx context.Context, nextReplicaID roachpb.ReplicaID, destroyData bool,
 ) error {
 	startTime := timeutil.Now()
 
@@ -793,8 +793,6 @@ func (r *Replica) destroyRaftMuLocked(
 
 	ms := r.GetMVCCStats()
 
-	// NB: this uses the local descriptor instead of the consistent one to match
-	// the data on disk.
 	desc := r.Desc()
 	err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch, destroyData)
 	if err != nil {
@@ -817,7 +815,7 @@ func (r *Replica) destroyRaftMuLocked(
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
+	if err := r.setTombstoneKey(ctx, batch, nextReplicaID); err != nil {
 		return err
 	}
 	// We need to sync here because we are potentially deleting sideloaded
@@ -884,42 +882,30 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 
 // setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
 // get reused. It determines what the minimum next replica ID can be using
-// the provided RangeDescriptor and the Replica's own ID.
+// the provided nextReplicaID and the Replica's own ID.
 //
 // We have to be careful to set the right key, since a replica can be using an
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
+	ctx context.Context, eng engine.ReadWriter, externalNextReplicaID roachpb.ReplicaID,
 ) error {
 	r.mu.Lock()
-	nextReplicaID := r.nextReplicaIDLocked(desc)
-	r.mu.minReplicaID = nextReplicaID
+	nextReplicaID := r.mu.state.Desc.NextReplicaID
+	if nextReplicaID < externalNextReplicaID {
+		nextReplicaID = externalNextReplicaID
+	}
+	if nextReplicaID > r.mu.minReplicaID {
+		r.mu.minReplicaID = nextReplicaID
+	}
 	r.mu.Unlock()
 
-	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	tombstoneKey := keys.RaftTombstoneKey(r.RangeID)
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: nextReplicaID,
 	}
 	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
 		hlc.Timestamp{}, nil, tombstone)
-}
-
-// nextReplicaIDLocked returns the minimum ID that a new replica can be created
-// with for this replica's range. We have to be very careful to ensure that
-// replica IDs never get re-used because that can cause panics.
-//
-// The externalDesc parameter is an optional way to provide an additional
-// descriptor for the range that was looked up outside the replica code.
-func (r *Replica) nextReplicaIDLocked(externalDesc *roachpb.RangeDescriptor) roachpb.ReplicaID {
-	result := r.mu.state.Desc.NextReplicaID
-	if externalDesc != nil && result < externalDesc.NextReplicaID {
-		result = externalDesc.NextReplicaID
-	}
-	if result < r.mu.minReplicaID {
-		result = r.mu.minReplicaID
-	}
-	return result
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -2800,7 +2786,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		replyDesc := rs[0]
 		if replyDesc.RangeID != desc.RangeID {
 			// Merge successful. Remove the replica.
-			err := r.store.RemoveReplica(ctx, r, *desc, RemoveOptions{DestroyData: true})
+			err := r.store.RemoveReplica(ctx, r, desc.NextReplicaID, RemoveOptions{DestroyData: true})
 			// It's not a problem if the replica is already gone. It may have been
 			// cleaned up when the merge transaction committed if it was collocated
 			// with a replica of the left-hand side of the merge.
@@ -5650,10 +5636,8 @@ func checkIfTxnAborted(
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
-		if log.V(1) {
-			log.Infof(ctx, "found AbortSpan entry for %s with priority %d",
-				txn.ID.Short(), entry.Priority)
-		}
+		log.VEventf(ctx, 1, "found AbortSpan entry for %s with priority %d",
+			txn.ID.Short(), entry.Priority)
 		newTxn := txn.Clone()
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority

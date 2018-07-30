@@ -38,7 +38,6 @@ import (
 
 const (
 	opTxnCoordSender = "txn coordinator"
-	opHeartbeatLoop  = "heartbeat txn"
 )
 
 // txnCoordState represents the state of the transaction coordinator.
@@ -556,14 +555,18 @@ func (tc *TxnCoordSender) Send(
 	txnIDStr := ba.Txn.ID.String()
 	sp.SetBaggageItem("txnID", txnIDStr)
 
+	// If there's a BeginTransaction, we need to start the heartbeat loop.
+	// Perhaps surprisingly, this needs to be done even if the batch has both
+	// a BeginTransaction and an EndTransaction. Although on batch success the
+	// heartbeat loop will be stopped right away, on retriable errors we need the
+	// heartbeat loop: the intents and txn record should be kept in place just
+	// like for non-1PC txns.
+	//
+	// Note that we don't start the heartbeat loop if the loop is already running.
+	// That can happen because of send BeginTransaction again after retriable
+	// errors.
 	_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
-	if hasBegin {
-		// If there's a BeginTransaction, we need to start the heartbeat loop.
-		// Perhaps surprisingly, this needs to be done even if the batch has both
-		// a BeginTransaction and an EndTransaction. Although on batch success the
-		// heartbeat loop will be stopped right away, on retriable errors we need the
-		// heartbeat loop: the intents and txn record should be kept in place just
-		// like for non-1PC txns.
+	if hasBegin && (tc.mu.txnEnd == nil) {
 		if err := tc.startHeartbeatLoopLocked(ctx); err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -757,8 +760,6 @@ func (tc *TxnCoordSender) finalTxnStatsLocked() (duration, restarts int64, statu
 // stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents. When the heartbeat stops, the transaction
 // stats are updated based on its final disposition.
-//
-// TODO(wiz): Update (*DBServer).Batch to not use context.TODO().
 func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 	var tickChan <-chan time.Time
 	{
@@ -766,12 +767,6 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 		tickChan = ticker.C
 		defer ticker.Stop()
 	}
-
-	// TODO(tschottdorf): this should join to the trace of the request
-	// which starts this goroutine.
-	sp := tc.AmbientContext.Tracer.StartSpan(opHeartbeatLoop)
-	defer sp.Finish()
-	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	defer func() {
 		tc.mu.Lock()
@@ -926,6 +921,10 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
 func (tc *TxnCoordSender) startHeartbeatLoopLocked(ctx context.Context) error {
+	if tc.mu.txnEnd != nil {
+		log.Fatal(ctx, "attempting to start a second heartbeat loop ")
+	}
+
 	tc.mu.hbRunning = true
 	tc.mu.firstUpdateNanos = tc.clock.PhysicalNow()
 
@@ -940,10 +939,15 @@ func (tc *TxnCoordSender) startHeartbeatLoopLocked(ctx context.Context) error {
 	tc.mu.txnEnd = make(chan struct{})
 	// Create a new context so that the heartbeat loop doesn't inherit the
 	// caller's cancelation.
+	// We want the loop to run in a span linked to the current one, though, so we
+	// put our span in the new context and expect RunAsyncTask to fork it
+	// immediately.
 	hbCtx := tc.AnnotateCtx(context.Background())
+	hbCtx = opentracing.ContextWithSpan(hbCtx, opentracing.SpanFromContext(ctx))
+
 	if err := tc.stopper.RunAsyncTask(
-		ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
-			tc.heartbeatLoop(hbCtx)
+		hbCtx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
+			tc.heartbeatLoop(ctx)
 		}); err != nil {
 		// The system is already draining and we can't start the
 		// heartbeat. We refuse new transactions for now because
