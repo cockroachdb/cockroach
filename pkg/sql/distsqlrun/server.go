@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // DistSQLVersion identifies DistSQL engine versions.
@@ -146,7 +145,7 @@ type ServerConfig struct {
 
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
-	ClusterID uuid.UUID
+	ClusterID *base.ClusterIDContainer
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
@@ -367,7 +366,7 @@ func (ds *ServerImpl) setupFlow(
 	evalCtx := tree.EvalContext{
 		Settings:     ds.ServerConfig.Settings,
 		SessionData:  sd,
-		ClusterID:    ds.ServerConfig.ClusterID,
+		ClusterID:    ds.ServerConfig.ClusterID.Get(),
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,
 		Mon:          &monitor,
