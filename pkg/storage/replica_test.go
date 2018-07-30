@@ -2745,8 +2745,8 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 	})
 	t.Run("CancelEndTxn", func(t *testing.T) {
 		instrs := []cancelInstr{
-			{reqOverride: heartbeatBa, expErr: "txn record not found"},
 			{reqOverride: endTxnBa, expErr: "txn record not found"},
+			{reqOverride: heartbeatBa, expErr: "txn record not found"},
 			{reqOverride: pushBa},
 			{reqOverride: heartbeatBa, expErr: "txn record not found"},
 			{reqOverride: resolveIntentBa},
