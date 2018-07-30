@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -337,21 +338,8 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate frame of the window definition if present.
 		if windowDef.Frame != nil {
-			bounds := windowDef.Frame.Bounds
-			startBound, endBound := bounds.StartBound, bounds.EndBound
-			if startBound.OffsetExpr != nil {
-				typedStartOffsetExpr, err := tree.TypeCheckAndRequire(startBound.OffsetExpr, &p.semaCtx, types.Int, "window frame start")
-				if err != nil {
-					return err
-				}
-				startBound.OffsetExpr = typedStartOffsetExpr
-			}
-			if endBound != nil && endBound.OffsetExpr != nil {
-				typedEndOffsetExpr, err := tree.TypeCheckAndRequire(endBound.OffsetExpr, &p.semaCtx, types.Int, "window frame end")
-				if err != nil {
-					return err
-				}
-				endBound.OffsetExpr = typedEndOffsetExpr
+			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
+				return err
 			}
 		}
 
@@ -664,17 +652,63 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
 			// so we need to make sure these expressions are evaluated before using offsets.
 			bounds := frameRun.Frame.Bounds
+			startBound, endBound := bounds.StartBound, bounds.EndBound
+			var requiredType types.T
+			switch frameRun.Frame.Mode {
+			case tree.ROWS:
+				// In ROWS mode, offsets must be non-null, non-negative integers.
+				// Non-nullity has already been checked, non-negativity is checked below.
+				requiredType = types.Int
+			case tree.RANGE:
+				// In RANGE mode, offsets must be non-null and non-negative.
+				// Non-nullity has already been checked, non-negativity is checked below.
+				if startBound.OffsetExpr != nil || (endBound != nil && endBound.OffsetExpr != nil) {
+					// At least one of the bounds is of type `value PRECEDING` or 'value FOLLOWING'.
+					// We require ordering on the single column that is the first argument
+					// to a window function that has this window frame. If the ordering is
+					// on the different column, we'll catch it later.
+					if len(windowFn.columnOrdering) != 1 {
+						return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires that the ORDER BY clause specify exactly one column")
+					}
+					// Assumption: renderNode is a parent of windowNode, and its renders
+					// contain IndexedVars representing the input columns. To make sure
+					// that ordering is done on the appropriate column, we compare indices
+					// of IndexedVars.
+					switch r := n.plan.(type) {
+					case *renderNode:
+						argCol, ok := r.render[windowFn.argIdxStart].(*tree.IndexedVar)
+						if !ok {
+							panic("unexpected: render of the first window function argument is not an IndexedVar")
+						}
+						ordCol, ok := r.render[windowFn.columnOrdering[0].ColIdx].(*tree.IndexedVar)
+						if !ok {
+							panic("unexpected: render of the ordering column is not an IndexedVar")
+						}
+						if argCol.Idx != ordCol.Idx {
+							return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires ordering be on the column over which window function calculation takes place")
+						}
+						requiredType = argCol.ResolvedType()
+						if types.IsDateTimeType(requiredType) {
+							// Spec: for datetime ordering columns, the required type is an 'interval'.
+							requiredType = types.Interval
+						}
+					default:
+						panic("unexpected: parent of windowNode is not renderNode")
+					}
+				}
+			default:
+				panic("unexpected WindowFrameMode")
+			}
 			if bounds.StartBound.OffsetExpr != nil {
 				typedStartOffset := bounds.StartBound.OffsetExpr.(tree.TypedExpr)
 				dStartOffset, err := typedStartOffset.Eval(evalCtx)
 				if err != nil {
 					return err
 				}
-				startOffset := int(tree.MustBeDInt(dStartOffset))
-				if startOffset < 0 {
+				if isNegative(evalCtx, dStartOffset) {
 					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
 				}
-				frameRun.StartBoundOffset = startOffset
+				frameRun.StartBoundOffset = dStartOffset
 			}
 			if bounds.EndBound != nil && bounds.EndBound.OffsetExpr != nil {
 				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
@@ -682,11 +716,10 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				if err != nil {
 					return err
 				}
-				endOffset := int(tree.MustBeDInt(dEndOffset))
-				if endOffset < 0 {
+				if isNegative(evalCtx, dEndOffset) {
 					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
 				}
-				frameRun.EndBoundOffset = endOffset
+				frameRun.EndBoundOffset = dEndOffset
 			}
 		}
 
@@ -843,6 +876,22 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		}
 	}
 	return nil
+}
+
+// isNegative returns whether offset is negative.
+func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
+	switch o := offset.(type) {
+	case *tree.DInt:
+		return *o < 0
+	case *tree.DDecimal:
+		return o.Negative
+	case *tree.DFloat:
+		return *o < 0
+	case *tree.DInterval:
+		return o.Compare(evalCtx, &tree.DInterval{duration.Duration{}}) < 0
+	default:
+		panic("unexpected offset type")
+	}
 }
 
 // populateValues populates n.run.values with final datum values after computing

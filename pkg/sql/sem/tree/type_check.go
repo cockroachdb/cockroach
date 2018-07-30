@@ -819,21 +819,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			expr.WindowDef.OrderBy[i].Expr = typedOrderBy
 		}
 		if expr.WindowDef.Frame != nil {
-			bounds := expr.WindowDef.Frame.Bounds
-			startBound, endBound := bounds.StartBound, bounds.EndBound
-			if startBound.OffsetExpr != nil {
-				typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, types.Int, "window frame start")
-				if err != nil {
-					return nil, err
-				}
-				startBound.OffsetExpr = typedStartOffsetExpr
-			}
-			if endBound != nil && endBound.OffsetExpr != nil {
-				typedEndOffsetExpr, err := typeCheckAndRequire(ctx, endBound.OffsetExpr, types.Int, "window frame end")
-				if err != nil {
-					return nil, err
-				}
-				endBound.OffsetExpr = typedEndOffsetExpr
+			if err := expr.WindowDef.Frame.TypeCheck(ctx, expr.WindowDef); err != nil {
+				return nil, err
 			}
 		}
 	} else {
@@ -2092,3 +2079,61 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// TypeCheck checks that offsets of the window frame (if present) are
+// of the appropriate type.
+func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
+	bounds := f.Bounds
+	startBound, endBound := bounds.StartBound, bounds.EndBound
+	var requiredType types.T
+	switch f.Mode {
+	case ROWS:
+		// In ROWS mode, offsets must be non-null, non-negative integers.
+		// Non-negativity will be checked later.
+		requiredType = types.Int
+	case RANGE:
+		// In RANGE mode, offsets must be non-null and non-negative.
+		// Non-negativity will be checked later.
+		if startBound.OffsetExpr != nil || (endBound != nil && endBound.OffsetExpr != nil) {
+			// At least one of the bounds is of type `value PRECEDING` or 'value FOLLOWING'.
+			// We require ordering on the single column that is the first argument
+			// to a window function that has this window frame. If the ordering is
+			// on the different column, we'll catch it later.
+			// TODO(yuzefovich): this behavior, however, might produce different error:
+			// for example, computing average over INT column, but the ordering
+			// is on STRING - we'll get 'incompatible types' error whereas the correct
+			// error would be 'ordering on a different column'.
+			if len(windowDef.OrderBy) != 1 {
+				return pgerror.NewErrorf(pgerror.CodeWindowingError, "RANGE mode requires that the ORDER BY clause specify exactly one column")
+			}
+			requiredType = windowDef.OrderBy[0].Expr.(TypedExpr).ResolvedType()
+			if types.IsDateTimeType(requiredType) {
+				// Spec: for datetime ordering columns, the required type is an 'interval'.
+				requiredType = types.Interval
+			}
+		}
+	default:
+		panic("unexpected WindowFrameMode")
+	}
+	if startBound.OffsetExpr != nil {
+		typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, requiredType, "window frame start")
+		if err != nil {
+			return err
+		}
+		startBound.OffsetExpr = typedStartOffsetExpr
+		if startBound.OffsetExpr == DNull {
+			return pgerror.NewErrorf(pgerror.CodeWindowingError, "frame starting offset must be non-null")
+		}
+	}
+	if endBound != nil && endBound.OffsetExpr != nil {
+		typedEndOffsetExpr, err := typeCheckAndRequire(ctx, endBound.OffsetExpr, requiredType, "window frame end")
+		if err != nil {
+			return err
+		}
+		endBound.OffsetExpr = typedEndOffsetExpr
+		if endBound.OffsetExpr == DNull {
+			return pgerror.NewErrorf(pgerror.CodeWindowingError, "frame ending offset must be non-null")
+		}
+	}
+	return nil
+}
