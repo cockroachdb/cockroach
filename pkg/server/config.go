@@ -215,11 +215,13 @@ type Config struct {
 	// ScanMinIdleTime is the minimum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in more than ScanInterval for large
 	// stores.
+	// Environment Variable: COCKROACH_SCAN_MIN_IDLE_TIME
 	ScanMinIdleTime time.Duration
 
 	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
+	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
 	// TestingKnobs is used for internal test controls only.
@@ -617,6 +619,9 @@ func (cfg *Config) RequireWebSession() bool {
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
+	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
+	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
+	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
