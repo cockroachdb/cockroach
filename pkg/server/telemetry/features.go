@@ -70,7 +70,10 @@ func GetAndResetFeatureCounts() map[string]int32 {
 	counters.RLock()
 	m := make(map[string]int32, approxFeatureCount)
 	for k := range counters.m {
-		m[k] = atomic.SwapInt32(counters.m[k], 0)
+		val := atomic.SwapInt32(counters.m[k], 0)
+		if val != 0 {
+			m[k] = val
+		}
 	}
 	counters.RUnlock()
 	return m

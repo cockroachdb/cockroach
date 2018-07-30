@@ -150,7 +150,9 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	telemetry.Count("test.a")
-	c := telemetry.GetCounter("test.b")
+	telemetry.Count("test.b")
+	telemetry.Count("test.b")
+	c := telemetry.GetCounter("test.c")
 	telemetry.Inc(c)
 	telemetry.Inc(c)
 	telemetry.Inc(c)
@@ -375,12 +377,13 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 2, len(r.last.FeatureUsage); expected != actual {
+	if expected, actual := 3, len(r.last.FeatureUsage); expected != actual {
 		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
 	for key, expected := range map[string]int32{
 		"test.a": 1,
-		"test.b": 3,
+		"test.b": 2,
+		"test.c": 3,
 	} {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
 			t.Fatalf("expected report of feature %q", key)
