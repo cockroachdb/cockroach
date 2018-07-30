@@ -4,6 +4,8 @@ Is this a bug report or a feature request? Prefer live chat? Message our enginee
 
 Please describe the issue you observed:
 
+- Which version of CockroachDB are you using?
+
 - What did you do?
 
 - What did you expect to see?
