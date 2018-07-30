@@ -228,6 +228,21 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: oneIntCol,
 			expected:    "[]",
 		},
+		{
+			description: "Test left outer lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 2},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftOuterJoin,
+			outputTypes: twoIntCols,
+			expected:    "[[0 NULL]]",
+		},
 	}
 	for _, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily} {
 		for _, c := range testCases {
