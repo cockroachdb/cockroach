@@ -1271,6 +1271,21 @@ func (r *Replica) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).State == LeaseState_VALID
 }
 
+func (r *Replica) ownsMostRecentLeaseRLocked() bool {
+	if !r.mu.state.Lease.OwnedBy(r.store.StoreID()) {
+		return false
+	}
+	leaseState := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State
+	switch leaseState {
+	case LeaseState_VALID:
+	case LeaseState_STASIS:
+	case LeaseState_EXPIRED:
+	default:
+		return false
+	}
+	return true
+}
+
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
 func (r *Replica) IsLeaseValid(lease roachpb.Lease, ts hlc.Timestamp) bool {
@@ -4383,7 +4398,7 @@ type quiescer interface {
 	raftStatusRLocked() *raft.Status
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
-	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
+	ownsMostRecentLeaseRLocked() bool
 	maybeTransferRaftLeader(ctx context.Context, status *raft.Status, ts hlc.Timestamp)
 }
 
@@ -4445,10 +4460,14 @@ func shouldReplicaQuiesce(
 		}
 		return nil, false
 	}
-	// Only quiesce if this replica is the leaseholder as well;
-	// otherwise the replica which is the valid leaseholder may have
-	// pending commands which it's waiting on this leader to propose.
-	if !q.ownsValidLeaseRLocked(now) {
+	// Only quiesce if this replica is (to the best of our knowledge) the most
+	// recent leaseholder as well; otherwise the replica which is the valid
+	// leaseholder may have pending commands which it's waiting on this leader to
+	// propose.
+	//
+	// Note that we can't ask that lease to be live. If the range is dormant but
+	// the lease expires, the range would never quiesce if we did.
+	if !q.ownsMostRecentLeaseRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}

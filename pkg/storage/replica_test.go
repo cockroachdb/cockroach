@@ -9515,7 +9515,7 @@ func (q *testQuiescer) hasRaftReadyRLocked() bool {
 	return q.raftReady
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
+func (q *testQuiescer) ownsMostRecentLeaseRLocked() bool {
 	return q.ownsValidLease
 }
 
