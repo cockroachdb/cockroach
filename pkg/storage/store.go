@@ -4017,36 +4017,36 @@ func (s *Store) tryGetOrCreateReplica(
 	// The common case: look up an existing (initialized) replica.
 	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
 		repl := (*Replica)(value)
+		repl.raftMu.Lock() // not unlocked
+		repl.mu.Lock()
+		defer repl.mu.Unlock()
+
+		var replTooOldErr error
 		if creatingReplica != nil {
 			// Drop messages that come from a node that we believe was once a member of
 			// the group but has been removed.
-			desc := repl.Desc()
+			desc := repl.mu.state.Desc
 			_, found := desc.GetReplicaDescriptorByID(creatingReplica.ReplicaID)
 			// It's not a current member of the group. Is it from the past?
 			if !found && creatingReplica.ReplicaID < desc.NextReplicaID {
-				return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+				replTooOldErr = roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 			}
 		}
 
-		repl.raftMu.Lock()
-		repl.mu.RLock()
-		destroyed := repl.mu.destroyStatus
-		repl.mu.RUnlock()
-		if destroyed.reason == destroyReasonRemoved {
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
+		var err error
+		if replTooOldErr != nil {
+			err = replTooOldErr
+		} else if ds := repl.mu.destroyStatus; ds.reason == destroyReasonRemoved {
+			err = errRetry
+		} else if ds.reason == destroyReasonCorrupted {
+			err = ds.err
+		} else {
+			err = repl.setReplicaIDRaftMuLockedMuLocked(replicaID)
 		}
-		if destroyed.reason == destroyReasonCorrupted {
-			repl.raftMu.Unlock()
-			return nil, false, destroyed.err
-		}
-		repl.mu.Lock()
-		if err := repl.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
-			repl.mu.Unlock()
+		if err != nil {
 			repl.raftMu.Unlock()
 			return nil, false, err
 		}
-		repl.mu.Unlock()
 		return repl, false, nil
 	}
 
@@ -4068,7 +4068,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// Create a new replica and lock it for raft processing.
 	repl := newReplica(rangeID, s)
 	repl.creatingReplica = creatingReplica
-	repl.raftMu.Lock()
+	repl.raftMu.Lock() // not unlocked
 
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
