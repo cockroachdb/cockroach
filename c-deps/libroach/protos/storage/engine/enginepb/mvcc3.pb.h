@@ -39,7 +39,7 @@ namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[4];
+  static const ::google::protobuf::internal::ParseTable schema[10];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -49,12 +49,30 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
+class MVCCAbortIntentOp;
+class MVCCAbortIntentOpDefaultTypeInternal;
+extern MVCCAbortIntentOpDefaultTypeInternal _MVCCAbortIntentOp_default_instance_;
+class MVCCCommitIntentOp;
+class MVCCCommitIntentOpDefaultTypeInternal;
+extern MVCCCommitIntentOpDefaultTypeInternal _MVCCCommitIntentOp_default_instance_;
+class MVCCLogicalOp;
+class MVCCLogicalOpDefaultTypeInternal;
+extern MVCCLogicalOpDefaultTypeInternal _MVCCLogicalOp_default_instance_;
 class MVCCPersistentStats;
 class MVCCPersistentStatsDefaultTypeInternal;
 extern MVCCPersistentStatsDefaultTypeInternal _MVCCPersistentStats_default_instance_;
 class MVCCStatsDelta;
 class MVCCStatsDeltaDefaultTypeInternal;
 extern MVCCStatsDeltaDefaultTypeInternal _MVCCStatsDelta_default_instance_;
+class MVCCUpdateIntentOp;
+class MVCCUpdateIntentOpDefaultTypeInternal;
+extern MVCCUpdateIntentOpDefaultTypeInternal _MVCCUpdateIntentOp_default_instance_;
+class MVCCWriteIntentOp;
+class MVCCWriteIntentOpDefaultTypeInternal;
+extern MVCCWriteIntentOpDefaultTypeInternal _MVCCWriteIntentOp_default_instance_;
+class MVCCWriteValueOp;
+class MVCCWriteValueOpDefaultTypeInternal;
+extern MVCCWriteValueOpDefaultTypeInternal _MVCCWriteValueOp_default_instance_;
 class RangeAppliedState;
 class RangeAppliedStateDefaultTypeInternal;
 extern RangeAppliedStateDefaultTypeInternal _RangeAppliedState_default_instance_;
@@ -67,8 +85,14 @@ extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
 }  // namespace cockroach
 namespace google {
 namespace protobuf {
+template<> ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCAbortIntentOp>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCCommitIntentOp>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCLogicalOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCLogicalOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::MVCCPersistentStats* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCPersistentStats>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::MVCCStatsDelta* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCStatsDelta>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCWriteIntentOp>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCWriteValueOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::RangeAppliedState* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::RangeAppliedState>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::TxnMeta* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TxnMeta>(Arena*);
 }  // namespace protobuf
@@ -758,6 +782,814 @@ class RangeAppliedState : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::storage::engine::enginepb::MVCCPersistentStats* range_stats_;
   ::google::protobuf::uint64 raft_applied_index_;
   ::google::protobuf::uint64 lease_applied_index_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCWriteValueOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCWriteValueOp) */ {
+ public:
+  MVCCWriteValueOp();
+  virtual ~MVCCWriteValueOp();
+
+  MVCCWriteValueOp(const MVCCWriteValueOp& from);
+
+  inline MVCCWriteValueOp& operator=(const MVCCWriteValueOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCWriteValueOp(MVCCWriteValueOp&& from) noexcept
+    : MVCCWriteValueOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCWriteValueOp& operator=(MVCCWriteValueOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCWriteValueOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCWriteValueOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCWriteValueOp*>(
+               &_MVCCWriteValueOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    4;
+
+  void Swap(MVCCWriteValueOp* other);
+  friend void swap(MVCCWriteValueOp& a, MVCCWriteValueOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCWriteValueOp* New() const final {
+    return CreateMaybeMessage<MVCCWriteValueOp>(NULL);
+  }
+
+  MVCCWriteValueOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCWriteValueOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCWriteValueOp& from);
+  void MergeFrom(const MVCCWriteValueOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCWriteValueOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // bytes key = 1;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // bytes value = 3;
+  void clear_value();
+  static const int kValueFieldNumber = 3;
+  const ::std::string& value() const;
+  void set_value(const ::std::string& value);
+  #if LANG_CXX11
+  void set_value(::std::string&& value);
+  #endif
+  void set_value(const char* value);
+  void set_value(const void* value, size_t size);
+  ::std::string* mutable_value();
+  ::std::string* release_value();
+  void set_allocated_value(::std::string* value);
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCWriteValueOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr value_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCWriteIntentOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCWriteIntentOp) */ {
+ public:
+  MVCCWriteIntentOp();
+  virtual ~MVCCWriteIntentOp();
+
+  MVCCWriteIntentOp(const MVCCWriteIntentOp& from);
+
+  inline MVCCWriteIntentOp& operator=(const MVCCWriteIntentOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCWriteIntentOp(MVCCWriteIntentOp&& from) noexcept
+    : MVCCWriteIntentOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCWriteIntentOp& operator=(MVCCWriteIntentOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCWriteIntentOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCWriteIntentOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCWriteIntentOp*>(
+               &_MVCCWriteIntentOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    5;
+
+  void Swap(MVCCWriteIntentOp* other);
+  friend void swap(MVCCWriteIntentOp& a, MVCCWriteIntentOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCWriteIntentOp* New() const final {
+    return CreateMaybeMessage<MVCCWriteIntentOp>(NULL);
+  }
+
+  MVCCWriteIntentOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCWriteIntentOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCWriteIntentOp& from);
+  void MergeFrom(const MVCCWriteIntentOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCWriteIntentOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_txn_id();
+  static const int kTxnIdFieldNumber = 1;
+  const ::std::string& txn_id() const;
+  void set_txn_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_id(::std::string&& value);
+  #endif
+  void set_txn_id(const char* value);
+  void set_txn_id(const void* value, size_t size);
+  ::std::string* mutable_txn_id();
+  ::std::string* release_txn_id();
+  void set_allocated_txn_id(::std::string* txn_id);
+
+  // bytes txn_key = 2;
+  void clear_txn_key();
+  static const int kTxnKeyFieldNumber = 2;
+  const ::std::string& txn_key() const;
+  void set_txn_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_key(::std::string&& value);
+  #endif
+  void set_txn_key(const char* value);
+  void set_txn_key(const void* value, size_t size);
+  ::std::string* mutable_txn_key();
+  ::std::string* release_txn_key();
+  void set_allocated_txn_key(::std::string* txn_key);
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 3;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCWriteIntentOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr txn_id_;
+  ::google::protobuf::internal::ArenaStringPtr txn_key_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCUpdateIntentOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp) */ {
+ public:
+  MVCCUpdateIntentOp();
+  virtual ~MVCCUpdateIntentOp();
+
+  MVCCUpdateIntentOp(const MVCCUpdateIntentOp& from);
+
+  inline MVCCUpdateIntentOp& operator=(const MVCCUpdateIntentOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCUpdateIntentOp(MVCCUpdateIntentOp&& from) noexcept
+    : MVCCUpdateIntentOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCUpdateIntentOp& operator=(MVCCUpdateIntentOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCUpdateIntentOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCUpdateIntentOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCUpdateIntentOp*>(
+               &_MVCCUpdateIntentOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    6;
+
+  void Swap(MVCCUpdateIntentOp* other);
+  friend void swap(MVCCUpdateIntentOp& a, MVCCUpdateIntentOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCUpdateIntentOp* New() const final {
+    return CreateMaybeMessage<MVCCUpdateIntentOp>(NULL);
+  }
+
+  MVCCUpdateIntentOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCUpdateIntentOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCUpdateIntentOp& from);
+  void MergeFrom(const MVCCUpdateIntentOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCUpdateIntentOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_txn_id();
+  static const int kTxnIdFieldNumber = 1;
+  const ::std::string& txn_id() const;
+  void set_txn_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_id(::std::string&& value);
+  #endif
+  void set_txn_id(const char* value);
+  void set_txn_id(const void* value, size_t size);
+  ::std::string* mutable_txn_id();
+  ::std::string* release_txn_id();
+  void set_allocated_txn_id(::std::string* txn_id);
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr txn_id_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCCommitIntentOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCCommitIntentOp) */ {
+ public:
+  MVCCCommitIntentOp();
+  virtual ~MVCCCommitIntentOp();
+
+  MVCCCommitIntentOp(const MVCCCommitIntentOp& from);
+
+  inline MVCCCommitIntentOp& operator=(const MVCCCommitIntentOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCCommitIntentOp(MVCCCommitIntentOp&& from) noexcept
+    : MVCCCommitIntentOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCCommitIntentOp& operator=(MVCCCommitIntentOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCCommitIntentOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCCommitIntentOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCCommitIntentOp*>(
+               &_MVCCCommitIntentOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    7;
+
+  void Swap(MVCCCommitIntentOp* other);
+  friend void swap(MVCCCommitIntentOp& a, MVCCCommitIntentOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCCommitIntentOp* New() const final {
+    return CreateMaybeMessage<MVCCCommitIntentOp>(NULL);
+  }
+
+  MVCCCommitIntentOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCCommitIntentOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCCommitIntentOp& from);
+  void MergeFrom(const MVCCCommitIntentOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCCommitIntentOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_txn_id();
+  static const int kTxnIdFieldNumber = 1;
+  const ::std::string& txn_id() const;
+  void set_txn_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_id(::std::string&& value);
+  #endif
+  void set_txn_id(const char* value);
+  void set_txn_id(const void* value, size_t size);
+  ::std::string* mutable_txn_id();
+  ::std::string* release_txn_id();
+  void set_allocated_txn_id(::std::string* txn_id);
+
+  // bytes key = 2;
+  void clear_key();
+  static const int kKeyFieldNumber = 2;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // bytes value = 4;
+  void clear_value();
+  static const int kValueFieldNumber = 4;
+  const ::std::string& value() const;
+  void set_value(const ::std::string& value);
+  #if LANG_CXX11
+  void set_value(::std::string&& value);
+  #endif
+  void set_value(const char* value);
+  void set_value(const void* value, size_t size);
+  ::std::string* mutable_value();
+  ::std::string* release_value();
+  void set_allocated_value(::std::string* value);
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 3;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCCommitIntentOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr txn_id_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr value_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCAbortIntentOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCAbortIntentOp) */ {
+ public:
+  MVCCAbortIntentOp();
+  virtual ~MVCCAbortIntentOp();
+
+  MVCCAbortIntentOp(const MVCCAbortIntentOp& from);
+
+  inline MVCCAbortIntentOp& operator=(const MVCCAbortIntentOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCAbortIntentOp(MVCCAbortIntentOp&& from) noexcept
+    : MVCCAbortIntentOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCAbortIntentOp& operator=(MVCCAbortIntentOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCAbortIntentOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCAbortIntentOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCAbortIntentOp*>(
+               &_MVCCAbortIntentOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    8;
+
+  void Swap(MVCCAbortIntentOp* other);
+  friend void swap(MVCCAbortIntentOp& a, MVCCAbortIntentOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCAbortIntentOp* New() const final {
+    return CreateMaybeMessage<MVCCAbortIntentOp>(NULL);
+  }
+
+  MVCCAbortIntentOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCAbortIntentOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCAbortIntentOp& from);
+  void MergeFrom(const MVCCAbortIntentOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCAbortIntentOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_txn_id();
+  static const int kTxnIdFieldNumber = 1;
+  const ::std::string& txn_id() const;
+  void set_txn_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_id(::std::string&& value);
+  #endif
+  void set_txn_id(const char* value);
+  void set_txn_id(const void* value, size_t size);
+  ::std::string* mutable_txn_id();
+  ::std::string* release_txn_id();
+  void set_allocated_txn_id(::std::string* txn_id);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCAbortIntentOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr txn_id_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCLogicalOp) */ {
+ public:
+  MVCCLogicalOp();
+  virtual ~MVCCLogicalOp();
+
+  MVCCLogicalOp(const MVCCLogicalOp& from);
+
+  inline MVCCLogicalOp& operator=(const MVCCLogicalOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCLogicalOp(MVCCLogicalOp&& from) noexcept
+    : MVCCLogicalOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCLogicalOp& operator=(MVCCLogicalOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCLogicalOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCLogicalOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCLogicalOp*>(
+               &_MVCCLogicalOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    9;
+
+  void Swap(MVCCLogicalOp* other);
+  friend void swap(MVCCLogicalOp& a, MVCCLogicalOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCLogicalOp* New() const final {
+    return CreateMaybeMessage<MVCCLogicalOp>(NULL);
+  }
+
+  MVCCLogicalOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCLogicalOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCLogicalOp& from);
+  void MergeFrom(const MVCCLogicalOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCLogicalOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // .cockroach.storage.engine.enginepb.MVCCWriteValueOp write_value = 1;
+  bool has_write_value() const;
+  void clear_write_value();
+  static const int kWriteValueFieldNumber = 1;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp& _internal_write_value() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp& write_value() const;
+  ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* release_write_value();
+  ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* mutable_write_value();
+  void set_allocated_write_value(::cockroach::storage::engine::enginepb::MVCCWriteValueOp* write_value);
+
+  // .cockroach.storage.engine.enginepb.MVCCWriteIntentOp write_intent = 2;
+  bool has_write_intent() const;
+  void clear_write_intent();
+  static const int kWriteIntentFieldNumber = 2;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp& _internal_write_intent() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp& write_intent() const;
+  ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* release_write_intent();
+  ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* mutable_write_intent();
+  void set_allocated_write_intent(::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* write_intent);
+
+  // .cockroach.storage.engine.enginepb.MVCCUpdateIntentOp update_intent = 3;
+  bool has_update_intent() const;
+  void clear_update_intent();
+  static const int kUpdateIntentFieldNumber = 3;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp& _internal_update_intent() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp& update_intent() const;
+  ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* release_update_intent();
+  ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* mutable_update_intent();
+  void set_allocated_update_intent(::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* update_intent);
+
+  // .cockroach.storage.engine.enginepb.MVCCCommitIntentOp commit_intent = 4;
+  bool has_commit_intent() const;
+  void clear_commit_intent();
+  static const int kCommitIntentFieldNumber = 4;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp& _internal_commit_intent() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp& commit_intent() const;
+  ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* release_commit_intent();
+  ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* mutable_commit_intent();
+  void set_allocated_commit_intent(::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* commit_intent);
+
+  // .cockroach.storage.engine.enginepb.MVCCAbortIntentOp abort_intent = 5;
+  bool has_abort_intent() const;
+  void clear_abort_intent();
+  static const int kAbortIntentFieldNumber = 5;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp& _internal_abort_intent() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp& abort_intent() const;
+  ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* release_abort_intent();
+  ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* mutable_abort_intent();
+  void set_allocated_abort_intent(::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* abort_intent);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCLogicalOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* write_value_;
+  ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* write_intent_;
+  ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* update_intent_;
+  ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* commit_intent_;
+  ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* abort_intent_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -1477,9 +2309,976 @@ inline void RangeAppliedState::set_allocated_range_stats(::cockroach::storage::e
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.RangeAppliedState.range_stats)
 }
 
+// -------------------------------------------------------------------
+
+// MVCCWriteValueOp
+
+// bytes key = 1;
+inline void MVCCWriteValueOp::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCWriteValueOp::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+  return key_.GetNoArena();
+}
+inline void MVCCWriteValueOp::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+}
+#if LANG_CXX11
+inline void MVCCWriteValueOp::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+}
+#endif
+inline void MVCCWriteValueOp::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+}
+inline void MVCCWriteValueOp::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+}
+inline ::std::string* MVCCWriteValueOp::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCWriteValueOp::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCWriteValueOp::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteValueOp.key)
+}
+
+inline bool MVCCWriteValueOp::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCWriteValueOp::_internal_timestamp() const {
+  return *timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCWriteValueOp::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteValueOp.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCWriteValueOp::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteValueOp.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCWriteValueOp::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteValueOp.timestamp)
+  return timestamp_;
+}
+inline void MVCCWriteValueOp::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+  }
+  if (timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  timestamp_ = timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteValueOp.timestamp)
+}
+
+// bytes value = 3;
+inline void MVCCWriteValueOp::clear_value() {
+  value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCWriteValueOp::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+  return value_.GetNoArena();
+}
+inline void MVCCWriteValueOp::set_value(const ::std::string& value) {
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+}
+#if LANG_CXX11
+inline void MVCCWriteValueOp::set_value(::std::string&& value) {
+  
+  value_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+}
+#endif
+inline void MVCCWriteValueOp::set_value(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+}
+inline void MVCCWriteValueOp::set_value(const void* value, size_t size) {
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+}
+inline ::std::string* MVCCWriteValueOp::mutable_value() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+  return value_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCWriteValueOp::release_value() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+  
+  return value_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCWriteValueOp::set_allocated_value(::std::string* value) {
+  if (value != NULL) {
+    
+  } else {
+    
+  }
+  value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteValueOp.value)
+}
+
+// -------------------------------------------------------------------
+
+// MVCCWriteIntentOp
+
+inline void MVCCWriteIntentOp::clear_txn_id() {
+  txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCWriteIntentOp::txn_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+  return txn_id_.GetNoArena();
+}
+inline void MVCCWriteIntentOp::set_txn_id(const ::std::string& value) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+}
+#if LANG_CXX11
+inline void MVCCWriteIntentOp::set_txn_id(::std::string&& value) {
+  
+  txn_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+}
+#endif
+inline void MVCCWriteIntentOp::set_txn_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+}
+inline void MVCCWriteIntentOp::set_txn_id(const void* value, size_t size) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+}
+inline ::std::string* MVCCWriteIntentOp::mutable_txn_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+  return txn_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCWriteIntentOp::release_txn_id() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+  
+  return txn_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCWriteIntentOp::set_allocated_txn_id(::std::string* txn_id) {
+  if (txn_id != NULL) {
+    
+  } else {
+    
+  }
+  txn_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_id)
+}
+
+// bytes txn_key = 2;
+inline void MVCCWriteIntentOp::clear_txn_key() {
+  txn_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCWriteIntentOp::txn_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+  return txn_key_.GetNoArena();
+}
+inline void MVCCWriteIntentOp::set_txn_key(const ::std::string& value) {
+  
+  txn_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+}
+#if LANG_CXX11
+inline void MVCCWriteIntentOp::set_txn_key(::std::string&& value) {
+  
+  txn_key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+}
+#endif
+inline void MVCCWriteIntentOp::set_txn_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+}
+inline void MVCCWriteIntentOp::set_txn_key(const void* value, size_t size) {
+  
+  txn_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+}
+inline ::std::string* MVCCWriteIntentOp::mutable_txn_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+  return txn_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCWriteIntentOp::release_txn_key() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+  
+  return txn_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCWriteIntentOp::set_allocated_txn_key(::std::string* txn_key) {
+  if (txn_key != NULL) {
+    
+  } else {
+    
+  }
+  txn_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.txn_key)
+}
+
+inline bool MVCCWriteIntentOp::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCWriteIntentOp::_internal_timestamp() const {
+  return *timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCWriteIntentOp::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCWriteIntentOp::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCWriteIntentOp::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.timestamp)
+  return timestamp_;
+}
+inline void MVCCWriteIntentOp::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+  }
+  if (timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  timestamp_ = timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCWriteIntentOp.timestamp)
+}
+
+// -------------------------------------------------------------------
+
+// MVCCUpdateIntentOp
+
+inline void MVCCUpdateIntentOp::clear_txn_id() {
+  txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCUpdateIntentOp::txn_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+  return txn_id_.GetNoArena();
+}
+inline void MVCCUpdateIntentOp::set_txn_id(const ::std::string& value) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+}
+#if LANG_CXX11
+inline void MVCCUpdateIntentOp::set_txn_id(::std::string&& value) {
+  
+  txn_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+}
+#endif
+inline void MVCCUpdateIntentOp::set_txn_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+}
+inline void MVCCUpdateIntentOp::set_txn_id(const void* value, size_t size) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+}
+inline ::std::string* MVCCUpdateIntentOp::mutable_txn_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+  return txn_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCUpdateIntentOp::release_txn_id() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+  
+  return txn_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCUpdateIntentOp::set_allocated_txn_id(::std::string* txn_id) {
+  if (txn_id != NULL) {
+    
+  } else {
+    
+  }
+  txn_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.txn_id)
+}
+
+inline bool MVCCUpdateIntentOp::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCUpdateIntentOp::_internal_timestamp() const {
+  return *timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCUpdateIntentOp::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCUpdateIntentOp::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCUpdateIntentOp::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.timestamp)
+  return timestamp_;
+}
+inline void MVCCUpdateIntentOp::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+  }
+  if (timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  timestamp_ = timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCUpdateIntentOp.timestamp)
+}
+
+// -------------------------------------------------------------------
+
+// MVCCCommitIntentOp
+
+inline void MVCCCommitIntentOp::clear_txn_id() {
+  txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCCommitIntentOp::txn_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+  return txn_id_.GetNoArena();
+}
+inline void MVCCCommitIntentOp::set_txn_id(const ::std::string& value) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+}
+#if LANG_CXX11
+inline void MVCCCommitIntentOp::set_txn_id(::std::string&& value) {
+  
+  txn_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+}
+#endif
+inline void MVCCCommitIntentOp::set_txn_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+}
+inline void MVCCCommitIntentOp::set_txn_id(const void* value, size_t size) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+}
+inline ::std::string* MVCCCommitIntentOp::mutable_txn_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+  return txn_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCCommitIntentOp::release_txn_id() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+  
+  return txn_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCCommitIntentOp::set_allocated_txn_id(::std::string* txn_id) {
+  if (txn_id != NULL) {
+    
+  } else {
+    
+  }
+  txn_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.txn_id)
+}
+
+// bytes key = 2;
+inline void MVCCCommitIntentOp::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCCommitIntentOp::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+  return key_.GetNoArena();
+}
+inline void MVCCCommitIntentOp::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+}
+#if LANG_CXX11
+inline void MVCCCommitIntentOp::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+}
+#endif
+inline void MVCCCommitIntentOp::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+}
+inline void MVCCCommitIntentOp::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+}
+inline ::std::string* MVCCCommitIntentOp::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCCommitIntentOp::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCCommitIntentOp::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.key)
+}
+
+inline bool MVCCCommitIntentOp::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCCommitIntentOp::_internal_timestamp() const {
+  return *timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MVCCCommitIntentOp::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCCommitIntentOp::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MVCCCommitIntentOp::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.timestamp)
+  return timestamp_;
+}
+inline void MVCCCommitIntentOp::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(timestamp_);
+  }
+  if (timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  timestamp_ = timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.timestamp)
+}
+
+// bytes value = 4;
+inline void MVCCCommitIntentOp::clear_value() {
+  value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCCommitIntentOp::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+  return value_.GetNoArena();
+}
+inline void MVCCCommitIntentOp::set_value(const ::std::string& value) {
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+}
+#if LANG_CXX11
+inline void MVCCCommitIntentOp::set_value(::std::string&& value) {
+  
+  value_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+}
+#endif
+inline void MVCCCommitIntentOp::set_value(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+}
+inline void MVCCCommitIntentOp::set_value(const void* value, size_t size) {
+  
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+}
+inline ::std::string* MVCCCommitIntentOp::mutable_value() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+  return value_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCCommitIntentOp::release_value() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+  
+  return value_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCCommitIntentOp::set_allocated_value(::std::string* value) {
+  if (value != NULL) {
+    
+  } else {
+    
+  }
+  value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCCommitIntentOp.value)
+}
+
+// -------------------------------------------------------------------
+
+// MVCCAbortIntentOp
+
+inline void MVCCAbortIntentOp::clear_txn_id() {
+  txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCAbortIntentOp::txn_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+  return txn_id_.GetNoArena();
+}
+inline void MVCCAbortIntentOp::set_txn_id(const ::std::string& value) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+}
+#if LANG_CXX11
+inline void MVCCAbortIntentOp::set_txn_id(::std::string&& value) {
+  
+  txn_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+}
+#endif
+inline void MVCCAbortIntentOp::set_txn_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+}
+inline void MVCCAbortIntentOp::set_txn_id(const void* value, size_t size) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+}
+inline ::std::string* MVCCAbortIntentOp::mutable_txn_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+  return txn_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCAbortIntentOp::release_txn_id() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+  
+  return txn_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCAbortIntentOp::set_allocated_txn_id(::std::string* txn_id) {
+  if (txn_id != NULL) {
+    
+  } else {
+    
+  }
+  txn_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCAbortIntentOp.txn_id)
+}
+
+// -------------------------------------------------------------------
+
+// MVCCLogicalOp
+
+// .cockroach.storage.engine.enginepb.MVCCWriteValueOp write_value = 1;
+inline bool MVCCLogicalOp::has_write_value() const {
+  return this != internal_default_instance() && write_value_ != NULL;
+}
+inline void MVCCLogicalOp::clear_write_value() {
+  if (GetArenaNoVirtual() == NULL && write_value_ != NULL) {
+    delete write_value_;
+  }
+  write_value_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp& MVCCLogicalOp::_internal_write_value() const {
+  return *write_value_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp& MVCCLogicalOp::write_value() const {
+  const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* p = write_value_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_value)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCWriteValueOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCWriteValueOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* MVCCLogicalOp::release_write_value() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_value)
+  
+  ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* temp = write_value_;
+  write_value_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCWriteValueOp* MVCCLogicalOp::mutable_write_value() {
+  
+  if (write_value_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCWriteValueOp>(GetArenaNoVirtual());
+    write_value_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_value)
+  return write_value_;
+}
+inline void MVCCLogicalOp::set_allocated_write_value(::cockroach::storage::engine::enginepb::MVCCWriteValueOp* write_value) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete write_value_;
+  }
+  if (write_value) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      write_value = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, write_value, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  write_value_ = write_value;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_value)
+}
+
+// .cockroach.storage.engine.enginepb.MVCCWriteIntentOp write_intent = 2;
+inline bool MVCCLogicalOp::has_write_intent() const {
+  return this != internal_default_instance() && write_intent_ != NULL;
+}
+inline void MVCCLogicalOp::clear_write_intent() {
+  if (GetArenaNoVirtual() == NULL && write_intent_ != NULL) {
+    delete write_intent_;
+  }
+  write_intent_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp& MVCCLogicalOp::_internal_write_intent() const {
+  return *write_intent_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp& MVCCLogicalOp::write_intent() const {
+  const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* p = write_intent_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_intent)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCWriteIntentOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* MVCCLogicalOp::release_write_intent() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_intent)
+  
+  ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* temp = write_intent_;
+  write_intent_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* MVCCLogicalOp::mutable_write_intent() {
+  
+  if (write_intent_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCWriteIntentOp>(GetArenaNoVirtual());
+    write_intent_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_intent)
+  return write_intent_;
+}
+inline void MVCCLogicalOp::set_allocated_write_intent(::cockroach::storage::engine::enginepb::MVCCWriteIntentOp* write_intent) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete write_intent_;
+  }
+  if (write_intent) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      write_intent = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, write_intent, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  write_intent_ = write_intent;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.write_intent)
+}
+
+// .cockroach.storage.engine.enginepb.MVCCUpdateIntentOp update_intent = 3;
+inline bool MVCCLogicalOp::has_update_intent() const {
+  return this != internal_default_instance() && update_intent_ != NULL;
+}
+inline void MVCCLogicalOp::clear_update_intent() {
+  if (GetArenaNoVirtual() == NULL && update_intent_ != NULL) {
+    delete update_intent_;
+  }
+  update_intent_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp& MVCCLogicalOp::_internal_update_intent() const {
+  return *update_intent_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp& MVCCLogicalOp::update_intent() const {
+  const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* p = update_intent_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.update_intent)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCUpdateIntentOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* MVCCLogicalOp::release_update_intent() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.update_intent)
+  
+  ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* temp = update_intent_;
+  update_intent_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* MVCCLogicalOp::mutable_update_intent() {
+  
+  if (update_intent_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp>(GetArenaNoVirtual());
+    update_intent_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.update_intent)
+  return update_intent_;
+}
+inline void MVCCLogicalOp::set_allocated_update_intent(::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* update_intent) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete update_intent_;
+  }
+  if (update_intent) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      update_intent = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, update_intent, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  update_intent_ = update_intent;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.update_intent)
+}
+
+// .cockroach.storage.engine.enginepb.MVCCCommitIntentOp commit_intent = 4;
+inline bool MVCCLogicalOp::has_commit_intent() const {
+  return this != internal_default_instance() && commit_intent_ != NULL;
+}
+inline void MVCCLogicalOp::clear_commit_intent() {
+  if (GetArenaNoVirtual() == NULL && commit_intent_ != NULL) {
+    delete commit_intent_;
+  }
+  commit_intent_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp& MVCCLogicalOp::_internal_commit_intent() const {
+  return *commit_intent_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp& MVCCLogicalOp::commit_intent() const {
+  const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* p = commit_intent_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.commit_intent)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCCommitIntentOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* MVCCLogicalOp::release_commit_intent() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.commit_intent)
+  
+  ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* temp = commit_intent_;
+  commit_intent_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* MVCCLogicalOp::mutable_commit_intent() {
+  
+  if (commit_intent_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCCommitIntentOp>(GetArenaNoVirtual());
+    commit_intent_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.commit_intent)
+  return commit_intent_;
+}
+inline void MVCCLogicalOp::set_allocated_commit_intent(::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* commit_intent) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete commit_intent_;
+  }
+  if (commit_intent) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      commit_intent = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, commit_intent, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  commit_intent_ = commit_intent;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.commit_intent)
+}
+
+// .cockroach.storage.engine.enginepb.MVCCAbortIntentOp abort_intent = 5;
+inline bool MVCCLogicalOp::has_abort_intent() const {
+  return this != internal_default_instance() && abort_intent_ != NULL;
+}
+inline void MVCCLogicalOp::clear_abort_intent() {
+  if (GetArenaNoVirtual() == NULL && abort_intent_ != NULL) {
+    delete abort_intent_;
+  }
+  abort_intent_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp& MVCCLogicalOp::_internal_abort_intent() const {
+  return *abort_intent_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp& MVCCLogicalOp::abort_intent() const {
+  const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* p = abort_intent_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_intent)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCAbortIntentOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* MVCCLogicalOp::release_abort_intent() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_intent)
+  
+  ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* temp = abort_intent_;
+  abort_intent_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* MVCCLogicalOp::mutable_abort_intent() {
+  
+  if (abort_intent_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCAbortIntentOp>(GetArenaNoVirtual());
+    abort_intent_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_intent)
+  return abort_intent_;
+}
+inline void MVCCLogicalOp::set_allocated_abort_intent(::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* abort_intent) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete abort_intent_;
+  }
+  if (abort_intent) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      abort_intent = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, abort_intent, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  abort_intent_ = abort_intent;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_intent)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
