@@ -2360,8 +2360,9 @@ func (dsp *DistSQLPlanner) createPlanForZero(
 
 func createDistinctSpec(n *distinctNode, cols []int) *distsqlrun.DistinctSpec {
 	var orderedColumns []uint32
-	for i, o := range n.columnsInOrder {
-		if o {
+	if !n.columnsInOrder.Empty() {
+		orderedColumns = make([]uint32, 0, n.columnsInOrder.Len())
+		for i, ok := n.columnsInOrder.Next(0); ok; i, ok = n.columnsInOrder.Next(i + 1) {
 			orderedColumns = append(orderedColumns, uint32(cols[i]))
 		}
 	}
