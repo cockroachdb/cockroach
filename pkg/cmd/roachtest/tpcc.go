@@ -45,10 +45,26 @@ func registerTPCC(r *registry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
+			t.Status("setting up dataset")
+			useFixture := warehouses > 10
+			if useFixture {
+				cmd := fmt.Sprintf(
+					"./workload fixtures load tpcc --warehouses=%d --checks=false {pgurl:1}",
+					warehouses)
+				c.Run(ctx, c.Node(nodes+1), cmd)
+			} else {
+				cmd := fmt.Sprintf(
+					"./workload run tpcc --init --warehouses=%d --duration=1ms {pgurl:1-%d}",
+					warehouses, nodes)
+				c.Run(ctx, c.Node(nodes+1), cmd)
+			}
+
+			t.Status("running workload")
+			ramp := " --ramp=" + ifLocal("0s", "3m")
+			duration := " --duration=" + ifLocal("10s", "20m")
 			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d --histograms=logs/stats.json"+
-					extra+duration+" {pgurl:1-%d}",
+				"./workload run tpcc --warehouses=%d --histograms=logs/stats.json"+
+					extra+ramp+duration+" {pgurl:1-%d}",
 				warehouses, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -62,6 +78,14 @@ func registerTPCC(r *registry) {
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, 1, " --wait=false")
+		},
+	})
+	r.Add(testSpec{
+		Name:   "tpcc/w=1000/nodes=3",
+		Nodes:  nodes(4),
+		Stable: true, // DO NOT COPY to new tests
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, 1000, " --wait=false")
 		},
 	})
 	r.Add(testSpec{
