@@ -508,3 +508,24 @@ func IsValidArrayElementType(t T) bool {
 		return true
 	}
 }
+
+// IsDateTimeType returns true if the T is
+// date- or time-related type.
+func IsDateTimeType(t T) bool {
+	switch t {
+	case Date:
+		return true
+	case Time:
+		return true
+	case TimeTZ:
+		return true
+	case Timestamp:
+		return true
+	case TimestampTZ:
+		return true
+	case Interval:
+		return true
+	default:
+		return false
+	}
+}

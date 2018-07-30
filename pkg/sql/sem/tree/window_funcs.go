@@ -38,8 +38,8 @@ type WindowFrameRun struct {
 	ArgIdxStart      int          // the index which arguments to the window function begin
 	ArgCount         int          // the number of window function arguments
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset int          // TODO(yuzefovich): interval offsets like '10 days' PRECEDING need to be supported.
-	EndBoundOffset   int
+	StartBoundOffset Datum
+	EndBoundOffset   Datum
 
 	// changes for each row (each call to WindowFunc.Add)
 	RowIdx int // the current row index
@@ -76,7 +76,8 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		case UnboundedPreceding:
 			return 0
 		case ValuePreceding:
-			idx := wfr.RowIdx - wfr.StartBoundOffset
+			offset := MustBeDInt(wfr.StartBoundOffset)
+			idx := wfr.RowIdx - int(offset)
 			if idx < 0 {
 				idx = 0
 			}
@@ -84,7 +85,8 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		case CurrentRow:
 			return wfr.RowIdx
 		case ValueFollowing:
-			idx := wfr.RowIdx + wfr.StartBoundOffset
+			offset := MustBeDInt(wfr.StartBoundOffset)
+			idx := wfr.RowIdx + int(offset)
 			if idx >= wfr.PartitionSize() {
 				idx = wfr.unboundedFollowing()
 			}
@@ -142,7 +144,8 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
 		case ValuePreceding:
-			idx := wfr.RowIdx - wfr.EndBoundOffset + 1
+			offset := MustBeDInt(wfr.EndBoundOffset)
+			idx := wfr.RowIdx - int(offset) + 1
 			if idx < 0 {
 				idx = 0
 			}
@@ -150,7 +153,8 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 		case CurrentRow:
 			return wfr.RowIdx + 1
 		case ValueFollowing:
-			idx := wfr.RowIdx + wfr.EndBoundOffset + 1
+			offset := MustBeDInt(wfr.EndBoundOffset)
+			idx := wfr.RowIdx + int(offset) + 1
 			if idx >= wfr.PartitionSize() {
 				idx = wfr.unboundedFollowing()
 			}
