@@ -564,7 +564,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
-			fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
+			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
 			if len(serverCfg.SocketFile) != 0 {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
