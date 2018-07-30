@@ -479,6 +479,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,
+		ClusterID:      &s.rpcContext.ClusterID,
 
 		TempStorage: tempEngine,
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
