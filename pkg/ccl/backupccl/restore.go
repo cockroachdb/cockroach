@@ -970,9 +970,9 @@ func restore(
 		syncutil.Mutex
 		res               roachpb.BulkOpSummary
 		requestsCompleted []bool
-		lowWaterMark      int
+		highWaterMark     int
 	}{
-		lowWaterMark: -1,
+		highWaterMark: -1,
 	}
 
 	var databases []*sqlbase.DatabaseDescriptor
@@ -1022,8 +1022,8 @@ func restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	lowWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.LowWaterMark
-	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
+	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
+	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
@@ -1041,8 +1041,8 @@ func restore(
 			switch d := details.(type) {
 			case *jobspb.Progress_Restore:
 				mu.Lock()
-				if mu.lowWaterMark >= 0 {
-					d.Restore.LowWaterMark = importSpans[mu.lowWaterMark].Key
+				if mu.highWaterMark >= 0 {
+					d.Restore.HighWater = importSpans[mu.highWaterMark].Key
 				}
 				mu.Unlock()
 			default:
@@ -1144,8 +1144,8 @@ func restore(
 				)
 			}
 			mu.requestsCompleted[idx] = true
-			for j := mu.lowWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.lowWaterMark = j
+			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+				mu.highWaterMark = j
 			}
 			mu.Unlock()
 

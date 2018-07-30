@@ -628,12 +628,12 @@ func TestJobLifecycle(t *testing.T) {
 
 		// Test Progressed callbacks.
 		if err := woodyJob.FractionProgressed(ctx, func(_ context.Context, details jobspb.ProgressDetails) float32 {
-			details.(*jobspb.Progress_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+			details.(*jobspb.Progress_Restore).Restore.HighWater = roachpb.Key("mariana")
 			return 1.0
 		}); err != nil {
 			t.Fatal(err)
 		}
-		woodyExp.Record.Progress = jobspb.RestoreProgress{LowWaterMark: roachpb.Key("mariana")}
+		woodyExp.Record.Progress = jobspb.RestoreProgress{HighWater: roachpb.Key("mariana")}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
@@ -1065,7 +1065,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
-		newDetails := jobspb.RestoreProgress{LowWaterMark: []byte{42}}
+		newDetails := jobspb.RestoreProgress{HighWater: []byte{42}}
 		exp.Record.Progress = newDetails
 		if err := job.SetProgress(ctx, newDetails); err != nil {
 			t.Fatal(err)
