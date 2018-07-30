@@ -1222,8 +1222,6 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#27820")
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
