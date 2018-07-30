@@ -299,7 +299,7 @@ CREATE TABLE ef (e INT, f INT, INDEX(f))
 statement ok
 INSERT INTO ef VALUES (NULL, 1), (1, 1)
 
-query I rowsort
+query I
 SELECT e FROM ef WHERE f > 0 AND f < 2 ORDER BY f
 ----
 NULL

@@ -27,7 +27,7 @@ query II rowsort
 3  30
 
 # Select
-query II rowsort
+query II
 SELECT * FROM test.t ORDER BY 1-t.k
 ----
 3  30
