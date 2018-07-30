@@ -218,10 +218,10 @@ func (c *conn) serveImpl(
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
 
-	for key, value := range statusReportParams {
+	for _, param := range statusReportParams {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
-		c.msgBuilder.writeTerminatedString(key)
-		c.msgBuilder.writeTerminatedString(value)
+		c.msgBuilder.writeTerminatedString(param.key)
+		c.msgBuilder.writeTerminatedString(param.value)
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 			return err
 		}
@@ -1297,33 +1297,36 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 	return c.readBuf.GetString()
 }
 
-// statusReportParams is a static mapping from run-time parameters to their respective
-// hard-coded values, each of which is to be returned as part of the status report
-// during connection initialization.
+// statusReportParams is a list of run-time parameters and their values, each of
+// which is to be returned as part of the status report during connection
+// initialization.
 //
 // The standard PostgreSQL status vars are listed here:
 // https://www.postgresql.org/docs/10/static/libpq-status.html
-var statusReportParams = map[string]string{
-	"client_encoding": "UTF8",
-	"server_encoding": "UTF8",
-	"DateStyle":       "ISO",
-	"IntervalStyle":   "postgres",
+var statusReportParams = []struct {
+	key   string
+	value string
+}{
+	{"client_encoding", "UTF8"},
+	{"server_encoding", "UTF8"},
+	{"DateStyle", "ISO"},
+	{"IntervalStyle", "postgres"},
 	// All datetime binary formats expect 64-bit integer microsecond values.
 	// This param needs to be provided to clients or some may provide 64-bit
 	// floating-point microsecond values instead, which was a legacy datetime
 	// binary format.
-	"integer_datetimes": "on",
+	{"integer_datetimes", "on"},
 	// The latest version of the docs that was consulted during the development
 	// of this package. We specify this version to avoid having to support old
 	// code paths which various client tools fall back to if they can't
 	// determine that the server is new enough.
-	"server_version": sql.PgServerVersion,
+	{"server_version", sql.PgServerVersion},
 	// The current CockroachDB version string.
-	"crdb_version": build.GetInfo().Short(),
+	{"crdb_version", build.GetInfo().Short()},
 	// If this parameter is not present, some drivers (including Python's psycopg2)
 	// will add redundant backslash escapes for compatibility with non-standard
 	// backslash handling in older versions of postgres.
-	"standard_conforming_strings": "on",
+	{"standard_conforming_strings", "on"},
 }
 
 // readTimeoutConn overloads net.Conn.Read by periodically calling
