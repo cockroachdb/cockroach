@@ -67,7 +67,7 @@ message RestoreDetails {
 }
 
 message RestoreProgress {
-  bytes low_water_mark = 1;
+  bytes high_water = 1;
 }
 
 message ImportDetails {
