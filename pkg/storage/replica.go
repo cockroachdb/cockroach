@@ -4411,9 +4411,6 @@ func (r *Replica) maybeTransferRaftLeader(
 	ctx context.Context, status *raft.Status, now hlc.Timestamp,
 ) {
 	l := *r.mu.state.Lease
-	if !r.isLeaseValidRLocked(l, now) {
-		return
-	}
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
