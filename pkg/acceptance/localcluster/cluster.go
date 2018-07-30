@@ -364,7 +364,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 	done := true
 	for rows.Next() {
 		var rangeID int64
-		var startKey, endKey []byte
+		var startKey, endKey roachpb.Key
 		var numReplicas int
 		if err := rows.Scan(&rangeID, &startKey, &endKey, &numReplicas); err != nil {
 			log.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
