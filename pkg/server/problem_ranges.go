@@ -129,6 +129,10 @@ func (s *statusServer) ProblemRanges(
 					problems.QuiescentEqualsTickingRangeIDs =
 						append(problems.QuiescentEqualsTickingRangeIDs, info.State.Desc.RangeID)
 				}
+				if info.Problems.RaftLogTooLarge {
+					problems.RaftLogTooLargeRangeIDs =
+						append(problems.RaftLogTooLargeRangeIDs, info.State.Desc.RangeID)
+				}
 			}
 			sort.Sort(roachpb.RangeIDSlice(problems.UnavailableRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.RaftLeaderNotLeaseHolderRangeIDs))
@@ -136,6 +140,7 @@ func (s *statusServer) ProblemRanges(
 			sort.Sort(roachpb.RangeIDSlice(problems.NoLeaseRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.UnderreplicatedRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.QuiescentEqualsTickingRangeIDs))
+			sort.Sort(roachpb.RangeIDSlice(problems.RaftLogTooLargeRangeIDs))
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
 			return nil, status.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
