@@ -124,9 +124,8 @@ const (
 	// that. Note that the server accepts a BeginTxn with a higher epoch if a
 	// transaction record already exists.
 	txnWriteInOldEpoch
-	// txnError means that the txn had performed some writes and then a batch got
-	// a non-retriable error. Further batches except EndTransaction(commit=false)
-	// will be rejected.
+	// txnError means that a batch got a non-retriable error. Further batches
+	// except EndTransaction(commit=false) will be rejected.
 	txnError
 )
 
@@ -1156,7 +1155,7 @@ func (txn *Txn) Send(
 			}
 		}
 
-		if !retriable && txn.mu.state == txnWriting {
+		if !retriable {
 			txn.mu.state = txnError
 		}
 
