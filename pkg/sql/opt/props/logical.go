@@ -48,9 +48,12 @@ type Logical struct {
 type AvailableRuleProps int
 
 const (
+	// PruneCols is set when the Relational.Rule.PruneCols field is populated.
+	PruneCols AvailableRuleProps = 1 << iota
+
 	// RejectNullCols is set when the Relational.Rule.RejectNullCols field is
 	// populated.
-	RejectNullCols AvailableRuleProps = 1 << iota
+	RejectNullCols
 
 	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
 	// populated.
@@ -174,6 +177,9 @@ type Relational struct {
 		// such an operator exists at the end of the journey. Operators that are
 		// not capable of filtering columns (like Explain) will not add any of
 		// their columns to this set.
+		//
+		// PruneCols is lazily populated by rules in prune_cols.opt. It is
+		// only valid once the Rule.Available.PruneCols bit has been set.
 		PruneCols opt.ColSet
 
 		// RejectNullCols is the subset of nullable output columns that can
