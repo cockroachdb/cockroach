@@ -47,13 +47,13 @@ type poller struct {
 	buf      *buffer
 
 	spans     []roachpb.Span
-	highwater hlc.Timestamp
+	highWater hlc.Timestamp
 }
 
 func makePoller(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.ChangefeedProgress,
+	startTime hlc.Timestamp,
 	buf *buffer,
 ) *poller {
 	p := &poller{
@@ -61,7 +61,7 @@ func makePoller(
 		db:        execCfg.DB,
 		clock:     execCfg.Clock,
 		gossip:    execCfg.Gossip,
-		highwater: progress.Highwater,
+		highWater: startTime,
 		buf:       buf,
 	}
 	for _, tableDesc := range details.TableDescs {
@@ -73,9 +73,9 @@ func makePoller(
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a
 // buffer. It blocks forever and is intended to be run in a goroutine.
 //
-// During each poll, a new highwater mark is chosen. The relevant spans for the
+// During each poll, a new high-water mark is chosen. The relevant spans for the
 // configured tables are broken up by (possibly stale) range boundaries and
-// every changed KV between the old and new highwater is fetched via
+// every changed KV between the old and new high-water is fetched via
 // ExportRequests. It backpressures sending the requests such that some maximum
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
@@ -83,7 +83,7 @@ func (p *poller) Run(ctx context.Context) error {
 	sender := p.db.NonTransactionalSender()
 	for {
 		pollDuration := changefeedPollInterval.Get(&p.settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, p.highwater.WallTime))
+		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, p.highWater.WallTime))
 		if pollDuration > 0 {
 			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
 			select {
@@ -93,9 +93,9 @@ func (p *poller) Run(ctx context.Context) error {
 			}
 		}
 
-		nextHighwater := p.clock.Now()
+		nextHighWater := p.clock.Now()
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
-			p.highwater, nextHighwater, time.Duration(nextHighwater.WallTime-p.highwater.WallTime))
+			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
 		var ranges []roachpb.RangeDescriptor
 		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -160,10 +160,10 @@ func (p *poller) Run(ctx context.Context) error {
 				if log.V(2) {
 					log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
 				}
-				header := roachpb.Header{Timestamp: nextHighwater}
+				header := roachpb.Header{Timestamp: nextHighWater}
 				req := &roachpb.ExportRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(span),
-					StartTime:     p.highwater,
+					StartTime:     p.highWater,
 					MVCCFilter:    roachpb.MVCCFilter_All,
 					ReturnSST:     true,
 				}
@@ -191,11 +191,11 @@ func (p *poller) Run(ctx context.Context) error {
 		if err := g.Wait(); err != nil {
 			return err
 		}
-		if err := p.buf.AddResolved(ctx, nextHighwater); err != nil {
+		if err := p.buf.AddResolved(ctx, nextHighWater); err != nil {
 			return err
 		}
 
-		p.highwater = nextHighwater
+		p.highWater = nextHighWater
 	}
 }
 

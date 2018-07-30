@@ -100,7 +100,7 @@ func testPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluste
 		`PauseUnpause_foo: [8]->{"a":8,"b":"e"}`,
 	})
 
-	// Wait for the highwater mark on the job to be updated after the initial
+	// Wait for the high-water mark on the job to be updated after the initial
 	// scan, to make sure we don't get the initial scan data again.
 	m := tc.nextMessage(t)
 	if len(m.Key) != 0 {

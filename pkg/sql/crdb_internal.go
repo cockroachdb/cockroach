@@ -459,7 +459,7 @@ CREATE TABLE crdb_internal.jobs (
 					}
 					errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
 				} else {
-					fractionCompleted = tree.NewDFloat(tree.DFloat(progress.FractionCompleted))
+					fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 					modified = tsOrNull(progress.ModifiedMicros)
 				}
 			}

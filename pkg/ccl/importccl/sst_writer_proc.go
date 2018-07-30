@@ -252,7 +252,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// There's no direct way to return an error from the Progressed()
 			// callback when decoding the span.End key.
 			var progressErr error
-			if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				d := details.(*jobspb.Progress_Import).Import
 				d.WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
 
