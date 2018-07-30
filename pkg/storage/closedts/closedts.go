@@ -50,6 +50,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// TrackerI is part of the machinery enabling follower reads, that is, consistent
+// reads served by replicas not holding the lease (for the requested timestamp).
+// This data structure keeps tabs on ongoing command evaluations (which it
+// forces to successively higher timestamps) and provides closed timestamp
+// updates along with a map delta of minimum Lease Applied Indexes a replica
+// wishing to serve a follower read must reach in order to do so correctly.
+//
+// See https://github.com/cockroachdb/cockroach/pull/26362 for more information.
+//
+// The methods exposed on Tracker are safe for concurrent use.
+type TrackerI interface {
+	Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
+	Track(ctx context.Context) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI))
+}
+
 // A Storage holds the closed timestamps and associated MLAIs for each node. It
 // additionally provides historical information about past state that it
 // "compacts" regularly, and which can be introspected via the VisitAscending
@@ -137,10 +152,18 @@ type ClientRegistry interface {
 // Outside of tests, it corresponds to (*Tracker).Close.
 type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
 
+// AsCloseFn uses the TrackerI as a CloseFn.
+func AsCloseFn(t TrackerI) CloseFn {
+	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+		return t.Close(next)
+	}
+}
+
 // LiveClockFn supplies a current HLC timestamp from the local node with the
 // extra constraints that the local node is live for the returned timestamp at
-// the given epoch.
-type LiveClockFn func() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error)
+// the given epoch. The NodeID is passed in to make this method easier to define
+// before the NodeID is known.
+type LiveClockFn func(roachpb.NodeID) (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error)
 
 // RefreshFn is called by the Producer when it is asked to manually create (and
 // emit) an update for a number of its replicas. The closed timestamp subsystem

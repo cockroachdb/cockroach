@@ -26,6 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -207,4 +209,25 @@ func (n *Dialer) getBreaker(nodeID roachpb.NodeID) *wrappedBreaker {
 		value, _ = n.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
 	return (*wrappedBreaker)(value)
+}
+
+type dialerAdapter Dialer
+
+func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
+	return (*Dialer)(da).GetCircuitBreaker(nodeID).Ready()
+}
+
+func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
+	c, err := (*Dialer)(da).Dial(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return ctpb.NewClosedTimestampClient(c).Get(ctx)
+}
+
+var _ closedts.Dialer = (*Dialer)(nil).CTDialer()
+
+// CTDialer wraps the NodeDialer into a closedts.Dialer.
+func (n *Dialer) CTDialer() closedts.Dialer {
+	return (*dialerAdapter)(n)
 }

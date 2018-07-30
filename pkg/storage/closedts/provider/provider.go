@@ -110,6 +110,10 @@ func (p *Provider) runCloser(ctx context.Context) {
 	// extra work to help the subscribers terminate.
 	defer p.drain()
 
+	if p.cfg.NodeID == 0 {
+		// This Provider is likely misconfigured.
+		panic("can't use NodeID zero")
+	}
 	ch := p.Notify(p.cfg.NodeID)
 	defer close(ch)
 
@@ -130,7 +134,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 			t.Read = true
 		}
 
-		next, epoch, err := p.cfg.Clock()
+		next, epoch, err := p.cfg.Clock(p.cfg.NodeID)
 
 		next.WallTime -= int64(targetDuration)
 		if err != nil {

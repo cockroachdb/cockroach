@@ -17,6 +17,7 @@ package testutils
 import (
 	"errors"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,7 +53,7 @@ func (c *TestClock) Tick(liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, err error)
 }
 
 // LiveNow implements closedts.LiveClockFn.
-func (c *TestClock) LiveNow() (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error) {
+func (c *TestClock) LiveNow(roachpb.NodeID) (liveNow hlc.Timestamp, liveEpoch ctpb.Epoch, _ error) {
 	select {
 	case r := <-c.ch:
 		return r.liveNow, r.liveEpoch, r.err
