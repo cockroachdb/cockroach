@@ -243,54 +243,40 @@ where
             phone0_.id=calls3_.phone_id
     )
 ----
-inner-join (merge)
+inner-join
  ├── columns: id1_6_0_:1(int!null) id1_4_1_:6(int!null) phone_nu2_6_0_:2(string) person_i4_6_0_:4(int!null) phone_ty3_6_0_:3(string) person_i1_5_0__:12(int!null) addresse2_5_0__:13(string) addresse3_0__:14(string!null) address2_4_1_:7(string) createdo3_4_1_:8(timestamp) name4_4_1_:9(string) nickname5_4_1_:10(string) version6_4_1_:11(int!null) person_i1_5_0__:12(int!null) addresse2_5_0__:13(string) addresse3_0__:14(string!null)
  ├── key: (1,14)
  ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6,12), (6)==(4,12), (12,14)-->(13), (12)==(4,6)
- ├── inner-join (merge)
+ ├── inner-join
  │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6), (6)==(4)
- │    ├── ordering: +(4|6)
- │    ├── scan person
- │    │    ├── columns: person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7-11)
- │    │    └── ordering: +6
- │    ├── sort
+ │    ├── semi-join
  │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
- │    │    ├── ordering: +4
- │    │    └── semi-join
- │    │         ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
- │    │         ├── key: (1)
- │    │         ├── fd: (1)-->(2-4)
- │    │         ├── scan phone
- │    │         │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
- │    │         │    ├── key: (1)
- │    │         │    └── fd: (1)-->(2-4)
- │    │         ├── scan phone_call
- │    │         │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
- │    │         │    ├── key: (15)
- │    │         │    └── fd: (15)-->(18)
- │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │              └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
- │    └── merge-on
- │         ├── left ordering: +6
- │         ├── right ordering: +4
- │         └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
- │              └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
+ │    │    ├── scan phone
+ │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-4)
+ │    │    ├── scan phone_call
+ │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+ │    │    │    ├── key: (15)
+ │    │    │    └── fd: (15)-->(18)
+ │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+ │    │         └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    ├── scan person
+ │    │    ├── columns: person.id:6(int!null) address:7(string) createdon:8(timestamp) name:9(string) nickname:10(string) version:11(int!null)
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7-11)
+ │    └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+ │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
  ├── scan person_addresses
  │    ├── columns: person_addresses.person_id:12(int!null) addresses:13(string) addresses_key:14(string!null)
  │    ├── key: (12,14)
- │    ├── fd: (12,14)-->(13)
- │    └── ordering: +12
- └── merge-on
-      ├── left ordering: +6
-      ├── right ordering: +12
-      └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
-           └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
+ │    └── fd: (12,14)-->(13)
+ └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+      └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
 
 opt
 select
@@ -319,50 +305,36 @@ where
 project
  ├── columns: id1_6_:1(int!null) phone_nu2_6_:2(string) person_i4_6_:4(int!null) phone_ty3_6_:3(string)
  ├── fd: (1)-->(2-4)
- └── inner-join (merge)
+ └── inner-join
       ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null) person_addresses.person_id:12(int!null)
       ├── fd: (1)-->(2-4), (4)==(6,12), (6)==(4,12), (12)==(4,6)
-      ├── inner-join (merge)
+      ├── inner-join
       │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int!null) person.id:6(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
-      │    ├── ordering: +(4|6)
-      │    ├── scan person
-      │    │    ├── columns: person.id:6(int!null)
-      │    │    ├── key: (6)
-      │    │    └── ordering: +6
-      │    ├── sort
+      │    ├── semi-join
       │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── ordering: +4
-      │    │    └── semi-join
-      │    │         ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
-      │    │         ├── key: (1)
-      │    │         ├── fd: (1)-->(2-4)
-      │    │         ├── scan phone
-      │    │         │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
-      │    │         │    ├── key: (1)
-      │    │         │    └── fd: (1)-->(2-4)
-      │    │         ├── scan phone_call
-      │    │         │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
-      │    │         │    ├── key: (15)
-      │    │         │    └── fd: (15)-->(18)
-      │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
-      │    │              └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
-      │    └── merge-on
-      │         ├── left ordering: +6
-      │         ├── right ordering: +4
-      │         └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
-      │              └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
+      │    │    ├── scan phone
+      │    │    │    ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) phone.person_id:4(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-4)
+      │    │    ├── scan phone_call
+      │    │    │    ├── columns: phone_call.id:15(int!null) phone_id:18(int)
+      │    │    │    ├── key: (15)
+      │    │    │    └── fd: (15)-->(18)
+      │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+      │    │         └── phone.id = phone_call.phone_id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │    ├── scan person
+      │    │    ├── columns: person.id:6(int!null)
+      │    │    └── key: (6)
+      │    └── filters [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+      │         └── phone.person_id = person.id [type=bool, outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
       ├── scan person_addresses
-      │    ├── columns: person_addresses.person_id:12(int!null)
-      │    └── ordering: +12
-      └── merge-on
-           ├── left ordering: +6
-           ├── right ordering: +12
-           └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
-                └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
+      │    └── columns: person_addresses.person_id:12(int!null)
+      └── filters [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ]), fd=(6)==(12), (12)==(6)]
+           └── person.id = person_addresses.person_id [type=bool, outer=(6,12), constraints=(/6: (/NULL - ]; /12: (/NULL - ])]
 
 opt
 select
