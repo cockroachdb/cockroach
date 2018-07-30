@@ -1139,6 +1139,7 @@ func (s *statusServer) Ranges(
 				Underreplicated:        metrics.Underreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
+				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 			},
 			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
 			CmdQGlobal:  serverpb.CommandQueueMetrics(metrics.CmdQMetricsGlobal),
