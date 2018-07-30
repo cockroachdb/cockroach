@@ -532,13 +532,26 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	// We create some flow; it doesn't matter what.
 	req := SetupFlowRequest{Version: Version}
 	req.Flow = FlowSpec{
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
-			Output: []OutputRouterSpec{{
-				Type:    OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-			}},
-		}},
+		Processors: []ProcessorSpec{
+			{
+				Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
+				Output: []OutputRouterSpec{{
+					Type:    OutputRouterSpec_PASS_THROUGH,
+					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				}},
+			},
+			{
+				Input: []InputSyncSpec{{
+					Type:    InputSyncSpec_UNORDERED,
+					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				}},
+				Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
+				Output: []OutputRouterSpec{{
+					Type:    OutputRouterSpec_PASS_THROUGH,
+					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+				}},
+			},
+		},
 	}
 
 	types := make([]sqlbase.ColumnType, 0)
