@@ -885,6 +885,8 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/27272")
+
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
