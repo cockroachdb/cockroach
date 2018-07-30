@@ -174,13 +174,6 @@ func (fr *flowRegistry) RegisterFlow(
 ) (retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
-	if fr.draining {
-		return errors.Errorf(
-			"could not register flowID %d on node %d because the registry is draining",
-			id,
-			fr.nodeID,
-		)
-	}
 	defer func() {
 		if retErr != nil {
 			for _, stream := range inboundStreams {
@@ -188,6 +181,13 @@ func (fr *flowRegistry) RegisterFlow(
 			}
 		}
 	}()
+	if fr.draining {
+		return errors.Errorf(
+			"could not register flowID %d on node %d because the registry is draining",
+			id,
+			fr.nodeID,
+		)
+	}
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
 		return errors.Errorf(
@@ -304,6 +304,11 @@ func (fr *flowRegistry) waitForFlowLocked(
 // the time window have a reasonable amount of time to connect to their
 // consumers, thus unblocking them.
 // The flowRegistry rejects any new flows once it has finished draining.
+//
+// Note that since local flows are not added to the registry, they are not
+// waited for. However, this is fine since there should be no local flows
+// running when the flowRegistry drains as the draining logic starts with
+// draining all client connections to a node.
 func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time.Duration) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
