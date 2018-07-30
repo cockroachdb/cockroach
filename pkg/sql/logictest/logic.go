@@ -1743,11 +1743,20 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		vals[i] = new(interface{})
 	}
 
+	// resultLinesRaw will be used to output the expected results when
+	// -rewrite-results is specified. It contains the output rows from
+	// the query without changes in spacing.
+	var resultLinesRaw [][]string
+	// actualResultsRaw will be used to set up the actual vs expected
+	// comparison during the test. It contains the output values from
+	// the query with space amounts normalized.
 	var actualResultsRaw []string
 	if query.colNames {
 		actualResultsRaw = append(actualResultsRaw, cols...)
+		resultLinesRaw = append(resultLinesRaw, cols)
 	}
 	for rows.Next() {
+		var resultLine []string
 		if err := rows.Scan(vals...); err != nil {
 			return err
 		}
@@ -1819,11 +1828,15 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				if val == "" {
 					val = "·"
 				}
-				actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
+				valStr := fmt.Sprint(val)
+				actualResultsRaw = append(actualResultsRaw, valStr)
+				resultLine = append(resultLine, valStr)
 			} else {
 				actualResultsRaw = append(actualResultsRaw, "NULL")
+				resultLine = append(resultLine, "NULL")
 			}
 		}
+		resultLinesRaw = append(resultLinesRaw, resultLine)
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -1881,8 +1894,22 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				}
 			} else {
 				// Emit the actual results.
-				for _, line := range t.formatValues(actualResults, query.valsPerLine) {
-					t.emit(line)
+				// We cannot use formatValues() here because the query rows
+				// may have important amounts of spacing (e.g. the output of
+				// EXPLAIN).
+				var buf bytes.Buffer
+				tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+				for _, resultLine := range resultLinesRaw {
+					for _, value := range resultLine {
+						fmt.Fprintf(tw, "%s\t", value)
+					}
+					fmt.Fprint(tw, "\n")
+				}
+				_ = tw.Flush()
+				// Split into lines and trim any trailing whitespace.
+				// Note that the last line will be empty (which is what we want).
+				for _, s := range strings.Split(buf.String(), "\n") {
+					t.emit(strings.TrimRight(s, " "))
 				}
 			}
 		}
