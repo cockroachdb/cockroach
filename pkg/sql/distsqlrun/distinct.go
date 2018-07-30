@@ -88,6 +88,9 @@ func NewDistinct(
 		}
 		distinctCols.Add(int(col))
 	}
+	if !orderedCols.SubsetOf(distinctCols) {
+		return nil, errors.New("ordered cols must be a subset of distinct cols")
+	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := newMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")

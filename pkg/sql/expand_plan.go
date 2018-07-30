@@ -460,16 +460,16 @@ func expandDistinctNode(
 		// column values again. We can thus clear out our bookkeeping.
 		// This needs to be planColumns(n.plan) and not planColumns(n) since
 		// distinctNode is "distinctifying" on the child plan's output rows.
-		d.columnsInOrder = make([]bool, len(planColumns(d.plan)))
-		for i := range d.columnsInOrder {
+		d.columnsInOrder = util.FastIntSet{}
+		for i, numCols := 0, len(planColumns(d.plan)); i < numCols; i++ {
 			group := distinctOnPp.eqGroups.Find(i)
 			if distinctOnPp.constantCols.Contains(group) {
-				d.columnsInOrder[i] = true
+				d.columnsInOrder.Add(i)
 				continue
 			}
 			for _, g := range distinctOnPp.ordering {
 				if g.ColIdx == group {
-					d.columnsInOrder[i] = true
+					d.columnsInOrder.Add(i)
 					break
 				}
 			}

@@ -28,9 +28,6 @@ import (
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
 	plan planNode
-	// All the columns that are part of the Sort. Set to nil if no-sort, or
-	// sort used an expression that was not part of the requested column set.
-	columnsInOrder []bool
 
 	// distinctOnColIdxs are the column indices of the child planNode and
 	// is what defines the distinct key.
@@ -40,6 +37,10 @@ type distinctNode struct {
 	// planNode's column indices indicating which columns are specified in
 	// the DISTINCT ON (<exprs>) clause.
 	distinctOnColIdxs util.FastIntSet
+
+	// Subset of distinctOnColIdxs on which the input guarantees an ordering.
+	// All rows that are equal on these columns appear contiguously in the input.
+	columnsInOrder util.FastIntSet
 
 	run *rowSourceToPlanNode
 }
