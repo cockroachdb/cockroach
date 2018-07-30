@@ -143,6 +143,8 @@ message RangeProblems {
   // If the replica's quiescent flag doesn't agree with the store's
   // list of replicas that are ticking, warn about it.
   bool quiescent_equals_ticking = 6;
+
+  bool log_too_large = 7;
 }
 
 message RangeStatistics {
@@ -521,6 +523,11 @@ message ProblemRangesResponse {
     ];
     repeated int64 quiescent_equals_ticking_range_ids = 7 [
       (gogoproto.customname) = "QuiescentEqualsTickingRangeIDs",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 log_size_too_large_range_ids = 8 [
+      (gogoproto.customname) = "LogSizeTooLargeRangeIDs",
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];

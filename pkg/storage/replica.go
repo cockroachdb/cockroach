@@ -94,6 +94,8 @@ const (
 	MaxQuotaReplicaLivenessDuration = 10 * time.Second
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
+
+	raftLogTooLargeSize = 1 << 20
 )
 
 // TODO(irfansharif, peter): What's a good default? Too low and everything comes
@@ -6517,6 +6519,7 @@ type ReplicaMetrics struct {
 	BehindCount       int64
 	CmdQMetricsLocal  CommandQueueMetrics
 	CmdQMetricsGlobal CommandQueueMetrics
+	LogTooLarge       bool
 }
 
 // Metrics returns the current metrics for the replica.
@@ -6531,6 +6534,7 @@ func (r *Replica) Metrics(
 	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
+	raftLogSize := r.mu.raftLogSize
 	r.cmdQMu.Lock()
 	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
 	cmdQMetricsGlobal := r.cmdQMu.queues[spanset.SpanGlobal].metrics()
@@ -6554,6 +6558,7 @@ func (r *Replica) Metrics(
 		ticking,
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
+		raftLogSize,
 	)
 }
 
@@ -6579,6 +6584,7 @@ func calcReplicaMetrics(
 	ticking bool,
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
+	raftLogSize int64,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -6633,6 +6639,8 @@ func calcReplicaMetrics(
 
 	m.CmdQMetricsLocal = cmdQMetricsLocal
 	m.CmdQMetricsGlobal = cmdQMetricsGlobal
+
+	m.LogTooLarge = raftLogSize > raftLogTooLargeSize
 
 	return m
 }
