@@ -48,9 +48,13 @@ type Logical struct {
 type AvailableRuleProps int
 
 const (
+	// RejectNullCols is set when the Relational.Rule.RejectNullCols field is
+	// populated.
+	RejectNullCols AvailableRuleProps = 1 << iota
+
 	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
 	// populated.
-	UnfilteredCols AvailableRuleProps = 1 << iota
+	UnfilteredCols
 
 	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
 	// is populated.
@@ -187,6 +191,9 @@ type Relational struct {
 		// it's advantageous to synthesize a new "IS NOT NULL" filter. Without this
 		// information, the rules can clutter the tree with extraneous and
 		// marginally useful null filters.
+		//
+		// RejectNullCols is lazily populated by rules in reject_nulls.opt. It is
+		// only valid once the Rule.Available.RejectNullCols bit has been set.
 		RejectNullCols opt.ColSet
 
 		// InterestingOrderings is a list of orderings that potentially could be
@@ -302,6 +309,12 @@ type Scalar struct {
 // on this relational properties instance.
 func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
 	return (r.Rule.Available & p) != 0
+}
+
+// SetAvailable sets the available bits for the given properties, in order to
+// mark them as populated on this relational properties instance.
+func (r *Relational) SetAvailable(p AvailableRuleProps) {
+	r.Rule.Available |= p
 }
 
 // IsAvailable returns true if the specified rule property has been populated
