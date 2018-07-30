@@ -145,17 +145,17 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 7439.89
+ │    │    └── cost: 12781.75
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 7439.89
+ │         └── cost: 12781.75
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 7439.89
+ │    │    └── cost: 12781.55
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 7439.89
+ │         └── cost: 12781.55
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
  │    ├── ""
@@ -163,7 +163,7 @@ memo (optimized)
  │    │    └── cost: 2431.67
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 7439.89
+ │         └── cost: 12781.45
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (scan b,cols=(3)) (scan b,rev,cols=(3))
@@ -198,7 +198,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: a:3,b:4,c:5,d:6]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1050.00
+ │         └── cost: 1050.02
  ├── G2: (select G4 G5)
  │    └── ""
  │         ├── best: (select G4 G5)
@@ -249,7 +249,7 @@ memo (optimized)
  ├── G7: (scan a,rev,constrained)
  │    └── ""
  │         ├── best: (scan a,rev,constrained)
- │         └── cost: 1.08
+ │         └── cost: 1.04
  ├── G8: (filters G10)
  ├── G9: (eq G13 G12)
  ├── G10: (eq G11 G12)
@@ -293,7 +293,7 @@ memo (optimized)
  └── G16: (scan a,rev,constrained)
       └── ""
            ├── best: (scan a,rev,constrained)
-           └── cost: 1.08
+           └── cost: 1.04
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
@@ -302,7 +302,7 @@ memo (optimized)
  ├── G1: (union G2 G3)
  │    └── "[presentation: x:7,y:8]"
  │         ├── best: (union G2 G3)
- │         └── cost: 2080.00
+ │         └── cost: 2150.00
  ├── G2: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
@@ -310,7 +310,7 @@ memo (optimized)
  ├── G3: (project G4 G5)
  │    └── ""
  │         ├── best: (project G4 G5)
- │         └── cost: 1040.00
+ │         └── cost: 1070.00
  ├── G4: (scan a) (scan a,rev)
  │    └── ""
  │         ├── best: (scan a)
@@ -329,7 +329,7 @@ memo (optimized)
  ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2 G3 cols=())
- │         └── cost: 1030.00
+ │         └── cost: 1040.01
  ├── G2: (scan a,cols=(1)) (scan a,rev,cols=(1))
  │    └── ""
  │         ├── best: (scan a,cols=(1))
@@ -345,11 +345,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1040.00
+ │         └── cost: 1074.00
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── ""
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1040.00
+ │         └── cost: 1067.00
  ├── G3: (projections array_agg)
  ├── G4: (scan a) (scan a,rev)
  │    └── ""
@@ -366,14 +366,14 @@ memo (optimized)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
- │         └── cost: 1139.66
+ │         └── cost: 1259.33
  ├── G2: (scan a) (scan a,rev)
  │    ├── ""
  │    │    ├── best: (scan a)
  │    │    └── cost: 1040.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1139.66
+ │         └── cost: 1249.32
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable a.x)
@@ -385,16 +385,16 @@ memo (optimized)
  ├── G1: (group-by G2 G3 cols=(3))
  │    └── "[presentation: field:3]"
  │         ├── best: (group-by G2 G3 cols=(3))
- │         └── cost: 0.01
+ │         └── cost: 0.03
  ├── G2: (explain G4 [presentation: k:1])
  │    └── ""
  │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
- │         └── cost: 0.01
+ │         └── cost: 0.03
  ├── G3: (aggregations)
  ├── G4: (project G5 G6)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G5 G6)
- │         └── cost: 0.01
+ │         └── cost: 0.03
  ├── G5: (values G7)
  │    └── ""
  │         ├── best: (values G7)

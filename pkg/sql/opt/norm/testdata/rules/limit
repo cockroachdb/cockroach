@@ -64,15 +64,11 @@ limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── limit
+ ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── limit: 5000000000
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 5000000000 [type=int]
+ │    └── fd: (1)-->(2-5)
  └── const: 5100000000 [type=int]
 
 # Don't eliminate in case of zero or negative limit.
