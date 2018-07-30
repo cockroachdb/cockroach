@@ -208,6 +208,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (problems.quiescent_equals_ticking) {
       results = _.concat(results, "Quiescent equals ticking");
     }
+    if (problems.raft_log_too_large) {
+      results = _.concat(results, "Raft log too large");
+    }
     if (awaitingGC) {
       results = _.concat(results, "Awaiting GC");
     }
