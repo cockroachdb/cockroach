@@ -2400,7 +2400,7 @@ func (s *Store) MergeRange(
 		// Note that we were called (indirectly) from raft processing so we must
 		// call removeReplicaImpl directly to avoid deadlocking on the right-hand
 		// replica's raftMu.
-		if err := s.removeReplicaImpl(ctx, rightRepl, rightDesc, RemoveOptions{
+		if err := s.removeReplicaImpl(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
 			DestroyData: false,
 		}); err != nil {
 			return errors.Errorf("cannot remove range: %s", err)
@@ -2530,28 +2530,29 @@ type RemoveOptions struct {
 	DestroyData bool
 }
 
-// RemoveReplica removes the replica from the store's replica map and
-// from the sorted replicasByKey btree. The version of the replica
-// descriptor that was used to make the removal decision is passed in,
-// and the removal is aborted if the replica ID has changed since
-// then.
+// RemoveReplica removes the replica from the store's replica map and from the
+// sorted replicasByKey btree.
 //
-// If opts.DestroyData is true, data in all of the range's keyspaces
-// is deleted. Otherwise, only data in the range-ID local keyspace is
-// deleted. In either case a tombstone record is written.
+// The NextReplicaID from the replica descriptor that was used to make the
+// removal decision is passed in. Removal is aborted if the replica ID has
+// advanced to or beyond the NextReplicaID since the removal decision was made.
+//
+// If opts.DestroyData is true, data in all of the range's keyspaces is deleted.
+// Otherwise, only data in the range-ID local keyspace is deleted. In either
+// case a tombstone record is written.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeReplicaImpl(ctx, rep, consistentDesc, opts)
+	return s.removeReplicaImpl(ctx, rep, nextReplicaID, opts)
 }
 
 // removeReplicaImpl is the implementation of RemoveReplica, which is sometimes
 // called directly when the necessary lock is already held. It requires that
 // Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(
-	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
 	log.Infof(ctx, "removing replica")
 
@@ -2559,16 +2560,16 @@ func (s *Store) removeReplicaImpl(
 	// they can differ in cases when a replica's ID is increased due to an
 	// incoming raft message (see #14231 for background).
 	rep.mu.Lock()
-	if rep.mu.replicaID >= consistentDesc.NextReplicaID {
+	if rep.mu.replicaID >= nextReplicaID {
 		rep.mu.Unlock()
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
-			rep, rep.mu.replicaID, consistentDesc.NextReplicaID)
+			rep, rep.mu.replicaID, nextReplicaID)
 	}
 	desc := rep.mu.state.Desc
-	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= consistentDesc.NextReplicaID {
+	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 		rep.mu.Unlock()
 		return errors.Errorf("cannot remove replica %s; replica descriptor's ID has changed (%s >= %s)",
-			rep, repDesc.ReplicaID, consistentDesc.NextReplicaID)
+			rep, repDesc.ReplicaID, nextReplicaID)
 	}
 	rep.mu.Unlock()
 
@@ -2604,7 +2605,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
-	if err := rep.destroyRaftMuLocked(ctx, consistentDesc, opts.DestroyData); err != nil {
+	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID, opts.DestroyData); err != nil {
 		return err
 	}
 
@@ -3551,7 +3552,9 @@ func (s *Store) processRaftSnapshotRequest(
 				// Raft has decided the snapshot shouldn't be applied we would be
 				// writing the tombstone key incorrectly.
 				r.mu.Lock()
-				r.mu.minReplicaID = r.nextReplicaIDLocked(nil)
+				if r.mu.state.Desc.NextReplicaID > r.mu.minReplicaID {
+					r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
+				}
 				r.mu.Unlock()
 			}
 

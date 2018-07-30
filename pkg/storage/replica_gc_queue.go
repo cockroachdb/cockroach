@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -215,7 +216,22 @@ func (rgcq *replicaGCQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "destroying local data")
 		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
+		nextReplicaID := replyDesc.NextReplicaID
+		if desc.RangeID != replyDesc.RangeID {
+			// The range this replica belonged to has been subsumed by its left-hand
+			// neighbor. replyDesc thus represents the subsuming range, whose
+			// NextReplicaID is irrelevant. We don't have the last NextReplicaID for
+			// the subsumed range, nor can we obtain it, but that's OK: we can just be
+			// conservative and use the maximum possible replica ID.
+			//
+			// store.RemoveReplica will write a tombstone using this maximum possible
+			// replica ID, which would normally be problematic, as it would prevent
+			// this store from ever having a new replica of the removed range. In this
+			// case, however, it's copacetic, as subsumed ranges _can't_ have new
+			// replicas.
+			nextReplicaID = math.MaxInt32
+		}
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return err
@@ -229,7 +245,7 @@ func (rgcq *replicaGCQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "removing merged range")
 		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
 			DestroyData: false,
 		}); err != nil {
 			return err

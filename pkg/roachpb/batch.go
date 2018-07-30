@@ -221,7 +221,15 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 func (br *BatchResponse) String() string {
 	var str []string
 	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
-	for _, union := range br.Responses {
+	for count, union := range br.Responses {
+		// Limit the strings to provide just a summary. Without this limit a log
+		// message with a BatchResponse can be very long.
+		if count >= 20 && count < len(br.Responses)-5 {
+			if count == 20 {
+				str = append(str, fmt.Sprintf("... %d skipped ...", len(br.Responses)-25))
+			}
+			continue
+		}
 		str = append(str, fmt.Sprintf("%T", union.GetInner()))
 	}
 	return strings.Join(str, ", ")
