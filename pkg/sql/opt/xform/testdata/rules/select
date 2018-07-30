@@ -102,7 +102,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 350.00
+ │         └── cost: 353.33
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained) (scan a@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
@@ -139,7 +139,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.05
+ │         └── cost: 1.06
  ├── G2: (select G4 G5) (select G6 G8) (select G7 G8) (scan a@u,cols=(1,2),constrained) (scan a@u,rev,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
@@ -157,7 +157,7 @@ memo (optimized)
  ├── G7: (scan a,rev,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a,rev,cols=(1,2),constrained)
- │         └── cost: 1.10
+ │         └── cost: 1.05
  ├── G8: (filters G10)
  ├── G9: (eq G11 G12)
  ├── G10: (eq G13 G14)
@@ -192,7 +192,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.51
+ │         └── cost: 1.52
  ├── G2: (select G4 G5) (select G6 G8) (select G7 G8)
  │    └── ""
  │         ├── best: (select G6 G8)
@@ -210,7 +210,7 @@ memo (optimized)
  ├── G7: (scan a@u,rev,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,rev,cols=(1,2),constrained)
- │         └── cost: 1.57
+ │         └── cost: 1.51
  ├── G8: (filters G10)
  ├── G9: (eq G14 G12)
  ├── G10: (eq G11 G12)
@@ -266,7 +266,7 @@ memo (optimized)
  ├── G7: (scan a@u,rev,constrained)
  │    └── ""
  │         ├── best: (scan a@u,rev,constrained)
- │         └── cost: 1.60
+ │         └── cost: 1.52
  ├── G8: (filters G12)
  ├── G9: (scan a@v,constrained)
  │    └── ""
@@ -275,7 +275,7 @@ memo (optimized)
  ├── G10: (scan a@v,rev,constrained)
  │    └── ""
  │         ├── best: (scan a@v,rev,constrained)
- │         └── cost: 1.12
+ │         └── cost: 1.06
  ├── G11: (filters G13)
  ├── G12: (eq G14 G15)
  ├── G13: (eq G16 G17)
@@ -361,7 +361,7 @@ memo (optimized)
  ├── G4: (select G10 G11) (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G5: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
@@ -369,7 +369,7 @@ memo (optimized)
  ├── G6: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G7: (scan b@u,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2))
@@ -377,7 +377,7 @@ memo (optimized)
  ├── G8: (scan b@u,rev,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G9: (scan b@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3))
@@ -385,7 +385,7 @@ memo (optimized)
  ├── G10: (scan b@v,rev,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G11: (filters G12 G13)
  ├── G12: (ge G15 G14)
  ├── G13: (le G15 G16)
@@ -446,7 +446,7 @@ memo (optimized)
  ├── G4: (scan b,rev,constrained)
  │    └── ""
  │         ├── best: (scan b,rev,constrained)
- │         └── cost: 386.67
+ │         └── cost: 387.94
  ├── G5: (select G14 G17) (select G15 G27)
  │    └── ""
  │         ├── best: (select G15 G27)
@@ -454,7 +454,7 @@ memo (optimized)
  ├── G6: (select G16 G17) (select G18 G27)
  │    └── ""
  │         ├── best: (select G18 G27)
- │         └── cost: 10.90
+ │         └── cost: 10.83
  ├── G7: (index-join G19 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G19 b,cols=(1-4))
@@ -462,7 +462,7 @@ memo (optimized)
  ├── G8: (index-join G20 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G20 b,cols=(1-4))
- │         └── cost: 2453.33
+ │         └── cost: 2512.99
  ├── G9: (filters G23 G24)
  ├── G10: (index-join G21 b,cols=(1-4))
  │    └── ""
@@ -471,7 +471,7 @@ memo (optimized)
  ├── G11: (index-join G22 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G22 b,cols=(1-4))
- │         └── cost: 51.70
+ │         └── cost: 51.63
  ├── G12: (select G21 G27)
  │    └── ""
  │         ├── best: (select G21 G27)
@@ -479,7 +479,7 @@ memo (optimized)
  ├── G13: (select G22 G27)
  │    └── ""
  │         ├── best: (select G22 G27)
- │         └── cost: 10.90
+ │         └── cost: 10.83
  ├── G14: (scan b@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3))
@@ -491,12 +491,12 @@ memo (optimized)
  ├── G16: (scan b@v,rev,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G17: (filters G23 G24 G31)
  ├── G18: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G19: (select G25 G27)
  │    └── ""
  │         ├── best: (select G25 G27)
@@ -504,7 +504,7 @@ memo (optimized)
  ├── G20: (select G26 G27)
  │    └── ""
  │         ├── best: (select G26 G27)
- │         └── cost: 1090.00
+ │         └── cost: 1149.66
  ├── G21: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
@@ -512,7 +512,7 @@ memo (optimized)
  ├── G22: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G23: (ge G29 G28)
  ├── G24: (le G29 G30)
  ├── G25: (scan b@u,cols=(1,2))
@@ -522,7 +522,7 @@ memo (optimized)
  ├── G26: (scan b@u,rev,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G27: (filters G31)
  ├── G28: (const 1)
  ├── G29: (variable b.v)
@@ -576,7 +576,7 @@ memo (optimized)
  ├── G5: (index-join G11 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G11 b,cols=(1-4))
- │         └── cost: 2453.33
+ │         └── cost: 2512.99
  ├── G6: (index-join G12 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G12 b,cols=(1-4))
@@ -584,7 +584,7 @@ memo (optimized)
  ├── G7: (index-join G13 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G13 b,cols=(1-4))
- │         └── cost: 51.70
+ │         └── cost: 51.63
  ├── G8: (index-join G14 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G14 b,cols=(1-4))
@@ -592,7 +592,7 @@ memo (optimized)
  ├── G9: (index-join G15 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G15 b,cols=(1-4))
- │         └── cost: 51.70
+ │         └── cost: 51.63
  ├── G10: (select G16 G18)
  │    └── ""
  │         ├── best: (select G16 G18)
@@ -600,7 +600,7 @@ memo (optimized)
  ├── G11: (select G17 G18)
  │    └── ""
  │         ├── best: (select G17 G18)
- │         └── cost: 1090.00
+ │         └── cost: 1149.66
  ├── G12: (select G19 G21) (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
@@ -608,7 +608,7 @@ memo (optimized)
  ├── G13: (select G20 G21) (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G14: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
@@ -616,7 +616,7 @@ memo (optimized)
  ├── G15: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G16: (scan b@u,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2))
@@ -624,7 +624,7 @@ memo (optimized)
  ├── G17: (scan b@u,rev,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G18: (filters G22)
  ├── G19: (scan b@v,cols=(1,3))
  │    └── ""
@@ -633,7 +633,7 @@ memo (optimized)
  ├── G20: (scan b@v,rev,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G21: (filters G23 G24)
  ├── G22: (eq G25 G26)
  ├── G23: (ge G27 G26)
@@ -690,7 +690,7 @@ memo (optimized)
  ├── G5: (scan b,rev,constrained)
  │    └── ""
  │         ├── best: (scan b,rev,constrained)
- │         └── cost: 386.67
+ │         └── cost: 387.94
  ├── G6: (filters G35 G36 G34)
  ├── G7: (index-join G17 b,cols=(1-4))
  │    └── ""
@@ -699,7 +699,7 @@ memo (optimized)
  ├── G8: (index-join G18 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G18 b,cols=(1-4))
- │         └── cost: 1544.44
+ │         └── cost: 1604.10
  ├── G9: (filters G35 G36)
  ├── G10: (index-join G19 b,cols=(1-4))
  │    └── ""
@@ -708,7 +708,7 @@ memo (optimized)
  ├── G11: (index-join G20 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G20 b,cols=(1-4))
- │         └── cost: 24.53
+ │         └── cost: 24.47
  ├── G12: (index-join G31 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G31 b,cols=(1-4))
@@ -716,7 +716,7 @@ memo (optimized)
  ├── G13: (index-join G32 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G32 b,cols=(1-4))
- │         └── cost: 51.70
+ │         └── cost: 51.63
  ├── G14: (index-join G21 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G21 b,cols=(1-4))
@@ -724,7 +724,7 @@ memo (optimized)
  ├── G15: (index-join G22 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G22 b,cols=(1-4))
- │         └── cost: 24.53
+ │         └── cost: 24.47
  ├── G16: (filters G34)
  ├── G17: (select G23 G25)
  │    └── ""
@@ -733,7 +733,7 @@ memo (optimized)
  ├── G18: (select G24 G25)
  │    └── ""
  │         ├── best: (select G24 G25)
- │         └── cost: 1090.00
+ │         └── cost: 1149.66
  ├── G19: (select G26 G29) (select G27 G33)
  │    └── ""
  │         ├── best: (select G27 G33)
@@ -741,7 +741,7 @@ memo (optimized)
  ├── G20: (select G28 G29) (select G30 G33)
  │    └── ""
  │         ├── best: (select G30 G33)
- │         └── cost: 10.90
+ │         └── cost: 10.83
  ├── G21: (select G31 G33)
  │    └── ""
  │         ├── best: (select G31 G33)
@@ -749,7 +749,7 @@ memo (optimized)
  ├── G22: (select G32 G33)
  │    └── ""
  │         ├── best: (select G32 G33)
- │         └── cost: 10.90
+ │         └── cost: 10.83
  ├── G23: (scan b@u,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2))
@@ -757,7 +757,7 @@ memo (optimized)
  ├── G24: (scan b@u,rev,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G25: (filters G34 G37)
  ├── G26: (scan b@v,cols=(1,3))
  │    └── ""
@@ -770,12 +770,12 @@ memo (optimized)
  ├── G28: (scan b@v,rev,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G29: (filters G35 G36 G37)
  ├── G30: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G31: (scan b@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3),constrained)
@@ -783,7 +783,7 @@ memo (optimized)
  ├── G32: (scan b@v,rev,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3),constrained)
- │         └── cost: 10.80
+ │         └── cost: 10.73
  ├── G33: (filters G37)
  ├── G34: (eq G38 G39)
  ├── G35: (ge G40 G39)
@@ -840,7 +840,7 @@ memo (optimized)
  ├── G4: (index-join G11 b,cols=(1-4))
  │    └── ""
  │         ├── best: (index-join G11 b,cols=(1-4))
- │         └── cost: 59.09
+ │         └── cost: 59.03
  ├── G5: (filters G12 G13)
  ├── G6: (scan b@u,cols=(1,2))
  │    └── ""
@@ -849,7 +849,7 @@ memo (optimized)
  ├── G7: (scan b@u,rev,cols=(1,2))
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G8: (scan b@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,cols=(1,3))
@@ -857,7 +857,7 @@ memo (optimized)
  ├── G9: (scan b@v,rev,cols=(1,3))
  │    └── ""
  │         ├── best: (scan b@v,rev,cols=(1,3))
- │         └── cost: 1080.00
+ │         └── cost: 1139.66
  ├── G10: (scan b@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan b@u,cols=(1,2),constrained)
@@ -865,7 +865,7 @@ memo (optimized)
  ├── G11: (scan b@u,rev,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan b@u,rev,cols=(1,2),constrained)
- │         └── cost: 12.34
+ │         └── cost: 12.29
  ├── G12: (gt G15 G14)
  ├── G13: (lt G15 G16)
  ├── G14: (tuple G17 G18 G19)

@@ -128,7 +128,7 @@ func registerCDC(r *registry) {
 				if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 					return err
 				}
-				if nanos := progress.GetChangefeed().Highwater.WallTime; nanos > 0 {
+				if nanos := progress.GetHighWater().WallTime; nanos > 0 {
 					if initialScanLatency == 0 {
 						initialScanLatency = timeutil.Since(timeutil.Unix(0, nanos))
 						l.printf("initial scan latency %s\n", initialScanLatency)

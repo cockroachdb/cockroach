@@ -65,7 +65,7 @@ func (jpl *ProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.lastReportedAt = timeutil.Now()
 	jpl.lastReportedFraction = fraction
-	return jpl.Job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+	return jpl.Job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 		if jpl.ProgressedFn != nil {
 			jpl.ProgressedFn(ctx, details)
 		}

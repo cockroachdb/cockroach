@@ -173,7 +173,7 @@ project
  ├── columns: "?column?":1(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.01
+ ├── cost: 0.03
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
@@ -194,7 +194,7 @@ project
  ├── columns: "?column?":1(decimal!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.01
+ ├── cost: 0.03
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
@@ -214,7 +214,7 @@ project
  ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.01
+ ├── cost: 0.03
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)

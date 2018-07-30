@@ -656,15 +656,15 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		lowWaterMark, err := getLowWaterMark(jobID, ip.DB)
+		highWaterMark, err := getHighWaterMark(jobID, ip.DB)
 		if err != nil {
 			return err
 		}
 		low := keys.MakeTablePrefix(ip.backupTableID)
 		high := keys.MakeTablePrefix(ip.backupTableID + 1)
-		if bytes.Compare(lowWaterMark, low) <= 0 || bytes.Compare(lowWaterMark, high) >= 0 {
-			return errors.Errorf("expected low water mark %v to be between %v and %v",
-				lowWaterMark, roachpb.Key(low), roachpb.Key(high))
+		if bytes.Compare(highWaterMark, low) <= 0 || bytes.Compare(highWaterMark, high) >= 0 {
+			return errors.Errorf("expected high-water mark %v to be between %v and %v",
+				highWaterMark, roachpb.Key(low), roachpb.Key(high))
 		}
 		return nil
 	}
@@ -798,7 +798,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		restoreLowWaterMark, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		restoreHighWaterMark, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -811,7 +811,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			},
 			URIs: []string{restoreDir},
 		}, jobspb.RestoreProgress{
-			LowWaterMark: restoreLowWaterMark,
+			HighWater: restoreHighWaterMark,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -831,7 +831,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	})
 }
 
-func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
+func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
 		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
@@ -844,7 +844,7 @@ func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 	}
 	switch d := payload.Details.(type) {
 	case *jobspb.Progress_Restore:
-		return d.Restore.LowWaterMark, nil
+		return d.Restore.HighWater, nil
 	default:
 		return nil, errors.Errorf("unexpected job details type %T", d)
 	}

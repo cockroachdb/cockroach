@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -137,62 +138,99 @@ func (j *Job) Started(ctx context.Context) error {
 	})
 }
 
-// ProgressedFn is a callback that computes a job's completion fraction
+// FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
-type ProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) float32
+type FractionProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) float32
 
-// DetailProgressedFn is a callback that computes a job's completion fraction
-// given its details. It is safe to modify details in the callback; those
-// modifications will be automatically persisted to the database record.
-type DetailProgressedFn func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32
+// FractionDetailProgressedFn is a callback that computes a job's completion
+// fraction given its details. It is safe to modify details in the callback;
+// those modifications will be automatically persisted to the database record.
+type FractionDetailProgressedFn func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32
 
-// FractionUpdater returns a ProgressedFn that returns its argument.
-func FractionUpdater(f float32) ProgressedFn {
+// FractionUpdater returns a FractionProgressedFn that returns its argument.
+func FractionUpdater(f float32) FractionProgressedFn {
 	return func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 		return f
 	}
 }
 
-// Progressed updates the progress of the tracked job. It sets the job's
+// HighWaterProgressedFn is a callback that computes a job's high-water mark
+// given its details. It is safe to modify details in the callback; those
+// modifications will be automatically persisted to the database record.
+type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) hlc.Timestamp
+
+// FractionProgressed updates the progress of the tracked job. It sets the job's
 // FractionCompleted field to the value returned by progressedFn and persists
 // progressedFn's modifications to the job's progress details, if any.
 //
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
-func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
+func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
 	return j.updateRow(ctx, updateProgressOnly,
 		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 			if *status != StatusRunning {
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}
-			progress.FractionCompleted = progressedFn(ctx, progress.Details)
-			if progress.FractionCompleted < 0.0 || progress.FractionCompleted > 1.0 {
+			fractionCompleted := progressedFn(ctx, progress.Details)
+			if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 				return false, errors.Errorf(
 					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-					progress.FractionCompleted, j.id,
+					fractionCompleted, j.id,
 				)
+			}
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: fractionCompleted,
 			}
 			return true, nil
 		},
 	)
 }
 
-// DetailProgressed is similar to Progressed but also updates the job's Details.
-func (j *Job) DetailProgressed(ctx context.Context, progressedFn DetailProgressedFn) error {
+// FractionDetailProgressed is similar to Progressed but also updates the job's Details.
+func (j *Job) FractionDetailProgressed(
+	ctx context.Context, progressedFn FractionDetailProgressedFn,
+) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
 		if *status != StatusRunning {
 			return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 		}
-		progress.FractionCompleted = progressedFn(ctx, payload.Details, progress.Details)
-		if progress.FractionCompleted < 0.0 || progress.FractionCompleted > 1.0 {
+		fractionCompleted := progressedFn(ctx, payload.Details, progress.Details)
+		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 			return false, errors.Errorf(
 				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				progress.FractionCompleted, j.id,
+				fractionCompleted, j.id,
 			)
+		}
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: fractionCompleted,
 		}
 		return true, nil
 	})
+}
+
+// HighWaterProgressed updates the progress of the tracked job. It sets the
+// job's HighWater field to the value returned by progressedFn and persists
+// progressedFn's modifications to the job's progress details, if any.
+func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterProgressedFn) error {
+	return j.updateRow(ctx, updateProgressOnly,
+		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+			if *status != StatusRunning {
+				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+			}
+			highWater := progressedFn(ctx, progress.Details)
+			if highWater.Less(hlc.Timestamp{}) {
+				return false, errors.Errorf(
+					"Job: high-water %s is outside allowable range > 0.0 (job %d)",
+					highWater, j.id,
+				)
+			}
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &highWater,
+			}
+			return true, nil
+		},
+	)
 }
 
 // Paused sets the status of the tracked job to paused. It does not directly
@@ -305,7 +343,9 @@ func (j *Job) Succeeded(
 			}
 		}
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		progress.FractionCompleted = 1.0
+		progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: 1.0,
+		}
 		return true, nil
 	})
 }
@@ -351,7 +391,8 @@ func (j *Job) Details() jobspb.Details {
 
 // FractionCompleted returns completion according to the in-memory job state.
 func (j *Job) FractionCompleted() float32 {
-	return j.Progress().FractionCompleted
+	progress := j.Progress()
+	return progress.GetFractionCompleted()
 }
 
 // WithTxn sets the transaction that this Job will use for its next operation.
