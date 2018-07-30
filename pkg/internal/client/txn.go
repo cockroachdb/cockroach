@@ -732,9 +732,14 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-// OnFinish adds a closure to be executed when the transaction sender
-// moves from state "ready" to "done" or "aborted".
-func (txn *Txn) OnFinish(onFinishFn func(error)) {
+// OnCurrentIncarnationFinish adds a closure to be executed when the transaction
+// sender moves from state "ready" to "done" or "aborted".
+// Note that, as the name suggests, this callback is not persistent across
+// different underlying KV transactions. In other words, once a
+// TransactionAbortedError happens, the callback is called, but then it won't be
+// called again after the client restarts. This is not intended to be used by
+// layers above the retries.
+func (txn *Txn) OnCurrentIncarnationFinish(onFinishFn func(error)) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.mu.sender.OnFinish(onFinishFn)
