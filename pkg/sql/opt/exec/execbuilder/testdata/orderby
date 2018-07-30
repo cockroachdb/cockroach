@@ -359,12 +359,10 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-sort            ·      ·
- │              order  -c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  /2-/3
+render        ·      ·
+ └── revscan  ·      ·
+·             table  abc@bc
+·             spans  /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query TTTTT
@@ -542,19 +540,16 @@ CREATE TABLE uvwxyz (
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-# TODO(radu): y is constant, so scan returns rows ordered on w,x already
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-render          ·         ·           (y, w, x)  ·
- │              render 0  y           ·          ·
- │              render 1  w           ·          ·
- │              render 2  x           ·          ·
- └── sort       ·         ·           (w, x, y)  +w,+x
-      │         order     +w,+x       ·          ·
-      └── scan  ·         ·           (w, x, y)  ·
-·               table     uvwxyz@ywz  ·          ·
-·               spans     /1-/2       ·          ·
+render     ·         ·            (y, w, x)  ·
+ │         render 0  y            ·          ·
+ │         render 1  w            ·          ·
+ │         render 2  x            ·          ·
+ └── scan  ·         ·            (w, x, y)  +w,+x
+·          table     uvwxyz@ywxz  ·          ·
+·          spans     /1-/2        ·          ·
 
 
 statement ok

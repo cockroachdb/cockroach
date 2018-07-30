@@ -142,7 +142,7 @@ CREATE CHANGEFEED <name> FOR DATABASE db INTO <...>
     - `format='avro'` The record key is an [Avro] array, serialized in the
       binary format. The record value is an Avro record, mapping column names to
       column values, serialized in the binary format.
-  - `WITH cursor=<timestamp>` can be used to set the initial highwater mark. If
+  - `WITH cursor=<timestamp>` can be used to set the initial high-water mark. If
     this option is used, the changefeed will emit any changes after the given
     timestamp and no initial scan.
 
@@ -169,7 +169,7 @@ to `PAUSE CHANGEFEED` and `RESUME CHANGEFEED` as necessary.
 options.
 
 `ALTER CHANGEFEED <name> SET cursor=<timestamp>` can be used to manually adjust
-the highwater mark forward or back. When resumed, the changefeed will emit any
+the high-water mark forward or back. When resumed, the changefeed will emit any
 changes after the given timestamp, but will not emit the initial catch-up. To do
 this, the changefeed must be cancelled and replaced with a new one.
 

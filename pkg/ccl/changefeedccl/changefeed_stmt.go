@@ -125,11 +125,11 @@ func changefeedPlanHook(
 		}
 
 		now := p.ExecCfg().Clock.Now()
-		var highwater hlc.Timestamp
+		var highWater hlc.Timestamp
 		if cursor, ok := opts[optCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if highwater, err = p.EvalAsOfTimestamp(asOf, now); err != nil {
+			if highWater, err = p.EvalAsOfTimestamp(asOf, now); err != nil {
 				return err
 			}
 		}
@@ -138,8 +138,8 @@ func changefeedPlanHook(
 		// interpret kvs written later. This both doesn't handle any schema
 		// changes and breaks the table leasing.
 		descriptorTime := now
-		if highwater != (hlc.Timestamp{}) {
-			descriptorTime = highwater
+		if highWater != (hlc.Timestamp{}) {
+			descriptorTime = highWater
 		}
 		targetDescs, _, err := backupccl.ResolveTargetsToDescriptors(
 			ctx, p, descriptorTime, changefeedStmt.Targets)
@@ -158,8 +158,11 @@ func changefeedPlanHook(
 			Opts:       opts,
 			SinkURI:    sinkURI,
 		}
-		progress := jobspb.ChangefeedProgress{
-			Highwater: highwater,
+		progress := jobspb.Progress{
+			Progress: &jobspb.Progress_HighWater{HighWater: &highWater},
+			Details: &jobspb.Progress_Changefeed{
+				Changefeed: &jobspb.ChangefeedProgress{},
+			},
 		}
 
 		if details.SinkURI == `` {
@@ -188,7 +191,7 @@ func changefeedPlanHook(
 				return sqlDescIDs
 			}(),
 			Details:  details,
-			Progress: progress,
+			Progress: *progress.GetChangefeed(),
 		})
 		if err != nil {
 			return err
@@ -243,7 +246,7 @@ func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDeta
 
 func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
 	// Technically, the only non-user table known not to work is system.jobs
-	// (which creates a cycle since the resolved timestamp highwater mark is
+	// (which creates a cycle since the resolved timestamp high-water mark is
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
@@ -265,8 +268,8 @@ func (b *changefeedResumer) Resume(
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
 	details := job.Details().(jobspb.ChangefeedDetails)
-	progress := job.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-	return runChangefeedFlow(ctx, execCfg, details, *progress, startedCh, job.Progressed)
+	progress := job.Progress()
+	return runChangefeedFlow(ctx, execCfg, details, progress, startedCh, job.HighWaterProgressed)
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }

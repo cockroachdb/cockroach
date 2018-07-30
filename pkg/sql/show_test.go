@@ -777,8 +777,10 @@ func TestShowJobs(t *testing.T) {
 	}
 
 	inProgress, err := protoutil.Marshal(&jobspb.Progress{
-		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
-		FractionCompleted: in.fractionCompleted,
+		ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+		Progress: &jobspb.Progress_FractionCompleted{
+			FractionCompleted: in.fractionCompleted,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

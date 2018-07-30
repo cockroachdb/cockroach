@@ -67,7 +67,7 @@ message RestoreDetails {
 }
 
 message RestoreProgress {
-  bytes low_water_mark = 1;
+  bytes high_water = 1;
 }
 
 message ImportDetails {
@@ -134,7 +134,7 @@ message ChangefeedDetails {
 }
 
 message ChangefeedProgress {
-  util.hlc.Timestamp highwater = 1 [(gogoproto.nullable) = false];
+  reserved 1;
 }
 
 message Payload {
@@ -164,7 +164,10 @@ message Payload {
 }
 
 message Progress {
-  float fraction_completed = 1;
+  oneof progress {
+    float fraction_completed = 1;
+    util.hlc.Timestamp high_water = 3;
+  }
   int64 modified_micros = 2;
 
   oneof details {

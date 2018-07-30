@@ -882,7 +882,7 @@ func doDistributedCSVTransform(
 		// job progress to coerce out the correct error type. If the update succeeds
 		// then return the original error, otherwise return this error instead so
 		// it can be cleaned up at a higher level.
-		if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			d := details.(*jobspb.Progress_Import).Import
 			return d.Completed()
 		}); err != nil {

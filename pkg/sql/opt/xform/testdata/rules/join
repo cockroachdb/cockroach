@@ -105,7 +105,7 @@ memo (optimized)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G4)
- │         └── cost: 1169.66
+ │         └── cost: 1279.32
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable abc.a)
@@ -132,7 +132,7 @@ memo (optimized)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G3)
- │         └── cost: 1169.66
+ │         └── cost: 1279.32
  ├── G4: (merge-on G5 full-join,+1,+7)
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
@@ -199,7 +199,7 @@ memo (optimized)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G3)
- │         └── cost: 1169.66
+ │         └── cost: 1279.32
  ├── G4: (merge-on G5 left-join,+1,+7)
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
@@ -247,7 +247,7 @@ memo (optimized)
  │    │    └── cost: 1070.00
  │    └── "[ordering: +7]"
  │         ├── best: (sort G4)
- │         └── cost: 1169.66
+ │         └── cost: 1279.32
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable abc.a)
@@ -638,7 +638,7 @@ memo (optimized)
  ├── G7: (scan abc@ab,rev,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@ab,rev,cols=(1-3),constrained)
- │         └── cost: 380.00
+ │         └── cost: 384.60
  ├── G8: (scan abc@bc,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@bc,cols=(1-3),constrained)
@@ -646,7 +646,7 @@ memo (optimized)
  ├── G9: (scan abc@bc,rev,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@bc,rev,cols=(1-3),constrained)
- │         └── cost: 380.00
+ │         └── cost: 384.60
  ├── G10: (filters G11)
  ├── G11: (eq G12 G13)
  ├── G12: (variable abc.a)
