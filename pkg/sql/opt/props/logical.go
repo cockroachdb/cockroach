@@ -55,6 +55,10 @@ const (
 	// populated.
 	RejectNullCols
 
+	// InterestingOrderings is set when the Relational.Rule.InterestingOrderings
+	// field is populated.
+	InterestingOrderings
+
 	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
 	// populated.
 	UnfilteredCols
@@ -210,9 +214,9 @@ type Relational struct {
 		// list doesn't need to contain orderings that are prefixes of some other
 		// ordering in the list.
 		//
-		// Since this property is only useful for a few specific cases (like merge
-		// joins), it is calculated lazily. Once it is calculated, it is not nil
-		// (even if there are no interesting orderings).
+		// InterestingOrderings is lazily populated by interesting_orderings.go.
+		// It is only valid once the Rule.Available.InterestingOrderings bit has
+		// been set.
 		InterestingOrderings opt.OrderingSet
 
 		// UnfilteredCols is the set of output columns that have values for every
