@@ -66,13 +66,17 @@ func runChangefeedFlow(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.ChangefeedProgress,
+	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
-	progressedFn func(context.Context, jobs.ProgressedFn) error,
+	progressedFn func(context.Context, jobs.HighwaterProgressedFn) error,
 ) error {
 	details, err := validateChangefeed(details)
 	if err != nil {
 		return err
+	}
+	var highwater hlc.Timestamp
+	if h := progress.GetHighwater(); h != nil {
+		highwater = *h
 	}
 
 	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
@@ -81,11 +85,8 @@ func runChangefeedFlow(
 		if progressedFn == nil {
 			return nil
 		}
-		return progressedFn(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			cfDetails := details.(*jobspb.Progress_Changefeed).Changefeed
-			cfDetails.Highwater = highwater
-			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
-			return 0.0
+		return progressedFn(ctx, func(ctx context.Context, details jobspb.ProgressDetails) hlc.Timestamp {
+			return highwater
 		})
 	}
 
@@ -94,7 +95,7 @@ func runChangefeedFlow(
 	//
 	// TODO(dan): Make this into a DistSQL flow.
 	buf := makeBuffer()
-	poller := makePoller(execCfg, details, progress, buf)
+	poller := makePoller(execCfg, details, highwater, buf)
 	rowsFn := kvsToRows(execCfg, details, buf.Get)
 	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {

@@ -53,7 +53,7 @@ type poller struct {
 func makePoller(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.ChangefeedProgress,
+	startTime hlc.Timestamp,
 	buf *buffer,
 ) *poller {
 	p := &poller{
@@ -61,7 +61,7 @@ func makePoller(
 		db:        execCfg.DB,
 		clock:     execCfg.Clock,
 		gossip:    execCfg.Gossip,
-		highwater: progress.Highwater,
+		highwater: startTime,
 		buf:       buf,
 	}
 	for _, tableDesc := range details.TableDescs {
