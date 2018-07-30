@@ -146,8 +146,11 @@ func changefeedPlanHook(
 			Opts:       opts,
 			SinkURI:    sinkURI,
 		}
-		progress := jobspb.ChangefeedProgress{
-			Highwater: highwater,
+		progress := jobspb.Progress{
+			Progress: &jobspb.Progress_Highwater{Highwater: &highwater},
+			Details: &jobspb.Progress_Changefeed{
+				Changefeed: &jobspb.ChangefeedProgress{},
+			},
 		}
 
 		if details.SinkURI == `` {
@@ -170,7 +173,7 @@ func changefeedPlanHook(
 				return sqlDescIDs
 			}(),
 			Details:  details,
-			Progress: progress,
+			Progress: *progress.GetChangefeed(),
 		})
 		if err != nil {
 			return err
@@ -232,8 +235,7 @@ func (b *changefeedResumer) Resume(
 ) error {
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
 	details := job.Details().(jobspb.ChangefeedDetails)
-	progress := job.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-	return runChangefeedFlow(ctx, execCfg, details, *progress, startedCh, job.Progressed)
+	return runChangefeedFlow(ctx, execCfg, details, job.Progress(), startedCh, job.HighwaterProgressed)
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
