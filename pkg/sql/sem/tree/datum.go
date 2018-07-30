@@ -1609,7 +1609,7 @@ func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DTime) AmbiguousFormat() bool { return false }
+func (*DTime) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
@@ -1713,7 +1713,7 @@ func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DTimeTZ) AmbiguousFormat() bool { return false }
+func (*DTimeTZ) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimeTZ) Format(ctx *FmtCtx) {

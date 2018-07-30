@@ -226,6 +226,8 @@ func TestFormatExpr(t *testing.T) {
 			`('Infinity':::DECIMAL + '-Infinity':::DECIMAL) + 'NaN':::DECIMAL`},
 		{`'+Inf':::FLOAT + '-Inf':::FLOAT + 'NaN':::FLOAT`, tree.FmtParsable,
 			`('+Inf':::FLOAT + '-Inf':::FLOAT) + 'NaN':::FLOAT`},
+		{`'12:00:00':::TIME`, tree.FmtParsable,
+			`'12:00:00':::TIME`},
 
 		{`(123:::INT, 123:::DECIMAL)`, tree.FmtCheckEquivalence,
 			`(123:::INT, 123:::DECIMAL)`},
