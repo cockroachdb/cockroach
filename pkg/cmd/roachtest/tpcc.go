@@ -47,7 +47,7 @@ func registerTPCC(r *registry) {
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d"+
+				"./workload run tpcc --init --warehouses=%d --histograms=logs/stats.json"+
 					extra+duration+" {pgurl:1-%d}",
 				warehouses, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
