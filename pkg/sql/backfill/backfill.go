@@ -137,14 +137,30 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := sqlbase.TablesNeededForFKs(
+	// TODO(dan): Tighten up the bound on the requestedCols parameter to
+	// makeRowUpdater.
+	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
+	requestedCols = append(requestedCols, tableDesc.Columns...)
+	requestedCols = append(requestedCols, cb.added...)
+	fetchColIDtoRowIndex, _, err := sqlbase.FetchColsForDelete(&tableDesc, requestedCols)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
+	fkHelper, _ := sqlbase.TablesNeededForFKsNew(
 		ctx,
+		cb.evalCtx,
+		txn,
 		tableDesc,
 		sqlbase.CheckUpdates,
 		sqlbase.NoLookup,
 		sqlbase.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
+		fetchColIDtoRowIndex,
+		&cb.alloc,
 	)
+	fkTables := fkHelper.Tables
+
 	for _, fkTableDesc := range otherTables {
 		found, ok := fkTables[fkTableDesc.ID]
 		if !ok {
@@ -160,14 +176,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			return roachpb.Key{}, errors.Errorf("table %v not sent by coordinator", id)
 		}
 	}
-	// TODO(dan): Tighten up the bound on the requestedCols parameter to
-	// makeRowUpdater.
-	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
-	requestedCols = append(requestedCols, tableDesc.Columns...)
-	requestedCols = append(requestedCols, cb.added...)
 	ru, err := sqlbase.MakeRowUpdater(
 		txn,
 		&tableDesc,
+		fkHelper,
 		fkTables,
 		cb.updateCols,
 		requestedCols,

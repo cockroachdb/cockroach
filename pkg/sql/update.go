@@ -88,19 +88,6 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	// Determine what are the foreign key tables that are involved in the update.
-	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx,
-		*desc,
-		sqlbase.CheckUpdates,
-		p.lookupFKTable,
-		p.CheckPrivilege,
-		p.analyzeExpr,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	// Pre-perform early subquery analysis and extraction. Usually
 	// this is done by analyzeExpr(), and, in fact, analyzeExpr() is indirectly
 	// called below as well. Why not call analyzeExpr() already?
@@ -195,6 +182,30 @@ func (p *planner) Update(
 		requestedCols = desc.Columns
 	}
 
+	fetchColIDtoRowIndex, _, err := sqlbase.FetchColsForDelete(desc, requestedCols)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine what are the foreign key tables that are involved in the update.
+	fkHelper, err := sqlbase.TablesNeededForFKsNew(
+		ctx,
+		p.EvalContext(),
+		p.Txn(),
+		*desc,
+		sqlbase.CheckUpdates,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+		fetchColIDtoRowIndex,
+		&p.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	fkTables := fkHelper.Tables
+
 	// Create the table updater, which does the bulk of the work.
 	// As a result of MakeRowUpdater, ru.FetchCols include all the
 	// columns in the table descriptor + any columns currently in the
@@ -202,6 +213,7 @@ func (p *planner) Update(
 	ru, err := sqlbase.MakeRowUpdater(
 		p.txn,
 		desc,
+		fkHelper,
 		fkTables,
 		updateCols,
 		requestedCols,

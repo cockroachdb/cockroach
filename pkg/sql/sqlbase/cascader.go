@@ -36,6 +36,8 @@ type cascader struct {
 
 	indexPKRowFetchers map[ID]map[IndexID]RowFetcher // PK RowFetchers by Table ID and Index ID
 
+	fkHelper FKHelper
+
 	// Row Deleters
 	rowDeleters        map[ID]RowDeleter    // RowDeleters by Table ID
 	deleterRowFetchers map[ID]RowFetcher    // RowFetchers for rowDeleters by Table ID
@@ -53,6 +55,7 @@ type cascader struct {
 func makeDeleteCascader(
 	txn *client.Txn,
 	table *TableDescriptor,
+	fkHelper FKHelper,
 	tablesByID TableLookupsByID,
 	evalCtx *tree.EvalContext,
 	alloc *DatumAlloc,
@@ -94,6 +97,7 @@ Outer:
 		txn:                txn,
 		tablesByID:         tablesByID,
 		indexPKRowFetchers: make(map[ID]map[IndexID]RowFetcher),
+		fkHelper:           fkHelper,
 		rowDeleters:        make(map[ID]RowDeleter),
 		deleterRowFetchers: make(map[ID]RowFetcher),
 		deletedRows:        make(map[ID]*RowContainer),
@@ -111,6 +115,7 @@ Outer:
 func makeUpdateCascader(
 	txn *client.Txn,
 	table *TableDescriptor,
+	fkHelper FKHelper,
 	tablesByID TableLookupsByID,
 	updateCols []ColumnDescriptor,
 	evalCtx *tree.EvalContext,
@@ -1172,7 +1177,6 @@ func (c *cascader) cascadeAll(
 					skipList[j] = struct{}{}
 				}
 			}
-
 			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
 			}

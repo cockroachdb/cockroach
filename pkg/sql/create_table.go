@@ -224,7 +224,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		// Instantiate a row inserter and table writer. It has a 1-1
 		// mapping to the definitions in the descriptor.
 		ri, err := sqlbase.MakeRowInserter(
-			params.p.txn, &desc, nil, desc.Columns, sqlbase.SkipFKs, &params.p.alloc)
+			params.p.txn, &desc, nil, sqlbase.FKHelper{}, desc.Columns, sqlbase.SkipFKs, &params.p.alloc)
 		if err != nil {
 			return err
 		}

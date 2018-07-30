@@ -160,6 +160,7 @@ type RowInserter struct {
 	InsertCols            []ColumnDescriptor
 	InsertColIDtoRowIndex map[ColumnID]int
 	Fks                   fkInsertHelper
+	FKHelper              FKHelper
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -175,6 +176,7 @@ func MakeRowInserter(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
+	fkHelper FKHelper,
 	insertCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	alloc *DatumAlloc,
@@ -195,6 +197,7 @@ func MakeRowInserter(
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
+		FKHelper:              fkHelper,
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
@@ -474,6 +477,7 @@ func (ri *RowInserter) EncodeIndexesForRow(
 type RowUpdater struct {
 	Helper                rowHelper
 	DeleteHelper          *rowHelper
+	fkHelper              FKHelper
 	FetchCols             []ColumnDescriptor
 	FetchColIDtoRowIndex  map[ColumnID]int
 	UpdateCols            []ColumnDescriptor
@@ -520,6 +524,7 @@ const (
 func MakeRowUpdater(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
+	fkHelper FKHelper,
 	fkTables TableLookupsByID,
 	updateCols []ColumnDescriptor,
 	requestedCols []ColumnDescriptor,
@@ -533,8 +538,9 @@ func MakeRowUpdater(
 	if err != nil {
 		return RowUpdater{}, err
 	}
+	rowUpdater.fkHelper = fkHelper
 	rowUpdater.cascader, err = makeUpdateCascader(
-		txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
+		txn, tableDesc, fkHelper, fkTables, updateCols, evalCtx, alloc,
 	)
 	if err != nil {
 		return RowUpdater{}, err
@@ -648,7 +654,7 @@ func makeRowUpdaterWithoutCascader(
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables,
+		if ru.ri, err = MakeRowInserter(txn, tableDesc, fkTables, FKHelper{},
 			tableCols, SkipFKs, alloc); err != nil {
 			return RowUpdater{}, err
 		}
@@ -953,6 +959,7 @@ type RowDeleter struct {
 	FetchCols            []ColumnDescriptor
 	FetchColIDtoRowIndex map[ColumnID]int
 	Fks                  fkDeleteHelper
+	FKHelper             FKHelper
 	cascader             *cascader
 	// For allocation avoidance.
 	key roachpb.Key
@@ -967,6 +974,7 @@ func MakeRowDeleter(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
+	fkHelper FKHelper,
 	requestedCols []ColumnDescriptor,
 	checkFKs checkFKConstraints,
 	evalCtx *tree.EvalContext,
@@ -980,7 +988,8 @@ func MakeRowDeleter(
 	}
 	if checkFKs == CheckFKs {
 		var err error
-		rowDeleter.cascader, err = makeDeleteCascader(txn, tableDesc, fkTables, evalCtx, alloc)
+		rowDeleter.FKHelper = fkHelper
+		rowDeleter.cascader, err = makeDeleteCascader(txn, tableDesc, fkHelper, fkTables, evalCtx, alloc)
 		if err != nil {
 			return RowDeleter{}, err
 		}
@@ -999,43 +1008,10 @@ func makeRowDeleterWithoutCascader(
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
-	for _, m := range tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			indexes = append(indexes, *index)
-		}
-	}
 
-	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
-	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
-
-	maybeAddCol := func(colID ColumnID) error {
-		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
-			col, err := tableDesc.FindColumnByID(colID)
-			if err != nil {
-				return err
-			}
-			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
-			fetchCols = append(fetchCols, *col)
-		}
-		return nil
-	}
-	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
-		if err := maybeAddCol(colID); err != nil {
-			return RowDeleter{}, err
-		}
-	}
-	for _, index := range indexes {
-		for _, colID := range index.ColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return RowDeleter{}, err
-			}
-		}
-		// The extra columns are needed to fix #14601.
-		for _, colID := range index.ExtraColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return RowDeleter{}, err
-			}
-		}
+	fetchColIDtoRowIndex, fetchCols, err := FetchColsForDelete(tableDesc, requestedCols)
+	if err != nil {
+		return RowDeleter{}, err
 	}
 
 	rd := RowDeleter{
@@ -1052,6 +1028,52 @@ func makeRowDeleterWithoutCascader(
 	}
 
 	return rd, nil
+}
+
+// FetchColsForDelete returns a column map for the columns that are to be deleted or updated.
+func FetchColsForDelete(
+	tableDesc *TableDescriptor,
+	requestedCols []ColumnDescriptor,
+) (map[ColumnID]int, []ColumnDescriptor, error) {
+	indexes := tableDesc.Indexes
+	for _, m := range tableDesc.Mutations {
+		if index := m.GetIndex(); index != nil {
+			indexes = append(indexes, *index)
+		}
+	}
+	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
+	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
+
+	maybeAddCol := func(colID ColumnID) error {
+		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+			col, err := tableDesc.FindColumnByID(colID)
+			if err != nil {
+				return err
+			}
+			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
+			fetchCols = append(fetchCols, *col)
+		}
+		return nil
+	}
+	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
+		if err := maybeAddCol(colID); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, index := range indexes {
+		for _, colID := range index.ColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return nil, nil, err
+			}
+		}
+		// The extra columns are needed to fix #14601.
+		for _, colID := range index.ExtraColumnIDs {
+			if err := maybeAddCol(colID); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return fetchColIDtoRowIndex, fetchCols, nil
 }
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
@@ -1106,12 +1128,12 @@ func (rd *RowDeleter) DeleteRow(
 			return err
 		}
 	}
-	if rd.Fks.checker != nil && checkFKs == CheckFKs {
-		if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
-			return err
-		}
-		return rd.Fks.checker.runCheck(ctx, values, nil)
-	}
+	// if rd.CheckFKs == CheckFKs && checkFKs == CheckFKs {
+	// 	if err := rd.Fks.addAllIdxChecks(ctx, values); err != nil {
+	// 		return err
+	// 	}
+	// 	return rd.Fks.checker.runCheck(ctx, values, nil)
+	// }
 	return nil
 }
 

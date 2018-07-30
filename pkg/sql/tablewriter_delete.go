@@ -33,8 +33,9 @@ import (
 type tableDeleter struct {
 	tableWriterBase
 
-	rd    sqlbase.RowDeleter
-	alloc *sqlbase.DatumAlloc
+	rd       sqlbase.RowDeleter
+	alloc    *sqlbase.DatumAlloc
+	fkHelper sqlbase.FKHelper
 }
 
 // walkExprs is part of the tableWriter interface.
@@ -59,13 +60,16 @@ func (td *tableDeleter) finalize(
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
-func (td *tableDeleter) atBatchEnd(_ context.Context, _ bool) error { return nil }
+func (td *tableDeleter) atBatchEnd(ctx context.Context, _ bool) error {
+	return td.fkHelper.RunChecks(ctx)
+}
 
 func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	td.batchSize++
-	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
+	td.fkHelper.AddChecks(ctx, *td.tableDesc(), td.rd.FetchColIDtoRowIndex, sqlbase.CheckDeletes, values, nil)
+	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.SkipFKs, traceKV)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -361,4 +365,6 @@ func (td *tableDeleter) fkSpanCollector() sqlbase.FkSpanCollector {
 	return td.rd.Fks
 }
 
-func (td *tableDeleter) close(_ context.Context) {}
+func (td *tableDeleter) close(ctx context.Context) {
+	td.fkHelper.Shutdown(ctx)
+}

@@ -179,7 +179,7 @@ func Load(
 				}
 			}
 
-			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns,
+			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, sqlbase.FKHelper{}, tableDesc.Columns,
 				true, &sqlbase.DatumAlloc{})
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make row inserter")

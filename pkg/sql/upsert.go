@@ -58,6 +58,7 @@ func (p *planner) newUpsertNode(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
 	computedCols []sqlbase.ColumnDescriptor,
+	fkHelper sqlbase.FKHelper,
 	fkTables sqlbase.TableLookupsByID,
 	desiredTypes []types.T,
 ) (res batchedPlanNode, err error) {
@@ -102,6 +103,7 @@ func (p *planner) newUpsertNode(
 					ri:          ri,
 					collectRows: needRows,
 					alloc:       &p.alloc,
+					fkHelper:    fkHelper,
 				},
 			}
 		} else {
@@ -111,6 +113,7 @@ func (p *planner) newUpsertNode(
 					ri:          ri,
 					collectRows: needRows,
 					alloc:       &p.alloc,
+					fkHelper:    fkHelper,
 				},
 			}
 		}
@@ -189,7 +192,8 @@ func (p *planner) newUpsertNode(
 			// much else to prepare.
 			un.run.tw = &fastTableUpserter{
 				tableUpserterBase: tableUpserterBase{
-					ri: ri,
+					ri:       ri,
+					fkHelper: fkHelper,
 				},
 			}
 		} else {
@@ -199,6 +203,7 @@ func (p *planner) newUpsertNode(
 					ri:          ri,
 					alloc:       &p.alloc,
 					collectRows: needRows,
+					fkHelper:    fkHelper,
 				},
 				anyComputed:   len(computeExprs) >= 0,
 				fkTables:      fkTables,

@@ -30,6 +30,8 @@ import (
 type tableUpserterBase struct {
 	tableWriterBase
 
+	fkHelper sqlbase.FKHelper
+
 	ri          sqlbase.RowInserter
 	alloc       *sqlbase.DatumAlloc
 	collectRows bool
@@ -263,6 +265,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		tu.ru, err = sqlbase.MakeRowUpdater(
 			txn,
 			tableDesc,
+			tu.fkHelper,
 			tu.fkTables,
 			tu.updateCols,
 			requestedCols,

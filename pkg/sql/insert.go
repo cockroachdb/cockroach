@@ -101,17 +101,6 @@ func (p *planner) Insert(
 	} else {
 		fkCheckType = sqlbase.CheckUpdates
 	}
-	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx,
-		*desc,
-		fkCheckType,
-		p.lookupFKTable,
-		p.CheckPrivilege,
-		p.analyzeExpr,
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	// Determine which columns we're inserting into.
 	var insertCols []sqlbase.ColumnDescriptor
@@ -125,6 +114,21 @@ func (p *planner) Insert(
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
+	}
+	fkHelper, err := sqlbase.TablesNeededForFKsNew(
+		ctx,
+		p.EvalContext(),
+		p.Txn(),
+		*desc,
+		fkCheckType,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+		sqlbase.ColIDtoRowIndexFromCols(insertCols),
+		&p.alloc,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// maxInsertIdx is the highest column index we are allowed to insert into -
@@ -224,7 +228,7 @@ func (p *planner) Insert(
 	}
 
 	// Create the table insert, which does the bulk of the work.
-	ri, err := sqlbase.MakeRowInserter(p.txn, desc, fkTables, insertCols,
+	ri, err := sqlbase.MakeRowInserter(p.txn, desc, fkHelper.Tables, fkHelper, insertCols,
 		sqlbase.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
@@ -250,7 +254,7 @@ func (p *planner) Insert(
 		// The upsert path has a separate constructor.
 		node, err = p.newUpsertNode(
 			ctx, n, desc, ri, tn, alias, rows, rowsNeeded, columns,
-			defaultExprs, computeExprs, computedCols, fkTables, desiredTypes)
+			defaultExprs, computeExprs, computedCols, fkHelper, fkHelper.Tables, desiredTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +266,7 @@ func (p *planner) Insert(
 			columns: columns,
 			run: insertRun{
 				ti:           tableInserter{ri: ri},
-				checkHelper:  fkTables[desc.ID].CheckHelper,
+				checkHelper:  fkHelper.Tables[desc.ID].CheckHelper,
 				rowsNeeded:   rowsNeeded,
 				computedCols: computedCols,
 				computeExprs: computeExprs,

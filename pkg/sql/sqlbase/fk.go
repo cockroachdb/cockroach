@@ -624,8 +624,12 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 }
 
 type baseFKHelper struct {
-	txn          *client.Txn
-	rf           RowFetcher
+	txn *client.Txn
+	rf  RowFetcher
+
+	tables  TableLookupsByID
+	indexes map[ID][]IndexID
+
 	searchTable  *TableDescriptor // the table being searched (for err msg)
 	searchIdx    *IndexDescriptor // the index that must (not) contain a value
 	prefixLen    int
@@ -644,8 +648,15 @@ func makeBaseFKHelper(
 	alloc *DatumAlloc,
 	dir FKCheck,
 ) (baseFKHelper, error) {
-	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].Table, dir: dir}
+	b := baseFKHelper{
+		txn:         txn,
+		tables:      otherTables,
+		writeIdx:    writeIdx,
+		searchTable: otherTables[ref.Table].Table,
+		dir:         dir,
+	}
 	if b.searchTable == nil {
+		log.Warningf(context.TODO(), "baseFKHelper: ref.Table = %d, searchTable == nil", ref.Table)
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchPrefix = MakeIndexKeyPrefix(b.searchTable, ref.Index)
@@ -685,6 +696,14 @@ func makeBaseFKHelper(
 	}
 	return b, nil
 }
+
+/*
+
+
+
+
+
+ */
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
