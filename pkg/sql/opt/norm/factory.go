@@ -63,7 +63,6 @@ type AppliedRuleFunc func(
 type Factory struct {
 	mem     *memo.Memo
 	evalCtx *tree.EvalContext
-	props   rulePropsBuilder
 
 	// scratchItems is a slice that is reused by projectionsBuilder to store
 	// temporary results that are accumulated before constructing a new
@@ -107,7 +106,6 @@ func NewFactory(evalCtx *tree.EvalContext) *Factory {
 	f := &Factory{
 		mem:        mem,
 		evalCtx:    evalCtx,
-		props:      rulePropsBuilder{mem: mem},
 		ruleCycles: make(map[memo.Fingerprint]bool),
 		funcs:      CustomFuncs{CustomFuncs: xfunc.MakeCustomFuncs(mem, evalCtx)},
 	}
@@ -166,7 +164,6 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
 	ev := memo.MakeNormExprView(f.mem, group)
-	f.props.buildProps(ev)
 
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
