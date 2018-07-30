@@ -659,7 +659,7 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
-	"repeat": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"repeat": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
