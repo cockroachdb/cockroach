@@ -3064,6 +3064,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
+	// TODO(tschottdorf): hook up the closed timestamp subsystem. For now, this
+	// block serves as an easily enabled canary that verifies whether the system
+	// is set up where it's needed.
+	if false {
+		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+		untrack(ctx, r.RangeID, 0)
+	}
+
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn

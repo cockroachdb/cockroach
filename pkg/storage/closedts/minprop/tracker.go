@@ -27,16 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// A Tracker is part of the machinery enabling follower reads, that is, consistent
-// reads served by replicas not holding the lease (for the requested timestamp).
-// This data structure keeps tabs on ongoing command evaluations (which it
-// forces to successively higher timestamps) and provides closed timestamp
-// updates along with a map delta of minimum Lease Applied Indexes a replica
-// wishing to serve a follower read must reach in order to do so correctly.
-//
-// See https://github.com/cockroachdb/cockroach/pull/26362 for more information.
-//
-// The methods exposed on Tracker are safe for concurrent use.
+// Tracker implements TrackerI.
 type Tracker struct {
 	mu struct {
 		syncutil.Mutex
@@ -79,7 +70,7 @@ type Tracker struct {
 	}
 }
 
-var _ closedts.CloseFn = (&Tracker{}).CloseFn()
+var _ closedts.TrackerI = (*Tracker)(nil)
 
 // NewTracker returns a Tracker initialized to a closed timestamp of zero and
 // a next closed timestamp of one logical tick past zero.
@@ -268,11 +259,4 @@ func (t *Tracker) Track(
 	}
 
 	return minProp, release
-}
-
-// CloseFn returns this Tracker's Close method as a CloseFn.
-func (t *Tracker) CloseFn() closedts.CloseFn {
-	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
-		return t.Close(next)
-	}
 }
