@@ -376,7 +376,7 @@ func makeDistSQLReceiver(
 	// monitoring to connExecutor and have it cancel the SQL txn's context? Or for
 	// that matter, should the TxnCoordSender cancel the context itself?
 	if r.txn != nil {
-		r.txn.OnFinish(func(err error) {
+		r.txn.OnCurrentIncarnationFinish(func(err error) {
 			r.txnAbortedErr.Store(errWrap{err: err})
 		})
 	}
@@ -493,7 +493,7 @@ func (r *distSQLReceiver) Push(
 // ProducerDone is part of the RowReceiver interface.
 func (r *distSQLReceiver) ProducerDone() {
 	if r.txn != nil {
-		r.txn.OnFinish(nil)
+		r.txn.OnCurrentIncarnationFinish(nil)
 	}
 	if r.closed {
 		panic("double close")
