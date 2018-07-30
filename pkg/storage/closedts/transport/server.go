@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -53,6 +54,10 @@ func (s *Server) Get(client ctpb.InboundClient) error {
 	// This problem has likely been solved somewhere in our codebase.
 	ctx := client.Context()
 	ch := make(chan ctpb.Entry, 10)
+
+	if log.V(1) {
+		log.Infof(ctx, "closed timestamp server serving new inbound client connection")
+	}
 
 	// TODO(tschottdorf): make this, say, 2*closedts.CloseFraction*closedts.TargetInterval.
 	const closedTimestampNoUpdateWarnThreshold = 10 * time.Second

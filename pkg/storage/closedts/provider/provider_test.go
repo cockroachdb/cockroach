@@ -59,7 +59,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 		Settings: st,
 		Stopper:  stopper,
 		Storage:  storage,
-		Clock: func() (hlc.Timestamp, ctpb.Epoch, error) {
+		Clock: func(roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
 			select {
 			case <-stopper.ShouldQuiesce():
 			case <-unblockClockCh:

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -240,6 +241,7 @@ func bootstrapCluster(
 
 	cfg.DB = client.NewDB(cfg.AmbientCtx, tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
+	cfg.ClosedTimestamp = container.NoopContainer()
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")
 	}
@@ -435,6 +437,9 @@ func (n *Node) start(
 	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
+
+	// Start the closed timestamp subsystem.
+	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
 	// Initialize the stores we're going to start.
 	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
