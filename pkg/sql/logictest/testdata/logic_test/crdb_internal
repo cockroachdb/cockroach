@@ -289,6 +289,15 @@ FROM crdb_internal.kv_store_status WHERE node_id = 1
 node_id  store_id  attrs  used
 1        1         []     0
 
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
+
+# Make sure that the cluster id isn't unset.
+query B
+select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
+----
+true
+
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
