@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -422,6 +423,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LogRangeEvents:          s.cfg.EventLogEnabled,
 		TimeSeriesDataStore:     s.tsDB,
 
+		// Initialize the closed timestamp subsystem. Note that it won't
+		// be ready until it is .Start()ed, but the grpc server can be
+		// registered early.
+		ClosedTimestamp: container.NewContainer(container.Config{
+			Settings: st,
+			Stopper:  s.stopper,
+			Clock:    s.nodeLiveness.AsLiveClock(),
+		}),
+
 		EnableEpochRangeLeases: true,
 	}
 	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -439,6 +449,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
+	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
