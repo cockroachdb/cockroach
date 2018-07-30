@@ -110,6 +110,38 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Disk Read Time"
+      sources={nodeSources}
+    >
+      <Axis units={AxisUnits.Duration} label="Read Time">
+        {nodeIDs.map((nid) => (
+          <Metric
+            name="cr.node.sys.host.disk.read.time"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Disk Write Time"
+      sources={nodeSources}
+    >
+      <Axis units={AxisUnits.Duration} label="Write Time">
+        {nodeIDs.map((nid) => (
+          <Metric
+            name="cr.node.sys.host.disk.write.time"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Disk Capacity"
       sources={storeSources}
       tooltip={(

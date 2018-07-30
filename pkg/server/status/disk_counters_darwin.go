@@ -33,10 +33,10 @@ func getDiskCounters(context.Context) ([]diskStats, error) {
 		output[i] = diskStats{
 			readBytes:      counters.BytesRead,
 			readCount:      counters.NumRead,
-			readTimeMs:     int64(counters.TotalReadTime),
+			readTime:       counters.TotalReadTime,
 			writeBytes:     counters.BytesWritten,
 			writeCount:     counters.NumWrite,
-			writeTimeMs:    int64(counters.TotalWriteTime),
+			writeTime:      counters.TotalWriteTime,
 			iopsInProgress: 0, // Not reported by this library. (#27927)
 		}
 	}
