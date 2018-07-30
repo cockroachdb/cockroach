@@ -431,7 +431,7 @@ func LoadCSV(
 	// Update job details with the sampled keys, as well as any parsed tables,
 	// clear SamplingProgress and prep second stage job details for progress
 	// tracking.
-	if err := job.DetailProgressed(ctx,
+	if err := job.FractionDetailProgressed(ctx,
 		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
 			prog := progress.(*jobspb.Progress_Import).Import
 			prog.SamplingProgress = nil
@@ -521,7 +521,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if err := job.Progressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+	if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 		d := details.(*jobspb.Progress_Import).Import
 		d.SamplingProgress = make([]float32, len(csvSpecs))
 		return d.Completed()

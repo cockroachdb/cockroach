@@ -430,7 +430,7 @@ func TestChangefeedErrors(t *testing.T) {
 	}
 
 	// Watching system.jobs would create a cycle, since the resolved timestamp
-	// highwater mark is saved in it.
+	// high-water mark is saved in it.
 	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR system.jobs`,
 	); !testutils.IsError(err, `CHANGEFEEDs are not supported on system tables`) {

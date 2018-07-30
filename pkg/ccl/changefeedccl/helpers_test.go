@@ -55,7 +55,7 @@ func createBenchmarkChangefeed(
 			*sqlbase.GetTableDescriptor(execCfg.DB, database, table),
 		},
 	}
-	progress := jobspb.ChangefeedProgress{}
+	progress := jobspb.Progress{}
 
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)

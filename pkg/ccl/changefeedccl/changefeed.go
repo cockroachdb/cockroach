@@ -66,26 +66,27 @@ func runChangefeedFlow(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
-	progress jobspb.ChangefeedProgress,
+	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
-	progressedFn func(context.Context, jobs.ProgressedFn) error,
+	progressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 ) error {
 	details, err := validateChangefeed(details)
 	if err != nil {
 		return err
 	}
+	var highWater hlc.Timestamp
+	if h := progress.GetHighWater(); h != nil {
+		highWater = *h
+	}
 
-	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
+	jobProgressedFn := func(ctx context.Context, highWater hlc.Timestamp) error {
 		// Some benchmarks want to skip the job progress update for a bit more
 		// isolation.
 		if progressedFn == nil {
 			return nil
 		}
-		return progressedFn(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			cfDetails := details.(*jobspb.Progress_Changefeed).Changefeed
-			cfDetails.Highwater = highwater
-			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
-			return 0.0
+		return progressedFn(ctx, func(ctx context.Context, details jobspb.ProgressDetails) hlc.Timestamp {
+			return highWater
 		})
 	}
 
@@ -94,7 +95,7 @@ func runChangefeedFlow(
 	//
 	// TODO(dan): Make this into a DistSQL flow.
 	buf := makeBuffer()
-	poller := makePoller(execCfg, details, progress, buf)
+	poller := makePoller(execCfg, details, highWater, buf)
 	rowsFn := kvsToRows(execCfg, details, buf.Get)
 	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {
@@ -309,7 +310,7 @@ func emitRows(
 
 				// NB: To minimize the chance that a user sees duplicates from
 				// below this resolved timestamp, keep this update of the
-				// highwater mark before emitting the resolved timestamp to the
+				// high-water mark before emitting the resolved timestamp to the
 				// sink.
 				if err := jobProgressedFn(ctx, input.resolved); err != nil {
 					return err
