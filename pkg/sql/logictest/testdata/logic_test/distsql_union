@@ -9,6 +9,7 @@ CREATE TABLE xyz (
 
 statement ok
 INSERT INTO xyz VALUES
+  (NULL, NULL, NULL),
   (1, 1, NULL),
   (2, 1, 'a'),
   (3, 1, 'b'),
@@ -42,6 +43,8 @@ subtest Union
 query I
 SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 ----
+NULL
+NULL
 1
 1
 2
@@ -56,6 +59,7 @@ SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 query I
 SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -86,6 +90,8 @@ SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
 query II rowsort
 SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 ----
+NULL NULL
+NULL NULL
 1 1
 1 1
 1 2
@@ -101,6 +107,8 @@ SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 query I
 (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
+NULL
+NULL
 1
 1
 2
@@ -115,6 +123,7 @@ query I
 query I
 (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -125,6 +134,8 @@ query I
 query I
 (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
+NULL
+NULL
 1
 1
 2
@@ -149,6 +160,7 @@ subtest Intersect
 query I
 (SELECT y FROM xyz) INTERSECT ALL (SELECT y FROM xyz) ORDER BY y
 ----
+NULL
 1
 1
 1
@@ -158,6 +170,7 @@ query I
 query I
 (SELECT y FROM xyz) INTERSECT (SELECT y FROM xyz) ORDER BY y
 ----
+NULL
 1
 2
 
@@ -165,6 +178,7 @@ query I
 query I rowsort
 (SELECT y FROM xyz ORDER BY y) INTERSECT ALL (SELECT y FROM xyz ORDER BY y)
 ----
+NULL
 1
 1
 1
@@ -174,6 +188,7 @@ query I rowsort
 query I rowsort
 (SELECT y FROM xyz ORDER BY y) INTERSECT (SELECT y FROM xyz ORDER BY y)
 ----
+NULL
 1
 2
 
@@ -204,17 +219,20 @@ query I
 query II rowsort
 SELECT x, y FROM xyz INTERSECT ALL SELECT y, x from xyz
 ----
+NULL NULL
 1 1
 
 query II rowsort
 SELECT x, y FROM xyz INTERSECT SELECT y, x from xyz
 ----
+NULL  NULL
 1  1
 
 # INTERSECT ALL and INTERSECT with different ORDER BY types.
 query I
 (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -224,6 +242,7 @@ query I
 query I
 (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -234,6 +253,7 @@ query I
 query I
 (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -243,6 +263,7 @@ query I
 query I
 (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
+NULL
 1
 2
 3
@@ -253,6 +274,7 @@ query I
 query I rowsort
 (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
+NULL
 1
 1
 1
@@ -262,6 +284,7 @@ query I rowsort
 query I rowsort
 (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
+NULL
 1
 1
 1
@@ -272,6 +295,7 @@ query I rowsort
 query I rowsort
 SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
 ----
+NULL
 1
 2
 3
@@ -281,6 +305,7 @@ SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
 query I rowsort
 SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))
 ----
+NULL
 1
 2
 3

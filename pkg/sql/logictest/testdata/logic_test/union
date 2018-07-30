@@ -89,6 +89,35 @@ SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 1  int
 2  unknown
 
+# INTERSECT with NULL columns in operands works.
+query I
+VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (1) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (NULL)
+----
+NULL
+
+# EXCEPT with NULL columns in operands works.
+query I
+VALUES (1) EXCEPT VALUES (NULL) ORDER BY 1
+----
+1
+
+query I
+VALUES (NULL) EXCEPT VALUES (1) ORDER BY 1
+----
+NULL
+
+query I
+VALUES (NULL) EXCEPT VALUES (NULL)
+----
+
 statement ok
 CREATE TABLE uniontest (
   k INT,
