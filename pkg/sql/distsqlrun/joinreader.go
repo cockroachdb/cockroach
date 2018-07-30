@@ -44,6 +44,9 @@ const (
 	// jrPerformingLookup means we are performing an index lookup for the current
 	// input row batch.
 	jrPerformingLookup
+	// jrCollectingUnmatched is used for left outer joins. It means we are
+	// collecting unmatched input rows to be emitted.
+	jrCollectingUnmatched
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
 )
@@ -327,6 +330,8 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			jr.runningState, meta = jr.readInput()
 		case jrPerformingLookup:
 			jr.runningState, meta = jr.performLookup()
+		case jrCollectingUnmatched:
+			jr.runningState = jr.collectUnmatched()
 		case jrEmittingRows:
 			jr.runningState, row, meta = jr.emitRow()
 		default:
@@ -354,37 +359,12 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		if row == nil {
 			break
 		}
-		if !jr.hasNullLookupColumn(row) {
-			jr.inputRows = append(jr.inputRows, jr.rowAlloc.CopyRow(row))
-		}
+		jr.inputRows = append(jr.inputRows, jr.rowAlloc.CopyRow(row))
 	}
 
 	if len(jr.inputRows) == 0 {
 		// We're done.
 		jr.moveToDraining(nil)
-		return jrStateUnknown, jr.drainHelper()
-	}
-
-	// Start the index lookup. We maintain a map from index key to the
-	// corresponding input rows so we can join the index results to the
-	// inputs.
-	var spans roachpb.Spans
-	for i, inputRow := range jr.inputRows {
-		key, err := jr.generateKey(inputRow)
-		if err != nil {
-			jr.moveToDraining(err)
-			return jrStateUnknown, jr.drainHelper()
-		}
-		if jr.keyToInputRowIndices[key.String()] == nil {
-			spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
-		}
-		jr.keyToInputRowIndices[key.String()] = append(jr.keyToInputRowIndices[key.String()], i)
-	}
-	err := jr.fetcher.StartScan(
-		jr.ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
-		jr.flowCtx.traceKV)
-	if err != nil {
-		jr.moveToDraining(err)
 		return jrStateUnknown, jr.drainHelper()
 	}
 
@@ -395,6 +375,37 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 	// the ON condition, which is applied in the render step.)
 	if jr.joinType == sqlbase.LeftOuterJoin {
 		jr.emitted = make([]bool, len(jr.inputRows))
+	}
+
+	// Start the index lookup. We maintain a map from index key to the
+	// corresponding input rows so we can join the index results to the
+	// inputs.
+	var spans roachpb.Spans
+	for i, inputRow := range jr.inputRows {
+		if jr.hasNullLookupColumn(inputRow) {
+			continue
+		}
+		key, err := jr.generateKey(inputRow)
+		if err != nil {
+			jr.moveToDraining(err)
+			return jrStateUnknown, jr.drainHelper()
+		}
+		if jr.keyToInputRowIndices[key.String()] == nil {
+			spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
+		}
+		jr.keyToInputRowIndices[key.String()] = append(jr.keyToInputRowIndices[key.String()], i)
+	}
+	if len(spans) == 0 {
+		// All of the input rows were filtered out. Skip the index lookup.
+		jr.finalLookupBatch = true
+		return jrCollectingUnmatched, nil
+	}
+	err := jr.fetcher.StartScan(
+		jr.ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
+		jr.flowCtx.traceKV)
+	if err != nil {
+		jr.moveToDraining(err)
+		return jrStateUnknown, jr.drainHelper()
 	}
 
 	return jrPerformingLookup, nil
@@ -477,8 +488,17 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 		}
 	}
 
-	if jr.finalLookupBatch && jr.emitted != nil {
-		// Emit unmatched rows.
+	if jr.finalLookupBatch {
+		return jrCollectingUnmatched, nil
+	}
+
+	return jrEmittingRows, nil
+}
+
+// collectUnmatched adds unmatched input rows to jr.toEmit in the case of a left
+// join. For inner joins it is a no-op.
+func (jr *joinReader) collectUnmatched() joinReaderState {
+	if jr.joinType == sqlbase.LeftOuterJoin {
 		for i := 0; i < len(jr.inputRows); i++ {
 			if !jr.emitted[i] {
 				if renderedRow := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); renderedRow != nil {
@@ -489,8 +509,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 			}
 		}
 	}
-
-	return jrEmittingRows, nil
+	return jrEmittingRows
 }
 
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it

@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -21,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -30,7 +30,6 @@ import (
 
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -72,7 +71,6 @@ func TestChangefeedBasics(t *testing.T) {
 
 func TestChangefeedEnvelope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -102,7 +100,6 @@ func TestChangefeedEnvelope(t *testing.T) {
 
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -131,7 +128,6 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 func TestChangefeedCursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -160,7 +156,6 @@ func TestChangefeedCursor(t *testing.T) {
 
 func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -226,8 +221,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
-	t.Skip("#26661")
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -240,21 +233,31 @@ func TestChangefeedSchemaChange(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (0)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
 
-	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
-	defer closeFeedRowsHack(t, sqlDB, rows)
-
+	var start string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&start)
+	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (0, '0')`)
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (1)`)
-	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
+	sqlDB.Exec(t, `ALTER TABLE foo ALTER COLUMN b SET DEFAULT 'after'`)
 	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (2)`)
-	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (3, 4)`)
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN c INT`)
+	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (3)`)
+	sqlDB.Exec(t, `INSERT INTO foo (a, c) VALUES (4, 14)`)
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, start)
+	defer closeFeedRowsHack(t, sqlDB, rows)
 	assertPayloads(t, rows, []string{
-		`foo: [0]->{"a": 0}`,
-		`foo: [1]->{"a": 1}`,
-		`foo: [2]->{"a": 2, "b": null}`,
-		`foo: [3]->{"a": 3, "b": 4}`,
+		`foo: [0]->{"a": 0, "b": "0"}`,
+		`foo: [1]->{"a": 1, "b": "before"}`,
+		`foo: [2]->{"a": 2, "b": "after"}`,
+		`foo: [3]->{"a": 3, "b": "after", "c": null}`,
+		`foo: [4]->{"a": 4, "b": "after", "c": 14}`,
+	})
+
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d INT`)
+	sqlDB.Exec(t, `INSERT INTO foo (a, d) VALUES (5, 15)`)
+	assertPayloads(t, rows, []string{
+		`foo: [5]->{"a": 5, "b": "after", "c": null, "d": 15}`,
 	})
 
 	// TODO(dan): Test a schema change that uses a backfill once we figure out
@@ -328,9 +331,78 @@ func TestChangefeedInterleaved(t *testing.T) {
 	})
 }
 
+func TestChangefeedColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	// Table with 2 column families.
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY (a), FAMILY (b))`)
+	if _, err := sqlDB.DB.Query(
+		`CREATE CHANGEFEED FOR foo`,
+	); !testutils.IsError(err, `exactly 1 column family`) {
+		t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
+	}
+
+	// Table with a second column family added after the changefeed starts.
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
+	sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
+	bar := sqlDB.Query(t, `CREATE CHANGEFEED FOR bar`)
+	defer closeFeedRowsHack(t, sqlDB, bar)
+	assertPayloads(t, bar, []string{
+		`bar: [0]->{"a": 0}`,
+	})
+	sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b STRING CREATE FAMILY f_b`)
+	sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+	bar.Next()
+	if err := bar.Err(); !testutils.IsError(err, `exactly 1 column family`) {
+		t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
+	}
+}
+
+func TestChangefeedComputedColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	// TODO(dan): Also test a non-STORED computed column once we support them.
+	sqlDB.Exec(t, `CREATE TABLE cc (
+		a INT, b INT AS (a + 1) STORED, c INT AS (a + 2) STORED, PRIMARY KEY (b, a)
+	)`)
+	sqlDB.Exec(t, `INSERT INTO cc (a) VALUES (1)`)
+
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR cc`)
+	defer closeFeedRowsHack(t, sqlDB, rows)
+
+	assertPayloads(t, rows, []string{
+		`cc: [2, 1]->{"a": 1, "b": 2, "c": 3}`,
+	})
+
+	sqlDB.Exec(t, `INSERT INTO cc (a) VALUES (10)`)
+	assertPayloads(t, rows, []string{
+		`cc: [11, 10]->{"a": 10, "b": 11, "c": 12}`,
+	})
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
@@ -341,21 +413,57 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 	if _, err := sqlDB.DB.Exec(
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-	); !testutils.IsError(err, `client has run out of available brokers`) {
-		t.Fatalf(`expected 'client has run out of available brokers' error got: %+v`, err)
-	}
-	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO ''`,
 	); !testutils.IsError(err, `omit the SINK clause`) {
-		t.Fatalf(`expected 'omit the SINK clause' error got: %+v`, err)
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
 	}
 	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
 	); !testutils.IsError(err, `omit the SINK clause`) {
-		t.Fatalf(`expected 'omit the SINK clause' error got: %+v`, err)
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
 	}
 
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
+	); !testutils.IsError(err, `use of CHANGEFEED requires an enterprise license`) {
+		t.Errorf(`expected 'use of CHANGEFEED requires an enterprise license' error got: %+v`, err)
+	}
+
+	// Watching system.jobs would create a cycle, since the resolved timestamp
+	// highwater mark is saved in it.
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR system.jobs`,
+	); !testutils.IsError(err, `CHANGEFEEDs are not supported on system tables`) {
+		t.Errorf(`expected 'CHANGEFEEDs are not supported on system tables' error got: %+v`, err)
+	}
+}
+
+func TestChangefeedPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingAddr(), "TestChangefeedPermissions-testuser", url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	if _, err := testuser.Exec(
+		`CREATE CHANGEFEED FOR foo`,
+	); !testutils.IsError(err, `only superusers are allowed to CREATE CHANGEFEED`) {
+		t.Errorf(`expected 'only superusers are allowed to CREATE CHANGEFEED' error got: %+v`, err)
+	}
 }
 
 func assertPayloads(t *testing.T, rows *gosql.Rows, expected []string) {

@@ -12,7 +12,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -97,6 +99,16 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
+		if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionCreateChangefeed) {
+			return errors.Errorf(`CREATE CHANGEFEED requires all nodes to be upgraded to %s`,
+				cluster.VersionByKey(cluster.VersionCreateChangefeed),
+			)
+		}
+
+		if err := p.RequireSuperUser(ctx, "CREATE CHANGEFEED"); err != nil {
+			return err
+		}
+
 		sinkURI, err := sinkURIFn()
 		if err != nil {
 			return err
@@ -154,6 +166,12 @@ func changefeedPlanHook(
 			return runChangefeedFlow(
 				ctx, p.ExecCfg(), details, progress, resultsCh, nil, /* progressedFn */
 			)
+		}
+
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+		); err != nil {
+			return err
 		}
 
 		// Make a channel for runChangefeedFlow to signal once everything has
@@ -215,14 +233,29 @@ func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDeta
 	}
 
 	for _, tableDesc := range details.TableDescs {
-		if len(tableDesc.Families) != 1 {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`only tables with 1 column family are currently supported: %s has %d`,
-				tableDesc.Name, len(tableDesc.Families))
+		if err := validateChangefeedTable(&tableDesc); err != nil {
+			return jobspb.ChangefeedDetails{}, err
 		}
 	}
 
 	return details, nil
+}
+
+func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
+	// Technically, the only non-user table known not to work is system.jobs
+	// (which creates a cycle since the resolved timestamp highwater mark is
+	// saved in it), but there are subtle differences in the way many of them
+	// work and this will be under-tested, so disallow them all until demand
+	// dictates.
+	if tableDesc.ID < keys.MinUserDescID {
+		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	}
+	if len(tableDesc.Families) != 1 {
+		return errors.Errorf(
+			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
+			tableDesc.Name, len(tableDesc.Families))
+	}
+	return nil
 }
 
 type changefeedResumer struct{}
