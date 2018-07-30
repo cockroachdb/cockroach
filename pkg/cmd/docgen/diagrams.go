@@ -642,7 +642,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' )",
+			"explain_option_name": "( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
 		},
 	},
 	{
