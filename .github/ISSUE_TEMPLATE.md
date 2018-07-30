@@ -9,6 +9,8 @@ If not, or you're not sure, please file an issue on our forum instead: https://f
 
 Please describe the issue you observed, and any steps we can take to reproduce it:
 
+- Which version of CockroachDB are you using? 
+
 - What did you do?
 
 - What did you expect to see?
