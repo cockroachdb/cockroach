@@ -518,7 +518,8 @@ type DistinctSpec struct {
 	// The ordered columns in the input stream can be optionally specified for
 	// possible optimizations. The specific ordering (ascending/descending) of
 	// the column itself is not important nor is the order in which the columns
-	// are specified.
+	// are specified. The ordered columns must be a subset of the distinct
+	// columns.
 	OrderedColumns []uint32 `protobuf:"varint,1,rep,name=ordered_columns,json=orderedColumns" json:"ordered_columns,omitempty"`
 	// The distinct columns in the input stream are those columns on which we
 	// check for distinct rows. If A,B,C are in distinct_columns and there is a

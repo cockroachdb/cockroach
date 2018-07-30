@@ -239,16 +239,14 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "distinct on", buf.String())
 		}
 
-		if n.columnsInOrder != nil {
+		if !n.columnsInOrder.Empty() {
 			var buf bytes.Buffer
 			prefix := ""
 			columns := planColumns(n.plan)
-			for i, key := range n.columnsInOrder {
-				if key {
-					buf.WriteString(prefix)
-					buf.WriteString(columns[i].Name)
-					prefix = ", "
-				}
+			for i, ok := n.columnsInOrder.Next(0); ok; i, ok = n.columnsInOrder.Next(i + 1) {
+				buf.WriteString(prefix)
+				buf.WriteString(columns[i].Name)
+				prefix = ", "
 			}
 			v.observer.attr(name, "order key", buf.String())
 		}
