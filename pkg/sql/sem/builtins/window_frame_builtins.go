@@ -226,24 +226,28 @@ type slidingWindowSumFunc struct {
 func (w *slidingWindowSumFunc) removeAllBefore(
 	ctx context.Context, wfr *tree.WindowFrameRun,
 ) error {
+	var err error
 	for idx := w.prevStart; idx < wfr.FrameStartIdx() && idx < w.prevEnd; idx++ {
 		value := wfr.ArgsByRowIdx(idx)[0]
 		switch v := value.(type) {
 		case *tree.DInt:
-			return w.agg.Add(ctx, tree.NewDInt(-*v))
+			err = w.agg.Add(ctx, tree.NewDInt(-*v))
 		case *tree.DDecimal:
 			d := tree.DDecimal{}
 			d.Neg(&v.Decimal)
-			return w.agg.Add(ctx, &d)
+			err = w.agg.Add(ctx, &d)
 		case *tree.DFloat:
-			return w.agg.Add(ctx, tree.NewDFloat(-*v))
+			err = w.agg.Add(ctx, tree.NewDFloat(-*v))
 		case *tree.DInterval:
 			// TODO(yuzefovich): currently only integer offsets are supported,
 			// but they could also be like '10 days' PRECEDING. When it is
 			// supported, this logic should be checked and tested.
-			return w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
+			err = w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
 		default:
-			return pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected value %v", v)
+			err = pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected value %v", v)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -271,6 +275,10 @@ func (w *slidingWindowSumFunc) Compute(
 
 	w.prevStart = start
 	w.prevEnd = end
+	if start == end {
+		// Spec: the frame is empty, so we return NULL.
+		return tree.DNull, nil
+	}
 	return w.agg.Result()
 }
 
@@ -288,16 +296,15 @@ type avgWindowFunc struct {
 func (w *avgWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if wfr.FrameSize() == 0 {
-		// Spec: the frame is empty, so we return NULL.
-		return tree.DNull, nil
-	}
-
 	var sum tree.Datum
 	var err error
 	sum, err = w.sum.Compute(ctx, evalCtx, wfr)
 	if err != nil {
 		return nil, err
+	}
+	if sum == tree.DNull {
+		// Spec: the frame is empty, so we return NULL.
+		return tree.DNull, nil
 	}
 
 	switch t := sum.(type) {
