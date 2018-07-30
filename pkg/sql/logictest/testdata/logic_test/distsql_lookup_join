@@ -126,6 +126,20 @@ query I
 SELECT h FROM distsql_lookup_test_1 JOIN distsql_lookup_test_3@g_idx ON b = g
 ----
 
+# Test left lookup join on NULL column.
+query II rowsort
+SELECT b, h FROM distsql_lookup_test_1 LEFT JOIN distsql_lookup_test_3@g_idx ON b = g;
+----
+1     NULL
+1     NULL
+NULL  NULL
+
+# Test left lookup join where all input rows are NULL.
+query II
+SELECT b, h FROM distsql_lookup_test_1 LEFT JOIN distsql_lookup_test_3@g_idx ON b = g WHERE b IS NULL
+----
+NULL  NULL
+
 # Ensure join performs properly on input that has more than 100 rows.
 query I
 SELECT count(*) FROM data as d1 NATURAL JOIN data as d2
