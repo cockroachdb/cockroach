@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -37,25 +38,45 @@ func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 	}
 }
 
-func (c *rowFetcherCache) RowFetcherForKey(
+func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
-) (*sqlbase.RowFetcher, error) {
-	// TODO(dan): Handle interleaved tables.
-	_, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
-	if err != nil {
-		return nil, err
+) (*sqlbase.TableDescriptor, error) {
+	var skippedCols int
+	for {
+		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(dan): We don't really need a lease, this is just a convenient way to
+		// get the right descriptor for a timestamp, so release it immediately after
+		// we acquire it. Avoid the lease entirely.
+		tableDesc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.leaseMgr.Release(tableDesc); err != nil {
+			return nil, err
+		}
+		// Skip over the column data.
+		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
+			l, err := encoding.PeekLength(remaining)
+			if err != nil {
+				return nil, err
+			}
+			remaining = remaining[l:]
+		}
+		var interleaved bool
+		remaining, interleaved = encoding.DecodeIfInterleavedSentinel(remaining)
+		if !interleaved {
+			return tableDesc, nil
+		}
+		key = remaining
 	}
+}
 
-	// TODO(dan): We don't really need a lease, this is just a convenient way to
-	// get the right descriptor for a timestamp, so release it immediately after
-	// we acquire it. Avoid the lease entirely.
-	tableDesc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.leaseMgr.Release(tableDesc); err != nil {
-		return nil, err
-	}
+func (c *rowFetcherCache) RowFetcherForTableDesc(
+	tableDesc *sqlbase.TableDescriptor,
+) (*sqlbase.RowFetcher, error) {
 	if rf, ok := c.fetchers[tableDesc]; ok {
 		return rf, nil
 	}

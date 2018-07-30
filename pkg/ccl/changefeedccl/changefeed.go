@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -126,51 +127,83 @@ func kvsToRows(
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitRow, error) {
 	rfCache := newRowFetcherCache(execCfg.LeaseManager)
+	watchedIDs := make(map[sqlbase.ID]struct{})
+	for _, d := range details.TableDescs {
+		watchedIDs[d.ID] = struct{}{}
+	}
 
-	var output []emitRow
 	var kvs sqlbase.SpanKVFetcher
-	return func(ctx context.Context) ([]emitRow, error) {
-		// Reuse output, kvs to save allocations.
-		output, kvs.KVs = output[:0], kvs.KVs[:0]
+	appendEmitRowsForKV := func(
+		ctx context.Context, output []emitRow, kv roachpb.KeyValue,
+	) ([]emitRow, error) {
+		// Reuse kvs to save allocations.
+		kvs.KVs = kvs.KVs[:0]
 
-		input, err := inputFn(ctx)
+		desc, err := rfCache.TableDescForKey(ctx, kv.Key, kv.Value.Timestamp)
 		if err != nil {
 			return nil, err
 		}
-		if input.kv.Key != nil {
-			rf, err := rfCache.RowFetcherForKey(ctx, input.kv.Key, input.kv.Value.Timestamp)
+		if _, ok := watchedIDs[desc.ID]; !ok {
+			// This kv is for an interleaved table that we're not watching.
+			if log.V(3) {
+				log.Infof(ctx, `skipping key from unwatched table %s: %s`, desc.Name, kv.Key)
+			}
+			return nil, nil
+		}
+
+		rf, err := rfCache.RowFetcherForTableDesc(desc)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(dan): Handle tables with multiple column families.
+		kvs.KVs = append(kvs.KVs, kv)
+		if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+			return nil, err
+		}
+
+		for {
+			var r emitRow
+			r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
 			if err != nil {
 				return nil, err
 			}
-			if log.V(3) {
-				log.Infof(ctx, "changed key %s", input.kv.Key)
+			if r.row == nil {
+				break
 			}
-			// TODO(dan): Handle tables with multiple column families.
-			kvs.KVs = append(kvs.KVs, input.kv)
-			if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+			r.row = append(tree.Datums(nil), r.row...)
+
+			r.deleted = rf.RowIsDeleted()
+			r.rowTimestamp = kv.Value.Timestamp
+			output = append(output, r)
+		}
+		return output, nil
+	}
+
+	var output []emitRow
+	return func(ctx context.Context) ([]emitRow, error) {
+		// Reuse output to save allocations.
+		output = output[:0]
+		for {
+			input, err := inputFn(ctx)
+			if err != nil {
 				return nil, err
 			}
-
-			for {
-				var r emitRow
-				r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
+			if input.kv.Key != nil {
+				if log.V(3) {
+					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
+				}
+				output, err = appendEmitRowsForKV(ctx, output, input.kv)
 				if err != nil {
 					return nil, err
 				}
-				if r.row == nil {
-					break
-				}
-				r.row = append(tree.Datums(nil), r.row...)
-
-				r.deleted = rf.RowIsDeleted()
-				r.rowTimestamp = input.kv.Value.Timestamp
-				output = append(output, r)
+			}
+			if input.resolved != (hlc.Timestamp{}) {
+				output = append(output, emitRow{resolved: input.resolved})
+			}
+			if output != nil {
+				return output, nil
 			}
 		}
-		if input.resolved != (hlc.Timestamp{}) {
-			output = append(output, emitRow{resolved: input.resolved})
-		}
-		return output, nil
 	}
 }
 
