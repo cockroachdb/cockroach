@@ -40,7 +40,7 @@ NaN   true   true   true
 1     false  false  false
 +Inf  false  false  false
 
-query RB rowsort
+query RB
 select f, f > 'NaN' from p@{FORCE_INDEX=primary} where f > 'NaN' ORDER BY f
 ----
 -Inf  true
@@ -49,7 +49,7 @@ select f, f > 'NaN' from p@{FORCE_INDEX=primary} where f > 'NaN' ORDER BY f
 1     true
 +Inf  true
 
-query RB rowsort
+query RB
 select f, f > 'NaN' from p@{FORCE_INDEX=p_f_key} where f > 'NaN' ORDER BY f
 ----
 -Inf  true
@@ -134,4 +134,3 @@ DROP TABLE vals
 
 statement ok
 RESET extra_float_digits
-

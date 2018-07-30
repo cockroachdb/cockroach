@@ -183,65 +183,112 @@ SELECT * FROM s WHERE d = 'NaN'
 NaN
 NaN
 
+# Check the ordering of decimal values.
+# The various zero values do not sort well currently
+# (see issue #28061) so we need to exclude them to get a stable sort.
+#
+# TODO(knz/mjibson): this WHERE clause can be removed/improved
+# once #27978 / #28061 are resolved.
+query R
+SELECT d FROM s WHERE d != 0 ORDER BY d
+----
+NaN
+NaN
+-Infinity
+-1
+1
+Infinity
+
+# We can check the relative ordering of zeros and other values by
+# doing some conversion to float and some arithmetic.
+#
+# TODO(knz/mjibson) This test can be deleted when the WHERE clause can
+# be removed from the previous test.
+query R
+SELECT floor(d::FLOAT+0.1)::DECIMAL FROM s ORDER BY d
+----
+NULL
+NaN
+NaN
+-Infinity
+-1
+0
+0
+0
+0
+0
+0
+1
+Infinity
+
+# In the following tests, the various zero values all compare equal to
+# each other so we cannot use ORDER BY to obtain a stable result so we
+# have to use `rowsort`. The test above has already controlled the
+# ordering.
+# These tests are only about testing the NaN-ness of the values, so
+# ordering is really inconsequential.
+
+# Just test the NaN-ness of the values.
 query RBBB rowsort
-SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY 1
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary}
 ----
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
-0          false  false  false
 -0         false  false  false
 -0.0       false  false  false
 -0.00      false  false  false
 -0.000     false  false  false
 -0.0000    false  false  false
+0          false  false  false
 1          false  false  false
 Infinity   false  false  false
 
+# Just test the NaN-ness of the values in secondary index
 query RBBB rowsort
-SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY 1
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx}
 ----
 NULL       NULL   NULL   NULL
 NaN        true   true   true
 NaN        true   true   true
 -Infinity  false  false  false
 -1         false  false  false
-0          false  false  false
 -0         false  false  false
 -0.0       false  false  false
 -0.00      false  false  false
 -0.000     false  false  false
 -0.0000    false  false  false
+0          false  false  false
 1          false  false  false
 Infinity   false  false  false
 
 query RB rowsort
-select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d
+select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN'
 ----
 -Infinity  true
 -1         true
-0          true
 -0         true
 -0.0       true
 -0.00      true
 -0.000     true
 -0.0000    true
+0          true
 1          true
 Infinity   true
 
 query RB rowsort
-select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d
+select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN'
 ----
 -Infinity  true
 -1         true
-0          true
 -0         true
 -0.0       true
 -0.00      true
 -0.000     true
 -0.0000    true
+0          true
 1          true
 Infinity   true
 
