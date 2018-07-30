@@ -16,16 +16,13 @@ package distsqlrun
 
 import (
 	"context"
-	math "math"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -510,53 +507,4 @@ func TestFlowRegistryDrain(t *testing.T) {
 
 		reg.Undrain()
 	})
-}
-
-// Test that we can register send a sync flow to the distSQLSrv after the
-// flowRegistry is draining and the we can also clean that flow up (the flow
-// will get a draining error). This used to crash.
-func TestSyncFlowAfterDrain(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.TODO()
-	// We'll create a server just so that we can extract its distsql ServerConfig,
-	// so we can use it for a manually-built DistSQL Server below. Otherwise, too
-	// much work to create that ServerConfig by hand.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	cfg := s.DistSQLServer().(*ServerImpl).ServerConfig
-
-	distSQLSrv := NewServer(ctx, cfg)
-	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
-
-	// We create some flow; it doesn't matter what.
-	req := SetupFlowRequest{Version: Version}
-	req.Flow = FlowSpec{
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
-			Output: []OutputRouterSpec{{
-				Type:    OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-			}},
-		}},
-	}
-
-	types := make([]sqlbase.ColumnType, 0)
-	rb := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := flow.StartAsync(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
-	flow.Wait()
-	_, meta := rb.Next()
-	if meta == nil {
-		t.Fatal("expected draining err, got no meta")
-	}
-	if !testutils.IsError(meta.Err, "the registry is draining") {
-		t.Fatalf("expected draining err, got: %v", meta.Err)
-	}
-	flow.Cleanup(ctx)
 }

@@ -58,7 +58,11 @@ type FlowCtx struct {
 
 	stopper *stop.Stopper
 
-	// id is a unique identifier for a flow.
+	// id is a unique identifier for a remote flow. It is mainly used as a key
+	// into the flowRegistry. Since local flows do not need to exist in the flow
+	// registry (no inbound stream connections need to be performed), they are not
+	// assigned ids. This is done for performance reasons, as local flows are
+	// more likely to be dominated by setup time.
 	id FlowID
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should
@@ -469,16 +473,20 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 
-	// Once we call RegisterFlow, the inbound streams become accessible; we must
-	// set up the WaitGroup counter before.
-	// The counter will be further incremented below to account for the
-	// processors.
-	f.waitGroup.Add(len(f.inboundStreams))
+	// Only register the flow if there will be inbound stream connections that
+	// need to look up this flow in the flow registry.
+	if numInboundStreams := len(f.inboundStreams); numInboundStreams > 0 {
+		// Once we call RegisterFlow, the inbound streams become accessible; we must
+		// set up the WaitGroup counter before.
+		// The counter will be further incremented below to account for the
+		// processors.
+		f.waitGroup.Add(numInboundStreams)
 
-	if err := f.flowRegistry.RegisterFlow(
-		ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
-	); err != nil {
-		return err
+		if err := f.flowRegistry.RegisterFlow(
+			ctx, f.id, f, f.inboundStreams, settingFlowStreamTimeout.Get(&f.FlowCtx.Settings.SV),
+		); err != nil {
+			return err
+		}
 	}
 
 	f.status = FlowRunning
@@ -571,7 +579,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	}
 	sp := opentracing.SpanFromContext(ctx)
 	sp.Finish()
-	if f.status != FlowNotStarted {
+	if f.status != FlowNotStarted && len(f.inboundStreams) > 0 {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}
 	f.status = FlowFinished
@@ -587,6 +595,9 @@ func (f *Flow) Cleanup(ctx context.Context) {
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
 func (f *Flow) cancel() {
+	if len(f.inboundStreams) == 0 {
+		return
+	}
 	f.flowRegistry.Lock()
 	defer f.flowRegistry.Unlock()
 
