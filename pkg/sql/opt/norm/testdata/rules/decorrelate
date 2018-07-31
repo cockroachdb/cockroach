@@ -547,7 +547,7 @@ WHERE EXISTS
     SELECT * FROM xy INNER JOIN (SELECT u, u/1.1 AS div FROM uv WHERE i=5) ON x=div
 )
 ----
-group-by
+distinct-on
  ├── columns: k:1(int!null)
  ├── grouping columns: k:1(int!null)
  ├── key: (1)

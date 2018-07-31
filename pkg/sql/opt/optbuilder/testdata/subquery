@@ -1665,7 +1665,7 @@ project
                           └── subquery [type=int]
                                └── max1-row
                                     ├── columns: a:7(int)
-                                    └── group-by
+                                    └── distinct-on
                                          ├── columns: a:7(int)
                                          ├── grouping columns: a:7(int)
                                          └── project

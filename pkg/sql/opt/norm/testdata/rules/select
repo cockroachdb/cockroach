@@ -912,7 +912,7 @@ group-by
 opt
 SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
 ----
-group-by
+distinct-on
  ├── columns: i:2(int)
  ├── cardinality: [0 - 1]
  ├── key: ()

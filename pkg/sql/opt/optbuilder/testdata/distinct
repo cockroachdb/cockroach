@@ -37,7 +37,7 @@ project
 build
 SELECT DISTINCT y, z FROM xyz
 ----
-group-by
+distinct-on
  ├── columns: y:2(int) z:3(float)
  ├── grouping columns: y:2(int) z:3(float)
  └── project
@@ -50,7 +50,7 @@ SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
 ----
 project
  ├── columns: y:2(int)
- └── group-by
+ └── distinct-on
       ├── columns: y:2(int) z:3(float)
       ├── grouping columns: y:2(int) z:3(float)
       └── project
@@ -64,7 +64,7 @@ SELECT DISTINCT y, z FROM xyz ORDER BY z
 sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +3
- └── group-by
+ └── distinct-on
       ├── columns: y:2(int) z:3(float)
       ├── grouping columns: y:2(int) z:3(float)
       └── project
@@ -78,7 +78,7 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y
 sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +2
- └── group-by
+ └── distinct-on
       ├── columns: y:2(int) z:3(float)
       ├── grouping columns: y:2(int) z:3(float)
       └── project
@@ -92,7 +92,7 @@ SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +2,+3
- └── group-by
+ └── distinct-on
       ├── columns: y:2(int) z:3(float)
       ├── grouping columns: y:2(int) z:3(float)
       └── project
@@ -106,7 +106,7 @@ SELECT DISTINCT y + x AS r FROM xyz ORDER by (y + x)
 sort
  ├── columns: r:4(int)
  ├── ordering: +4
- └── group-by
+ └── distinct-on
       ├── columns: r:4(int)
       ├── grouping columns: r:4(int)
       └── project
@@ -124,7 +124,7 @@ SELECT DISTINCT y + x AS r FROM xyz ORDER BY y + x
 sort
  ├── columns: r:4(int)
  ├── ordering: +4
- └── group-by
+ └── distinct-on
       ├── columns: r:4(int)
       ├── grouping columns: r:4(int)
       └── project
@@ -156,7 +156,7 @@ SELECT DISTINCT y AS w FROM xyz ORDER by y
 sort
  ├── columns: w:2(int)
  ├── ordering: +2
- └── group-by
+ └── distinct-on
       ├── columns: y:2(int)
       ├── grouping columns: y:2(int)
       └── project
@@ -167,7 +167,7 @@ sort
 build
 SELECT DISTINCT (y,z) AS r FROM xyz
 ----
-group-by
+distinct-on
  ├── columns: r:4(tuple{int, float})
  ├── grouping columns: r:4(tuple{int, float})
  └── project
@@ -185,7 +185,7 @@ SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
 scalar-group-by
  ├── columns: count:4(int)
  ├── project
- │    └── group-by
+ │    └── distinct-on
  │         ├── columns: y:2(int)
  │         ├── grouping columns: y:2(int)
  │         └── project
@@ -198,7 +198,7 @@ scalar-group-by
 build
 SELECT DISTINCT x FROM xyz WHERE x > 0
 ----
-group-by
+distinct-on
  ├── columns: x:1(int!null)
  ├── grouping columns: x:1(int!null)
  └── project
@@ -215,7 +215,7 @@ group-by
 build
 SELECT DISTINCT z FROM xyz WHERE x > 0
 ----
-group-by
+distinct-on
  ├── columns: z:3(float)
  ├── grouping columns: z:3(float)
  └── project
@@ -232,7 +232,7 @@ group-by
 build
 SELECT DISTINCT max(x) FROM xyz GROUP BY x
 ----
-group-by
+distinct-on
  ├── columns: max:4(int)
  ├── grouping columns: max:4(int)
  └── project
@@ -251,7 +251,7 @@ group-by
 build
 SELECT DISTINCT x+y AS r FROM xyz
 ----
-group-by
+distinct-on
  ├── columns: r:4(int)
  ├── grouping columns: r:4(int)
  └── project
@@ -266,7 +266,7 @@ group-by
 build
 SELECT DISTINCT 3 r FROM xyz
 ----
-group-by
+distinct-on
  ├── columns: r:4(int!null)
  ├── grouping columns: r:4(int!null)
  └── project
@@ -279,7 +279,7 @@ group-by
 build
 SELECT DISTINCT 3 r
 ----
-group-by
+distinct-on
  ├── columns: r:1(int!null)
  ├── grouping columns: r:1(int!null)
  └── project
@@ -292,7 +292,7 @@ group-by
 build
 SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
 ----
-group-by
+distinct-on
  ├── columns: max:4(float) r:5(int) s:6(int!null)
  ├── grouping columns: max:4(float) r:5(int) s:6(int!null)
  └── project
@@ -348,7 +348,7 @@ SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b
 sort
  ├── columns: x:5(int!null) d:4(int!null) b:2(int!null)
  ├── ordering: +4,+2
- └── group-by
+ └── distinct-on
       ├── columns: b:2(int!null) d:4(int!null) x:5(int!null)
       ├── grouping columns: b:2(int!null) d:4(int!null) x:5(int!null)
       └── project
