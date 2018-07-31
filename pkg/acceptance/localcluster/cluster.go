@@ -364,7 +364,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 	done := true
 	for rows.Next() {
 		var rangeID int64
-		var startKey, endKey []byte
+		var startKey, endKey roachpb.Key
 		var numReplicas int
 		if err := rows.Scan(&rangeID, &startKey, &endKey, &numReplicas); err != nil {
 			log.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
@@ -548,6 +548,7 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	}
 	n.cmd = exec.Command(n.Cfg.ExtraArgs[0], args...)
 	n.cmd.Env = os.Environ()
+	n.cmd.Env = append(n.cmd.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms") // speed up rebalancing
 	n.cmd.Env = append(n.cmd.Env, n.Cfg.ExtraEnv...)
 
 	atomic.StoreInt32(&n.startSeq, n.seq.Next())
