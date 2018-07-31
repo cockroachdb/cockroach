@@ -773,7 +773,7 @@ where
             call3_.phone_id=phone0_.id
     )
 ----
-group-by
+distinct-on
  ├── columns: id1_2_:10(int!null) address2_2_:11(string) createdo3_2_:12(timestamp) name4_2_:13(string) nickname5_2_:14(string) version6_2_:15(int)
  ├── grouping columns: person.id:10(int!null)
  ├── key: (10)
