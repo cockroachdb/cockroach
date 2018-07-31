@@ -158,7 +158,7 @@ func (g *ycsb) Tables() []workload.Table {
 			func(splitIdx int) []interface{} {
 				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
 				return []interface{}{
-					w.hashKey(uint64(splitIdx)),
+					w.buildKeyName(uint64(splitIdx)),
 				}
 			},
 		),
