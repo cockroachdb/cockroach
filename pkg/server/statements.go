@@ -95,6 +95,7 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 				App:       stmt.Key.App,
 				NodeID:    s.gossip.NodeID.Get(),
 				DistSQL:   stmt.Key.DistSQL,
+				Opt:       stmt.Key.Opt,
 				Failed:    stmt.Key.Failed,
 			},
 			Stats: stmt.Stats,

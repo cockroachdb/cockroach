@@ -230,6 +230,7 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.opt, [stmtA.key.opt]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -248,6 +249,7 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.app, stmtB.key.app, stmtC.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.opt, [stmtA.key.opt]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -269,6 +271,7 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.opt, [stmtA.key.opt]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
     assert.deepEqual(result.node_id, [1, 2, 3]);
   });
@@ -292,6 +295,7 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [false, true]);
+    assert.deepEqual(result.opt, [false]);
     assert.deepEqual(result.failed, [false, true]);
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -311,6 +315,7 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.opt, [stmtA.key.opt]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
@@ -330,17 +335,19 @@ describe("selectStatement", () => {
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.app]);
     assert.deepEqual(result.distSQL, [stmtA.key.distSQL]);
+    assert.deepEqual(result.opt, [stmtA.key.opt]);
     assert.deepEqual(result.failed, [stmtA.key.failed]);
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 });
 
-function makeFingerprint(id: number, app: string = "", nodeId: number = 1, distSQL: boolean = false, failed: boolean = false) {
+function makeFingerprint(id: number, app: string = "", nodeId: number = 1, distSQL: boolean = false, failed: boolean = false, opt: boolean = false) {
   return {
     key: {
       statement: "SELECT * FROM table_" + id + " WHERE true",
       app,
       distSQL,
+      opt,
       failed,
       node_id: nodeId,
     },
