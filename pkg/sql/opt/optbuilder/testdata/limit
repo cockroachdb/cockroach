@@ -277,22 +277,21 @@ SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 2
 limit
  ├── columns: w:3(int)
  ├── ordering: +3
- ├── sort
+ ├── distinct-on
  │    ├── columns: w:3(int)
+ │    ├── grouping columns: w:3(int)
  │    ├── ordering: +3
- │    └── distinct-on
+ │    └── limit
  │         ├── columns: w:3(int)
- │         ├── grouping columns: w:3(int)
- │         └── limit
- │              ├── columns: w:3(int)
- │              ├── sort
- │              │    ├── columns: w:3(int)
- │              │    ├── ordering: +3
- │              │    └── project
- │              │         ├── columns: w:3(int)
- │              │         └── scan t
- │              │              └── columns: k:1(int!null) v:2(int) w:3(int)
- │              └── const: 100 [type=int]
+ │         ├── ordering: +3
+ │         ├── sort
+ │         │    ├── columns: w:3(int)
+ │         │    ├── ordering: +3
+ │         │    └── project
+ │         │         ├── columns: w:3(int)
+ │         │         └── scan t
+ │         │              └── columns: k:1(int!null) v:2(int) w:3(int)
+ │         └── const: 100 [type=int]
  └── const: 25 [type=int]
 
 build
