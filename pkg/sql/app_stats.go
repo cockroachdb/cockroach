@@ -39,6 +39,7 @@ type stmtKey struct {
 	stmt        string
 	failed      bool
 	distSQLUsed bool
+	optUsed     bool
 }
 
 // appStats holds per-application statistics.
@@ -88,12 +89,16 @@ func (s stmtKey) flags() string {
 	if s.distSQLUsed {
 		b.WriteByte('+')
 	}
+	if !s.optUsed {
+		b.WriteByte('-')
+	}
 	return b.String()
 }
 
 func (a *appStats) recordStatement(
 	stmt Statement,
 	distSQLUsed bool,
+	optUsed bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -110,7 +115,7 @@ func (a *appStats) recordStatement(
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed}
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optUsed}
 
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
@@ -313,6 +318,7 @@ func (s *sqlStats) getStmtStats(
 				k := roachpb.StatementStatisticsKey{
 					Query:   maybeScrubbed,
 					DistSQL: q.distSQLUsed,
+					Opt:     q.optUsed,
 					Failed:  q.failed,
 					App:     maybeHashedAppName,
 				}

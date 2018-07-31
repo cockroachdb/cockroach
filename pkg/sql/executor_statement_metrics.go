@@ -150,7 +150,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt, distSQLUsed, automaticRetryCount, rowsAffected, err,
+		stmt, distSQLUsed, optUsed, automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 
