@@ -235,7 +235,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
-			hlc.Timestamp{WallTime: 10}.Prev(),
+			hlc.Timestamp{WallTime: 9},
 		)},
 		r1Stream.Events(),
 	)
@@ -245,7 +245,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
-			hlc.Timestamp{WallTime: 12}.Prev(),
+			hlc.Timestamp{WallTime: 11},
 		)},
 		r1Stream.Events(),
 	)

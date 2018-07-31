@@ -148,7 +148,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 func (rts *resolvedTimestamp) recompute() bool {
 	newTS := rts.closedTS
 	if txn := rts.intentQ.Oldest(); txn != nil {
-		txnTS := txn.timestamp.Prev()
+		txnTS := txn.timestamp.FloorPrev()
 		if txnTS.Less(newTS) {
 			newTS = txnTS
 		}

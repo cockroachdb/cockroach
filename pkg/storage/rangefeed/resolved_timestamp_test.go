@@ -195,12 +195,12 @@ func TestResolvedTimestamp(t *testing.T) {
 	// the earliest intent.
 	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
 	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 10}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 9}, rts.Get())
 
 	// Update the timestamp of txn2. No effect on the resolved timestamp.
 	fwd = rts.ConsumeLogicalOp(updateIntentOp(txn2, hlc.Timestamp{WallTime: 18}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 10}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 9}, rts.Get())
 
 	// Update the timestamp of txn1. Resolved timestamp moves forward.
 	fwd = rts.ConsumeLogicalOp(updateIntentOp(txn1, hlc.Timestamp{WallTime: 20}))
@@ -210,12 +210,12 @@ func TestResolvedTimestamp(t *testing.T) {
 	// Forward closed timestamp to same time as earliest intent.
 	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 18})
 	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 18}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 17}, rts.Get())
 
 	// Write intent for earliest txn at same timestamp. No change.
 	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn2, hlc.Timestamp{WallTime: 18}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 18}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 17}, rts.Get())
 
 	// Write intent for earliest txn at later timestamp. Resolved
 	// timestamp moves forward.
@@ -226,35 +226,35 @@ func TestResolvedTimestamp(t *testing.T) {
 	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
 	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 30})
 	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 20}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 19}, rts.Get())
 
 	// First transaction aborted. Resolved timestamp moves to next earliest
 	// intent.
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn1))
 	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Third transaction at higher timestamp. No effect.
 	txn3 := uuid.MakeV4()
 	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn3, hlc.Timestamp{WallTime: 40}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Third transaction aborted. No effect.
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn3))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Fourth transaction at higher timestamp. No effect.
 	txn4 := uuid.MakeV4()
 	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn4, hlc.Timestamp{WallTime: 45}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Fourth transaction committed. No effect.
 	fwd = rts.ConsumeLogicalOp(commitIntentOp(txn4, hlc.Timestamp{WallTime: 45}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Second transaction observes one intent being resolved at timestamp
 	// above closed time. Resolved timestamp moves to closed timestamp.
@@ -265,13 +265,13 @@ func TestResolvedTimestamp(t *testing.T) {
 	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
 	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 40})
 	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 35}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 34}, rts.Get())
 
 	// Second transaction observes another intent being resolved at timestamp
 	// below closed time. Still one intent left.
 	fwd = rts.ConsumeLogicalOp(commitIntentOp(txn2, hlc.Timestamp{WallTime: 35}))
 	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 35}.Prev(), rts.Get())
+	require.Equal(t, hlc.Timestamp{WallTime: 34}, rts.Get())
 
 	// Second transaction observes final intent being resolved at timestamp
 	// below closed time. Resolved timestamp moves to closed timestamp.
