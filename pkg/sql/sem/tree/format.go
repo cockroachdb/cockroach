@@ -97,6 +97,10 @@ const (
 
 	// fmtUnicodeStrings prints strings and JSON in their unicode representation.
 	fmtUnicodeStrings
+
+	// FmtParsableNumerics produces decimal and float representations that are
+	// always parsable, even if they require a string representation like -Inf.
+	FmtParsableNumerics
 )
 
 // Composite/derived flag definitions follow.
@@ -116,7 +120,7 @@ const (
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression (useful for serialization of
 	// expressions).
-	FmtParsable FmtFlags = fmtDisambiguateDatumTypes
+	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
 	// that can be used to check equivalence of expressions. Specifically:
@@ -126,7 +130,7 @@ const (
 	//    annotations. This is necessary because datums of different types
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
-	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtParseDatums, if set, formats datums in a raw form
 	// (e.g. suitable for output into a CSV file) such that they can be
