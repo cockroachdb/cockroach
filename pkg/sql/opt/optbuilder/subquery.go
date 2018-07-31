@@ -257,7 +257,7 @@ func (b *Builder) buildMultiRowSubquery(
 ) (out memo.GroupID, outScope *scope) {
 	out, outScope = b.buildSubqueryProjection(c.Right.(*subquery), inScope)
 
-	scalar := b.buildScalar(c.TypedLeft(), outScope)
+	scalar := b.buildScalar(c.TypedLeft(), inScope)
 	outScope = outScope.replace()
 
 	var cmp opt.Operator
