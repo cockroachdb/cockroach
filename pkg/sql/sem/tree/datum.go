@@ -2491,6 +2491,8 @@ type DTuple struct {
 	// the tuple type auto-computed when ResolvedType() is called the
 	// first time.
 	typ types.TTuple
+
+	row bool
 }
 
 // NewDTuple creates a *DTuple with the provided datums. When creating a new
@@ -2671,9 +2673,12 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 // TODO(bram): We don't format tuples in the same way as postgres. See #25522.
 // TODO(knz): this is broken if the tuple is labeled. See #26624.
 func (d *DTuple) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
-		ctx.WriteString("ROW()")
-		return
+	if ctx.HasFlags(FmtParsable) {
+		ctx.WriteString("ROW")
+		if len(d.D) == 0 {
+			ctx.WriteString("()")
+			return
+		}
 	}
 	ctx.FormatNode(&d.D)
 }
