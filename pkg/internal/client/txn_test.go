@@ -908,3 +908,31 @@ func TestConcurrentTxnRequests(t *testing.T) {
 		t.Errorf("expected %v, got %v", expectedCallCounts, callCounts)
 	}
 }
+
+// Test that a txn's anchor is set to the first write key in batches mixing
+// reads with writes.
+func TestAnchorKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	key1 := roachpb.Key("a")
+	key2 := roachpb.Key("b")
+	db := NewDB(
+		testutils.MakeAmbientCtx(),
+		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if !roachpb.Key(ba.Txn.Key).Equal(key2) {
+				t.Fatalf("expected anchor %q, got %q", key2, ba.Txn.Key)
+			}
+			return ba.CreateReply(), nil
+		}), clock)
+
+	if err := db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
+		ba := txn.NewBatch()
+		ba.Get(key1)
+		ba.Put(key2, "val")
+		return txn.Run(ctx, ba)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
