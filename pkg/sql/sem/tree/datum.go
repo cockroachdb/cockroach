@@ -1248,7 +1248,7 @@ func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DUuid) AmbiguousFormat() bool { return false }
+func (*DUuid) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {

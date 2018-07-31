@@ -228,6 +228,8 @@ func TestFormatExpr(t *testing.T) {
 			`('+Inf':::FLOAT + '-Inf':::FLOAT) + 'NaN':::FLOAT`},
 		{`'12:00:00':::TIME`, tree.FmtParsable,
 			`'12:00:00':::TIME`},
+		{`'63616665-6630-3064-6465-616462656562':::UUID`, tree.FmtParsable,
+			`'63616665-6630-3064-6465-616462656562':::UUID`},
 
 		{`(123:::INT, 123:::DECIMAL)`, tree.FmtCheckEquivalence,
 			`(123:::INT, 123:::DECIMAL)`},
