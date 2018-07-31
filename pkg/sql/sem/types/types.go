@@ -501,12 +501,11 @@ func IsStringType(t T) bool {
 // IsValidArrayElementType returns true if the T
 // can be used in TArray.
 func IsValidArrayElementType(t T) bool {
-	switch t {
-	case JSON:
+	switch t.(type) {
+	case tJSON, TArray:
 		return false
-	default:
-		return true
 	}
+	return true
 }
 
 // IsDateTimeType returns true if the T is
