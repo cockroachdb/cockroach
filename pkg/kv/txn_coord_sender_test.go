@@ -43,21 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// teardownHeartbeat shuts down the coordinator's heartbeat task, if
-// it's not already finished. This is useful for tests which don't
-// finish transactions. This is safe to call multiple times.
-func teardownHeartbeat(tc *TxnCoordSender) {
-	if r := recover(); r != nil {
-		panic(r)
-	}
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnEnd != nil {
-		close(tc.mu.txnEnd)
-		tc.mu.txnEnd = nil
-	}
-}
-
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *localtestcluster.LocalTestCluster {
@@ -176,7 +161,6 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
 
 	for _, rng := range ranges {
 		if rng.end != nil {
@@ -560,7 +544,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	key := roachpb.Key("x")
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
+
 	// Write so that the coordinator begins tracking this txn.
 	if err := txn.Put(context.TODO(), "x", "y"); err != nil {
 		t.Fatal(err)
@@ -874,7 +858,6 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
 	ba := txn.NewBatch()
 	ba.Put(roachpb.Key("a"), []byte("value"))
 	if err := txn.Run(context.TODO(), ba); err != nil {
@@ -988,7 +971,6 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
 			meta := roachpb.MakeTxnCoordMeta(txn)
 			tc := factory.TransactionalSender(client.RootTxn, meta)
-			defer teardownHeartbeat(tc.(*TxnCoordSender))
 			ba.Txn = &txn
 			_, pErr := tc.Send(context.Background(), ba)
 			if !testutils.IsPError(pErr, test.errMsg) {
