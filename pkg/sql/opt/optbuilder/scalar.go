@@ -163,6 +163,33 @@ func (b *Builder) buildScalarHelper(
 		elements := b.factory.InternList(els)
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
+	case *tree.ArrayFlatten:
+		s := t.Subquery.(*subquery)
+		aggInputColID := s.cols[0].id
+
+		elemType := b.factory.Metadata().ColumnType(aggInputColID)
+		aggColID := b.factory.Metadata().AddColumn(
+			"array_agg",
+			types.TArray{Typ: elemType},
+		)
+
+		out = b.factory.ConstructSubquery(
+			b.factory.ConstructScalarGroupBy(
+				s.group,
+				b.factory.ConstructAggregations(
+					b.factory.InternList([]memo.GroupID{
+						b.factory.ConstructArrayAgg(
+							b.factory.ConstructVariable(
+								b.factory.InternColumnID(aggInputColID),
+							),
+						),
+					}),
+					b.factory.InternColList(opt.ColList{aggColID}),
+				),
+				b.factory.InternGroupByDef(&memo.GroupByDef{}),
+			),
+		)
+
 	case *tree.BinaryExpr:
 		// It's possible for an overload to be selected that expects different
 		// types than the TypedExpr arguments return:

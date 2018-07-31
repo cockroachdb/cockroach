@@ -747,3 +747,89 @@ project
  └── projections
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
+
+# TODO(justin): modify build-scalar to handle subqueries
+# so this can use it.
+build
+SELECT ARRAY(SELECT 1)
+----
+project
+ ├── columns: array:3(tuple{int}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int[]]
+           └── scalar-group-by
+                ├── columns: array_agg:2(int[])
+                ├── project
+                │    ├── columns: "?column?":1(int!null)
+                │    ├── values
+                │    │    └── tuple [type=tuple]
+                │    └── projections
+                │         └── const: 1 [type=int]
+                └── aggregations
+                     └── array-agg [type=int[]]
+                          └── variable: ?column? [type=int]
+
+exec-ddl
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+TABLE x
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
+
+exec-ddl
+CREATE TABLE y (b INT PRIMARY KEY)
+----
+TABLE y
+ ├── b int not null
+ └── INDEX primary
+      └── b int not null
+
+# TODO(justin): this needs to be decorrelated.
+build
+SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
+----
+project
+ ├── columns: b:1(int!null) array:4(tuple{int}[])
+ ├── scan y
+ │    └── columns: b:1(int!null)
+ └── projections
+      └── subquery [type=int[]]
+           └── scalar-group-by
+                ├── columns: array_agg:3(int[])
+                ├── select
+                │    ├── columns: a:2(int!null)
+                │    ├── scan x
+                │    │    └── columns: a:2(int!null)
+                │    └── filters [type=bool]
+                │         └── eq [type=bool]
+                │              ├── variable: x.a [type=int]
+                │              └── variable: y.b [type=int]
+                └── aggregations
+                     └── array-agg [type=int[]]
+                          └── variable: x.a [type=int]
+
+build
+SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
+----
+project
+ ├── columns: array:3(tuple{string}[])
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=string[]]
+           └── scalar-group-by
+                ├── columns: array_agg:2(string[])
+                ├── values
+                │    ├── columns: column1:1(string)
+                │    ├── tuple [type=tuple{string}]
+                │    │    └── const: 'foo' [type=string]
+                │    ├── tuple [type=tuple{string}]
+                │    │    └── const: 'bar' [type=string]
+                │    └── tuple [type=tuple{string}]
+                │         └── const: 'baz' [type=string]
+                └── aggregations
+                     └── array-agg [type=string[]]
+                          └── variable: column1 [type=string]
