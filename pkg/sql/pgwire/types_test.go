@@ -50,7 +50,7 @@ func TestParseTs(t *testing.T) {
 		{"2006-07-08T00:00:00.000000123Z", time.Date(2006, 7, 8, 0, 0, 0, 123, time.FixedZone("UTC", 0))},
 
 		// The format accepted by pq.ParseTimestamp.
-		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.FixedZone("", -7*60*60))},
+		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.FixedZone("", 0))},
 	}
 
 	for i, test := range parseTsTests {
