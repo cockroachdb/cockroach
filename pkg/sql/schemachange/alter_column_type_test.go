@@ -124,14 +124,6 @@ func TestColumnConversions(t *testing.T) {
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 19}: ColumnConversionValidate,
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
 		},
-		// See discussion in alter_column_type.go
-		{SemanticType: sqlbase.ColumnType_TIME}: {
-			{SemanticType: sqlbase.ColumnType_TIMETZ}: ColumnConversionDangerous,
-		},
-		{SemanticType: sqlbase.ColumnType_TIMETZ}: {
-			{SemanticType: sqlbase.ColumnType_TIME}: ColumnConversionDangerous,
-		},
-
 		{SemanticType: sqlbase.ColumnType_TIMESTAMP}: {
 			{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
 		},
@@ -236,12 +228,10 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case sqlbase.ColumnType_TIME,
-						sqlbase.ColumnType_TIMETZ,
 						sqlbase.ColumnType_TIMESTAMP,
 						sqlbase.ColumnType_TIMESTAMPTZ:
 
 						const timeOnly = "15:04:05"
-						const timeTZ = "15:04:05 -0700"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
 
@@ -249,8 +239,6 @@ func TestColumnConversions(t *testing.T) {
 						switch from.SemanticType {
 						case sqlbase.ColumnType_TIME:
 							fromFmt = timeOnly
-						case sqlbase.ColumnType_TIMETZ:
-							fromFmt = timeTZ
 						case sqlbase.ColumnType_TIMESTAMP:
 							fromFmt = noZone
 						case sqlbase.ColumnType_TIMESTAMPTZ:
@@ -271,7 +259,6 @@ func TestColumnConversions(t *testing.T) {
 						switch to.SemanticType {
 						case
 							sqlbase.ColumnType_TIME,
-							sqlbase.ColumnType_TIMETZ,
 							sqlbase.ColumnType_TIMESTAMP,
 							sqlbase.ColumnType_TIMESTAMPTZ:
 							// We're going to re-parse the text as though we're in UTC

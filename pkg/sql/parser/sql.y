@@ -6186,11 +6186,11 @@ const_datetime:
   }
 | TIMETZ
   {
-    $$.val = coltypes.TimeTZ
+    return unimplementedWithIssue(sqllex, 26097)
   }
 | TIME WITH_LA TIME ZONE
   {
-    $$.val = coltypes.TimeTZ
+    return unimplementedWithIssue(sqllex, 26097)
   }
 | TIMESTAMP
   {
@@ -7006,7 +7006,7 @@ func_expr_common_subexpr:
   }
 | CURRENT_TIME
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+    return unimplementedWithIssue(sqllex, 26097)
   }
 | CURRENT_USER
   {
@@ -7086,7 +7086,7 @@ special_function:
 | CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_TIME '(' ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+    return unimplementedWithIssue(sqllex, 26097)
   }
 | CURRENT_TIME '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_USER '(' ')'

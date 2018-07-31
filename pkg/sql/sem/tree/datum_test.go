@@ -515,50 +515,6 @@ func TestParseDTimeError(t *testing.T) {
 	}
 }
 
-func TestParseDTimeTZ(t *testing.T) {
-	// Since ParseDTime mostly delegates parsing logic to ParseDTimestamp, we only test a subset of
-	// the timestamp test cases.
-	l1, _ := time.LoadLocation("America/New_York") // -5
-	l2, _ := time.LoadLocation("Asia/Shanghai")    // +8
-	l3, _ := time.LoadLocation("Europe/Paris")     // +1
-
-	testData := []struct {
-		str      string
-		expected *tree.DTimeTZ
-	}{
-		{"04:05:06+00", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), time.UTC)},
-		{"04:05:06.000001-05", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 1), l1)},
-		{"04:05:06+08", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), l2)},
-		{"4:5:6+01", tree.MakeDTimeTZ(timeofday.New(4, 5, 6, 0), l3)},
-	}
-	for _, td := range testData {
-		actual, err := tree.ParseDTimeTZ(td.str, time.UTC)
-		if err != nil {
-			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
-			continue
-		}
-		if !actual.ToTime().Equal(td.expected.ToTime()) {
-			t.Errorf("TIME %s: got %s, expected %s", td.str, actual, td.expected)
-		}
-	}
-}
-
-func TestParseDTimeTZError(t *testing.T) {
-	testData := []string{
-		"",
-		"foo",
-		"01",
-		"2001-02-03 04:05:06-07",
-		"24:00:00-07",
-	}
-	for _, s := range testData {
-		actual, _ := tree.ParseDTimeTZ(s, time.UTC)
-		if actual != nil {
-			t.Errorf("TIME %s: got %s, expected error", s, actual)
-		}
-	}
-}
-
 func TestParseDTimestamp(t *testing.T) {
 	testData := []struct {
 		str      string

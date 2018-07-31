@@ -260,12 +260,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, errors.Errorf("could not parse string %q as time", b)
 			}
 			return d, nil
-		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(string(b), time.UTC)
-			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timetz", b)
-			}
-			return d, nil
+
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
@@ -477,12 +472,6 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
-		case oid.T_timetz:
-			if len(b) < 8 {
-				return nil, errors.Errorf("timetz requires 8 bytes for binary format")
-			}
-			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTimeTZ(timeofday.TimeOfDay(i), time.UTC), nil
 		case oid.T_interval:
 			if len(b) < 16 {
 				return nil, errors.Errorf("interval requires 16 bytes for binary format")
