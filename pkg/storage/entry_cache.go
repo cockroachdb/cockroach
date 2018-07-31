@@ -47,6 +47,54 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 	}
 }
 
+const defaultEntryCacheFreeListSize = 16
+
+// entryCacheFreeList represents a free list of raftEntryCache cache.Entry
+// objects. The free list is initially empty and is populated as entries are
+// freed.
+//
+// A freelist is used here instead of a sync.Pool because all access to the
+// freelist is protected by the raftEntryCache lock so it doesn't need its
+// own locking. This allows us to avoid the added synchronization cost of
+// a sync.Pool.
+type entryCacheFreeList []*cache.Entry
+
+func makeEntryCacheFreeList(size int) entryCacheFreeList {
+	return make(entryCacheFreeList, 0, size)
+}
+
+func (f *entryCacheFreeList) newEntry(key entryCacheKey, value raftpb.Entry) *cache.Entry {
+	i := len(*f) - 1
+	if i < 0 {
+		alloc := struct {
+			key   entryCacheKey
+			value raftpb.Entry
+			entry cache.Entry
+		}{
+			key:   key,
+			value: value,
+		}
+		alloc.entry.Key = &alloc.key
+		alloc.entry.Value = &alloc.value
+		return &alloc.entry
+	}
+	e := (*f)[i]
+	(*f)[i] = nil
+	(*f) = (*f)[:i]
+
+	*e.Key.(*entryCacheKey) = key
+	*e.Value.(*raftpb.Entry) = value
+	return e
+}
+
+func (f *entryCacheFreeList) freeEntry(e *cache.Entry) {
+	if len(*f) < cap(*f) {
+		*e.Key.(*entryCacheKey) = entryCacheKey{}
+		*e.Value.(*raftpb.Entry) = raftpb.Entry{}
+		*f = append(*f, e)
+	}
+}
+
 // A raftEntryCache maintains a global cache of Raft group log entries. The
 // cache mostly prevents unnecessary reads from disk of recently-written log
 // entries between log append and application to the FSM.
@@ -54,21 +102,21 @@ func (a *entryCacheKey) Compare(b llrb.Comparable) int {
 // This cache stores entries with sideloaded proposals inlined (i.e. ready to
 // be sent to followers).
 type raftEntryCache struct {
-	syncutil.Mutex                     // protects Cache for concurrent access.
-	bytes          uint64              // total size of the cache in bytes
-	cache          *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
-	fromKey        entryCacheKey       // used to avoid allocations on lookup
-	toKey          entryCacheKey       // ^^^
+	syncutil.RWMutex                     // protects Cache for concurrent access
+	bytes            uint64              // total size of the cache in bytes
+	cache            *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
+	freeList         entryCacheFreeList  // used to avoid allocations on insertion
 }
 
 // newRaftEntryCache returns a new RaftEntryCache with the given
 // maximum size in bytes.
 func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	rec := &raftEntryCache{
-		cache: cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
+		cache:    cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
+		freeList: makeEntryCacheFreeList(defaultEntryCacheFreeListSize),
 	}
 	// The raft entry cache mutex will be held when the ShouldEvict
-	// and OnEvicted callbacks are invoked.
+	// and OnEvictedEntry callbacks are invoked.
 	//
 	// On ShouldEvict, compare the total size of the cache in bytes to the
 	// configured maxBytes. We also insist that at least one entry remains
@@ -77,26 +125,13 @@ func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	rec.cache.Config.ShouldEvict = func(n int, k, v interface{}) bool {
 		return rec.bytes > maxBytes && n >= 1
 	}
-	rec.cache.Config.OnEvicted = func(k, v interface{}) {
-		ent := v.(*raftpb.Entry)
+	rec.cache.Config.OnEvictedEntry = func(e *cache.Entry) {
+		ent := e.Value.(*raftpb.Entry)
 		rec.bytes -= uint64(ent.Size())
+		rec.freeList.freeEntry(e)
 	}
 
 	return rec
-}
-
-func (rec *raftEntryCache) makeCacheEntry(key entryCacheKey, value raftpb.Entry) *cache.Entry {
-	alloc := struct {
-		key   entryCacheKey
-		value raftpb.Entry
-		entry cache.Entry
-	}{
-		key:   key,
-		value: value,
-	}
-	alloc.entry.Key = &alloc.key
-	alloc.entry.Value = &alloc.value
-	return &alloc.entry
 }
 
 // addEntries adds the slice of raft entries, using the range ID and the
@@ -109,20 +144,21 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 	defer rec.Unlock()
 
 	for _, e := range ents {
-		rec.bytes += uint64(e.Size())
-		entry := rec.makeCacheEntry(entryCacheKey{RangeID: rangeID, Index: e.Index}, e)
+		key := entryCacheKey{RangeID: rangeID, Index: e.Index}
+		entry := rec.freeList.newEntry(key, e)
 		rec.cache.AddEntry(entry)
+		rec.bytes += uint64(e.Size())
 	}
 }
 
 // getTerm returns the term for the specified index and true for the second
 // return value. If the index is not present in the cache, false is returned.
 func (rec *raftEntryCache) getTerm(rangeID roachpb.RangeID, index uint64) (uint64, bool) {
-	rec.Lock()
-	defer rec.Unlock()
+	rec.RLock()
+	defer rec.RUnlock()
 
-	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: index}
-	k, v, ok := rec.cache.Ceil(&rec.fromKey)
+	fromKey := entryCacheKey{RangeID: rangeID, Index: index}
+	k, v, ok := rec.cache.Ceil(&fromKey)
 	if !ok {
 		return 0, false
 	}
@@ -142,13 +178,13 @@ func (rec *raftEntryCache) getTerm(rangeID roachpb.RangeID, index uint64) (uint6
 func (rec *raftEntryCache) getEntries(
 	ents []raftpb.Entry, rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, uint64, uint64) {
-	rec.Lock()
-	defer rec.Unlock()
+	rec.RLock()
+	defer rec.RUnlock()
 	var bytes uint64
 	nextIndex := lo
 
-	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: lo}
-	rec.toKey = entryCacheKey{RangeID: rangeID, Index: hi}
+	fromKey := entryCacheKey{RangeID: rangeID, Index: lo}
+	toKey := entryCacheKey{RangeID: rangeID, Index: hi}
 	rec.cache.DoRange(func(k, v interface{}) bool {
 		ecKey := k.(*entryCacheKey)
 		if ecKey.Index != nextIndex {
@@ -162,7 +198,7 @@ func (rec *raftEntryCache) getEntries(
 			return true
 		}
 		return false
-	}, &rec.fromKey, &rec.toKey)
+	}, &fromKey, &toKey)
 
 	return ents, bytes, nextIndex
 }
@@ -175,12 +211,12 @@ func (rec *raftEntryCache) delEntries(rangeID roachpb.RangeID, lo, hi uint64) {
 		return
 	}
 	var cacheEnts []*cache.Entry
-	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: lo}
-	rec.toKey = entryCacheKey{RangeID: rangeID, Index: hi}
+	fromKey := entryCacheKey{RangeID: rangeID, Index: lo}
+	toKey := entryCacheKey{RangeID: rangeID, Index: hi}
 	rec.cache.DoRangeEntry(func(e *cache.Entry) bool {
 		cacheEnts = append(cacheEnts, e)
 		return false
-	}, &rec.fromKey, &rec.toKey)
+	}, &fromKey, &toKey)
 
 	for _, e := range cacheEnts {
 		rec.cache.DelEntry(e)
