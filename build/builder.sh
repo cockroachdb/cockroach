@@ -50,14 +50,6 @@ if [ -t 0 ]; then
   tty=--tty
 fi
 
-ccache=
-if [ -n "${COCKROACH_BUILDER_CCACHE-}" ]; then
-  ccache+="--env=CC=/usr/lib/ccache/clang "
-  ccache+="--env=CXX=/usr/lib/ccache/clang++ "
-  ccache+="--env=CCACHE_DIR=/go/native/ccache "
-  ccache+="--env=CCACHE_MAXSIZE=${COCKROACH_BUILDER_CCACHE_MAXSIZE-10G} "
-fi
-
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel=$(dirname "$(cd "$(dirname "${0}")"; pwd)")
 
@@ -173,11 +165,13 @@ vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg${delegated_volume_mode}"
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
-docker run --privileged -i ${tty-} ${ccache} --rm \
+docker run --privileged -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
-  "${image}:${version}" "${@-bash}"
+  --env=COCKROACH_BUILDER_CCACHE \
+  --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
+  "${image}:${version}" "$@"
