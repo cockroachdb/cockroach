@@ -209,34 +209,37 @@ func (oc *OrderingChoice) ColSet() opt.ColSet {
 	return cs
 }
 
-// SubsetOf returns true if every ordering in this set is allowed by the given
-// set. In other words, is this set of ordering choices at least as restrictive
-// as the input set? Here are some examples:
+// Implies returns true if any ordering allowed by <oc> is also allowed by <other>.
 //
-//   <empty>           matches <empty>
-//   +1                matches <empty>        (given set is prefix)
-//   +1                matches +1
-//   +1,-2             matches +1             (given set is prefix)
-//   +1,-2             matches +1,-2
-//   +1                matches +1 opt(2)      (unused optional col is ignored)
-//   -2,+1             matches +1 opt(2)      (optional col is ignored)
-//   +1                matches +(1|2)         (subset of choice)
-//   +(1|2)            matches +(1|2|3)       (subset of choice)
-//   +(1|2),-4         matches +(1|2|3),-(4|5)
-//   +(1|2) opt(4)     matches +(1|2|3) opt(4)
+// In the case of no optional or equivalent columns, Implies returns true when
+// the given ordering is a prefix of this ordering.
 //
-//   <empty>           !matches +1
-//   +1                !matches -1            (direction mismatch)
-//   +1                !matches +1,-2         (prefix matching not commutative)
-//   +1 opt(2)         !matches +1            (extra optional cols not allowed)
-//   +1 opt(2)         !matches +1 opt(3)
-//   +(1|2)            !matches -(1|2)        (direction mismatch)
-//   +(1|2)            !matches +(3|4)        (no intersection)
-//   +(1|2)            !matches +(2|3)        (intersects, but not subset)
-//   +(1|2|3)          !matches +(1|2)        (subset of choice not commutative)
-//   +(1|2)            !matches +1 opt(2)
+// Examples:
 //
-func (oc *OrderingChoice) SubsetOf(other *OrderingChoice) bool {
+//   <empty>           implies <empty>
+//   +1                implies <empty>        (given set is prefix)
+//   +1                implies +1
+//   +1,-2             implies +1             (given set is prefix)
+//   +1,-2             implies +1,-2
+//   +1                implies +1 opt(2)      (unused optional col is ignored)
+//   -2,+1             implies +1 opt(2)      (optional col is ignored)
+//   +1                implies +(1|2)         (subset of choice)
+//   +(1|2)            implies +(1|2|3)       (subset of choice)
+//   +(1|2),-4         implies +(1|2|3),-(4|5)
+//   +(1|2) opt(4)     implies +(1|2|3) opt(4)
+//
+//   <empty>           !implies +1
+//   +1                !implies -1            (direction mismatch)
+//   +1                !implies +1,-2         (prefix matching not commutative)
+//   +1 opt(2)         !implies +1            (extra optional cols not allowed)
+//   +1 opt(2)         !implies +1 opt(3)
+//   +(1|2)            !implies -(1|2)        (direction mismatch)
+//   +(1|2)            !implies +(3|4)        (no intersection)
+//   +(1|2)            !implies +(2|3)        (intersects, but not subset)
+//   +(1|2|3)          !implies +(1|2)        (subset of choice not commutative)
+//   +(1|2)            !implies +1 opt(2)
+//
+func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 	if !oc.Optional.SubsetOf(other.Optional) {
 		return false
 	}

@@ -107,6 +107,10 @@ type PhysicalPlan struct {
 
 	// Used internally for numbering stages.
 	stageCounter int32
+
+	// Used internally to avoid creating flow IDs for local flows. This boolean
+	// specifies whether there is more than one node involved in a plan.
+	remotePlan bool
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.
@@ -716,6 +720,9 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 		}
 		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
 		if endpoint.Type == distsqlrun.StreamEndpointSpec_REMOTE {
+			if !p.remotePlan {
+				p.remotePlan = true
+			}
 			var ok bool
 			endpoint.TargetNodeID = p2.Node
 			endpoint.DeprecatedTargetAddr, ok = nodeAddresses[p2.Node]
@@ -745,7 +752,13 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 func (p *PhysicalPlan) GenerateFlowSpecs(
 	gateway roachpb.NodeID,
 ) map[roachpb.NodeID]distsqlrun.FlowSpec {
-	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
+	// Only generate a flow ID for a remote plan because it will need to be
+	// referenced by remote nodes when connecting streams. This id generation is
+	// skipped for performance reasons on local flows.
+	flowID := distsqlrun.FlowID{}
+	if p.remotePlan {
+		flowID.UUID = uuid.MakeV4()
+	}
 	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec)
 
 	for _, proc := range p.Processors {
