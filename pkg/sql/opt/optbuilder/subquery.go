@@ -32,6 +32,11 @@ type subquery struct {
 	// group is the top level memo GroupID of the subquery.
 	group memo.GroupID
 
+	// ordering is the ordering requested by the subquery.
+	// It is only consulted in certain cases, however (such as the
+	// ArrayFlatten operation).
+	ordering opt.Ordering
+
 	// Is the subquery in a multi-row or single-row context?
 	multiRow bool
 
