@@ -2014,3 +2014,7 @@ query T
 SELECT pg_catalog.pg_client_encoding()
 ----
 UTF8
+
+# Ensure that privileged builtins work from DistSQL.
+statement ok
+SELECT crdb_internal.set_vmodule('foo=2') FROM foo
