@@ -131,7 +131,7 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.Orderin
 			ordering.AppendCol(colID, indexCol.Descending)
 		}
 	}
-	return ordering.SubsetOf(required)
+	return ordering.Implies(required)
 }
 
 // GroupByDef defines the value of the Def private field of the GroupBy and
@@ -270,10 +270,10 @@ func (w *RowNumberDef) CanProvideOrdering(required *props.OrderingChoice) bool {
 	if prefix < len(required.Columns) {
 		truncated := required.Copy()
 		truncated.Truncate(prefix)
-		return w.Ordering.SubsetOf(&truncated)
+		return w.Ordering.Implies(&truncated)
 	}
 
-	return w.Ordering.SubsetOf(required)
+	return w.Ordering.Implies(required)
 }
 
 // SetOpColMap defines the value of the ColMap private field of the set
@@ -339,13 +339,13 @@ func (m *MergeOnDef) CanProvideOrdering(required *props.OrderingChoice) bool {
 	// ordering is preserved when multiple rows match on the equality columns.
 	switch m.JoinType {
 	case opt.InnerJoinOp:
-		return m.LeftOrdering.SubsetOf(required) || m.RightOrdering.SubsetOf(required)
+		return m.LeftOrdering.Implies(required) || m.RightOrdering.Implies(required)
 
 	case opt.LeftJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
-		return m.LeftOrdering.SubsetOf(required)
+		return m.LeftOrdering.Implies(required)
 
 	case opt.RightJoinOp:
-		return m.RightOrdering.SubsetOf(required)
+		return m.RightOrdering.Implies(required)
 
 	default:
 		return false

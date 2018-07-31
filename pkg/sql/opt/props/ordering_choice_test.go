@@ -68,7 +68,7 @@ func TestOrderingChoice_ColSet(t *testing.T) {
 	}
 }
 
-func TestOrderingChoice_SubsetOf(t *testing.T) {
+func TestOrderingChoice_Implies(t *testing.T) {
 	testcases := []struct {
 		left     string
 		right    string
@@ -102,7 +102,7 @@ func TestOrderingChoice_SubsetOf(t *testing.T) {
 	for _, tc := range testcases {
 		left := props.ParseOrderingChoice(tc.left)
 		right := props.ParseOrderingChoice(tc.right)
-		if left.SubsetOf(&right) != tc.expected {
+		if left.Implies(&right) != tc.expected {
 			if tc.expected {
 				t.Errorf("expected %s to be subset of %s", tc.left, tc.right)
 			} else {

@@ -636,3 +636,167 @@ inner-join (merge)
       └── filters [type=bool]
            ├── abc.a = xyz.x [type=bool]
            └── abc.b = xyz.y [type=bool]
+
+# --------------------------------------------------
+# Limit / Offset
+# --------------------------------------------------
+
+# Basic cases.
+
+opt
+SELECT * FROM abc ORDER BY a, b LIMIT 10
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── limit: 10
+ └── ordering: +1,+2
+
+# The filter prevents pushing of the limit into the scan.
+opt
+SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10
+----
+limit
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1,+2
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +1,+2
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    │    └── ordering: +1,+2
+ │    └── filters [type=bool]
+ │         └── abc.c < (abc.a + abc.b) [type=bool]
+ └── const: 10 [type=int]
+
+opt
+SELECT * FROM abc ORDER BY a, b OFFSET 10 
+----
+offset
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── const: 10 [type=int]
+
+
+# Cases where the requirement on Limit/Offset is incompatible with the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY b
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ └── scan abc
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── limit: 10
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY b
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ └── limit
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── select
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── ordering: +1,+2
+      │    ├── scan abc
+      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    │    └── ordering: +1,+2
+      │    └── filters [type=bool]
+      │         └── abc.c < (abc.a + abc.b) [type=bool]
+      └── const: 10 [type=int]
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY b
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ └── offset
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1,+2
+      └── const: 10 [type=int]
+
+
+# Cases where the requirement on Limit/Offset is weaker than the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY a
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── limit: 10
+ └── ordering: +1
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a
+----
+limit
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +1,+2
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    │    └── ordering: +1,+2
+ │    └── filters [type=bool]
+ │         └── abc.c < (abc.a + abc.b) [type=bool]
+ └── const: 10 [type=int]
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a
+----
+offset
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── const: 10 [type=int]
+
+# Cases where the requirement on Limit/Offset is stronger than the
+# internal requirement.
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b LIMIT 10) ORDER BY a, b, c
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── limit: 10
+ └── ordering: +1,+2,+3
+
+opt
+SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a, b, c
+----
+limit
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1,+2,+3
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +1,+2,+3
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    │    └── ordering: +1,+2,+3
+ │    └── filters [type=bool]
+ │         └── abc.c < (abc.a + abc.b) [type=bool]
+ └── const: 10 [type=int]
+
+opt
+SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a, b, c
+----
+offset
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── ordering: +1,+2,+3
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2,+3
+ └── const: 10 [type=int]
