@@ -16,6 +16,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/hex"
@@ -1143,6 +1144,144 @@ func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	return synctest.Run(syncTestOpts)
 }
 
+var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
+	Use:   "unsafe-remove-dead-replicas --dead-store-ids=[store ID,...] [path]",
+	Short: "Unsafely remove all other replicas from the given range",
+	Long: `
+
+This command is UNSAFE and should only be used with the supervision of
+a Cockroach Labs engineer. It is a last-resort option to recover data
+after multiple node failures. The recovered data is not guaranteed to
+be consistent.
+
+The --dead-store-ids flag takes a comma-separated list of dead store
+IDs and scans this store for any ranges whose only live replica is on
+this store. These range descriptors will be edited to forcibly remove
+the dead stores, allowing the range to recover from this single
+replica.
+
+Must only be used when the dead stores are lost and unrecoverable. If
+the dead stores were to rejoin the cluster after this command was
+used, data may be corrupted.
+
+This comand will prompt for confirmation before committing its changes.
+
+Limitations: Can only recover from a single replica. If a range with
+four replicas has experienced two failures, or a range with five
+replicas experiences three failures, this tool cannot (yet) be used to
+recover from the two remaining replicas.
+
+`,
+	RunE: MaybeDecorateGRPCError(runDebugUnsafeRemoveDeadReplicas),
+}
+
+var removeDeadReplicasOpts struct {
+	deadStoreIDs []int
+}
+
+func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	clock := hlc.NewClock(hlc.UnixNano, 0)
+
+	ctx := context.Background()
+
+	if len(args) != 1 {
+		return errors.New("one required argument: dir")
+	}
+
+	db, err := openExistingStore(args[0], stopper, false /* readOnly */)
+	if err != nil {
+		return err
+	}
+
+	storeIdent, err := storage.ReadStoreIdent(ctx, db)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Scanning replicas on store %s for dead peers %v\n", storeIdent,
+		removeDeadReplicasOpts.deadStoreIDs)
+
+	deadStoreIDs := map[roachpb.StoreID]struct{}{}
+	for _, id := range removeDeadReplicasOpts.deadStoreIDs {
+		deadStoreIDs[roachpb.StoreID(id)] = struct{}{}
+	}
+
+	if _, ok := deadStoreIDs[storeIdent.StoreID]; ok {
+		return errors.New("This store's ID marked as dead, aborting")
+	}
+
+	var newDescs []roachpb.RangeDescriptor
+
+	err = storage.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
+		hasSelf := false
+		numDeadPeers := 0
+		numReplicas := len(desc.Replicas)
+		for _, rep := range desc.Replicas {
+			if rep.StoreID == storeIdent.StoreID {
+				hasSelf = true
+			}
+			if _, ok := deadStoreIDs[rep.StoreID]; ok {
+				numDeadPeers++
+			}
+		}
+		if hasSelf && numDeadPeers > 0 && numDeadPeers == numReplicas-1 {
+			newDesc := desc
+			// Rewrite the replicas list. Bump the replica ID as an extra
+			// defense against one of the old replicas returning from the
+			// dead.
+			newDesc.Replicas = []roachpb.ReplicaDescriptor{{
+				NodeID:    storeIdent.NodeID,
+				StoreID:   storeIdent.StoreID,
+				ReplicaID: desc.NextReplicaID,
+			}}
+			newDesc.NextReplicaID++
+			fmt.Printf("Replica %s -> %s\n", desc, newDesc)
+			newDescs = append(newDescs, newDesc)
+		}
+		return false, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(newDescs) == 0 {
+		fmt.Printf("Nothing to do\n")
+		return nil
+	}
+
+	batch := db.NewBatch()
+	defer batch.Close()
+	for _, desc := range newDescs {
+		var ms enginepb.MVCCStats
+		err := engine.MVCCPutProto(ctx, batch, &ms, keys.RangeDescriptorKey(desc.StartKey),
+			clock.Now(), nil /* txn */, &desc)
+		if err != nil {
+			return err
+		}
+	}
+
+	fmt.Printf("Proceed with the above rewrites to %d ranges? [y/N] ", len(newDescs))
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n")
+	if line[0] == 'y' || line[0] == 'Y' {
+		fmt.Printf("Committing\n")
+		if err := batch.Commit(true); err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("Aborting\n")
+	}
+
+	return nil
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 
@@ -1153,6 +1292,10 @@ func init() {
 		"duration to run the test for")
 	f.BoolVarP(&syncTestOpts.LogOnly, "log-only", "l", syncTestOpts.LogOnly,
 		"only write to the WAL, not to sstables")
+
+	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
+	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
+		"list of dead store IDs")
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb.
@@ -1174,6 +1317,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugRocksDBCmd,
 	debugGossipValuesCmd,
 	debugSyncTestCmd,
+	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
 )
