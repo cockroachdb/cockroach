@@ -621,6 +621,62 @@ func (c *CustomFuncs) ConstructLookupJoin(
 	return c.e.exprs
 }
 
+// HoistIndexJoinDef creates a LookupJoinDef that implements an index join which
+// was hoisted above a join. See the PushJoinThroughIndexJoin rule for more
+// information.
+func (c *CustomFuncs) HoistIndexJoinDef(
+	indexJoinDefID memo.PrivateID, newJoin memo.GroupID, joinType opt.Operator,
+) memo.PrivateID {
+	indexJoinDef := c.e.mem.LookupPrivate(indexJoinDefID).(*memo.IndexJoinDef)
+	inputCols := c.e.mem.GroupProperties(newJoin).Relational.OutputCols
+	md := c.e.mem.Metadata()
+
+	pkIndex := md.Table(indexJoinDef.Table).Index(opt.PrimaryIndex)
+	numPKCols := pkIndex.KeyColumnCount()
+
+	// Create the lookup join expression.
+	//
+	// The key columns are the PK columns.
+	//
+	// The lookup columns are the lookup columns in the original index join,
+	// without any columns that are already available in the lookup join's input
+	// (i.e. newJoin).
+	//
+	// For example:
+	//  CREATE TABLE abc (a PRIMARY KEY, b INT, c INT)
+	//  CREATE TABLE xyz (x PRIMARY KEY, y INT, z INT, INDEX (y))
+	//  SELECT * FROM abc JOIN xyz ON a=y
+	//
+	// We want to first join abc with the index on y (which provides columns y, x)
+	// and then use a lookup join to retrieve column z. The newJoin will thus
+	// produce columns a,b,c,x,y; the lookup columns are just z (the original
+	// index join produced x,y,z).
+	//
+	// Note that the lookup join "sees" column IDs from the table on both "sides"
+	// (in this example x,y on the left and z on the right) but there is no
+	// overlap.
+	//
+	// We support inner and left join. For left join, the lookup join node must
+	// pass-through NULL PKs that come from "outer" (null-extended) rows and
+	// return a row of NULLs. Because we know that all other rows will have a
+	// match in the primary index, we can achieve this by making the lookup join a
+	// left join as well.
+	lookupJoinDef := memo.LookupJoinDef{
+		JoinType:   joinType,
+		Table:      indexJoinDef.Table,
+		Index:      opt.PrimaryIndex,
+		KeyCols:    make(opt.ColList, numPKCols),
+		LookupCols: indexJoinDef.Cols.Difference(inputCols),
+	}
+	for i := 0; i < numPKCols; i++ {
+		lookupJoinDef.KeyCols[i] = md.TableColumn(indexJoinDef.Table, pkIndex.Column(i).Ordinal)
+		if !inputCols.Contains(int(lookupJoinDef.KeyCols[i])) {
+			panic("index join input doesn't have PK")
+		}
+	}
+	return c.e.mem.InternLookupJoinDef(&lookupJoinDef)
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules
