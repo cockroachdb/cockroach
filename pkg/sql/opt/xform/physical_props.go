@@ -103,15 +103,11 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 		def := mergeOn.Private(o.mem).(*memo.MergeOnDef)
 		return def.CanProvideOrdering(required)
 
-	case opt.LimitOp:
-		// Limit can provide the same ordering it requires of its input.
-		provided := o.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
-		return provided.SubsetOf(required)
-
-	case opt.OffsetOp:
-		// Offset can provide the same ordering it requires of its input.
-		provided := o.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
-		return provided.SubsetOf(required)
+	case opt.LimitOp, opt.OffsetOp:
+		// Limit/Offset can provide the same ordering it requires of its input, but
+		// can also pass through a stronger ordering.
+		provided := mexpr.Private(o.mem).(*props.OrderingChoice)
+		return provided.Implies(required) || required.Implies(provided)
 	}
 
 	return false
@@ -169,15 +165,11 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 		}
 
-	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
+	case opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
 		// These ops require the ordering in their private.
 		if nth == 0 {
 			var ordering *props.OrderingChoice
 			switch mexpr.Operator() {
-			case opt.LimitOp:
-				ordering = o.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*props.OrderingChoice)
-			case opt.OffsetOp:
-				ordering = o.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*props.OrderingChoice)
 			case opt.RowNumberOp:
 				def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
 				ordering = &def.Ordering
@@ -186,6 +178,18 @@ func (o *Optimizer) buildChildPhysicalProps(
 				ordering = &def.Ordering
 			}
 			childProps.Ordering = *ordering
+		}
+
+	case opt.LimitOp, opt.OffsetOp:
+		if nth == 0 {
+			// These ops require the ordering in their private, but can pass through a
+			// stronger ordering.
+			ordering := mexpr.Private(o.mem).(*props.OrderingChoice)
+			if parentProps.Ordering.Implies(ordering) {
+				childProps.Ordering = parentProps.Ordering
+			} else {
+				childProps.Ordering = *ordering
+			}
 		}
 
 	case opt.ExplainOp:
