@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,99 +83,19 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 	}
 }
 
-// TestTxnCoordSenderAddRequest verifies adding a request creates a
-// transaction metadata and adding multiple requests with same
-// transaction ID updates the last update timestamp.
-func TestTxnCoordSenderAddRequest(t *testing.T) {
+// Test that the Transaction.Writing flag is set after performing any writes.
+func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
 
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
-
-	// Put request will create a new transaction.
 	if err := txn.Put(context.TODO(), roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	if !txn.Proto().Writing {
 		t.Fatal("txn is not marked as writing")
 	}
-	tc.mu.Lock()
-	s.Manual.Increment(1)
-	ts := tc.mu.lastUpdateNanos
-	tc.mu.Unlock()
-
-	if err := txn.Put(context.TODO(), roachpb.Key("a"), []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	tc.mu.Lock()
-	if lu := tc.mu.lastUpdateNanos; ts >= lu {
-		t.Errorf("expected last update time to advance past %d; got %d", ts, lu)
-	} else if un := s.Manual.UnixNano(); lu != un {
-		t.Errorf("expected last update time to equal %d; got %d", un, lu)
-	}
-	tc.mu.Unlock()
-}
-
-// TestTxnCoordSenderAddRequestConcurrently verifies adding concurrent requests
-// creates a transaction metadata and adding multiple requests with same
-// transaction ID updates the last update timestamp.
-func TestTxnCoordSenderAddRequestConcurrently(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	defer s.Stop()
-
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
-
-	// Put requests will create a new transaction.
-	sendRequests := func() error {
-		// NB: we can't use errgroup.WithContext here because s.DB uses the first
-		// request's context (if it's cancelable) to determine when the
-		// transaction is abandoned. Since errgroup.Group.Wait cancels its
-		// context, this would cause the transaction to have been aborted when
-		// this function is called for the second time. See this TODO from
-		// txn_coord_sender.go:
-		//
-		// TODO(dan): The Context we use for this is currently the one from the
-		// first request in a Txn, but the semantics of this aren't good. Each
-		// context has its own associated lifetime and we're ignoring all but the
-		// first. It happens now that we pass the same one in every request, but
-		// it's brittle to rely on this forever.
-		var g errgroup.Group
-		for i := 0; i < 30; i++ {
-			key := roachpb.Key("a" + strconv.Itoa(i))
-			g.Go(func() error {
-				return txn.Put(context.Background(), key, []byte("value"))
-			})
-		}
-		return g.Wait()
-	}
-	if err := sendRequests(); err != nil {
-		t.Fatal(err)
-	}
-	if !txn.Proto().Writing {
-		t.Fatal("txn is not marked as writing")
-	}
-	tc.mu.Lock()
-	ts := tc.mu.lastUpdateNanos
-	s.Manual.Increment(1)
-	tc.mu.Unlock()
-
-	if err := sendRequests(); err != nil {
-		t.Fatal(err)
-	}
-
-	tc.mu.Lock()
-	if lu := tc.mu.lastUpdateNanos; ts >= lu {
-		t.Errorf("expected last update time to advance past %d; got %d", ts, lu)
-	} else if un := s.Manual.UnixNano(); lu != un {
-		t.Errorf("expected last update time to equal %d; got %d", un, lu)
-	}
-	tc.mu.Unlock()
 }
 
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
