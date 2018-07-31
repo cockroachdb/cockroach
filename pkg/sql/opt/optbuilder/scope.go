@@ -41,9 +41,12 @@ type scope struct {
 	groupby       groupby
 	physicalProps props.Physical
 
-	// orderByCols contains all the columns specified by the ORDER BY clause.
-	// There may be some overlap with the columns in cols.
-	orderByCols []scopeColumn
+	// extraCols contains columns specified by the ORDER BY clause which don't
+	// appear in cols.
+	extraCols []scopeColumn
+
+	// orderByCols remembers the ordering columns by ID (for convenience).
+	orderByCols opt.ColSet
 
 	// group is the memo.GroupID of the relational operator built with this scope.
 	group memo.GroupID
@@ -128,24 +131,68 @@ func (s *scope) appendColumn(col *scopeColumn, label string) *scopeColumn {
 	return newCol
 }
 
+// addExtraColumns adds the given columns as extra columns, ignoring any
+// duplicate columns that are already in the scope.
+func (s *scope) addExtraColumns(cols []scopeColumn) {
+	existing := s.colSetWithExtraCols()
+	for i := range cols {
+		if !existing.Contains(int(cols[i].id)) {
+			s.extraCols = append(s.extraCols, cols[i])
+		}
+	}
+}
+
+// setOrdering sets the ordering in the physical properties and adds any new
+// columns as extra columns.
+func (s *scope) setOrdering(cols []scopeColumn, ord *props.OrderingChoice) {
+	s.addExtraColumns(cols)
+	s.orderByCols = opt.ColSet{}
+	for i := range cols {
+		s.orderByCols.Add(int(cols[i].id))
+	}
+	s.physicalProps.Ordering = *ord
+}
+
+// copyOrdering copies the ordering and the ORDER BY columns from the src scope.
+// The groups in the new columns are reset to 0.
+func (s *scope) copyOrdering(src *scope) {
+	s.physicalProps.Ordering = src.physicalProps.Ordering
+	s.orderByCols = src.orderByCols.Copy()
+	if src.orderByCols.Empty() {
+		return
+	}
+	existing := s.colSetWithExtraCols()
+	for i, ok := src.orderByCols.Next(0); ok; i, ok = src.orderByCols.Next(i + 1) {
+		if !existing.Contains(i) {
+			col := *src.getColumn(opt.ColumnID(i))
+			// We want to reset the group, as this becomes a pass-through column in
+			// the new scope.
+			col.group = 0
+			s.extraCols = append(s.extraCols, col)
+		}
+	}
+}
+
 // copyPhysicalProps copies the physicalProps from the src scope to this scope.
 func (s *scope) copyPhysicalProps(src *scope) {
 	s.physicalProps.Presentation = src.physicalProps.Presentation
 	s.copyOrdering(src)
 }
 
-// copyOrdering copies the ordering and orderByCols from the src scope to this
-// scope. The groups in the new columns are reset to 0.
-func (s *scope) copyOrdering(src *scope) {
-	s.physicalProps.Ordering = src.physicalProps.Ordering
-
-	l := len(s.orderByCols)
-	s.orderByCols = append(s.orderByCols, src.orderByCols...)
-	// We want to reset the groups, as these become pass-through columns in the
-	// new scope.
-	for i := l; i < len(s.orderByCols); i++ {
-		s.orderByCols[i].group = 0
+// getColumn returns the scopeColumn with the given id (either in cols or
+// extraCols).
+func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
+	for i := range s.cols {
+		if s.cols[i].id == col {
+			return &s.cols[i]
+		}
 	}
+	for i := range s.extraCols {
+		if s.extraCols[i].id == col {
+			return &s.extraCols[i]
+		}
+	}
+	return nil
 }
 
 // setPresentation sets s.physicalProps.Presentation (if not already set).
@@ -260,15 +307,12 @@ func (s *scope) colSet() opt.ColSet {
 	return colSet
 }
 
-// colSetWithOrderBy returns a ColSet of all the columns in this scope,
-// including orderByCols.
-func (s *scope) colSetWithOrderBy() opt.ColSet {
-	var colSet opt.ColSet
-	for i := range s.cols {
-		colSet.Add(int(s.cols[i].id))
-	}
-	for i := range s.orderByCols {
-		colSet.Add(int(s.orderByCols[i].id))
+// colSetWithExtraCols returns a ColSet of all the columns in this scope,
+// including extraCols.
+func (s *scope) colSetWithExtraCols() opt.ColSet {
+	colSet := s.colSet()
+	for i := range s.extraCols {
+		colSet.Add(int(s.extraCols[i].id))
 	}
 	return colSet
 }
@@ -278,25 +322,11 @@ func (s *scope) colSetWithOrderBy() opt.ColSet {
 //
 // NOTE: This function is currently only called by
 // Builder.constructProjectForScope, which uses it to determine whether or not
-// to construct a projection. Since the projection includes all the order by
-// columns, this check is sufficient to determine whether or not the projection
-// is necessary. Be careful if using this function for another purpose.
+// to construct a projection. Since the projection includes the extra columns,
+// this check is sufficient to determine whether or not the projection is
+// necessary. Be careful if using this function for another purpose.
 func (s *scope) hasSameColumns(other *scope) bool {
-	return s.colSetWithOrderBy().Equals(other.colSetWithOrderBy())
-}
-
-// hasExtraOrderByCols returns true if there are some ORDER BY columns in
-// s.orderByCols that are not included in s.cols.
-func (s *scope) hasExtraOrderByCols() bool {
-	if len(s.orderByCols) > 0 {
-		cols := s.colSet()
-		for _, c := range s.orderByCols {
-			if !cols.Contains(int(c.id)) {
-				return true
-			}
-		}
-	}
-	return false
+	return s.colSetWithExtraCols().Equals(other.colSetWithExtraCols())
 }
 
 // removeHiddenCols removes hidden columns from the scope.
@@ -813,8 +843,8 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 		}
 	}
 
-	if outScope.hasExtraOrderByCols() {
-		// We need to add a projection to remove the ORDER BY columns.
+	if len(outScope.extraCols) > 0 {
+		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
 		projScope.appendColumns(outScope)
 		projScope.group = s.builder.constructProject(outScope.group, projScope.cols)
