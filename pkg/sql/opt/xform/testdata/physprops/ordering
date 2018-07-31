@@ -777,30 +777,26 @@ scan abc
 opt
 SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a, b, c
 ----
-sort
+limit
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── ordering: +1,+2,+3
- └── limit
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      ├── select
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    ├── ordering: +1,+2
-      │    ├── scan abc
-      │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    │    └── ordering: +1,+2
-      │    └── filters [type=bool]
-      │         └── abc.c < (abc.a + abc.b) [type=bool]
-      └── const: 10 [type=int]
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +1,+2,+3
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    │    └── ordering: +1,+2,+3
+ │    └── filters [type=bool]
+ │         └── abc.c < (abc.a + abc.b) [type=bool]
+ └── const: 10 [type=int]
 
 opt
 SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a, b, c
 ----
-sort
+offset
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── ordering: +1,+2,+3
- └── offset
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      ├── scan abc
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +1,+2
-      └── const: 10 [type=int]
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2,+3
+ └── const: 10 [type=int]

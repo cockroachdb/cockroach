@@ -213,28 +213,28 @@ func (oc *OrderingChoice) ColSet() opt.ColSet {
 // set. In other words, is this set of ordering choices at least as restrictive
 // as the input set? Here are some examples:
 //
-//   <empty>           matches <empty>
-//   +1                matches <empty>        (given set is prefix)
-//   +1                matches +1
-//   +1,-2             matches +1             (given set is prefix)
-//   +1,-2             matches +1,-2
-//   +1                matches +1 opt(2)      (unused optional col is ignored)
-//   -2,+1             matches +1 opt(2)      (optional col is ignored)
-//   +1                matches +(1|2)         (subset of choice)
-//   +(1|2)            matches +(1|2|3)       (subset of choice)
-//   +(1|2),-4         matches +(1|2|3),-(4|5)
-//   +(1|2) opt(4)     matches +(1|2|3) opt(4)
+//   <empty>           subset of <empty>
+//   +1                subset of <empty>        (given set is prefix)
+//   +1                subset of +1
+//   +1,-2             subset of +1             (given set is prefix)
+//   +1,-2             subset of +1,-2
+//   +1                subset of +1 opt(2)      (unused optional col is ignored)
+//   -2,+1             subset of +1 opt(2)      (optional col is ignored)
+//   +1                subset of +(1|2)         (subset of choice)
+//   +(1|2)            subset of +(1|2|3)       (subset of choice)
+//   +(1|2),-4         subset of +(1|2|3),-(4|5)
+//   +(1|2) opt(4)     subset of +(1|2|3) opt(4)
 //
-//   <empty>           !matches +1
-//   +1                !matches -1            (direction mismatch)
-//   +1                !matches +1,-2         (prefix matching not commutative)
-//   +1 opt(2)         !matches +1            (extra optional cols not allowed)
-//   +1 opt(2)         !matches +1 opt(3)
-//   +(1|2)            !matches -(1|2)        (direction mismatch)
-//   +(1|2)            !matches +(3|4)        (no intersection)
-//   +(1|2)            !matches +(2|3)        (intersects, but not subset)
-//   +(1|2|3)          !matches +(1|2)        (subset of choice not commutative)
-//   +(1|2)            !matches +1 opt(2)
+//   <empty>           !subset of +1
+//   +1                !subset of -1            (direction mismatch)
+//   +1                !subset of +1,-2         (prefix matching not commutative)
+//   +1 opt(2)         !subset of +1            (extra optional cols not allowed)
+//   +1 opt(2)         !subset of +1 opt(3)
+//   +(1|2)            !subset of -(1|2)        (direction mismatch)
+//   +(1|2)            !subset of +(3|4)        (no intersection)
+//   +(1|2)            !subset of +(2|3)        (intersects, but not subset)
+//   +(1|2|3)          !subset of +(1|2)        (subset of choice not commutative)
+//   +(1|2)            !subset of +1 opt(2)
 //
 func (oc *OrderingChoice) SubsetOf(other *OrderingChoice) bool {
 	if !oc.Optional.SubsetOf(other.Optional) {
