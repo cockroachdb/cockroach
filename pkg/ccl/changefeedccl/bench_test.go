@@ -26,6 +26,9 @@ import (
 )
 
 func BenchmarkChangefeed(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	defer leaktest.AfterTest(b)()
 	defer utilccl.TestingEnableEnterprise()()
 	defer log.Scope(b).Close(b)

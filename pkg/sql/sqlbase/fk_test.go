@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type testTables struct {
@@ -217,6 +218,10 @@ func TestTablesNeededForFKs(t *testing.T) {
 
 // BenchmarkMultiRowFKChecks performs several benchmarks that pertain to operations involving foreign keys and cascades.
 func BenchmarkMultiRowFKChecks(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
 
 	// Throughout the course of testing there are four tables that are set up at the beginning of each sub-benchmark and
 	// torn down at the end of each sub-benchmark.

@@ -1301,6 +1301,9 @@ func BenchmarkImport(b *testing.B) {
 }
 
 func BenchmarkConvertRecord(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	ctx := context.TODO()
 
 	tpchLineItemDataRows := [][]string{
