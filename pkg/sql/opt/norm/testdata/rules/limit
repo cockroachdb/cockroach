@@ -176,7 +176,7 @@ project
  │    │    ├── columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── group-by
+ │    │    └── distinct-on
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── grouping columns: i:2(int) f:3(float)
  │    │         ├── key: (2,3)
@@ -303,7 +303,7 @@ project
  │    │    ├── columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
- │    │    └── group-by
+ │    │    └── distinct-on
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── grouping columns: i:2(int) f:3(float)
  │    │         ├── key: (2,3)
@@ -363,7 +363,7 @@ project
  │    │    │    ├── columns: i:2(int) f:3(float)
  │    │    │    ├── key: (2,3)
  │    │    │    ├── ordering: +3
- │    │    │    └── group-by
+ │    │    │    └── distinct-on
  │    │    │         ├── columns: i:2(int) f:3(float)
  │    │    │         ├── grouping columns: i:2(int) f:3(float)
  │    │    │         ├── key: (2,3)
