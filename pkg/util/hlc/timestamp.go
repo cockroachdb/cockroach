@@ -104,6 +104,24 @@ func (t Timestamp) Prev() Timestamp {
 	panic("cannot take the previous value to a zero timestamp")
 }
 
+// FloorPrev returns a timestamp earlier than the current timestamp. If it
+// can subtract a logical tick without wrapping around, it does so. Otherwise
+// it subtracts a nanosecond from the walltime.
+func (t Timestamp) FloorPrev() Timestamp {
+	if t.Logical > 0 {
+		return Timestamp{
+			WallTime: t.WallTime,
+			Logical:  t.Logical - 1,
+		}
+	} else if t.WallTime > 0 {
+		return Timestamp{
+			WallTime: t.WallTime - 1,
+			Logical:  0,
+		}
+	}
+	panic("cannot take the previous value to a zero timestamp")
+}
+
 // Forward updates the timestamp from the one given, if that moves it forwards
 // in time. Returns true if the timestamp was adjusted and false otherwise.
 func (t *Timestamp) Forward(s Timestamp) bool {
