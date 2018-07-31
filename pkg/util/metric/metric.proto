@@ -59,10 +59,22 @@ enum Unit {
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
 message Metadata {
+  // name is the metric's name as identified by its metadata.
   required string name = 1 [(gogoproto.nullable) = false];
+  // help explains how to interpret the metric's data.
   required string help = 2 [(gogoproto.nullable) = false];
+  // measurement expresses the entities measured by the metric, e.g. 
+  // ranges.
   required string measurement = 3 [(gogoproto.nullable) = false];
+  // unit describes how the metric's units should be displayed in charts.
   required Unit unit = 4 [(gogoproto.nullable) = false];
+  // metricType identifies the metric's Prometheus type, but at a higher 
+  // level also expresses how the metric represents its data, e.g. as a 
+  // COUNTER or a GAUGE.
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
+  // labels are necessary for Prometheus support.
   repeated LabelPair labels = 6;
+  // timeseriesPrefix provides the proper prefix to identify whether the 
+  // metric is a store (cr.store.) or node (cr.node.).
+  required string timeseriesPrefix = 7 [(gogoproto.nullable) = false];
 }

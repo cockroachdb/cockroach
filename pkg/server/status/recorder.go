@@ -46,10 +46,10 @@ import (
 const (
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
-	storeTimeSeriesPrefix = "cr.store.%s"
+	storeTimeSeriesPrefix = "cr.store."
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
-	nodeTimeSeriesPrefix = "cr.node.%s"
+	nodeTimeSeriesPrefix = "cr.node."
 
 	advertiseAddrLabelKey = "advertise-addr"
 	httpAddrLabelKey      = "http-addr"
@@ -305,7 +305,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	now := mr.clock.PhysicalNow()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
-		format:         nodeTimeSeriesPrefix,
+		format:         nodeTimeSeriesPrefix + "%s",
 		source:         strconv.FormatInt(int64(mr.mu.desc.NodeID), 10),
 		timestampNanos: now,
 	}
@@ -315,7 +315,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	for storeID, r := range mr.mu.storeRegistries {
 		storeRecorder := registryRecorder{
 			registry:       r,
-			format:         storeTimeSeriesPrefix,
+			format:         storeTimeSeriesPrefix + "%s",
 			source:         strconv.FormatInt(int64(storeID), 10),
 			timestampNanos: now,
 		}
@@ -341,7 +341,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 
 	metrics := make(map[string]metric.Metadata)
 
-	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics)
+	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics, nodeTimeSeriesPrefix)
 
 	// Get a random storeID.
 	var sID roachpb.StoreID
@@ -352,7 +352,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	}
 
 	// Get metric metadata from that store because all stores have the same metadata.
-	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics, storeTimeSeriesPrefix)
 
 	return metrics
 }
