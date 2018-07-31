@@ -46,6 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -126,6 +128,16 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 		}
 		return nil
 	},
+)
+
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	"server.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	false,
 )
 
 type proposalRetryReason int
@@ -2490,8 +2502,13 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
+//
+// minReadTS is used as a per-request low water mark for the value returned from
+// the read timestamp cache. That is, if the read timestamp cache returns a
+// value below minReadTS, minReadTS (without an associated txn id) will be used
+// instead to adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
 	var bumped bool
 	for _, union := range ba.Requests {
@@ -2533,6 +2550,9 @@ func (r *Replica) applyTimestampCache(
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			if rTS.Forward(minReadTS) {
+				rTxnID = uuid.Nil
+			}
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					nextTS := rTS.Next()
@@ -2823,11 +2843,42 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease.
+	// If the read is not inconsistent, the read requires the range lease or
+	// permission to serve via follower reads.
 	var status LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr
+			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
+				FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
+				lErr.LeaseHolder != nil && lErr.Lease.Epoch != 0 {
+
+				r.mu.Lock()
+				lai := r.mu.state.LeaseAppliedIndex
+				r.mu.Unlock()
+				if !r.store.cfg.ClosedTimestamp.Provider.CanServe(
+					lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
+				) {
+					r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+					// NB: this can't go behind V(x) because the log message created by the
+					// storage might be gigantic in real clusters, and we don't want to trip it
+					// using logspy.
+					if false {
+						log.Warningf(ctx, "can't serve follower read for %s at epo %d lai %d, storage is %s",
+							ba.Timestamp, lErr.Lease.Epoch, lai,
+							r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
+						)
+					}
+					return nil, pErr
+				}
+				// This replica can serve this read!
+				//
+				// TODO(tschottdorf): once a read has been proven servable, we can serve all reads
+				// for the same or lower timestamps as long as the lease doesn't change hands (or
+				// epoch).
+				log.Event(ctx, "serving via follower read")
+			} else {
+				return nil, pErr
+			}
 		}
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
@@ -3050,19 +3101,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
-	// TODO(tschottdorf): hook up the closed timestamp subsystem. For now, this
-	// block serves as an easily enabled canary that verifies whether the system
-	// is set up where it's needed.
-	if false {
-		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-		untrack(ctx, r.RangeID, 0)
-	}
+	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	defer untrack(ctx, 0, 0) // in case proposal is never put into Raft
 
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
 		return nil, pErr, proposalNoRetry
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
@@ -3085,7 +3131,7 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	ch, tryAbandon, pErr := r.propose(ctx, lease, ba, endCmds, spans, untrack)
 	if pErr != nil {
 		return nil, pErr, proposalNoRetry
 	}
@@ -3169,6 +3215,7 @@ func (r *Replica) requestToProposal(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
+	untrack func(context.Context, roachpb.RangeID, ctpb.LAI),
 ) (*ProposalData, *roachpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
 
@@ -3180,6 +3227,7 @@ func (r *Replica) requestToProposal(
 		doneCh:  make(chan proposalResult, 1),
 		Local:   &res.Local,
 		Request: &ba,
+		Untrack: untrack,
 	}
 
 	if needConsensus {
@@ -3358,6 +3406,17 @@ func (r *Replica) insertProposalLocked(
 	proposal.command.ProposerReplica = proposerReplica
 	proposal.command.ProposerLeaseSequence = proposerLease.Sequence
 
+	// Release the reference the closed timestamp tracker holds on this proposal.
+	//
+	// TODO(tschottdorf): how do we catch it if this proposal never acquired a
+	// reference? Sure, the tracker should eventually go negative and panic. Is
+	// that enough? If the request isn't tracked, it wouldn't have an Untrack
+	// method. We only explicitly pass nil in some low level tests that don't
+	// care about closed timestamps.
+	if proposal.Untrack != nil {
+		proposal.Untrack(proposal.ctx, r.RangeID, ctpb.LAI(proposal.command.MaxLeaseIndex))
+	}
+
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -3397,6 +3456,7 @@ func (r *Replica) propose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
+	untrack func(context.Context, roachpb.RangeID, ctpb.LAI),
 ) (_ chan proposalResult, _ func() bool, pErr *roachpb.Error) {
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
@@ -3427,7 +3487,7 @@ func (r *Replica) propose(
 	}
 
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans, untrack)
 	log.Event(proposal.ctx, "evaluated request")
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to
@@ -6698,4 +6758,20 @@ func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
 		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
 		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),
 	}
+}
+
+// EmitMLAI registers the replica's last assigned max lease index with the
+// closed timestamp tracker. This is called to emit an update about this
+// replica in the absence of write activity.
+func (r *Replica) EmitMLAI() {
+	r.mu.Lock()
+	lai := r.mu.lastAssignedLeaseIndex
+	if r.mu.state.LeaseAppliedIndex > lai {
+		lai = r.mu.state.LeaseAppliedIndex
+	}
+	r.mu.Unlock()
+
+	ctx := r.AnnotateCtx(context.Background())
+	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	untrack(ctx, r.RangeID, ctpb.LAI(lai))
 }

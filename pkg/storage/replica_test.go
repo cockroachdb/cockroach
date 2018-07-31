@@ -468,7 +468,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
+	ch, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans, nil)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1237,7 +1237,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
+	ch, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans, nil)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -4536,7 +4536,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
 		lease, _ := tc.repl.GetLease()
-		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil, &allSpans)
+		ch, _, err := tc.repl.propose(context.Background(), lease, ba, nil, &allSpans, nil)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -7790,7 +7790,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
-	_, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
+	_, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -8002,7 +8002,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			lease, _ := repl.GetLease()
-			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
+			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -8079,7 +8079,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, &allSpans)
+			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, &allSpans, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -8176,7 +8176,7 @@ func TestReplicaLeaseReproposal(t *testing.T) {
 	})
 
 	ba.Timestamp = tc.Clock().Now()
-	proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
+	proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans, nil)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8273,7 +8273,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
-		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans)
+		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans, nil)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -9331,7 +9331,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 
 	exLease, _ := repl.GetLease()
 	ch, _, pErr := repl.propose(
-		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+		context.Background(), exLease, ba, nil /* endCmds */, &allSpans, nil,
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9378,7 +9378,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
 	ch, _, pErr := repl.propose(
-		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+		context.Background(), exLease, ba, nil /* endCmds */, &allSpans, nil,
 	)
 	if pErr != nil {
 		t.Fatal(pErr)

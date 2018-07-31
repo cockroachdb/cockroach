@@ -430,6 +430,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			Settings: st,
 			Stopper:  s.stopper,
 			Clock:    s.nodeLiveness.AsLiveClock(),
+			// NB: s.node is not defined at this point, but it will be
+			// before this is ever called.
+			Refresh: func(rangeIDs ...roachpb.RangeID) {
+				for _, rangeID := range rangeIDs {
+					repl, err := s.node.stores.GetReplicaForRangeID(rangeID)
+					if err != nil || repl == nil {
+						continue
+					}
+					repl.EmitMLAI()
+				}
+			},
+			Dialer: s.nodeDialer.CTDialer(),
 		}),
 
 		EnableEpochRangeLeases: true,

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
@@ -94,6 +95,11 @@ type ProposalData struct {
 	// here; this could be replaced with isLease and isChangeReplicas
 	// booleans.
 	Request *roachpb.BatchRequest
+
+	// Untrack releases the proposal from the closed timestamp proposal tracker.
+	//
+	// May be nil in low-level Replica tests.
+	Untrack func(context.Context, roachpb.RangeID, ctpb.LAI)
 }
 
 // finishApplication is called when a command application has finished. The
@@ -353,6 +359,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		}
 		// Make sure the push transaction queue is enabled.
 		r.txnWaitQueue.Enable()
+
+		// Emit an MLAI on the leaseholder replica, as follower will be looking
+		// for one and if we went on to quiesce, they wouldn't necessarily get
+		// one otherwise (unless they ask for it, which adds latency).
+		r.EmitMLAI()
 	}
 
 	// Mark the new lease in the replica's lease history.
