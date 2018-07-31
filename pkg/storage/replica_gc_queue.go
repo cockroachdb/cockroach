@@ -209,8 +209,9 @@ func (rgcq *replicaGCQueue) process(
 		return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 	}
 	replyDesc := rs[0]
-
-	if currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
+	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
+	log.Errorf(ctx, "currentDesc %v, currentMember %v", currentDesc, currentMember)
+	if !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		if log.V(1) {

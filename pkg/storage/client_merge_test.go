@@ -1202,6 +1202,49 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	}
 }
 
+func TestStoreRangeMergeSlowFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	circuitBreaker2 := mtc.transport.GetCircuitBreaker(store2.Ident.NodeID)
+	circuitBreaker2.Break()
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// mtc.unreplicateRange(lhsDesc.RangeID, 2)
+	// circuitBreaker2.Reset()
+
+	rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rhsRepl2.IsDestroyed(); err == nil {
+		t.Fatal("rhs replica on store2 not destroyed after garbage collection")
+	}
+
+	// mtc.replicateRange(lhsDesc.RangeID, 2)
+}
+
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

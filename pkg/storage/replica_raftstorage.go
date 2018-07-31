@@ -516,7 +516,6 @@ func snapshot(
 	// streamer can send chunks from it bit by bit.
 	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
-
 	log.Infof(ctx, "generated %s snapshot %s at index %d",
 		snapType, snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
