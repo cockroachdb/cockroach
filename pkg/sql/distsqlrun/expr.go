@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +53,9 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
-func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.TypedExpr, error) {
+func processExpression(
+	exprSpec Expression, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
+) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
@@ -68,8 +71,9 @@ func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.Type
 		return nil, v.err
 	}
 
+	semaCtx.IVarContainer = h.Container()
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: h.Container()}, types.Any)
+	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
 	}
@@ -134,7 +138,8 @@ func (eh *exprHelper) init(
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	var err error
-	eh.expr, err = processExpression(expr, &eh.vars)
+	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
+	eh.expr, err = processExpression(expr, &semaContext, &eh.vars)
 	if err != nil {
 		return err
 	}
