@@ -103,11 +103,11 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 		def := mergeOn.Private(o.mem).(*memo.MergeOnDef)
 		return def.CanProvideOrdering(required)
 
-	case opt.LimitOp, opt.OffsetOp:
-		// Limit/Offset can provide the same ordering it requires of its input, but
-		// can also pass through a stronger ordering.
-		provided := mexpr.Private(o.mem).(*props.OrderingChoice)
-		return provided.Implies(required) || required.Implies(provided)
+	case opt.LimitOp, opt.OffsetOp, opt.DistinctOnOp:
+		// These operators require a certain ordering of their input, but can also
+		// pass through a stronger ordering.
+		internal := o.internalOrdering(mexpr)
+		return internal.Implies(required) || required.Implies(internal)
 	}
 
 	return false
@@ -165,30 +165,28 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 		}
 
-	case opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
+	case opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
 		// These ops require the ordering in their private.
 		if nth == 0 {
-			var ordering *props.OrderingChoice
-			switch mexpr.Operator() {
-			case opt.RowNumberOp:
-				def := o.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
-				ordering = &def.Ordering
-			case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-				def := mexpr.Private(o.mem).(*memo.GroupByDef)
-				ordering = &def.Ordering
-			}
-			childProps.Ordering = *ordering
+			childProps.Ordering = *o.internalOrdering(mexpr)
 		}
 
-	case opt.LimitOp, opt.OffsetOp:
+	case opt.LimitOp, opt.OffsetOp, opt.DistinctOnOp:
 		if nth == 0 {
 			// These ops require the ordering in their private, but can pass through a
-			// stronger ordering.
-			ordering := mexpr.Private(o.mem).(*props.OrderingChoice)
-			if parentProps.Ordering.Implies(ordering) {
+			// stronger ordering. For example:
+			//   SELECT * FROM (SELECT x, y FROM t ORDER BY x LIMIT 10) ORDER BY x,y
+			// In this case the internal ordering is x+, but we can pass through x+,y+
+			// to satisfy both orderings.
+			//
+			// DistinctOn is executed differently than GroupBy, in a way that retains
+			// the input ordering. Once we support "streaming" execution of GroupBy,
+			// that operator will belong here as well.
+			internalOrdering := o.internalOrdering(mexpr)
+			if parentProps.Ordering.Implies(internalOrdering) {
 				childProps.Ordering = parentProps.Ordering
 			} else {
-				childProps.Ordering = *ordering
+				childProps.Ordering = *internalOrdering
 			}
 		}
 
@@ -228,6 +226,25 @@ func (o *Optimizer) buildChildPhysicalProps(
 	}
 
 	return o.mem.InternPhysicalProps(&childProps)
+}
+
+// internalOrdering returns the internal OrderingChoice stored in the private
+// (for operators that have it).
+func (o *Optimizer) internalOrdering(mexpr *memo.Expr) *props.OrderingChoice {
+	private := mexpr.Private(o.mem)
+	switch mexpr.Operator() {
+	case opt.LimitOp, opt.OffsetOp:
+		return private.(*props.OrderingChoice)
+
+	case opt.RowNumberOp:
+		return &private.(*memo.RowNumberDef).Ordering
+
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
+		return &private.(*memo.GroupByDef).Ordering
+
+	default:
+		return nil
+	}
 }
 
 // isOrderingBoundBy returns whether or not input provides all columns present
