@@ -1079,6 +1079,9 @@ func TestVersionCheckBidirectional(t *testing.T) {
 }
 
 func BenchmarkGRPCDial(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 

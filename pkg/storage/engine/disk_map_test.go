@@ -352,6 +352,9 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 }
 
 func BenchmarkRocksDBMapIteration(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	dir, err := ioutil.TempDir("", "BenchmarkRocksDBMapIteration")
 	if err != nil {
 		b.Fatal(err)

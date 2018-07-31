@@ -386,6 +386,9 @@ var twoColOrdering = convertToSpecOrdering(sqlbase.ColumnOrdering{
 
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: Fix benchmark")
+	}
 	const numCols = 2
 
 	ctx := context.Background()
@@ -423,6 +426,9 @@ func BenchmarkSortAll(b *testing.B) {
 // BenchmarkSortLimit times how long it takes to sort a fixed size input with
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	const numCols = 2
 
 	ctx := context.Background()
@@ -464,6 +470,9 @@ func BenchmarkSortLimit(b *testing.B) {
 // BenchmarkSortChunks times how long it takes to sort an input which is already
 // sorted on a prefix.
 func BenchmarkSortChunks(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	const numCols = 2
 
 	ctx := context.Background()

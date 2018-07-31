@@ -48,6 +48,9 @@ func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
 // Read benchmarks. All of them run with on-disk data.
 
 func BenchmarkMVCCScan_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for _, numVersions := range []int{1, 2, 10, 100} {
@@ -64,6 +67,9 @@ func BenchmarkMVCCScan_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCReverseScan_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	for _, numRows := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for _, numVersions := range []int{1, 2, 10, 100} {
@@ -92,6 +98,9 @@ func BenchmarkMVCCGet_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCComputeStats_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			runMVCCComputeStats(setupMVCCRocksDB, valueSize, b)
@@ -217,6 +226,9 @@ func BenchmarkMVCCBatchTimeSeries_RocksDB(b *testing.B) {
 // DeleteRange benchmarks below (using on-disk data).
 
 func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			runMVCCDeleteRange(setupMVCCRocksDB, valueSize, b)
@@ -225,6 +237,9 @@ func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
 }
 
 func BenchmarkBatchApplyBatchRepr(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	for _, writeOnly := range []bool{false, true} {
 		b.Run(fmt.Sprintf("writeOnly=%t ", writeOnly), func(b *testing.B) {
 			for _, valueSize := range []int{10} {
