@@ -274,12 +274,15 @@ func (s simpleCtxProvider) Ctx() context.Context {
 
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
+// The provided txn may be nil, in which case setupFlow will create a new leaf
+// transaction based on req.
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context,
 	parentSpan opentracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
+	txn *client.Txn,
 ) (context.Context, *Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
 		err := errors.Errorf(
@@ -324,11 +327,12 @@ func (ds *ServerImpl) setupFlow(
 		meta := roachpb.MakeTxnCoordMeta(*txn)
 		req.TxnCoordMeta = &meta
 	}
-	var txn *client.Txn
-	if meta := req.TxnCoordMeta; meta != nil {
-		// The flow will run in a Txn that specifies child=true because we
-		// do not want each distributed Txn to heartbeat the transaction.
-		txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+	if txn == nil {
+		if meta := req.TxnCoordMeta; meta != nil {
+			// The flow will run in a Txn that specifies child=true because we
+			// do not want each distributed Txn to heartbeat the transaction.
+			txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+		}
 	}
 
 	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
@@ -427,12 +431,28 @@ func (ds *ServerImpl) setupFlow(
 // SetupSyncFlow sets up a synchronous flow, connecting the sync response
 // output stream to the given RowReceiver. The flow is not started. The flow
 // will be associated with the given context.
+// If the caller is setting up a local flow, SetupLocalSyncFlow should be used.
+// The difference is that this method sets up a new leaf txn based on
+// information provided in req. This is only necessary for remote flows because
+// we do not want each distributed Txn to heartbeat the transaction.
 // Note: the returned context contains a span that must be finished through
 // Flow.Cleanup.
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, parentMonitor *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver,
 ) (context.Context, *Flow, error) {
-	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output)
+	return ds.setupFlow(
+		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, nil, /* txn */
+	)
+}
+
+// SetupLocalSyncFlow is the same as SetupSyncFlow with the difference that the
+// flow will be set up using the specified txn.
+func (ds *ServerImpl) SetupLocalSyncFlow(
+	ctx context.Context, parentMonitor *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver, txn *client.Txn,
+) (context.Context, *Flow, error) {
+	return ds.setupFlow(
+		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, txn,
+	)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
@@ -481,7 +501,9 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */)
+	ctx, f, err := ds.setupFlow(
+		ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, nil, /* txn */
+	)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
