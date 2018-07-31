@@ -35,7 +35,11 @@ type ShowVar struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
-	ctx.FormatNameP(&node.Name)
+	// Session var names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
@@ -46,7 +50,11 @@ type ShowClusterSetting struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
-	ctx.WriteString(node.Name)
+	// Cluster setting names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP
