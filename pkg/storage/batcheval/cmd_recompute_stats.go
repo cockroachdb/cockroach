@@ -81,15 +81,32 @@ func RecomputeStats(
 	// for details on this.
 	//
 	// [1]: see engine.TestBatchReadLaterWrite.
-	snap := cArgs.EvalCtx.Engine().NewSnapshot()
-	defer snap.Close()
+	//
+	// TODO(peter): This should be NewReadOnly(), but that currently causes
+	// TestConsistencyQueueRecomputeStats to fail:
+	//
+	//     consistency_queue_test.go:376: stats still in need of adjustment: {ContainsEstimates:false LastUpdateNanos:0 IntentAge:0 GCBytesAge:0 LiveBytes:45 LiveCount:1 KeyBytes:33 KeyCount:1 ValBytes:12 ValCount:1 IntentBytes:0 IntentCount:0 SysBytes:0 SysCount:0}
+	readonly := cArgs.EvalCtx.Engine().NewReadOnly()
+	defer readonly.Close()
 
-	actualMS, err := rditer.ComputeStatsForRange(desc, snap, cArgs.Header.Timestamp.WallTime)
+	// Force the creation of both the prefix and non-prefix iterators now.
+	//
+	// TODO(peter): probably better to add a flag to NewReadOnly() to do this. Or
+	// perhaps NewSnapshot() should do this internally.
+	for _, prefix := range [2]bool{false, true} {
+		iter := readonly.NewIterator(engine.IterOptions{
+			Prefix:     prefix,
+			UpperBound: desc.EndKey.AsRawKey(),
+		})
+		iter.Close()
+	}
+
+	actualMS, err := rditer.ComputeStatsForRange(desc, readonly, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, snap)
+	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, readonly)
 	if err != nil {
 		return result.Result{}, err
 	}

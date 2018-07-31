@@ -380,7 +380,12 @@ func (r *Replica) GetSnapshot(
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
-	snap := r.store.engine.NewSnapshot()
+	snap := r.store.engine.NewReadOnly()
+	// This is somewhat hacky: the readonly engine caches the iterator. We want
+	// the iterator it is using to be created while we're holding raftMu in order
+	// to get a consistent snapshot of our state.
+	iter := snap.NewIterator(engine.IterOptions{UpperBound: r.Desc().EndKey.AsRawKey()})
+	iter.Close()
 	r.raftMu.Unlock()
 
 	defer func() {
@@ -444,7 +449,9 @@ type OutgoingSnapshot struct {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.Iter.Close()
+	if s.Iter != nil {
+		s.Iter.Close()
+	}
 	s.EngineSnap.Close()
 }
 

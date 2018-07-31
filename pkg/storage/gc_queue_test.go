@@ -496,9 +496,10 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Call RunGC with dummy functions to get current GCInfo.
 	gcInfo, err := func() (GCInfo, error) {
-		snap := tc.repl.store.Engine().NewSnapshot()
+		// TODO(peter): this should be NewReadOnly().
+		readonly := tc.repl.store.Engine().NewSnapshot()
 		desc := tc.repl.Desc()
-		defer snap.Close()
+		defer readonly.Close()
 
 		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
@@ -507,7 +508,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 		ctx := context.Background()
 		now := tc.Clock().Now()
-		return RunGC(ctx, desc, snap, now, zone.GC,
+		return RunGC(ctx, desc, readonly, now, zone.GC,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -797,11 +798,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			"but only %d are left", exp, count)
 	}
 
-	batch := tc.engine.NewSnapshot()
-	defer batch.Close()
+	// TODO(peter): this should be NewReadOnly().
+	readonly := tc.engine.NewSnapshot()
+	defer readonly.Close()
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(context.TODO(), batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertStateLocked(context.TODO(), readonly) // check that in-mem and on-disk state were updated
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 

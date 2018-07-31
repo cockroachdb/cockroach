@@ -151,11 +151,12 @@ func (q *timeSeriesMaintenanceQueue) process(
 	ctx context.Context, repl *Replica, _ config.SystemConfig,
 ) error {
 	desc := repl.Desc()
-	snap := repl.store.Engine().NewSnapshot()
+	readonly := repl.store.Engine().NewReadOnly()
+	defer readonly.Close()
 	now := repl.store.Clock().Now()
-	defer snap.Close()
 	if err := q.tsData.MaintainTimeSeries(
-		ctx, snap, desc.StartKey, desc.EndKey, q.db, &q.mem, TimeSeriesMaintenanceMemoryBudget, now,
+		ctx, readonly, desc.StartKey, desc.EndKey,
+		q.db, &q.mem, TimeSeriesMaintenanceMemoryBudget, now,
 	); err != nil {
 		return err
 	}

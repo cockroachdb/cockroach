@@ -570,9 +570,13 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 func (gcq *gcQueue) processImpl(
 	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
 ) error {
-	snap := repl.store.Engine().NewSnapshot()
+	// TODO(peter): This should be NewReadOnly(), but that doesn't currently work
+	// because RunGC() requires multiple iterators simultaneously. In particular,
+	// RunGC has an open ReplicaDataIterator while it calls MVCCIterate (via
+	// processLocalKeyRange).
+	readonly := repl.store.Engine().NewSnapshot()
+	defer readonly.Close()
 	desc := repl.Desc()
-	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
@@ -580,7 +584,7 @@ func (gcq *gcQueue) processImpl(
 		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	info, err := RunGC(ctx, desc, snap, now, zone.GC, &replicaGCer{repl: repl},
+	info, err := RunGC(ctx, desc, readonly, now, zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.cleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
 			if err == nil {
