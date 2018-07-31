@@ -56,7 +56,7 @@ export function aggregateStatementStats(statementStats: CollectedStatementStatis
   const statementsMap: { [statement: string]: CollectedStatementStatistics[] } = {};
   statementStats.forEach(
     (statement: CollectedStatementStatistics) => {
-      const matches = statementsMap[statement.key.statement] || (statementsMap[statement.key.statement] = []);
+      const matches = statementsMap[statement.key.key_data.query] || (statementsMap[statement.key.key_data.query] = []);
       matches.push(statement);
   });
 
@@ -72,6 +72,7 @@ export interface ExecutionStatistics {
   statement: string;
   app: string;
   distSQL: boolean;
+  opt: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -79,12 +80,13 @@ export interface ExecutionStatistics {
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    statement: stmt.key.statement,
-    app: stmt.key.app,
-    distSQL: stmt.key.distSQL,
-    failed: stmt.key.failed,
-    node_id: stmt.key.node_id,
-    stats: stmt.stats,
+    statement: stmt.key.key_data.query,
+    app:       stmt.key.key_data.app,
+    distSQL:   stmt.key.key_data.distSQL,
+    opt:       stmt.key.key_data.opt,
+    failed:    stmt.key.key_data.failed,
+    node_id:   stmt.key.node_id,
+    stats:     stmt.stats,
   }));
 }
 

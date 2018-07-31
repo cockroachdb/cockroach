@@ -76,20 +76,26 @@ describe("flattenStatementStats", () => {
     const stats = [
       {
         key: {
-          statement: "SELECT * FROM foobar",
-          app: "foobar",
-          distSQL: true,
-          failed: false,
+          key_data: {
+            query: "SELECT * FROM foobar",
+            app: "foobar",
+            distSQL: true,
+            opt: true,
+            failed: false,
+          },
           node_id: 1,
         },
         stats: {},
       },
       {
         key: {
-          statement: "UPDATE foobar SET name = 'baz' WHERE id = 42",
-          app: "bazzer",
-          distSQL: false,
-          failed: true,
+          key_data: {
+            query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
+            app: "bazzer",
+            distSQL: false,
+            opt: false,
+            failed: true,
+          },
           node_id: 2,
         },
         stats: {},
@@ -101,10 +107,11 @@ describe("flattenStatementStats", () => {
     assert.equal(flattened.length, stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].statement, stats[i].key.statement);
-      assert.equal(flattened[i].app, stats[i].key.app);
-      assert.equal(flattened[i].distSQL, stats[i].key.distSQL);
-      assert.equal(flattened[i].failed, stats[i].key.failed);
+      assert.equal(flattened[i].statement, stats[i].key.key_data.query);
+      assert.equal(flattened[i].app, stats[i].key.key_data.app);
+      assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
+      assert.equal(flattened[i].opt, stats[i].key.key_data.opt);
+      assert.equal(flattened[i].failed, stats[i].key.key_data.failed);
       assert.equal(flattened[i].node_id, stats[i].key.node_id);
 
       assert.equal(flattened[i].stats, stats[i].stats);
