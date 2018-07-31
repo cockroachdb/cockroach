@@ -40,3 +40,9 @@ func (data *InternalTimeSeriesData) SampleCount() int {
 func (data *InternalTimeSeriesData) OffsetForTimestamp(timestampNanos int64) int32 {
 	return int32((timestampNanos - data.StartTimestampNanos) / data.SampleDurationNanos)
 }
+
+// TimestampForOffset returns the timestamp that would represent the provided
+// offset in this collection.
+func (data *InternalTimeSeriesData) TimestampForOffset(offset int32) int64 {
+	return data.StartTimestampNanos + int64(offset)*data.SampleDurationNanos
+}
