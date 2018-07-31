@@ -133,6 +133,7 @@ func TestReportUsage(t *testing.T) {
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 	ts := s.(*TestServer)
 
 	if err := ts.WaitForInitialSplits(); err != nil {
@@ -631,8 +632,6 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 	}
-
-	ts.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
 }
 
 type mockRecorder struct {
