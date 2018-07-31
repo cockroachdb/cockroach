@@ -146,7 +146,6 @@ func TestNormalizeExpr(t *testing.T) {
 		{`random()`, `random()`},
 		{`gen_random_uuid()`, `gen_random_uuid()`},
 		{`current_date()`, `current_date()`},
-		{`current_time()`, `current_time()`},
 		{`clock_timestamp()`, `clock_timestamp()`},
 		{`now()`, `now()`},
 		{`current_timestamp()`, `current_timestamp()`},

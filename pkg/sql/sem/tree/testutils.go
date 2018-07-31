@@ -60,8 +60,6 @@ func SampleDatum(t types.T) Datum {
 		return NewDDate(123123)
 	case types.Time:
 		return MakeDTime(timeofday.FromInt(789))
-	case types.TimeTZ:
-		return MakeDTimeTZ(timeofday.FromInt(789), time.UTC)
 	case types.Timestamp:
 		return MakeDTimestamp(timeutil.Unix(123, 123), time.Second)
 	case types.TimestampTZ:

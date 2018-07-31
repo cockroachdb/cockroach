@@ -2056,7 +2056,6 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
 	reflect.TypeOf(types.Date):        typCategoryDateTime,
 	reflect.TypeOf(types.Time):        typCategoryDateTime,
-	reflect.TypeOf(types.TimeTZ):      typCategoryDateTime,
 	reflect.TypeOf(types.Float):       typCategoryNumeric,
 	reflect.TypeOf(types.Int):         typCategoryNumeric,
 	reflect.TypeOf(types.Interval):    typCategoryTimespan,

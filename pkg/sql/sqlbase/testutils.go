@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -92,8 +91,6 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
 	case ColumnType_TIME:
 		return tree.MakeDTime(timeofday.Random(rng))
-	case ColumnType_TIMETZ:
-		return tree.MakeDTimeTZ(timeofday.Random(rng), time.UTC)
 	case ColumnType_TIMESTAMP:
 		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
