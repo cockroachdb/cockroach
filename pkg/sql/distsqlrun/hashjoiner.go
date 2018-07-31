@@ -90,6 +90,10 @@ type hashJoiner struct {
 	// stream we store fully and build the hashRowContainer from.
 	storedSide joinSide
 
+	// nullEquality indicates that NULL = NULL should be considered true. Used for
+	// INTERSECT and EXCEPT.
+	nullEquality bool
+
 	useTempStorage bool
 	storedRows     hashRowContainer
 
@@ -211,6 +215,10 @@ func newHashJoiner(
 	h.rows[rightSide].initWithMon(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.memMonitor,
 	)
+
+	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {
+		h.nullEquality = true
+	}
 
 	return h, nil
 }
@@ -620,11 +628,11 @@ func (h *hashJoiner) close() {
 }
 
 // receiveNext reads from the source specified by side and returns the next row
-// or metadata to be processed by the hashJoiner. rows with NULLs in their
-// equality columns are only returned if the joinType specifies that unmatched
-// rows should be returned for the given side. In this case, a rendered row and
-// true is returned, notifying the caller that the returned row may be emitted
-// directly.
+// or metadata to be processed by the hashJoiner. Unless h.nullEquality is true,
+// rows with NULLs in their equality columns are only returned if the joinType
+// specifies that unmatched rows should be returned for the given side. In this
+// case, a rendered row and true is returned, notifying the caller that the
+// returned row may be emitted directly.
 func (h *hashJoiner) receiveNext(
 	side joinSide,
 ) (sqlbase.EncDatumRow, *ProducerMetadata, bool, error) {
@@ -649,9 +657,9 @@ func (h *hashJoiner) receiveNext(
 				break
 			}
 		}
-		// row has no NULLs in its equality columns so it might match a row from the
-		// other side.
-		if !hasNull {
+		// row has no NULLs in its equality columns (or we are considering NULLs to
+		// be equal), so it might match a row from the other side.
+		if !hasNull || h.nullEquality {
 			return row, nil, false, nil
 		}
 
@@ -684,6 +692,7 @@ func (h *hashJoiner) initStoredRows() error {
 		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
+		h.nullEquality,
 	)
 	if err == nil {
 		err = h.maybeMakeMemErr("initializing mem rows")
@@ -732,6 +741,7 @@ func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
+		h.nullEquality,
 	); err != nil {
 		return false, newDiskSpillErr(err.Error())
 	}

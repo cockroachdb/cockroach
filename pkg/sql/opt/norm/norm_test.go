@@ -54,27 +54,6 @@ func TestNormRules(t *testing.T) {
 	})
 }
 
-// TestRuleProps tests the rule properties that power some of the normalization
-// rules. The tests are data-driven cases of the form:
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
-//
-// See OptTester.Handle for supported commands.
-func TestRuleProps(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideQualifications |
-		opt.ExprFmtHideScalars
-	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
-		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = fmtFlags
-			return tester.RunCommand(t, d)
-		})
-	})
-}
-
 // Test the FoldNullInEmpty rule. Can't create empty tuple on right side of
 // IN/NOT IN in SQL, so do it here.
 func TestRuleFoldNullInEmpty(t *testing.T) {

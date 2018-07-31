@@ -143,7 +143,8 @@ func (lj *lookupJoinNode) Next(params runParams) (bool, error) {
 }
 
 func (lj *lookupJoinNode) Values() tree.Datums {
-	return lj.run.n.Values()
+	// Chop off any values we may have tacked onto the table scanNode.
+	return lj.run.n.Values()[:len(lj.columns)]
 }
 
 func (lj *lookupJoinNode) Close(ctx context.Context) {

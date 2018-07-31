@@ -304,6 +304,15 @@ project
 # PruneLimitCols
 # --------------------------------------------------
 
+opt
+SELECT i, s FROM a LIMIT 1
+----
+scan a
+ ├── columns: i:2(int) s:4(string)
+ ├── limit: 1
+ ├── key: ()
+ └── fd: ()-->(2,4)
+
 # The projection on top of Limit should trickle down and we shouldn't scan f.
 opt
 SELECT k FROM (SELECT k, i, f FROM a ORDER BY i LIMIT 10)
@@ -402,6 +411,15 @@ project
 # --------------------------------------------------
 # PruneOffsetCols
 # --------------------------------------------------
+
+opt
+SELECT f FROM a OFFSET 1
+----
+offset
+ ├── columns: f:3(float)
+ ├── scan a
+ │    └── columns: f:3(float)
+ └── const: 1 [type=int]
 
 opt
 SELECT k FROM (SELECT k, i, f FROM a ORDER BY i OFFSET 10)
@@ -806,6 +824,142 @@ project
       │    └── fd: (7)-->(8)
       └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
            └── a.i < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+
+# ApplyJoin operator.
+opt
+SELECT k, i
+FROM a
+WHERE (SELECT k+1 AS r FROM xy WHERE y=k) = 1
+----
+project
+ ├── columns: k:1(int!null) i:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) r:7(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,7)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── select
+      │    ├── columns: r:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: r:7(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7)
+      │    │    └── project
+      │    │         ├── columns: r:7(int)
+      │    │         ├── outer: (1)
+      │    │         ├── fd: ()-->(7)
+      │    │         ├── select
+      │    │         │    ├── columns: y:6(int!null)
+      │    │         │    ├── outer: (1)
+      │    │         │    ├── fd: ()-->(6)
+      │    │         │    ├── scan xy
+      │    │         │    │    └── columns: y:6(int)
+      │    │         │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │         │         └── xy.y = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │         └── projections [outer=(1)]
+      │    │              └── a.k + 1 [type=int, outer=(1)]
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │         └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      └── true [type=bool]
+
+# SemiJoin operator.
+opt
+SELECT a.i
+FROM a
+WHERE
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ └── semi-join (merge)
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── semi-join (merge)
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── key: (5)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+# AntiJoin operator.
+opt
+SELECT a.i
+FROM a
+WHERE
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ └── anti-join (merge)
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── anti-join (merge)
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │              └── a.k = xy.x [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── key: (5)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+                └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # --------------------------------------------------
 # PruneJoinRightCols
@@ -1213,6 +1367,17 @@ group-by
  └── aggregations [outer=(5)]
       └── min [type=decimal, outer=(5)]
            └── variable: sm [type=decimal, outer=(5)]
+
+# Distinct (GroupBy operator with no aggregates).
+opt
+SELECT DISTINCT s, f FROM a
+----
+group-by
+ ├── columns: s:4(string) f:3(float)
+ ├── grouping columns: f:3(float) s:4(string)
+ ├── key: (3,4)
+ └── scan a
+      └── columns: f:3(float) s:4(string)
 
 # --------------------------------------------------
 # PruneValueCols

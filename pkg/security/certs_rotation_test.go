@@ -18,6 +18,7 @@ package security_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -85,6 +86,20 @@ func TestRotateCerts(t *testing.T) {
 		return nil
 	}
 
+	// Create a client by calling sql.Open which loads the certificates but do not use it yet.
+	createTestClient := func() *gosql.DB {
+		pgUrl := makeSecurePGUrl(s.ServingAddr(), security.RootUser, certsDir, security.EmbeddedCACert, security.EmbeddedRootCert, security.EmbeddedRootKey)
+		goDB, err := gosql.Open("postgres", pgUrl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return goDB
+	}
+
+	// Some errors codes.
+	const kBadAuthority = "certificate signed by unknown authority"
+	const kBadCertificate = "tls: bad certificate"
+
 	// Test client with the same certs.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
@@ -94,6 +109,13 @@ func TestRotateCerts(t *testing.T) {
 	}
 
 	if err := clientTest(firstClient); err != nil {
+		t.Fatal(err)
+	}
+
+	firstSQLClient := createTestClient()
+	defer firstSQLClient.Close()
+
+	if _, err := firstSQLClient.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,12 +138,23 @@ func TestRotateCerts(t *testing.T) {
 		t.Fatalf("could not create http client: %v", err)
 	}
 
-	if err := clientTest(secondClient); !testutils.IsError(err, "unknown authority") {
-		t.Fatalf("expected unknown authority error, got: %q", err)
+	if err := clientTest(secondClient); !testutils.IsError(err, kBadAuthority) {
+		t.Fatalf("expected error %q, got: %q", kBadAuthority, err)
+	}
+
+	secondSQLClient := createTestClient()
+	defer secondSQLClient.Close()
+
+	if _, err := secondSQLClient.Exec("SELECT 1"); !testutils.IsError(err, kBadAuthority) {
+		t.Fatalf("expected error %q, got: %q", kBadAuthority, err)
 	}
 
 	// We haven't triggered the reload, first client should still work.
 	if err := clientTest(firstClient); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := firstSQLClient.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,7 +163,7 @@ func TestRotateCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Try again, the first client should now fail, the second should succeed.
+	// Try again, the first HTTP client should now fail, the second should succeed.
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(firstClient); !testutils.IsError(err, "unknown authority") {
@@ -143,9 +176,19 @@ func TestRotateCerts(t *testing.T) {
 			return nil
 		})
 
+	// Nothing changed in the first SQL client: the connection is already established.
+	if _, err := firstSQLClient.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// However, the second SQL client now succeeds.
+	if _, err := secondSQLClient.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Now regenerate certs, but keep the CA cert around.
 	// We still need to delete the key.
-	// New clients will fail with bad certificate (CA not yet loaded).
+	// New clients with certs will fail with bad certificate (CA not yet loaded).
 	if err := os.Remove(filepath.Join(certsDir, security.EmbeddedCAKey)); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +198,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Setup a third http client. It will load the new certs.
 	// We need to use a new context as it keeps the certificate manager around.
-	// Fails on crypto errors.
+	// This is HTTP and succeeds because we do not ask for or verify client certificates.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 	thirdClient, err := clientContext.GetHTTPClient()
@@ -163,9 +206,16 @@ func TestRotateCerts(t *testing.T) {
 		t.Fatalf("could not create http client: %v", err)
 	}
 
-	// client3 fails on bad certificate, because the node does not have the new CA.
-	if err := clientTest(thirdClient); !testutils.IsError(err, "tls: bad certificate") {
-		t.Fatalf("expected bad certificate error, got: %q", err)
+	if err := clientTest(thirdClient); err != nil {
+		t.Fatal(err)
+	}
+
+	// However, a SQL client uses client certificates. The node does not have the new CA yet.
+	thirdSQLClient := createTestClient()
+	defer thirdSQLClient.Close()
+
+	if _, err := thirdSQLClient.Exec("SELECT 1"); !testutils.IsError(err, kBadCertificate) {
+		t.Fatalf("expected error %q, got: %q", kBadCertificate, err)
 	}
 
 	// We haven't triggered the reload, second client should still work.
@@ -178,15 +228,17 @@ func TestRotateCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// client2 fails on bad CA for the node certs, client3 succeeds.
+	// Wait until client3 succeeds.
 	testutils.SucceedsSoon(t,
 		func() error {
-			if err := clientTest(secondClient); !testutils.IsError(err, "unknown authority") {
-				return errors.Errorf("expected unknown authority, got %v", err)
-			}
 			if err := clientTest(thirdClient); err != nil {
 				return errors.Errorf("third client failed: %v", err)
 			}
 			return nil
 		})
+
+	// SQL client 3 should also succeed.
+	if _, err := thirdSQLClient.Exec("SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
 }

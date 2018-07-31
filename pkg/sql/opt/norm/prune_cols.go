@@ -17,6 +17,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -80,20 +81,6 @@ func (c *CustomFuncs) NeededColsExplain(def memo.PrivateID) opt.ColSet {
 // comment for more details.
 func (c *CustomFuncs) CanPruneCols(target memo.GroupID, neededCols opt.ColSet) bool {
 	return !c.candidatePruneCols(target).Difference(neededCols).Empty()
-}
-
-// candidatePruneCols returns the subset of the given target group's output
-// columns that can be pruned. Projections and Aggregations return all output
-// columns, since they are projecting a new set of columns that haven't yet been
-// used, and therefore are all possible candidates for pruning. Relational
-// expressions consult the PruneCols property, which has been built bottom-up to
-// only include columns that are candidates for pruning.
-func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
-	switch c.f.mem.NormExpr(target).Operator() {
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		return c.OutputCols(target)
-	}
-	return c.LookupLogical(target).Relational.Rule.PruneCols
 }
 
 // PruneCols creates an expression that discards any outputs columns of the
@@ -233,6 +220,105 @@ func (c *CustomFuncs) PruneOrderingRowNumber(
 	defCopy.Ordering = defCopy.Ordering.Copy()
 	defCopy.Ordering.ProjectCols(outCols)
 	return c.f.InternRowNumberDef(&defCopy)
+}
+
+// candidatePruneCols returns the subset of the given target group's output
+// columns that can be pruned. Each operator has its own custom rule for what
+// columns it allows to be pruned. Note that if an operator allows columns to
+// be pruned, then there must be logic in the PruneCols method to actually prune
+// those columns when requested.
+func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
+	// Handle special scalar operators.
+	ev := memo.MakeNormExprView(c.f.mem, target)
+	switch ev.Operator() {
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		// Both Projections and Aggregations allow their columns to be pruned if
+		// they're never used in a higher-level expression.
+		return c.OutputCols(target)
+	}
+
+	// Must be relational operator.
+	relational := c.LookupRelational(target)
+	if relational.IsAvailable(props.PruneCols) {
+		return relational.Rule.PruneCols
+	}
+	relational.SetAvailable(props.PruneCols)
+
+	switch ev.Operator() {
+	case opt.ScanOp, opt.ValuesOp:
+		// All columns can potentially be pruned from the Scan and Values operators.
+		relational.Rule.PruneCols = relational.OutputCols
+
+	case opt.SelectOp:
+		// Any pruneable input columns can potentially be pruned, as long as they're
+		// not used by the filter.
+		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		relational.Rule.PruneCols = inputPruneCols.Difference(ev.Child(1).Logical().OuterCols())
+
+	case opt.ProjectOp:
+		// All columns can potentially be pruned from the Project, if they're never
+		// used in a higher-level expression.
+		relational.Rule.PruneCols = relational.OutputCols
+
+	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
+		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		// Any pruneable columns from projected inputs can potentially be pruned, as
+		// long as they're not used by the right input (i.e. in Apply case) or by
+		// the join filter.
+		leftPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		rightPruneCols := c.candidatePruneCols(ev.ChildGroup(1))
+
+		switch ev.Operator() {
+		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+			relational.Rule.PruneCols = leftPruneCols.Copy()
+
+		default:
+			relational.Rule.PruneCols = leftPruneCols.Union(rightPruneCols)
+		}
+		relational.Rule.PruneCols.DifferenceWith(ev.Child(1).Logical().OuterCols())
+		relational.Rule.PruneCols.DifferenceWith(ev.Child(2).Logical().OuterCols())
+
+	case opt.GroupByOp, opt.ScalarGroupByOp:
+		// Grouping columns can't be pruned, because they were used to group rows.
+		// However, aggregation columns can potentially be pruned.
+		groupingColSet := ev.Private().(*memo.GroupByDef).GroupingCols
+		if groupingColSet.Empty() {
+			relational.Rule.PruneCols = relational.OutputCols
+		} else {
+			relational.Rule.PruneCols = relational.OutputCols.Difference(groupingColSet)
+		}
+
+	case opt.LimitOp, opt.OffsetOp:
+		// Any pruneable input columns can potentially be pruned, as long as
+		// they're not used as an ordering column.
+		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		ordering := ev.Private().(*props.OrderingChoice).ColSet()
+		relational.Rule.PruneCols = inputPruneCols.Difference(ordering)
+
+	case opt.RowNumberOp:
+		// Any pruneable input columns can potentially be pruned, as long as
+		// they're not used as an ordering column. The new row number column
+		// cannot be pruned without adding an additional Project operator, so
+		// don't add it to the set.
+		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		ordering := ev.Private().(*memo.RowNumberDef).Ordering.ColSet()
+		relational.Rule.PruneCols = inputPruneCols.Difference(ordering)
+
+	case opt.IndexJoinOp, opt.LookupJoinOp:
+		// There is no need to prune columns projected by Index or Lookup joins,
+		// since its parent will always be an "alternate" expression in the memo.
+		// Any pruneable columns should have already been pruned at the time the
+		// IndexJoin is constructed. Additionally, there is not currently a
+		// PruneCols rule for these operators.
+
+	default:
+		// Don't allow any columns to be pruned, since that would trigger the
+		// creation of a wrapper Project around an operator that does not have
+		// a pruning rule that will eliminate that Project.
+	}
+
+	return relational.Rule.PruneCols
 }
 
 // filterColList removes columns not in colWhitelist from a list of groups and

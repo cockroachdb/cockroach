@@ -2746,6 +2746,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				LeftOrdering:  mergeOrdering,
 				RightOrdering: mergeOrdering,
 				Type:          joinType,
+				NullEquality:  true,
 			}
 		}
 

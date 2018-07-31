@@ -24,9 +24,10 @@ import (
 // props.Logical.Rule.InterestingOrderings property of a relational operator.
 func GetInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 	l := ev.Logical().Relational
-	if l.Rule.InterestingOrderings != nil {
+	if l.IsAvailable(props.InterestingOrderings) {
 		return l.Rule.InterestingOrderings
 	}
+	l.SetAvailable(props.InterestingOrderings)
 
 	var res opt.OrderingSet
 	switch ev.Operator() {

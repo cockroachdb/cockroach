@@ -386,7 +386,7 @@
 (Select
     $input:*
     $filter:* &
-        (HasCorrelatedSubquery $filter) &
+        (HasHoistableSubquery $filter) &
         (Filters
             $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
         )
@@ -410,7 +410,7 @@
 (Select
     $input:*
     $filter:* &
-        (HasCorrelatedSubquery $filter) &
+        (HasHoistableSubquery $filter) &
         (Filters
             $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
         )
@@ -440,7 +440,7 @@
 [HoistSelectSubquery, Normalize, LowPriority]
 (Select
     $input:*
-    $filter:* & (HasCorrelatedSubquery $filter) & (Filters)
+    $filter:* & (HasHoistableSubquery $filter) & (Filters)
 )
 =>
 (HoistSelectSubquery $input $filter)
@@ -453,7 +453,7 @@
 [HoistProjectSubquery, Normalize, LowPriority]
 (Project
     $input:*
-    $projections:* & (HasCorrelatedSubquery $projections)
+    $projections:* & (HasHoistableSubquery $projections)
 )
 =>
 (HoistProjectSubquery $input $projections)
@@ -467,7 +467,7 @@
 (Join
     $left:*
     $right:*
-    $on:* & (HasCorrelatedSubquery $on) & (Filters)
+    $on:* & (HasHoistableSubquery $on) & (Filters)
 )
 =>
 (HoistJoinSubquery (OpName) $left $right $on)
@@ -479,7 +479,7 @@
 # This rule is marked as low priority for the same reason as HoistSelectExists.
 [HoistValuesSubquery, Normalize, LowPriority]
 (Values
-    $rows:[ ... $item:* & (HasCorrelatedSubquery $item) ... ]
+    $rows:[ ... $item:* & (HasHoistableSubquery $item) ... ]
     $cols:*
 )
 =>
