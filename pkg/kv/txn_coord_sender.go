@@ -112,12 +112,8 @@ type TxnCoordSender struct {
 		// TODO(andrei): let's get rid of this. It should be maintained
 		// in the SQL level.
 		commandCount int32
-		// lastUpdateNanos is the latest wall time in nanos the client sent
-		// transaction operations to this coordinator. Accessed and updated
-		// atomically.
-		lastUpdateNanos int64
-		// Analogous to lastUpdateNanos, this is the wall time at which the
-		// transaction was instantiated.
+		// firstUpdateNanos is the wall time at which the transaction was
+		// instantiated.
 		firstUpdateNanos int64
 		// txnEnd is closed when the transaction is aborted or committed,
 		// terminating the heartbeat loop.
@@ -1055,7 +1051,6 @@ func (tc *TxnCoordSender) updateStateLocked(
 	if responseTxn != nil {
 		tc.mu.txn.Update(responseTxn)
 	}
-	tc.mu.lastUpdateNanos = tc.clock.PhysicalNow()
 
 	if pErr != nil {
 		// On rollback error, stop the heartbeat loop. No more requests can come
