@@ -569,7 +569,8 @@ func TestOfficializeAddr(t *testing.T) {
 			"notarealhost.local.:0",
 			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
 			os.Hostname,
-		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: no such host") {
+		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: no such host") &&
+			!testutils.IsError(err, `unable to lookup hostname "notarealhost.local."`) {
 			// On Linux but not on macOS, the error returned from
 			// (*net.Resolver).LookupHost reports the DNS server used; permit
 			// both.
