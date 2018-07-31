@@ -831,10 +831,11 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	}
 
 	return &subquery{
-		cols:     outScope.cols,
-		group:    outScope.group,
-		multiRow: multiRow,
-		expr:     sub,
+		cols:          outScope.cols,
+		group:         outScope.group,
+		physicalProps: outScope.physicalProps,
+		multiRow:      multiRow,
+		expr:          sub,
 	}
 }
 

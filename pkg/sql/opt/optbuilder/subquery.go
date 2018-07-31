@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -31,6 +32,11 @@ type subquery struct {
 
 	// group is the top level memo GroupID of the subquery.
 	group memo.GroupID
+
+	// physicalProps is the physical properties requested by the subquery.
+	// These props are only consulted in certain cases, however (such as the
+	// ArrayFlatten operation).
+	physicalProps props.Physical
 
 	// Is the subquery in a multi-row or single-row context?
 	multiRow bool

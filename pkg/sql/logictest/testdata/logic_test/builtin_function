@@ -1539,20 +1539,14 @@ SELECT array_upper(ARRAY[]:::int[], 1)
 ----
 NULL
 
-query I
+statement error arrays of int\[\] not allowed
 SELECT array_length(ARRAY[ARRAY[1, 2]], 2)
-----
-2
 
-query I
+statement error arrays of int\[\] not allowed
 SELECT array_lower(ARRAY[ARRAY[1, 2]], 2)
-----
-1
 
-query I
+statement error arrays of int\[\] not allowed
 SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
-----
-2
 
 query T
 SELECT encode('\xa7', 'hex')

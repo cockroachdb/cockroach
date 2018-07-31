@@ -217,3 +217,21 @@ join       ·      ·            (x, z)  ·
 
 query error could not decorrelate subquery
 SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
+----
+root                 ·            ·                       ("array")  ·
+ ├── render          ·            ·                       ("array")  ·
+ │    │              render 0     COALESCE(@S1, ARRAY[])  ·          ·
+ │    └── emptyrow   ·            ·                       ()         ·
+ └── subquery        ·            ·                       ("array")  ·
+      │              id           @S1                     ·          ·
+      │              sql          <unknown>               ·          ·
+      │              exec mode    one row                 ·          ·
+      └── group      ·            ·                       (agg0)     ·
+           │         aggregate 0  array_agg(x)            ·          ·
+           │         scalar       ·                       ·          ·
+           └── scan  ·            ·                       (x)        ·
+·                    table        b@primary               ·          ·
+·                    spans        ALL                     ·          ·
