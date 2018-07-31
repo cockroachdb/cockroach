@@ -267,6 +267,9 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 	if _, err := cfg.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
+	if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+		return nil, err
+	}
 	if _, err := cfg.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
@@ -282,6 +285,7 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
 func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
@@ -294,6 +298,28 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	}
 
 	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a TLS config configured to talk to the Admin UI.
+// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
+func (cfg *Config) GetUIClientTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+
+	tlsCfg, err := cm.GetUIClientTLSConfig()
 	if err != nil {
 		return nil, didYouMeanInsecureError(err)
 	}
@@ -321,6 +347,27 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
+// GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a server UI TLS config.
+func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+
+	tlsCfg, err := cm.GetUIServerTLSConfig()
+	if err != nil {
+		return nil, didYouMeanInsecureError(err)
+	}
+	return tlsCfg, nil
+}
+
 // GetHTTPClient returns the http client, initializing it
 // if needed. It uses the client TLS config.
 func (cfg *Config) GetHTTPClient() (http.Client, error) {
@@ -328,7 +375,7 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 		cfg.httpClient.httpClient.Timeout = 10 * time.Second
 		var transport http.Transport
 		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()
+		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetUIClientTLSConfig()
 	})
 
 	return cfg.httpClient.httpClient, cfg.httpClient.err

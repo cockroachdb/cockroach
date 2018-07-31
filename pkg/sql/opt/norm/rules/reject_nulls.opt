@@ -126,7 +126,7 @@
         $aggregations:*
         $def:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (NullRejectCols $input))
+    $filter:(Filters) & (HasNullRejectingFilter $filter (RejectNullCols $input))
 )
 =>
 (Select

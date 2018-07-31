@@ -149,6 +149,45 @@ func GenerateServerCert(
 	return certBytes, nil
 }
 
+// GenerateUIServerCert generates a server certificate for the Admin UI and returns the cert bytes.
+// Takes in the CA cert and private key, the UI cert public key, the certificate lifetime,
+// and the list of hosts/ip addresses this certificate applies to.
+func GenerateUIServerCert(
+	caCert *x509.Certificate,
+	caPrivateKey crypto.PrivateKey,
+	certPublicKey crypto.PublicKey,
+	lifetime time.Duration,
+	hosts []string,
+) ([]byte, error) {
+	// Use the first host as the CN. We still place all in the alternative subject name.
+	template, err := newTemplate(hosts[0], lifetime)
+	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
+	// Only server authentication is allowed.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, certPublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
 // GenerateClientCert generates a client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the client public key, the certificate lifetime,
 // and the username.

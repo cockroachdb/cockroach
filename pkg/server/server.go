@@ -1020,12 +1020,12 @@ func (s *Server) Start(ctx context.Context) error {
 	startTime := timeutil.Now()
 	s.startMonitoringForwardClockJumps(ctx)
 
-	tlsConfig, err := s.cfg.GetServerTLSConfig()
+	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()
 	if err != nil {
 		return err
 	}
 
-	httpServer := netutil.MakeServer(s.stopper, tlsConfig, s)
+	httpServer := netutil.MakeServer(s.stopper, uiTLSConfig, s)
 
 	// The following code is a specialization of util/net.go's ListenAndServe
 	// which adds pgwire support. A single port is used to serve all protocols
@@ -1103,7 +1103,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
-	if tlsConfig != nil {
+	if uiTLSConfig != nil {
 		httpMux := cmux.New(httpLn)
 		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
@@ -1119,12 +1119,12 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 			mux.Handle("/health", s)
 
-			plainRedirectServer := netutil.MakeServer(s.stopper, tlsConfig, mux)
+			plainRedirectServer := netutil.MakeServer(s.stopper, uiTLSConfig, mux)
 
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		})
 
-		httpLn = tls.NewListener(tlsL, tlsConfig)
+		httpLn = tls.NewListener(tlsL, uiTLSConfig)
 	}
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {

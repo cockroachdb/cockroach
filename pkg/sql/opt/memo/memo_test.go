@@ -28,6 +28,12 @@ func TestMemo(t *testing.T) {
 	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
+func TestLogicalPropsBuilder(t *testing.T) {
+	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+	runDataDrivenTest(t, "testdata/logprops/", flags)
+	runDataDrivenTest(t, "testdata/stats/", flags)
+}
+
 // runDataDrivenTest runs data-driven testcases of the form
 //   <command>
 //   <SQL statement>
