@@ -536,7 +536,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 	g.GoCtx(func(ctx context.Context) error {
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
-		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsableNumerics)
 		defer f.Close()
 		for vals := range valsCh {
 			f.Reset()
