@@ -20,11 +20,15 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -117,5 +121,83 @@ func TestOpenReadOnlyStore(t *testing.T) {
 				t.Fatalf("wanted %s but got %v", test.expErr, err)
 			}
 		})
+	}
+}
+
+func TestRemoveDeadReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	baseDir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	// The first node gets a real store, others are just in memory.
+	storePath := filepath.Join(baseDir, "store")
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				StoreSpecs:      []base.StoreSpec{{Path: storePath}},
+				ScanMaxIdleTime: time.Millisecond,
+			},
+		},
+	}
+	// Start the cluster, let it replicate, then stop it. Since two
+	// nodes use in-memory stores, this automatically causes the cluster
+	// to lose its quorum.
+	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
+	tc.Stopper().Stop(ctx)
+
+	// Open the store directly to repair it.
+	func() {
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		db, err := openExistingStore(storePath, stopper, false /* readOnly */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		batch, err := removeDeadReplicas(db, map[roachpb.StoreID]struct{}{
+			2: struct{}{},
+			3: struct{}{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch == nil {
+			t.Fatal("expected non-nil batch")
+		}
+		if err := batch.Commit(true); err != nil {
+			t.Fatal(err)
+		}
+		batch.Close()
+
+		// The repair process is idempotent and should give a nil batch the second time.
+		batch, err = removeDeadReplicas(db, map[roachpb.StoreID]struct{}{
+			2: struct{}{},
+			3: struct{}{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch != nil {
+			t.Fatalf("expected nil batch on second attempt")
+		}
+	}()
+
+	// Now that the data is salvaged, we can restart the cluster. The
+	// nodes with the in-memory stores will be assigned new node IDs 4
+	// and 5. StartTestCluster will even wait for all the ranges to be
+	// replicated to the new nodes.
+	tc = testcluster.StartTestCluster(t, 3, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	s := sqlutils.MakeSQLRunner(tc.Conns[0])
+	row := s.QueryRow(t, "select replicas from [show experimental_ranges from table system.namespace] limit 1")
+	var replicaStr string
+	row.Scan(&replicaStr)
+	if replicaStr != "{1,4,5}" {
+		t.Fatalf("expected replicas on {1,4,5} but got %s", replicaStr)
 	}
 }
