@@ -1905,3 +1905,67 @@ select
                                │              └── max [type=string]
                                │                   └── variable: a.s [type=string]
                                └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE t (a string)
+----
+TABLE t
+ ├── a string
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE u (b string)
+----
+TABLE u
+ ├── b string
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #27846. Ensure that an aggregate combined with ANY does
+# not cause a panic.
+build
+SELECT max(a) FROM t HAVING max(a) < ANY(SELECT b FROM u)
+----
+select
+ ├── columns: max:5(string)
+ ├── scalar-group-by
+ │    ├── columns: column5:5(string)
+ │    ├── project
+ │    │    ├── columns: a:1(string)
+ │    │    └── scan t
+ │    │         └── columns: a:1(string) t.rowid:2(int!null)
+ │    └── aggregations
+ │         └── max [type=string]
+ │              └── variable: t.a [type=string]
+ └── filters [type=bool]
+      └── any: lt [type=bool]
+           ├── project
+           │    ├── columns: b:3(string)
+           │    └── scan u
+           │         └── columns: b:3(string) u.rowid:4(int!null)
+           └── variable: column5 [type=string]
+
+build
+SELECT min(a) IN (SELECT b FROM u) FROM t
+----
+project
+ ├── columns: "?column?":6(bool)
+ ├── scalar-group-by
+ │    ├── columns: column5:5(string)
+ │    ├── project
+ │    │    ├── columns: a:1(string)
+ │    │    └── scan t
+ │    │         └── columns: a:1(string) t.rowid:2(int!null)
+ │    └── aggregations
+ │         └── min [type=string]
+ │              └── variable: t.a [type=string]
+ └── projections
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: b:3(string)
+           │    └── scan u
+           │         └── columns: b:3(string) u.rowid:4(int!null)
+           └── variable: column5 [type=string]
