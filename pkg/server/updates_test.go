@@ -530,32 +530,32 @@ func TestReportUsage(t *testing.T) {
 
 	var foundKeys []string
 	for _, s := range r.last.SqlStats {
-		foundKeys = append(foundKeys, fmt.Sprintf("[%v,%v] %s", s.Key.DistSQL, s.Key.Failed, s.Key.Query))
+		foundKeys = append(foundKeys, fmt.Sprintf("[%v,%v,%v] %s", s.Key.Opt, s.Key.DistSQL, s.Key.Failed, s.Key.Query))
 	}
 	sort.Strings(foundKeys)
 	expectedKeys := []string{
-		`[false,false] ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
-		`[false,false] ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
-		`[false,false] CREATE DATABASE _`,
-		`[false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
-		`[false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
-		`[false,false] INSERT INTO _ VALUES (_), (__more2__)`,
-		`[false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
-		`[false,false] INSERT INTO _(_, _) VALUES (_, _)`,
-		`[false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-		`[false,false] SET CLUSTER SETTING "cluster.organization" = _`,
-		`[false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
-		`[false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
-		`[false,false] SET application_name = DEFAULT`,
-		`[false,false] SET application_name = _`,
-		`[false,false] UPDATE _ SET _ = _ + _`,
-		`[false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
-		`[false,true] SELECT _ / $1`,
-		`[false,true] SELECT _ / _`,
-		`[false,true] SELECT crdb_internal.force_error(_, $1)`,
-		`[true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
-		`[true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
-		`[true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
+		`[false,false,false] ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
+		`[false,false,false] ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
+		`[false,false,false] CREATE DATABASE _`,
+		`[false,false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
+		`[false,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
+		`[false,false,false] INSERT INTO _ VALUES (_), (__more2__)`,
+		`[false,false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
+		`[false,false,false] INSERT INTO _(_, _) VALUES (_, _)`,
+		`[false,false,false] SET CLUSTER SETTING "cluster.organization" = _`,
+		`[false,false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
+		`[false,false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+		`[false,false,false] SET application_name = DEFAULT`,
+		`[false,false,false] SET application_name = _`,
+		`[false,false,false] UPDATE _ SET _ = _ + _`,
+		`[false,false,true] CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
+		`[false,false,true] SELECT crdb_internal.force_error(_, $1)`,
+		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+		`[true,false,true] SELECT _ / $1`,
+		`[true,false,true] SELECT _ / _`,
+		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
+		`[true,true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 	}
 	t.Logf("expected:\n%s\ngot:\n%s", pretty.Sprint(expectedKeys), pretty.Sprint(foundKeys))
 	for i, found := range foundKeys {
