@@ -86,6 +86,11 @@ SELECT ARRAY['foo', 'bar']
 # array construction from subqueries
 
 query T
+SELECT ARRAY(SELECT 3 WHERE false)
+----
+{}
+
+query T
 SELECT ARRAY(SELECT 3)
 ----
 {3}
@@ -95,10 +100,18 @@ SELECT ARRAY(VALUES (1),(2),(1))
 ----
 {1,2,1}
 
+statement error arrays cannot have arrays as element type
+SELECT ARRAY(VALUES (ARRAY[1]))
+
 query T
 SELECT ARRAY(VALUES ('a'),('b'),('c'))
 ----
 {"a","b","c"}
+
+query T
+SELECT ARRAY(SELECT (1,2))
+----
+{"(1,2)"}
 
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)
@@ -279,6 +292,11 @@ query T
 SELECT (SELECT ARRAY['a', 'b', 'c'])[3]
 ----
 c
+
+query T
+SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC);
+----
+{10,9,8,7,6,5,4,3,2,1}
 
 # From a function call expression.
 query T

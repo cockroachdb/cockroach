@@ -842,6 +842,7 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	return &subquery{
 		cols:     outScope.cols,
 		group:    outScope.group,
+		ordering: outScope.ordering,
 		multiRow: multiRow,
 		expr:     sub,
 	}
