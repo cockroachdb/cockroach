@@ -1541,9 +1541,12 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			select {
 			case decommissionSem <- struct{}{}:
 				s.stopper.RunWorker(ctx, func(context.Context) {
-					// Don't use the passed in ctx because there is an associated timeout
-					// meant to be used when heartbeating.
-					ctx := context.Background()
+					// Don't use the passed in ctx because there is an associated
+					// timeout meant to be used when heartbeating. Instead, tie the
+					// context to the stopper so that the drain attempt stops without
+					// blocking if the server starts shutting down.
+					ctx, done := s.stopper.WithCancelOnQuiesce(context.Background())
+					defer done()
 
 					defer func() {
 						<-decommissionSem
