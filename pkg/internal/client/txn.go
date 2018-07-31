@@ -1035,7 +1035,7 @@ func (txn *Txn) Send(
 			if len(txn.mu.Proto.Key) == 0 {
 				txnAnchorKey := txn.mu.txnAnchorKey
 				if len(txnAnchorKey) == 0 {
-					txnAnchorKey = ba.Requests[0].GetInner().Header().Key
+					txnAnchorKey = ba.Requests[firstWriteIdx].GetInner().Header().Key
 				}
 				txn.mu.Proto.Key = txnAnchorKey
 			}
