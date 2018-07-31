@@ -4,6 +4,10 @@ interface LoadingProps {
   loading: boolean;
   className: string;
   image: string;
+  // The render function should probably be the only API, but currently
+  // it will be used if it is there, and fall back to children if it is not.
+  // TODO(vilterp): migrate all usages of Loading to use render prop.
+  render?: () => JSX.Element;
   children?: React.ReactNode;
 }
 
@@ -17,6 +21,9 @@ export default function Loading(props: LoadingProps) {
   };
   if (props.loading) {
     return <div className={props.className} style={image} />;
+  }
+  if (props.render) {
+    return props.render();
   }
 
   // This throws an error if more than one child is passed.
