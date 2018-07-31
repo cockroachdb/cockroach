@@ -41,6 +41,7 @@ import (
 )
 
 func TestCDC(t *testing.T) {
+	t.Skip("#28102")
 	s := log.Scope(t)
 	defer s.Close(t)
 
