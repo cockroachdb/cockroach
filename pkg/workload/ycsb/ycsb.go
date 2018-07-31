@@ -130,6 +130,8 @@ func (g *ycsb) Hooks() workload.Hooks {
 				return errors.New("Workload E (scans) not implemented yet")
 			case "F", "f":
 				g.insertFreq = 1.0
+			default:
+				return errors.Errorf("Unknown workload: %q", g.workload)
 			}
 			return nil
 		},
