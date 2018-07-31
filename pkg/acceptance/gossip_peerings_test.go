@@ -167,16 +167,13 @@ func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c clus
 			t.Fatal(err)
 		}
 		if i == 0 {
-			if _, err := db.Exec("DROP DATABASE IF EXISTS test"); err != nil {
+			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("CREATE DATABASE test"); err != nil {
+			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("CREATE TABLE test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.Exec(`INSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
+			if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
 				t.Fatal(err)
 			}
 		}
