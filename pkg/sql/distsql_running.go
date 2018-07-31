@@ -221,7 +221,15 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = flows[thisNodeID]
-	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
+	var flow *distsqlrun.Flow
+	var err error
+	if len(flows) > 1 {
+		ctx, flow, err = dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
+	} else {
+		// If we are only running this local flow, we can setup the flow with
+		// the root txn.
+		ctx, flow, err = dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, txn)
+	}
 	if err != nil {
 		recv.SetError(err)
 		return
