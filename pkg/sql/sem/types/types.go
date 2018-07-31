@@ -505,6 +505,9 @@ func IsValidArrayElementType(t T) bool {
 	case JSON:
 		return false
 	default:
+		if _, ok := t.(TArray); ok {
+			return false
+		}
 		return true
 	}
 }

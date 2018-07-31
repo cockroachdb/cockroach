@@ -30,6 +30,14 @@ import (
 type unaryFactoryFunc func(f *norm.Factory, input memo.GroupID) memo.GroupID
 type binaryFactoryFunc func(f *norm.Factory, left, right memo.GroupID) memo.GroupID
 
+func checkArrayElementType(t types.T) error {
+	if !types.IsValidArrayElementType(t) {
+		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			"arrays of %s not allowed", t)
+	}
+	return nil
+}
+
 // Map from tree.ComparisonOperator to Factory constructor function.
 var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
 	tree.EQ:                (*norm.Factory).ConstructEq,
@@ -152,9 +160,8 @@ func (b *Builder) buildScalarHelper(
 		els := make([]memo.GroupID, len(t.Exprs))
 		arrayType := t.ResolvedType()
 		elementType := arrayType.(types.TArray).Typ
-		if !types.IsValidArrayElementType(elementType) {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-				"arrays of %s not allowed", elementType)})
+		if err := checkArrayElementType(elementType); err != nil {
+			panic(builderError{err})
 		}
 		for i := range t.Exprs {
 			texpr := inScope.resolveType(t.Exprs[i], elementType)
@@ -162,6 +169,63 @@ func (b *Builder) buildScalarHelper(
 		}
 		elements := b.factory.InternList(els)
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
+
+	case *tree.ArrayFlatten:
+		// We build
+		//
+		//  ARRAY(<subquery>)
+		//
+		// as
+		//
+		//   COALESCE(
+		//     (SELECT array_agg(x) FROM (<subquery>)),
+		//     ARRAY[]
+		//   )
+		//
+		// The COALESCE is needed because ARRAY(<empty subquery>) needs to return
+		// an empty array, while ARRAY_AGG with no inputs returns NULL.
+
+		s := t.Subquery.(*subquery)
+		aggInputColID := s.cols[0].id
+
+		elemType := b.factory.Metadata().ColumnType(aggInputColID)
+		if err := checkArrayElementType(elemType); err != nil {
+			panic(builderError{err})
+		}
+
+		if _, ok := elemType.(types.TTuple); ok {
+			// We build this into ARRAY_AGG which doesn't support non-scalar types.
+			panic(unimplementedf("can't build ARRAY(<tuple>)"))
+		}
+
+		aggColID := b.factory.Metadata().AddColumn(
+			"array_agg",
+			types.TArray{Typ: elemType},
+		)
+
+		typID := b.factory.InternType(types.TArray{Typ: elemType})
+
+		out = b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{
+			b.factory.ConstructSubquery(
+				b.factory.ConstructScalarGroupBy(
+					s.group,
+					b.factory.ConstructAggregations(
+						b.factory.InternList([]memo.GroupID{
+							b.factory.ConstructArrayAgg(
+								b.factory.ConstructVariable(
+									b.factory.InternColumnID(aggInputColID),
+								),
+							),
+						}),
+						b.factory.InternColList(opt.ColList{aggColID}),
+					),
+					b.factory.InternGroupByDef(&memo.GroupByDef{
+						Ordering: s.physicalProps.Ordering,
+					}),
+				),
+			),
+			b.factory.ConstructArray(memo.EmptyList, typID),
+		}))
 
 	case *tree.BinaryExpr:
 		// It's possible for an overload to be selected that expects different
