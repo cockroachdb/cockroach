@@ -107,7 +107,7 @@ sort
  ├── columns: d:4(int)
  ├── key: (4)
  ├── ordering: +4
- └── group-by
+ └── distinct-on
       ├── columns: d:4(int)
       ├── grouping columns: d:4(int)
       ├── key: (4)

@@ -398,7 +398,7 @@ project
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]
  │    ├── key: (3,4)
- │    ├── group-by
+ │    ├── distinct-on
  │    │    ├── columns: f:3(float) s:4(string)
  │    │    ├── grouping columns: f:3(float) s:4(string)
  │    │    ├── key: (3,4)
@@ -621,7 +621,7 @@ project
  │    ├── offset
  │    │    ├── columns: f:3(float) s:4(string)
  │    │    ├── key: (3,4)
- │    │    ├── group-by
+ │    │    ├── distinct-on
  │    │    │    ├── columns: f:3(float) s:4(string)
  │    │    │    ├── grouping columns: f:3(float) s:4(string)
  │    │    │    ├── key: (3,4)
@@ -1213,7 +1213,7 @@ project
 opt
 SELECT s FROM (SELECT s, sum(i), min(s||'foo') FROM a GROUP BY s) a
 ----
-group-by
+distinct-on
  ├── columns: s:4(string)
  ├── grouping columns: s:4(string)
  ├── key: (4)
@@ -1242,7 +1242,7 @@ SELECT 1 r FROM (SELECT s FROM a GROUP BY s) a
 project
  ├── columns: r:5(int!null)
  ├── fd: ()-->(5)
- ├── group-by
+ ├── distinct-on
  │    ├── columns: s:4(string)
  │    ├── grouping columns: s:4(string)
  │    ├── key: (4)
@@ -1334,7 +1334,7 @@ SELECT s, i+1 AS r FROM a GROUP BY i, s
 ----
 project
  ├── columns: s:4(string) r:5(int)
- ├── group-by
+ ├── distinct-on
  │    ├── columns: i:2(int) s:4(string)
  │    ├── grouping columns: i:2(int) s:4(string)
  │    ├── key: (2,4)
@@ -1372,7 +1372,7 @@ group-by
 opt
 SELECT DISTINCT s, f FROM a
 ----
-group-by
+distinct-on
  ├── columns: s:4(string) f:3(float)
  ├── grouping columns: f:3(float) s:4(string)
  ├── key: (3,4)

@@ -259,11 +259,8 @@ EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
 ----
 render               ·            ·
  │                   render 0     v
- └── group           ·            ·
-      │              aggregate 0  v
-      │              aggregate 1  w
-      │              aggregate 2  s
-      │              group by     @1-@3
+ └── distinct        ·            ·
+      │              distinct on  v, w, s
       └── join       ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -838,10 +835,8 @@ EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
 render                    ·            ·                                          (a int)                        ·
  │                        render 0     (1)[int]                                   ·                              ·
- └── group                ·            ·                                          ("kv.v" int, column5 decimal)  ·
-      │                   aggregate 0  kv.v                                       ·                              ·
-      │                   aggregate 1  column5                                    ·                              ·
-      │                   group by     @2,@1                                      ·                              ·
+ └── distinct             ·            ·                                          (column5 decimal, "kv.v" int)  weak-key(column5,"kv.v")
+      │                   distinct on  column5, kv.v                              ·                              ·
       └── filter          ·            ·                                          (column5 decimal, "kv.v" int)  ·
            │              filter       ((column5)[decimal] > (1)[decimal])[bool]  ·                              ·
            └── render     ·            ·                                          (column5 decimal, "kv.v" int)  ·

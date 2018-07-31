@@ -153,7 +153,7 @@ limit
  ├── sort
  │    ├── columns: v:2(int)
  │    ├── ordering: +2
- │    └── group-by
+ │    └── distinct-on
  │         ├── columns: v:2(int)
  │         ├── grouping columns: v:2(int)
  │         └── project
@@ -280,7 +280,7 @@ limit
  ├── sort
  │    ├── columns: w:3(int)
  │    ├── ordering: +3
- │    └── group-by
+ │    └── distinct-on
  │         ├── columns: w:3(int)
  │         ├── grouping columns: w:3(int)
  │         └── limit

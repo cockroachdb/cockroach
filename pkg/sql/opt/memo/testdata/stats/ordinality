@@ -149,7 +149,7 @@ select
 build
 SELECT DISTINCT ordinality FROM (SELECT * FROM a WITH ORDINALITY)
 ----
-group-by
+distinct-on
  ├── columns: ordinality:3(int!null)
  ├── grouping columns: ordinality:3(int!null)
  ├── stats: [rows=4000, distinct(3)=4000]

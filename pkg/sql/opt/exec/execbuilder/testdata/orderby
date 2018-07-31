@@ -42,14 +42,12 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 render                    ·            ·          (c, b)  ·
  │                        render 0     c          ·       ·
  │                        render 1     b          ·       ·
- └── limit                ·            ·          (b, c)  +b
+ └── limit                ·            ·          (b, c)  weak-key(b,c); +b
       │                   count        2          ·       ·
-      └── sort            ·            ·          (b, c)  +b
+      └── sort            ·            ·          (b, c)  weak-key(b,c); +b
            │              order        +b         ·       ·
-           └── group      ·            ·          (b, c)  ·
-                │         aggregate 0  b          ·       ·
-                │         aggregate 1  c          ·       ·
-                │         group by     @1-@2      ·       ·
+           └── distinct   ·            ·          (b, c)  weak-key(b,c)
+                │         distinct on  b, c       ·       ·
                 └── scan  ·            ·          (b, c)  ·
 ·                         table        t@primary  ·       ·
 ·                         spans        ALL        ·       ·

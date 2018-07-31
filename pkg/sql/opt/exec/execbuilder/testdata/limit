@@ -26,13 +26,12 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
 tree                           field        description  columns  ordering
-limit                          ·            ·            (w)      +w
+limit                          ·            ·            (w)      weak-key(w); +w
  │                             count        25           ·        ·
- └── sort                      ·            ·            (w)      +w
+ └── sort                      ·            ·            (w)      weak-key(w); +w
       │                        order        +w           ·        ·
-      └── group                ·            ·            (w)      ·
-           │                   aggregate 0  w            ·        ·
-           │                   group by     @1           ·        ·
+      └── distinct             ·            ·            (w)      weak-key(w); +w
+           │                   distinct on  w            ·        ·
            └── limit           ·            ·            (w)      +w
                 │              count        100          ·        ·
                 └── sort       ·            ·            (w)      +w
