@@ -816,8 +816,8 @@ func (node *ListPartition) Format(ctx *FmtCtx) {
 // RangePartition represents a PARTITION definition within a PARTITION BY RANGE.
 type RangePartition struct {
 	Name         UnrestrictedName
-	From         Expr
-	To           Expr
+	From         Exprs
+	To           Exprs
 	Subpartition *PartitionBy
 }
 
@@ -825,10 +825,11 @@ type RangePartition struct {
 func (node *RangePartition) Format(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(` VALUES FROM `)
-	ctx.FormatNode(node.From)
-	ctx.WriteString(` TO `)
-	ctx.FormatNode(node.To)
+	ctx.WriteString(` VALUES FROM (`)
+	ctx.FormatNode(&node.From)
+	ctx.WriteString(`) TO (`)
+	ctx.FormatNode(&node.To)
+	ctx.WriteByte(')')
 	if node.Subpartition != nil {
 		ctx.FormatNode(node.Subpartition)
 	}
