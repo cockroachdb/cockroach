@@ -342,6 +342,14 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	}
 }
 
+func (b *Builder) resolveTableRef(ref *tree.TableRef) opt.Table {
+	tab, err := b.catalog.FindTableByTableRef(b.ctx, ref.TableID)
+	if err != nil {
+		panic(builderError{err})
+	}
+	return tab
+}
+
 // resolveTable returns the table in the catalog with the given name.
 func (b *Builder) resolveTable(tn *tree.TableName) opt.Table {
 	tab, err := b.catalog.FindTable(b.ctx, tn)

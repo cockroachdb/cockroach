@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,6 +49,29 @@ var _ opt.Catalog = &optCatalog{}
 func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
+}
+
+func (oc *optCatalog) FindTableByTableRef(ctx context.Context, tableID int64) (opt.Table, error) {
+	// TODO(madhavsuresh): this does not completely mirror planner.getTableDescByID.
+	// It does not use the descriptorCache
+	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(tableID))
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
+
+	if oc.wrappers == nil {
+		oc.wrappers = make(map[*sqlbase.TableDescriptor]*optTable)
+	}
+	wrapper, ok := oc.wrappers[desc]
+	if !ok {
+		// Is this a normalized table name?
+		tbName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
+		wrapper = newOptTable(&tbName, oc.statsCache, desc)
+		oc.wrappers[desc] = wrapper
+	}
+	return wrapper, nil
 }
 
 // FindTable is part of the opt.Catalog interface.
@@ -212,11 +237,25 @@ func (ot *optTable) ensureColMap() {
 	}
 }
 
+// LookupColumnOrdinal exposes optTable.lookupColumnOrdinal.
+// In order to preserve the argument type information
+// on lookupColumnOrdinal, this wrapper function exists.
+// colID as the sqlbase.ColumnID type would result in a
+// circular dependency for catalog.Table - the interface this
+// implements.
+func (ot *optTable) LookupColumnOrdinal(colID uint32) (int, error) {
+	return ot.lookupColumnOrdinal(sqlbase.ColumnID(colID))
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) int {
+func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 	ot.ensureColMap()
-	return ot.colMap[colID]
+	col, ok := ot.colMap[colID]
+	if ok {
+		return col, nil
+	}
+	return col, error(fmt.Errorf("column [%d] does not exist", colID))
 }
 
 // optIndex is a wrapper around sqlbase.IndexDescriptor that caches some
@@ -266,7 +305,7 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 	if desc.Unique {
 		notNull := true
 		for _, id := range desc.ColumnIDs {
-			ord := tab.lookupColumnOrdinal(id)
+			ord, _ := tab.lookupColumnOrdinal(id)
 			if tab.desc.Columns[ord].Nullable {
 				notNull = false
 				break
@@ -323,7 +362,7 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 func (oi *optIndex) Column(i int) opt.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
-		ord := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
 		return opt.IndexColumn{
 			Column:     oi.tab.Column(ord),
 			Ordinal:    ord,
@@ -334,12 +373,12 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
-		ord := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
 		return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 	}
 
 	i -= length
-	ord := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
