@@ -968,11 +968,11 @@ c_expr ::=
 
 cast_target ::=
 	typename
-	| postgres_oid
 
 typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
+	| postgres_oid
 
 collation_name ::=
 	unrestricted_name
@@ -1314,13 +1314,6 @@ array_subscripts ::=
 case_expr ::=
 	'CASE' case_arg when_clause_list case_default 'END'
 
-postgres_oid ::=
-	'REGPROC'
-	| 'REGPROCEDURE'
-	| 'REGCLASS'
-	| 'REGTYPE'
-	| 'REGNAMESPACE'
-
 simple_typename ::=
 	const_typename
 	| bit_with_length
@@ -1330,6 +1323,13 @@ simple_typename ::=
 opt_array_bounds ::=
 	'[' ']'
 	| 
+
+postgres_oid ::=
+	'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGCLASS'
+	| 'REGTYPE'
+	| 'REGNAMESPACE'
 
 math_op ::=
 	'+'

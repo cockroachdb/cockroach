@@ -288,3 +288,13 @@ query B
 SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE proretset=false LIMIT 1
 ----
 false
+
+query TTTTT
+SELECT create_regtype(10, 'foo'), create_regclass(10, 'foo'), create_regproc(10, 'foo'), create_regprocedure(10, 'foo'), create_regnamespace(10, 'foo')
+----
+foo foo foo foo foo
+
+query OOOOO
+SELECT create_regtype(10, 'foo')::oid, create_regclass(10, 'foo')::oid, create_regproc(10, 'foo')::oid, create_regprocedure(10, 'foo')::oid, create_regnamespace(10, 'foo')::oid
+----
+10 10 10 10 10
