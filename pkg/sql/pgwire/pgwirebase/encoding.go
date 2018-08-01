@@ -478,6 +478,20 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
+		case oid.T_interval:
+			if len(b) < 16 {
+				return nil, errors.Errorf("interval requires 16 bytes for binary format")
+			}
+			nanos := (int64(binary.BigEndian.Uint64(b)) / int64(time.Nanosecond)) * int64(time.Microsecond)
+			days := int32(binary.BigEndian.Uint32(b[8:]))
+			months := int32(binary.BigEndian.Uint32(b[12:]))
+
+			duration := duration.Duration{
+				Nanos:  nanos,
+				Days:   int64(days),
+				Months: int64(months),
+			}
+			return &tree.DInterval{Duration: duration}, nil
 		case oid.T_uuid:
 			u, err := tree.ParseDUuidFromBytes(b)
 			if err != nil {
