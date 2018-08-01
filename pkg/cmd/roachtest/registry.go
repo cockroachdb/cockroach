@@ -50,6 +50,7 @@ func registerTests(r *registry) {
 	registerTPCC(r)
 	registerUpgrade(r)
 	registerVersion(r)
+	registerYCSB(r)
 }
 
 func registerBenchmarks(r *registry) {
