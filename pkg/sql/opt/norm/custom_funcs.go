@@ -180,8 +180,8 @@ func (c *CustomFuncs) HasOuterCols(group memo.GroupID) bool {
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.
 func (c *CustomFuncs) OnlyConstants(group memo.GroupID) bool {
-	// TODO(andyk): Consider impact of "impure" functions with side effects.
-	return c.LookupScalar(group).OuterCols.Empty()
+	scalar := c.LookupScalar(group)
+	return scalar.OuterCols.Empty() && !scalar.CanHaveSideEffects
 }
 
 // HasNoCols returns true if the group has zero output columns.

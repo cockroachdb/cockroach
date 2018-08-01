@@ -44,11 +44,38 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 	}
 
 	// If HasHoistableSubquery is true for any child, then it's true for this
-	// expression as well.
+	// expression as well. The exception is Case/If branches that have side
+	// effects. These can only be executed if the branch test evaluates to true,
+	// and so it's not possible to hoist out subqueries, since they would then be
+	// evaluated when they shouldn't be.
 	for i, end := 0, ev.ChildCount(); i < end; i++ {
-		if c.HasHoistableSubquery(ev.ChildGroup(i)) {
+		child := ev.Child(i)
+		if c.HasHoistableSubquery(child.Group()) {
 			scalar.Rule.HasHoistableSubquery = true
-			return true
+
+			// Look in CASE WHEN and ELSE branches:
+			//   (Case
+			//     $input:*
+			//     (When $cond1:* $branch1:*)  # optional
+			//     (When $cond2:* $branch2:*)  # optional
+			//     $else:*                     # optional
+			//   )
+			switch ev.Operator() {
+			case opt.CaseOp:
+				// Determine whether this is the Else child.
+				if i > 0 && child.Operator() != opt.WhenOp {
+					scalar.Rule.HasHoistableSubquery = !child.Logical().CanHaveSideEffects()
+				}
+
+			case opt.WhenOp:
+				if i == 1 {
+					scalar.Rule.HasHoistableSubquery = !child.Logical().CanHaveSideEffects()
+				}
+			}
+
+			if scalar.Rule.HasHoistableSubquery {
+				return true
+			}
 		}
 	}
 	return false

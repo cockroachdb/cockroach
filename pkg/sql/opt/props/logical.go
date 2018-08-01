@@ -97,6 +97,12 @@ type Relational struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
 	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
 	// relationships between columns in a base or derived relation. Given two sets
 	// of columns A and B, a functional dependency A-->B holds if A uniquely
@@ -254,6 +260,12 @@ type Scalar struct {
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
 	// Constraints is the set of constraints deduced from a boolean expression.
 	// For the expression to be true, all constraints in the set must be
 	// satisfied.
@@ -346,6 +358,79 @@ func (p *Logical) OuterCols() opt.ColSet {
 		return p.Scalar.OuterCols
 	}
 	return p.Relational.OuterCols
+}
+
+// CanHaveSideEffects is true if the expression modifies state outside its own
+// scope, or if depends upon state that may change across evaluations. An
+// expression can have side effects if it can do any of the following:
+//
+//   1. Trigger a run-time error
+//        10 / col                           -- division by zero error possible
+//        crdb_internal.force_error('', '')  -- triggers run-time error
+//
+//   2. Modify outside session or database state
+//        nextval(seq)                -- modifies database sequence value
+//        SELECT * FROM [INSERT ...]  -- inserts rows into database
+//
+//   3. Return different results when repeatedly called with same input
+//        ORDER BY random()       -- random can return different values
+//        ts < clock_timestamp()  -- clock_timestamp can return different values
+//
+// The optimizer makes *only* the following side-effect related guarantees:
+//
+//   1. CASE/IF branches are only evaluated if the branch condition is true.
+//      Therefore, the following is guaranteed to never raise a divide by zero
+//      error, regardless of how cleverly the optimizer rewrites the expression:
+//
+//        CASE WHEN divisor<>0 THEN dividend / divisor ELSE NULL END
+//
+//      While this example is trivial, a more complex example might have
+//      correlated subqueries that cannot be hoisted outside the CASE expression
+//      in the usual way, since that would trigger premature evaluation.
+//
+//   2. Expressions with side effects are never treated as constant expressions,
+//      even though they do not depend on other columns in the query:
+//
+//        SELECT * FROM xy ORDER BY random()
+//
+//      If the random() expression were treated as a constant, then the ORDER BY
+//      could be dropped by the optimizer, since ordering by a constant is a
+//      no-op. Instead, the optimizer treats it like it would an expression that
+//      depends upon a column.
+//
+//   3. A common table expression (CTE) with side effects will only be evaluated
+//      one time. This will typically prevent inlining of the CTE into the query
+//      body. For example:
+//
+//        WITH a AS (INSERT ... RETURNING ...) SELECT * FROM a, a
+//
+//      Although the "a" CTE is referenced twice, it must be evaluated only one
+//      time (and its results cached to satisfy the second reference).
+//
+// As long as the optimizer provides these guarantees, it is free to rewrite,
+// reorder, duplicate, and eliminate as if no side effects were present. As an
+// example, the optimizer is free to eliminate the unused "nextval" column in
+// this query:
+//
+//   SELECT x FROM (SELECT nextval(seq), x FROM xy)
+//   =>
+//   SELECT x FROM xy
+//
+// It's also allowed to duplicate side-effecting expressions during predicate
+// pushdown:
+//
+//   SELECT * FROM xy INNER JOIN xz ON xy.x=xz.x WHERE xy.x=random()
+//   =>
+//   SELECT *
+//   FROM (SELECT * FROM xy WHERE xy.x=random())
+//   INNER JOIN (SELECT * FROM xz WHERE xz.x=random())
+//   ON xy.x=xz.x
+//
+func (p *Logical) CanHaveSideEffects() bool {
+	if p.Scalar != nil {
+		return p.Scalar.CanHaveSideEffects
+	}
+	return p.Relational.CanHaveSideEffects
 }
 
 // Verify runs consistency checks against the logical properties, in order to
@@ -465,10 +550,6 @@ func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, 
 	buf.WriteByte('(')
 	buf.WriteString(typ.String())
 
-	if !p.Relational.NotNullCols.SubsetOf(p.Relational.OutputCols) {
-		panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
-			p.Relational.NotNullCols, p.Relational.OutputCols))
-	}
 	if p.Relational.NotNullCols.Contains(int(id)) {
 		buf.WriteString("!null")
 	}
