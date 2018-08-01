@@ -3721,8 +3721,8 @@ range_partition:
   {
     $$.val = tree.RangePartition{
       Name: tree.UnrestrictedName($1),
-      From: &tree.Tuple{Exprs: $5.exprs()},
-      To: &tree.Tuple{Exprs: $9.exprs()},
+      From: $5.exprs(),
+      To: $9.exprs(),
       Subpartition: $11.partitionBy(),
     }
   }
