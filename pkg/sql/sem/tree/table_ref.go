@@ -29,6 +29,7 @@ type TableRef struct {
 	// ColumnIDs is the list of column IDs requested in the table.
 	// Note that a nil array here means "unspecified" (all columns)
 	// whereas an array of length 0 means "zero columns".
+	// Lists of zero columns are not supported and will throw an error.
 	Columns []ColumnID
 
 	// As determines the names that can be used in the surrounding query

@@ -21,8 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -43,6 +45,17 @@ const (
 	// testDB is the default current database for testing purposes.
 	testDB = "t"
 )
+
+// FindTableByID is part of the opt.Catalog interface.
+func (tc *Catalog) FindTableByID(ctx context.Context, tableID int64) (opt.Table, error) {
+	for _, table := range tc.tables {
+		if int64(table.tableID) == tableID {
+			return table, nil
+		}
+	}
+	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+		"relation [%d] does not exist", tableID)
+}
 
 // FindTable is part of the opt.Catalog interface.
 func (tc *Catalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
@@ -170,6 +183,7 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 // Table implements the opt.Table interface for testing purposes.
 type Table struct {
 	Name      tree.TableName
+	tableID   sqlbase.ID
 	Columns   []*Column
 	Indexes   []*Index
 	Stats     TableStats
@@ -202,6 +216,15 @@ func (tt *Table) ColumnCount() int {
 // Column is part of the opt.Table interface.
 func (tt *Table) Column(i int) opt.Column {
 	return tt.Columns[i]
+}
+
+// LookupColumnOrdinal is part of the opt.Table interface.
+func (tt *Table) LookupColumnOrdinal(colID uint32) (int, error) {
+	if int(colID) > len(tt.Columns) || int(colID) < 1 {
+		return int(colID), pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			"column [%d] does not exist", colID)
+	}
+	return int(colID) - 1, nil
 }
 
 // IndexCount is part of the opt.Table interface.

@@ -88,6 +88,12 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		outScope = b.buildStmt(source.Statement, inScope)
 		return outScope
 
+	case *tree.TableRef:
+		tab := b.resolveTableRef(source)
+		outScope = b.buildScanWithTableRef(tab, tab.TabName(), inScope, source)
+		b.renameSource(source.As, outScope)
+		return outScope
+
 	default:
 		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
 	}
@@ -139,6 +145,71 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	}
 }
 
+// buildScanWithTableRef adds support for numeric references in queries.
+// For example:
+// SELECT * FROM [53 as t]; (table reference)
+// SELECT * FROM [53(1) as t]; (+columnar reference)
+// SELECT * FROM [53(1) as t]@1; (+index reference)
+// Note, the query SELECT * FROM [53() as t] is unsupported. Column lists must
+// be non-empty
+func (b *Builder) buildScanWithTableRef(
+	tab opt.Table, tn *tree.TableName, inScope *scope, ref *tree.TableRef,
+) (outScope *scope) {
+
+	if ref.Columns != nil && len(ref.Columns) == 0 {
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"an explicit list of column IDs must include at least one column")})
+	}
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
+
+	var colsToAdd []int
+	// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
+	// (all columns). whereas an array of length 0 means 'zero columns'.
+	// Lists of zero columns are not supported and will throw an error."
+	// The error for lists of zero columns is thrown in the caller function
+	// for buildScanWithTableRef.
+	if ref.Columns == nil {
+		for i := 0; i < tab.ColumnCount(); i++ {
+			colsToAdd = append(colsToAdd, i)
+		}
+	} else {
+		for _, c := range ref.Columns {
+			ordinalCol, err := tab.LookupColumnOrdinal(uint32(c))
+			if err != nil {
+				panic(builderError{err})
+			}
+			colsToAdd = append(colsToAdd, ordinalCol)
+		}
+	}
+	var tabCols opt.ColSet
+	outScope = inScope.push()
+	for _, i := range colsToAdd {
+		col := tab.Column(i)
+		colID := b.factory.Metadata().TableColumn(tabID, i)
+		name := tree.Name(col.ColName())
+		colProps := scopeColumn{
+			id:       colID,
+			origName: name,
+			name:     name,
+			table:    *tn,
+			typ:      col.DatumType(),
+			hidden:   col.IsHidden(),
+		}
+		tabCols.Add(int(colID))
+		b.colMap = append(b.colMap, colProps)
+		outScope.cols = append(outScope.cols, colProps)
+	}
+	if tab.IsVirtualTable() {
+		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
+	} else {
+		def := memo.ScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
+	}
+	return outScope
+}
+
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
 // given table with the given table name.
 //
@@ -162,7 +233,6 @@ func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden(),
 		}
-
 		tabCols.Add(int(colID))
 		b.colMap = append(b.colMap, colProps)
 		outScope.cols = append(outScope.cols, colProps)
