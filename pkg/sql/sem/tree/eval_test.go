@@ -1118,6 +1118,9 @@ func TestEval(t *testing.T) {
 		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamp`, `'0s'`},
 		{`'1970-01-01 00:01:00.123456-00:00'::timestamp::int`, `60`},
 		{`'1970-01-01 00:01:00.123456-00:00'::timestamptz::int`, `60`},
+		// Ensure timezone is stripped when casting to timestamp.
+		{`'1970-01-01 00:01:00.1-01:00'::timestamptz::timestamp`, `'1970-01-01 01:01:00.1+00:00'`},
+		{`'1970-01-01 00:01:00.1-01:00'::timestamp`, `'1970-01-01 00:01:00.1+00:00'`},
 		{`'1970-01-10'::date::int`, `9`},
 		{`'2h3s4us5ns'::interval::int`, `7203`},
 		{`'2h3s4us5ns'::interval::int::interval`, `'2h3s'`},
