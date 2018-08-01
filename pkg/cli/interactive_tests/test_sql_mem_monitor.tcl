@@ -77,6 +77,7 @@ expect {
     "out of memory" {}
     "cannot allocate memory" {}
     "std::bad_alloc" {}
+    "Resource temporarily unavailable" {}
     timeout { handle_timeout "memory allocation error" }
 }
 eexpect ":/# "
