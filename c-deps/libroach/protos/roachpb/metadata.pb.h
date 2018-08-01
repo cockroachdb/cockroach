@@ -744,7 +744,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
-  // optional int64 generation = 6;
   bool has_generation() const;
   void clear_generation();
   static const int kGenerationFieldNumber = 6;
@@ -2465,7 +2464,6 @@ inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.next_replica_id)
 }
 
-// optional int64 generation = 6;
 inline bool RangeDescriptor::has_generation() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }

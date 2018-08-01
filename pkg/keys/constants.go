@@ -128,9 +128,6 @@ var (
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
-	// LocalRangeSubsumerSuffix is the suffix for the descriptor of the range that
-	// subsumed this range.
-	LocalRangeSubsumerSuffix = []byte("subsumer")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this
@@ -169,6 +166,9 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
+	// LocalSubsumerDescriptorSuffix is the suffix for the descriptor of the range
+	// that subsumed this range.
+	LocalSubsumerDescriptorSuffix = roachpb.RKey("sdsc")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++

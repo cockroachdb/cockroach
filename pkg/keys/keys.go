@@ -289,12 +289,6 @@ func RangeTxnSpanGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeTxnSpanGCThresholdKey()
 }
 
-// RangeSubsumerKey returns a key for the descriptor of the range that
-// subsumed this range.
-func RangeSubsumerKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RangeSubsumerKey()
-}
-
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
@@ -422,6 +416,12 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // processed times.
 func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
+}
+
+// SubsumerKey returns a range-local key for the descriptor of the range that
+// subsumed this range.
+func SubsumerKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, LocalSubsumerDescriptorSuffix, nil)
 }
 
 // IsLocal performs a cheap check that returns true iff a range-local key is
@@ -935,12 +935,6 @@ func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 // threshold on the txn span.
 func (b RangeIDPrefixBuf) RangeTxnSpanGCThresholdKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalTxnSpanGCThresholdSuffix...)
-}
-
-// RangeSubsumerKey returns a key for the descriptor of the range that
-// subsumed this range.
-func (b RangeIDPrefixBuf) RangeSubsumerKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeSubsumerSuffix...)
 }
 
 // RaftTombstoneKey returns a system-local key for a raft tombstone.

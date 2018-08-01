@@ -140,6 +140,7 @@ func GetSnapshotForMerge(
 		} else if !ok {
 			break
 		}
+		log.Errorf(ctx, "putting %s", iter.Key())
 		if err := snapBatch.Put(iter.Key(), iter.Value()); err != nil {
 			return result.Result{}, err
 		}

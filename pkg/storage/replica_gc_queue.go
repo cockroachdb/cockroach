@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -211,45 +213,52 @@ func (rgcq *replicaGCQueue) process(
 	replyDesc := rs[0]
 	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
 	if desc.RangeID != replyDesc.RangeID {
-		// If we get a different range ID back, then the range was subsumed
-		// by its left-hand neighbor.
-		// repl.Engine().GetProto
-		// But currentMember is true, so we are still a member of the
-		// subsuming range. The subsuming range will clean up the subsumed range
-		// when it applies the merge trigger.
-	}
+		// If we get a different range ID back, then the range was subsumed by its
+		// left-hand neighbor. We can probably GC it, with one exception: if this
+		// store has a replica of the subsuming range that has not yet applied the
+		// merge. In that case, we simply wait and let the merge destroy this
+		// replica.
+		var subsumerDesc roachpb.RangeDescriptor
+		ok, err := engine.MVCCGetProto(ctx, repl.Engine(), keys.SubsumerKey(desc.StartKey),
+			hlc.Timestamp{}, true /* consistent */, nil /* txn */, &subsumerDesc)
+		if err != nil {
+			return err
+		} else if ok {
+			subsumerRepl, _ := rgcq.store.GetReplica(subsumerDesc.RangeID)
+			if subsumerRepl != nil && subsumerRepl.Desc().Generation <= subsumerDesc.Generation {
+				if log.V(1) {
+					log.Infof(ctx, "not gc'able, range awaiting subsumption by left-hand neighbor")
+				}
+				return nil
+			}
+		} else {
+			// The replica doesn't know who subsumed it. That means it was orphaned
+			// before the merge began and is definitely safe to GC.
+		}
 
-	log.Errorf(ctx, "currentDesc %v, currentMember %v", currentDesc, currentMember)
-	if !currentMember {
-		// We are no longer a member of this range; clean up our local data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "destroying local data")
-		}
-		nextReplicaID := replyDesc.NextReplicaID
-		if desc.RangeID != replyDesc.RangeID {
-			// The range this replica belonged to has been subsumed by its left-hand
-			// neighbor. replyDesc thus represents the subsuming range, whose
-			// NextReplicaID is irrelevant. We don't have the last NextReplicaID for
-			// the subsumed range, nor can we obtain it, but that's OK: we can just be
-			// conservative and use the maximum possible replica ID.
-			//
-			// store.RemoveReplica will write a tombstone using this maximum possible
-			// replica ID, which would normally be problematic, as it would prevent
-			// this store from ever having a new replica of the removed range. In this
-			// case, however, it's copacetic, as subsumed ranges _can't_ have new
-			// replicas.
-			nextReplicaID = math.MaxInt32
-		}
+		// We don't have the last NextReplicaID for the subsumed range, nor can we
+		// obtain it, but that's OK: we can just be conservative and use the maximum
+		// possible replica ID. store.RemoveReplica will write a tombstone using
+		// this maximum possible replica ID, which would normally be problematic, as
+		// it would prevent this store from ever having a new replica of the removed
+		// range. In this case, however, it's copacetic, as subsumed ranges _can't_
+		// have new replicas.
+		const nextReplicaID = math.MaxInt32
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			return err
 		}
-	} else if desc.RangeID != replyDesc.RangeID {
-
+	} else if !currentMember {
+		// We are no longer a member of this range; clean up our local data.
+		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		if log.V(1) {
-			log.Infof(ctx, "range merged away; allowing merge trigger on LHS to clean up")
+			log.Infof(ctx, "destroying local data")
+		}
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			return err
 		}
 	} else {
 		// This replica is a current member of the raft group. Set the last replica

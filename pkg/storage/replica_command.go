@@ -274,7 +274,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
-	leftDesc.IncrementGeneration()
+	leftDesc.Generation++
 	leftDesc.EndKey = splitKey
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
@@ -403,7 +403,7 @@ func (r *Replica) AdminMerge(
 			return reply, roachpb.NewError(err)
 		}
 
-		updatedLeftDesc.IncrementGeneration()
+		updatedLeftDesc.Generation++
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range", rightDesc)
 	}
@@ -468,6 +468,12 @@ func (r *Replica) AdminMerge(
 		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
 			return err
 		}
+
+		// Tell the deleted range about the subsuming range so that the replica GC
+		// queue knows when it's safe to GC an orphaned replica of the deleted
+		// range.
+		log.Errorf(ctx, "subsumer %s", keys.SubsumerKey(roachpb.RKey(rightDesc.StartKey)))
+		b.Put(keys.SubsumerKey(roachpb.RKey(rightDesc.StartKey)), origLeftDesc)
 
 		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)

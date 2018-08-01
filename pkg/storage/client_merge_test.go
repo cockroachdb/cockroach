@@ -1205,6 +1205,8 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 func TestStoreRangeMergeSlowFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip()
+
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true

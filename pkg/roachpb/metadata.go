@@ -182,19 +182,9 @@ func (r RangeDescriptor) String() string {
 	} else {
 		buf.WriteString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+	fmt.Fprintf(&buf, ", next=%d, gen=%d]", r.NextReplicaID, r.Generation)
 
 	return buf.String()
-}
-
-// IncrementGeneration increases the Generation counter of this RangeDescriptor.
-func (r *RangeDescriptor) IncrementGeneration() {
-	if r.Generation != nil {
-		*r.Generation++
-	} else {
-		var one int64 = 1
-		r.Generation = &one
-	}
 }
 
 func (r ReplicationTarget) String() string {

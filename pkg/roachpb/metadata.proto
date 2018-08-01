@@ -95,7 +95,7 @@ message RangeDescriptor {
 
   // generation is incremented on every split and every merge, i.e., whenever
   // the end_key of this range changes.
-  optional int64 generation = 6;
+  optional int64 generation = 6 [(gogoproto.nullable) = false];
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
