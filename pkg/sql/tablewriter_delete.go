@@ -97,9 +97,11 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 func (td *tableDeleter) fastDelete(
 	ctx context.Context, scan *scanNode, autoCommit autoCommitOpt, traceKV bool,
 ) (rowCount int, err error) {
+	log.Info(ctx, "doing fastDelete")
 
 	for _, span := range scan.spans {
 		log.VEvent(ctx, 2, "fast delete: skipping scan")
+		log.Warningf(ctx, "DelRange %s - %s", span.Key, span.EndKey)
 		if traceKV {
 			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}

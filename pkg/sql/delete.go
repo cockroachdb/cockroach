@@ -158,6 +158,10 @@ func (p *planner) Delete(
 		},
 	}
 
+	interleaveFastPathCheck := canDeleteFastInterleaved(*desc, fkTables)
+	dn.run.fastPath = interleaveFastPathCheck
+	dn.run.fastPathInterleaved = interleaveFastPathCheck
+
 	// Finally, handle RETURNING, if any.
 	r, err := p.Returning(ctx, dn, n.Returning, desiredTypes, alias)
 	if err != nil {
@@ -175,6 +179,9 @@ type deleteRun struct {
 	// fastPath indicates whether the delete operation is running to
 	// completion during startExec.
 	fastPath bool
+
+	// fastPathInterleaved
+	fastPathInterleaved bool
 
 	// rowCount is the total row count if fastPath is set,
 	// or the number of rows in the current batch otherwise.
@@ -211,7 +218,7 @@ func (d *deleteNode) startExec(params runParams) error {
 
 	if scan, ok := canDeleteFast(params.ctx, d.source, &d.run); ok {
 		d.run.fastPath = true
-		return d.fastDelete(params, scan)
+		return d.fastDelete(params, scan, d.run.fastPathInterleaved)
 	}
 
 	if d.run.rowsNeeded {
@@ -340,6 +347,80 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
+func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
+
+	// contains all table IDs that are directly or indirectly interleaved into `table`,
+	// including `table` itself
+	interleavedMemo := make(map[sqlbase.ID]struct{})
+	interleavedQueue := make([]sqlbase.ID, 0)
+	interleavedQueue = append(interleavedQueue, table.ID)
+
+	log.Warningf(context.TODO(), "checking for fast path on table ID %s", table.ID)
+
+	// if the base table is interleaved in another table, fail
+	// TODO let this succeed if this is part of another table's fast path (???).
+	for _, idx := range fkTables[table.ID].Table.AllNonDropIndexes() {
+		if len(idx.Interleave.Ancestors) > 0 {
+			log.Warning(context.TODO(), "Base table is interleaved in another one")
+			return false
+		}
+	}
+
+	for len(interleavedQueue) > 0 {
+		tableID := interleavedQueue[0]
+		interleavedQueue = interleavedQueue[1:]
+
+		for _, idx := range fkTables[tableID].Table.AllNonDropIndexes() {
+			// Don't allow any secondary indexes
+			// TODO identify the cases where secondary indexes can still work with the fast path and allow them
+			if idx.ID != fkTables[tableID].Table.PrimaryIndex.ID {
+				log.Warning(context.TODO(), "not fast path: Secondary index")
+				return false
+			}
+
+			// interleavedIdxs will contain all of the table and index IDs of the indexes interleaved in this one
+			interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
+			for _, ref := range idx.InterleavedBy {
+
+				if _, ok := interleavedIdxs[ref.Table]; !ok {
+					interleavedIdxs[ref.Table] = make(map[sqlbase.IndexID]struct{})
+				}
+				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
+
+				// Append the next tables to inspect to the queue
+				if _, ok := interleavedMemo[ref.Table]; !ok {
+					interleavedQueue = append(interleavedQueue, ref.Table)
+					interleavedMemo[ref.Table] = struct{}{}
+				}
+			}
+			// The index can't be referenced by anything that's not the interleaved relationship
+			for _, ref := range idx.ReferencedBy {
+				if _, ok := interleavedIdxs[ref.Table]; !ok {
+					log.Warning(context.TODO(), "non-interleaved relationship fk reference")
+					return false
+				}
+				if _, ok := interleavedIdxs[ref.Table][ref.Index]; !ok {
+					log.Warning(context.TODO(), "non-interleaved relationship fk reference")
+					return false
+				}
+
+				idx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
+				if err != nil {
+					panic("Couldn't find index in foreign key reference")
+				}
+
+				// All of these references MUST be ON DELETE CASCADE
+				if idx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+					log.Warningf(context.TODO(), "not fast path: Non cascade on ref %s, %s to %s, %s. action is %s", ref.Table, ref.Index, tableID, idx.ID, sqlbase.ForeignKeyReference_Action_name[int32(ref.OnDelete)])
+					return false
+				}
+			}
+		}
+	}
+
+	return true
+}
+
 // canDeleteFast determines if the deletion of `rows` can be done
 // without actually scanning them.
 // This should be called after plan simplification for optimal results.
@@ -347,7 +428,7 @@ func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNod
 	// Check that there are no secondary indexes, interleaving, FK
 	// references checks, etc., ie. there is no extra work to be done
 	// per row deleted.
-	if !r.td.fastPathAvailable(ctx) {
+	if !r.td.fastPathAvailable(ctx) && !r.fastPath {
 		return nil, false
 	}
 
@@ -384,13 +465,15 @@ func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNod
 		return nil, false
 	}
 
+	log.Info(ctx, "delete: fast path is available")
+
 	return scan, true
 }
 
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `scan` would scan. Should only be used if `canDeleteFast` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
+func (d *deleteNode) fastDelete(params runParams, scan *scanNode, interleavedFastPath bool) error {
 	if err := scan.initScan(params); err != nil {
 		return err
 	}
@@ -399,6 +482,15 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
+	}
+	if interleavedFastPath {
+
+		for i, span := range scan.spans {
+			if span.EndKey.Compare(span.EndKey.PrefixEnd()) == -1 {
+				span.EndKey = span.EndKey.PrefixEnd()
+				scan.spans[i] = span
+			}
+		}
 	}
 	var err error
 	d.run.rowCount, err = d.run.td.fastDelete(
