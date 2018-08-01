@@ -49,60 +49,73 @@ func (b *logicalPropsBuilder) buildProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
+	var logical props.Logical
+
 	switch ev.Operator() {
 	case opt.ScanOp:
-		return b.buildScanProps(ev)
+		logical = b.buildScanProps(ev)
 
 	case opt.VirtualScanOp:
-		return b.buildVirtualScanProps(ev)
+		logical = b.buildVirtualScanProps(ev)
 
 	case opt.SelectOp:
-		return b.buildSelectProps(ev)
+		logical = b.buildSelectProps(ev)
 
 	case opt.ProjectOp:
-		return b.buildProjectProps(ev)
+		logical = b.buildProjectProps(ev)
 
 	case opt.ValuesOp:
-		return b.buildValuesProps(ev)
+		logical = b.buildValuesProps(ev)
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
-		return b.buildJoinProps(ev)
+		logical = b.buildJoinProps(ev)
 
 	case opt.IndexJoinOp:
-		return b.buildIndexJoinProps(ev)
+		logical = b.buildIndexJoinProps(ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-		return b.buildSetProps(ev)
+		logical = b.buildSetProps(ev)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		return b.buildGroupByProps(ev)
+		logical = b.buildGroupByProps(ev)
 
 	case opt.LimitOp:
-		return b.buildLimitProps(ev)
+		logical = b.buildLimitProps(ev)
 
 	case opt.OffsetOp:
-		return b.buildOffsetProps(ev)
+		logical = b.buildOffsetProps(ev)
 
 	case opt.Max1RowOp:
-		return b.buildMax1RowProps(ev)
+		logical = b.buildMax1RowProps(ev)
 
 	case opt.ExplainOp:
-		return b.buildExplainProps(ev)
+		logical = b.buildExplainProps(ev)
 
 	case opt.ShowTraceForSessionOp:
-		return b.buildShowTraceProps(ev)
+		logical = b.buildShowTraceProps(ev)
 
 	case opt.RowNumberOp:
-		return b.buildRowNumberProps(ev)
+		logical = b.buildRowNumberProps(ev)
 
 	case opt.ZipOp:
-		return b.buildZipProps(ev)
+		logical = b.buildZipProps(ev)
+
+	default:
+		panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 	}
 
-	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
+	// If CanHaveSideEffects is true for any child, it's true for the expression.
+	for i, end := 0, ev.ChildCount(); i < end; i++ {
+		if ev.childGroup(i).logical.CanHaveSideEffects() {
+			logical.Relational.CanHaveSideEffects = true
+			break
+		}
+	}
+
+	return logical
 }
 
 func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
@@ -303,9 +316,11 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 	// remove columns that are not projected.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	for i, colID := range projectionsDef.SynthesizedCols {
-		child := projections.Child(i)
-		from := child.Logical().Scalar.OuterCols.Intersection(inputProps.OutputCols)
-		relational.FuncDeps.AddSynthesizedCol(from, colID)
+		childLogical := projections.Child(i).Logical()
+		if !childLogical.Scalar.CanHaveSideEffects {
+			from := childLogical.Scalar.OuterCols.Intersection(inputProps.OutputCols)
+			relational.FuncDeps.AddSynthesizedCol(from, colID)
+		}
 	}
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
@@ -1011,24 +1026,18 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		// Variable introduces outer column.
 		scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return logical
-
-	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
-		// Inherit outer columns from input query.
-		scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
-
-		// Any has additional scalar value that can contain outer references.
-		if ev.Operator() == opt.AnyOp {
-			cols := ev.childGroup(1).logical.Scalar.OuterCols
-			scalar.OuterCols = scalar.OuterCols.Union(cols)
-		}
-
-		return logical
 	}
 
-	// By default, union outer cols from all children, both relational and scalar.
-	for i := 0; i < ev.ChildCount(); i++ {
+	// By default, derive OuterCols and CanHaveSideEffects from all children, both
+	// relational and scalar.
+	for i, end := 0, ev.ChildCount(); i < end; i++ {
 		childLogical := &ev.childGroup(i).logical
+
 		scalar.OuterCols.UnionWith(childLogical.OuterCols())
+
+		if childLogical.CanHaveSideEffects() {
+			scalar.CanHaveSideEffects = true
+		}
 	}
 
 	switch ev.Operator() {
@@ -1036,8 +1045,8 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		// For a ProjectionsOp, the passthrough cols are also outer cols.
 		scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
 
-	case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
-		// Calculate constraints and FDs for any expressions that could be filters.
+	case opt.FiltersOp:
+		// Calculate constraints and FDs for filters.
 
 		// Constraints
 		// -----------
@@ -1069,6 +1078,17 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 				}
 			}
 		}
+
+	case opt.FunctionOp:
+		funcOpDef := ev.Private().(*FuncOpDef)
+		if funcOpDef.Properties.Impure {
+			// Impure functions can return different value on each call.
+			logical.Scalar.CanHaveSideEffects = true
+		}
+
+	case opt.DivOp:
+		// Division by zero error is possible.
+		logical.Scalar.CanHaveSideEffects = true
 	}
 
 	return logical
