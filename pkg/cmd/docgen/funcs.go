@@ -58,6 +58,11 @@ func init() {
 			); err != nil {
 				return err
 			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
+			); err != nil {
+				return err
+			}
 			return ioutil.WriteFile(
 				filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
 			)
@@ -189,6 +194,9 @@ func generateFunctions(from []string, categorize bool) []byte {
 			if fn.Info == notUsableInfo {
 				continue
 			}
+			// Both aggregate and window builtin functions' overloads have non-nil
+			// fn.WindowFunc. We generate docs for them in separate files, so we want
+			// to omit them when processing all other builtins.
 			if categorize && fn.WindowFunc != nil {
 				continue
 			}
