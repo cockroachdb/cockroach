@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -806,7 +807,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
-		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+		if size, err := status.GetTotalMemory(context.Background()); err == nil {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
@@ -819,7 +820,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
-		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+		if size, err := status.GetTotalMemory(context.Background()); err == nil {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {

@@ -322,6 +322,11 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
 	}
 
+	totalMemory, err := GetTotalMemory(context.Background())
+	if err != nil {
+		t.Error("couldn't get total memory", err)
+	}
+
 	// ========================================
 	// Verify node summary generation
 	// ========================================
@@ -341,6 +346,7 @@ func TestMetricsRecorder(t *testing.T) {
 				Metrics: expectedStoreSummaryMetrics,
 			},
 		},
+		TotalSystemMemory: totalMemory,
 	}
 
 	// Make sure there is at least one environment variable that will be
