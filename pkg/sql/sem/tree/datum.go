@@ -409,6 +409,14 @@ func (*DBool) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		if bool(*d) {
+			ctx.WriteByte('t')
+		} else {
+			ctx.WriteByte('f')
+		}
+		return
+	}
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
 }
 
@@ -958,8 +966,6 @@ func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtUnicodeStrings) {
 		buf.WriteString(string(*d))
-	} else if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
@@ -1026,14 +1032,9 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, d.Contents)
-	} else {
-		lex.EncodeSQLString(buf, d.Contents)
-		ctx.WriteString(" COLLATE ")
-		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncNoFlags)
-	}
+	lex.EncodeSQLString(ctx.Buffer, d.Contents)
+	ctx.WriteString(" COLLATE ")
+	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, d.Locale, lex.EncNoFlags)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1192,7 +1193,7 @@ func writeAsHexString(ctx *FmtCtx, d *DBytes) {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.HasFlags(fmtWithinArray) {
+	if f.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(`"\\x`)
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
@@ -2718,14 +2719,24 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-// TODO(bram): We don't format tuples in the same way as postgres. See #25522.
 // TODO(knz): this is broken if the tuple is labeled. See #26624.
 func (d *DTuple) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
-		ctx.WriteString("ROW()")
+	if ctx.HasFlags(fmtPgwireFormat) {
+		d.pgwireFormat(ctx)
 		return
 	}
-	ctx.FormatNode(&d.D)
+
+	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
+		ctx.WriteString("ROW")
+	}
+	ctx.WriteByte('(')
+	comma := ""
+	for _, v := range d.D {
+		ctx.WriteString(comma)
+		ctx.FormatNode(v)
+		comma = ", "
+	}
+	ctx.WriteByte(')')
 }
 
 // Sorted returns true if the tuple is known to be sorted (and contains no
@@ -2879,6 +2890,11 @@ func (dNull) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (dNull) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		// NULL sub-expressions in pgwire text values are represented with
+		// the empty string.
+		return
+	}
 	ctx.WriteString("NULL")
 }
 
@@ -3002,12 +3018,17 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		d.pgwireFormat(ctx)
+		return
+	}
+
 	ctx.WriteString("ARRAY[")
-	for i, v := range d.Array {
-		if i > 0 {
-			ctx.WriteString(",")
-		}
+	comma := ""
+	for _, v := range d.Array {
+		ctx.WriteString(comma)
 		ctx.FormatNode(v)
+		comma = ","
 	}
 	ctx.WriteByte(']')
 }
