@@ -2178,3 +2178,64 @@ SELECT avg(price) OVER w1, avg(price) OVER w2, avg(price) OVER w1 FROM products 
 425.00                 750.00   425.00
 350.00                 425.00   350.00
 175.00                 175.00   175.00
+
+# In the following 4 tests, since ORDER BY is omitted, all rows are peers, so frame includes all the rows for every row.
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   6450.00
+Smartphone  HTC One          400.00   6450.00
+Smartphone  Nexus            500.00   6450.00
+Smartphone  iPhone           900.00   6450.00
+Laptop      HP Elite         1200.00  6450.00
+Laptop      Lenovo Thinkpad  700.00   6450.00
+Laptop      Sony VAIO        700.00   6450.00
+Laptop      Dell             800.00   6450.00
+Tablet      iPad             700.00   6450.00
+Tablet      Kindle Fire      150.00   6450.00
+Tablet      Samsung          200.00   6450.00
