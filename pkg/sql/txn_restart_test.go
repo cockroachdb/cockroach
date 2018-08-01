@@ -1753,9 +1753,12 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			// test which needs a single statement.
 			sql := fmt.Sprintf(`
 				%s
-				SELECT generate_series(1, 10000)
-				UNION ALL
-				SELECT crdb_internal.force_retry('1s');
+				SELECT
+					CASE x
+          WHEN 10000 THEN crdb_internal.force_retry('1s')
+          ELSE x
+					END
+        FROM generate_series(1, 10000) AS t(x);
 				%s`,
 				prefix, suffix)
 			_, err := sqlDB.Exec(sql)

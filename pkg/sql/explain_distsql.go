@@ -49,21 +49,21 @@ type explainDistSQLRun struct {
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
-	// Check for subqueries and trigger limit propagation.
-	if _, err := params.p.prepareForDistSQLSupportCheck(
-		params.ctx, true, /* returnError */
-	); err != nil {
-		return err
-	}
+	// Trigger limit propagation.
+	params.p.prepareForDistSQLSupportCheck()
 
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	auto, err := distSQLPlanner.CheckSupport(n.plan)
-	if err != nil {
-		return err
-	}
+	recommendation, supportErr := distSQLPlanner.checkSupportForNode(n.plan)
 
 	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n)
+
+	// This stanza ensures that EXPLAIN(DISTSQL) won't include metadata test
+	// senders or receivers.
+	curTol := distSQLPlanner.metadataTestTolerance
+	distSQLPlanner.metadataTestTolerance = distsqlrun.On
+	defer func() { distSQLPlanner.metadataTestTolerance = curTol }()
+
+	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
 	}
@@ -75,6 +75,10 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
 				"cannot run EXPLAIN ANALYZE while tracing is enabled")
 		}
+		if supportErr != nil {
+			return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"cannot run EXPLAIN ANALYZE on this query: %v", supportErr)
+		}
 		// Start tracing. KV tracing is not enabled because we are only interested
 		// in stats present on the spans. Noop if tracing is already enabled.
 		if err := params.extendedEvalCtx.Tracing.StartTracing(
@@ -85,17 +89,16 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			return err
 		}
 
+		planCtx.ctx = params.extendedEvalCtx.Tracing.ex.ctxHolder.ctx()
+
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
 		execCfg := params.p.ExecCfg()
-		// tree.RowsAffected is used as the statement type passed in to the distsql
-		// receiver because it isn't necessary to process any result rows from the
-		// wrapped plan.
-		const stmtType = tree.RowsAffected
+		const stmtType = tree.Rows
 		recv := makeDistSQLReceiver(
-			params.ctx,
+			planCtx.ctx,
 			rw,
 			stmtType,
 			execCfg.RangeDescriptorCache,
@@ -104,9 +107,9 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			func(ts hlc.Timestamp) {
 				_ = execCfg.Clock.Update(ts)
 			},
-			params.p.ExtendedEvalContext().Tracing,
+			params.extendedEvalCtx.Tracing,
 		)
-		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.p.ExtendedEvalContext())
+		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx)
 
 		spans = params.extendedEvalCtx.Tracing.getRecording()
 		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
@@ -121,7 +124,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	n.run.values = tree.Datums{
-		tree.MakeDBool(tree.DBool(auto)),
+		tree.MakeDBool(tree.DBool(recommendation == shouldDistribute)),
 		tree.NewDString(planURL.String()),
 		tree.NewDString(planJSON),
 	}

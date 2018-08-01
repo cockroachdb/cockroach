@@ -221,7 +221,16 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = flows[thisNodeID]
-	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
+	var localState distsqlrun.LocalState
+	if planCtx.validExtendedEvalCtx {
+		localState.EvalContext = planCtx.EvalContext()
+	}
+	if planCtx.isLocal {
+		localState.IsLocal = true
+		localState.LocalProcs = plan.LocalProcessors
+		localState.Txn = txn
+	}
+	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
 		return
@@ -455,7 +464,7 @@ func (r *distSQLReceiver) Push(
 
 	if r.stmtType != tree.Rows {
 		// We only need the row count.
-		r.resultWriter.IncrementRowsAffected(1)
+		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
 	if r.row == nil {
@@ -535,15 +544,17 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // distSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
-	ctx context.Context,
-	txn *client.Txn,
-	p *planner,
-	plan planNode,
-	recv *distSQLReceiver,
-	evalCtx *extendedEvalContext,
+	ctx context.Context, p *planner, recv *distSQLReceiver, distribute bool,
 ) {
+	evalCtx := p.ExtendedEvalContext()
+	txn := p.txn
 	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
-	log.VEvent(ctx, 1, "creating DistSQL plan")
+	planCtx.isLocal = !distribute
+	planCtx.planner = p
+	planCtx.stmtType = recv.stmtType
+	planCtx.validExtendedEvalCtx = true
+
+	log.VEventf(ctx, 1, "creating DistSQL plan with distributedMode=%v", distribute)
 
 	if len(p.curPlan.subqueryPlans) != 0 {
 		err := p.curPlan.evalSubqueries(runParams{
@@ -559,7 +570,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		log.VEvent(ctx, 2, "evaluated subqueries")
 	}
 
-	physPlan, err := dsp.createPlanForNode(&planCtx, plan)
+	physPlan, err := dsp.createPlanForNode(&planCtx, p.curPlan.plan)
 	if err != nil {
 		recv.SetError(err)
 		return

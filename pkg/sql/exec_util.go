@@ -469,9 +469,9 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
-// shouldUseDistSQL determines whether we should use DistSQL for the
+// shouldDistributePlan determines whether we should distribute the
 // given logical plan, based on the session settings.
-func shouldUseDistSQL(
+func shouldDistributePlan(
 	ctx context.Context, distSQLMode sessiondata.DistSQLExecMode, dp *DistSQLPlanner, plan planNode,
 ) (bool, error) {
 	if distSQLMode == sessiondata.DistSQLOff {
@@ -483,7 +483,7 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	distribute, err := dp.CheckSupport(plan)
+	rec, err := dp.checkSupportForNode(plan)
 	if err != nil {
 		// If the distSQLMode is ALWAYS, reject anything but SET.
 		if distSQLMode == sessiondata.DistSQLAlways && err != setNotSupportedError {
@@ -494,13 +494,13 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	if distSQLMode == sessiondata.DistSQLAuto && !distribute {
-		log.VEventf(ctx, 1, "not distributing query")
-		return false, nil
+	switch distSQLMode {
+	case sessiondata.DistSQLAuto:
+		return rec == shouldDistribute, nil
+	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
+		return rec != cannotDistribute, nil
 	}
-
-	// In ON or ALWAYS mode, all supported queries are distributed.
-	return true, nil
+	panic(fmt.Sprintf("unhandled distsql mode: %v", distSQLMode))
 }
 
 // golangFillQueryArguments transforms Go values into datums.
