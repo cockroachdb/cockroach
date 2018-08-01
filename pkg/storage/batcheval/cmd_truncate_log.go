@@ -81,10 +81,7 @@ func TruncateLog(
 		return result.Result{}, err
 	}
 
-	// We start at index zero because it's always possible that a previous
-	// truncation did not clean up entries made obsolete by the previous
-	// truncation.
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, 0))
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index).PrefixEnd())
 
 	var ms enginepb.MVCCStats
