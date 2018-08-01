@@ -53,9 +53,6 @@ export default function Debug() {
       </Helmet>
       <h1>Advanced Debugging</h1>
       <DebugTable heading="Reports">
-        <DebugTableRow title="Statements">
-          <DebugTableLink name="Recent Statements" url="#/statements" />
-        </DebugTableRow>
         <DebugTableRow title="Node Diagnostics">
           <DebugTableLink name="All Nodes" url="#/reports/nodes" />
           <DebugTableLink

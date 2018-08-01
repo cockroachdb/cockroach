@@ -11,10 +11,11 @@ import { LOGOUT_PAGE } from "src/routes/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
-import homeIcon from "!!raw-loader!assets/home.svg";
-import metricsIcon from "!!raw-loader!assets/metrics.svg";
-import databasesIcon from "!!raw-loader!assets/databases.svg";
-import jobsIcon from "!!raw-loader!assets/jobs.svg";
+import homeIcon from "!!raw-loader!assets/sidebarIcons/home.svg";
+import metricsIcon from "!!raw-loader!assets/sidebarIcons/metrics.svg";
+import databasesIcon from "!!raw-loader!assets/sidebarIcons/databases.svg";
+import jobsIcon from "!!raw-loader!assets/sidebarIcons/jobs.svg";
+import statementsIcon from "!!raw-loader!assets/sidebarIcons/statements.svg";
 import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
 
 interface IconLinkProps {
@@ -123,6 +124,7 @@ export default class Sidebar extends React.Component {
           <IconLink to="/overview" icon={homeIcon} title="Overview" activeFor="/node" />
           <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
+          <IconLink to="/statements" icon={statementsIcon} title="Statements" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
