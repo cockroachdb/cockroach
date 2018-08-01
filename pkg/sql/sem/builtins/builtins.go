@@ -1433,8 +1433,9 @@ CockroachDB supports the following flags:
 
 	"nextval": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySequences,
-			Impure:   true,
+			Category:         categorySequences,
+			DistsqlBlacklist: true,
+			Impure:           true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
@@ -1457,8 +1458,9 @@ CockroachDB supports the following flags:
 
 	"currval": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySequences,
-			Impure:   true,
+			Category:         categorySequences,
+			DistsqlBlacklist: true,
+			Impure:           true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
@@ -1502,8 +1504,9 @@ CockroachDB supports the following flags:
 	// See https://github.com/cockroachdb/cockroach/issues/21564
 	"setval": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySequences,
-			Impure:   true,
+			Category:         categorySequences,
+			DistsqlBlacklist: true,
+			Impure:           true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
