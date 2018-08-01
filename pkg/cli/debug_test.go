@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -145,8 +147,41 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	// Start the cluster, let it replicate, then stop it. Since two
 	// nodes use in-memory stores, this automatically causes the cluster
 	// to lose its quorum.
-	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
-	tc.Stopper().Stop(ctx)
+	//
+	// While it's running, start a transaction and write an intent to
+	// one of the range descriptors (without committing or aborting the
+	// transaction). This exercises a special case in removeDeadReplicas.
+	func() {
+		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
+		defer tc.Stopper().Stop(ctx)
+
+		txn := client.NewTxn(tc.Servers[0].DB(), 1, client.RootTxn)
+		var desc roachpb.RangeDescriptor
+		// Pick one of the predefined split points.
+		rdKey := keys.RangeDescriptorKey(roachpb.RKey(keys.TimeseriesPrefix))
+		if err := txn.GetProto(ctx, rdKey, &desc); err != nil {
+			t.Fatal(err)
+		}
+		desc.NextReplicaID++
+		if err := txn.Put(ctx, rdKey, &desc); err != nil {
+			t.Fatal(err)
+		}
+
+		// At this point the intent has been written to rocksdb but this
+		// write was not synced (only the raft log append was synced). We
+		// need to force another sync, but we're far from the storage
+		// layer here so the easiest thing to do is simply perform a
+		// second write. This will force the first write to be persisted
+		// to disk (the second write may or may not make it to disk due to
+		// timing).
+		desc.NextReplicaID++
+		if err := txn.Put(ctx, rdKey, &desc); err != nil {
+			t.Fatal(err)
+		}
+
+		// We deliberately do not close this transaction so the intent is
+		// left behind.
+	}()
 
 	// Open the store directly to repair it.
 	func() {
@@ -183,6 +218,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 			t.Fatal(err)
 		}
 		if batch != nil {
+			batch.Close()
 			t.Fatalf("expected nil batch on second attempt")
 		}
 	}()
@@ -191,7 +227,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	// nodes with the in-memory stores will be assigned new node IDs 4
 	// and 5. StartTestCluster will even wait for all the ranges to be
 	// replicated to the new nodes.
-	tc = testcluster.StartTestCluster(t, 3, clusterArgs)
+	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
 	row := s.QueryRow(t, "select replicas from [show experimental_ranges from table system.namespace] limit 1")
