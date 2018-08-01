@@ -55,72 +55,105 @@ func winProps() tree.FunctionProperties {
 // See `windowFuncHolder` in the sql package.
 var windows = map[string]builtinDefinition{
 	"row_number": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{}, types.Int, newRowNumberWindow),
+		makeWindowOverload(tree.ArgTypes{}, types.Int, newRowNumberWindow,
+			"Calculates the number of the current row within its partition, counting from 1."),
 	),
 	"rank": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{}, types.Int, newRankWindow),
+		makeWindowOverload(tree.ArgTypes{}, types.Int, newRankWindow,
+			"Calculates the rank of the current row with gaps; same as row_number of its first peer."),
 	),
 	"dense_rank": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{}, types.Int, newDenseRankWindow),
+		makeWindowOverload(tree.ArgTypes{}, types.Int, newDenseRankWindow,
+			"Calculates the rank of the current row without gaps; this function counts peer groups."),
 	),
 	"percent_rank": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{}, types.Float, newPercentRankWindow),
+		makeWindowOverload(tree.ArgTypes{}, types.Float, newPercentRankWindow,
+			"Calculates the relative rank of the current row: (rank - 1) / (total rows - 1)."),
 	),
 	"cume_dist": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{}, types.Float, newCumulativeDistWindow),
+		makeWindowOverload(tree.ArgTypes{}, types.Float, newCumulativeDistWindow,
+			"Calculates the relative rank of the current row: "+
+				"(number of rows preceding or peer with current row) / (total rows)."),
 	),
 	"ntile": makeBuiltin(winProps(),
-		makeWindowOverload(tree.ArgTypes{{"n", types.Int}}, types.Int, newNtileWindow),
+		makeWindowOverload(tree.ArgTypes{{"n", types.Int}}, types.Int, newNtileWindow,
+			"Calculates an integer ranging from 1 to `n`, dividing the partition as equally as possible."),
 	),
 	"lag": collectOverloads(
 		winProps(),
 		types.AnyNonArray,
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
+			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t,
+				makeLeadLagWindowConstructor(false, false, false),
+				"Returns `val` evaluated at the previous row within current row's partition; "+
+					"if there is no such row, instead returns null.")
 		},
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(false, true, false))
+			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}}, t,
+				makeLeadLagWindowConstructor(false, true, false),
+				"Returns `val` evaluated at the row that is `n` rows before the current row within its partition; "+
+					"if there is no such row, instead returns null. `n` is evaluated with respect to the current row.")
 		},
 		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
 		// can be any types but must be the same (eg. lag(T, Int, T)).
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
-				t, makeLeadLagWindowConstructor(false, true, true))
+			return makeWindowOverload(tree.ArgTypes{
+				{"val", t}, {"n", types.Int}, {"default", t},
+			}, t, makeLeadLagWindowConstructor(false, true, true),
+				"Returns `val` evaluated at the row that is `n` rows before the current row within its partition; "+
+					"if there is no such, row, instead returns `default` (which must be of the same type as `val`). "+
+					"Both `n` and `default` are evaluated with respect to the current row.")
 		},
 	),
 	"lead": collectOverloads(winProps(), types.AnyNonArray,
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
+			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t,
+				makeLeadLagWindowConstructor(true, false, false),
+				"Returns `val` evaluated at the following row within current row's partition; "+""+
+					"if there is no such row, instead returns null.")
 		},
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(true, true, false))
+			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}}, t,
+				makeLeadLagWindowConstructor(true, true, false),
+				"Returns `val` evaluated at the row that is `n` rows after the current row within its partition; "+
+					"if there is no such row, instead returns null. `n` is evaluated with respect to the current row.")
 		},
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
-				t, makeLeadLagWindowConstructor(true, true, true))
+			return makeWindowOverload(tree.ArgTypes{
+				{"val", t}, {"n", types.Int}, {"default", t},
+			}, t, makeLeadLagWindowConstructor(true, true, true),
+				"Returns `val` evaluated at the row that is `n` rows after the current row within its partition; "+
+					"if there is no such, row, instead returns `default` (which must be of the same type as `val`). "+
+					"Both `n` and `default` are evaluated with respect to the current row.")
 		},
 	),
 	"first_value": collectOverloads(winProps(), types.AnyNonArray,
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newFirstValueWindow)
+			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newFirstValueWindow,
+				"Returns `val` evaluated at the row that is the first row of the window frame.")
 		}),
 	"last_value": collectOverloads(winProps(), types.AnyNonArray,
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newLastValueWindow)
+			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newLastValueWindow,
+				"Returns `val` evaluated at the row that is the last row of the window frame.")
 		}),
 	"nth_value": collectOverloads(winProps(), types.AnyNonArray,
 		func(t types.T) tree.Overload {
-			return makeWindowOverload(tree.ArgTypes{{"val", t}, {"n", types.Int}}, t, newNthValueWindow)
+			return makeWindowOverload(tree.ArgTypes{
+				{"val", t}, {"n", types.Int}}, t, newNthValueWindow,
+				"Returns `val` evaluated at the row that is the `n`th row of the window frame (counting from 1); "+
+					"null if no such row.")
 		}),
 }
 
 func makeWindowOverload(
-	in tree.ArgTypes, ret types.T, f func([]types.T, *tree.EvalContext) tree.WindowFunc,
+	in tree.ArgTypes, ret types.T, f func([]types.T, *tree.EvalContext) tree.WindowFunc, info string,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      in,
 		ReturnType: tree.FixedReturnType(ret),
 		WindowFunc: f,
+		Info:       info,
 	}
 }
 
