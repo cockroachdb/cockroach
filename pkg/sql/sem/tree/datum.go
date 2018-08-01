@@ -1890,7 +1890,7 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 	case *DDate:
 		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
 	case *DTimestampTZ:
-		return t.Time, true
+		return t.stripTimeZone(ctx).Time, true
 	case *DTimestamp:
 		return t.Time, true
 	case *DTimeTZ:
@@ -2080,6 +2080,15 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DTimestampTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
+}
+
+// stripTimeZone removes the time zone from this TimestampTZ. For example, a
+// TimestampTZ '2012-01-01 12:00:00 +02:00' would become
+//             '2012-01-01 12:00:00'.
+func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
+	_, locOffset := d.Time.In(ctx.GetLocation()).Zone()
+	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
+	return MakeDTimestamp(newTime, time.Microsecond)
 }
 
 // DInterval is the interval Datum.

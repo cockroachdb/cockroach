@@ -964,8 +964,13 @@ SELECT a FROM tz WHERE c < d
 ----
 2
 
+
 query I rowsort
 SELECT a FROM tz WHERE b = c::timestamp
+----
+
+query I rowsort
+SELECT a FROM tz WHERE c = d::timestamp
 ----
 1
 
