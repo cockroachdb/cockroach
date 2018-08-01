@@ -79,12 +79,8 @@ func (b *writeBuffer) writeTextDatum(
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DBool:
-		b.putInt32(1)
-		if *v {
-			b.writeByte('t')
-		} else {
-			b.writeByte('f')
-		}
+		b.textFormatter.FormatNode(v)
+		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
@@ -157,40 +153,24 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.JSON.String())
 
 	case *tree.DTuple:
-		b.variablePutbuf.WriteString("(")
-		for i, d := range v.D {
-			if i > 0 {
-				b.variablePutbuf.WriteString(",")
-			}
-			if d == tree.DNull {
-				// Emit nothing on NULL.
-				continue
-			}
-			b.simpleFormatter.FormatNode(d)
-		}
-		b.variablePutbuf.WriteString(")")
+		b.textFormatter.FormatNode(v)
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DArray:
-		// Arrays are serialized as a string of comma-separated values, surrounded
-		// by braces.
-		begin, sep, end := "{", ",", "}"
-
 		switch d.ResolvedType().Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 			// vectors are serialized as a string of space-separated values.
-			begin, sep, end = "", " ", ""
-		}
-
-		b.variablePutbuf.WriteString(begin)
-		for i, d := range v.Array {
-			if i > 0 {
-				b.variablePutbuf.WriteString(sep)
-			}
+			sep := ""
 			// TODO(justin): add a test for nested arrays.
-			b.arrayFormatter.FormatNode(d)
+			for _, d := range v.Array {
+				b.variablePutbuf.WriteString(sep)
+				b.textFormatter.FormatNode(d)
+				sep = " "
+			}
+		default:
+			// Uses the default pgwire text format for arrays.
+			b.textFormatter.FormatNode(v)
 		}
-		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
 
 	case *tree.DOid:
