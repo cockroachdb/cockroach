@@ -47,6 +47,7 @@ class FakeTimeEnv : public rocksdb::EnvWrapper {
   }
 
   void SetCurrentTime(int64_t t) { fake_time_ = t; };
+  void IncCurrentTime(int64_t t) { fake_time_ += t; };
 
  private:
   int64_t fake_time_;
