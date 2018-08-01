@@ -820,8 +820,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   types.Timestamp,
 			RightType:  types.TimestampTZ,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// These two quantities aren't directly comparable. Convert the
+				// TimestampTZ to a timestamp first.
+				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).stripTimeZone(ctx).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
@@ -829,8 +831,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   types.TimestampTZ,
 			RightType:  types.Timestamp,
 			ReturnType: types.Interval,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestamp).Time).Nanoseconds()
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				// These two quantities aren't directly comparable. Convert the
+				// TimestampTZ to a timestamp first.
+				nanos := left.(*DTimestampTZ).stripTimeZone(ctx).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
@@ -3199,7 +3203,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:
-			return MakeDTimestamp(d.Time.In(ctx.GetLocation()), time.Microsecond), nil
+			// Strip time zone. Timestamps don't carry their location.
+			return d.stripTimeZone(ctx), nil
 		}
 
 	case *coltypes.TTimestampTZ:
