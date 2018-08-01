@@ -124,7 +124,7 @@
     $right:(Project
         (Select
             $selectInput:*
-            $filters:* & ^(IsBoundBy $filters $selectInput)
+            $filters:* & ^(IsBoundBy $filters (OutputCols $selectInput))
         )
         $projections:*
     )
@@ -159,7 +159,7 @@
         $join:(InnerJoin | InnerJoinApply
             $innerLeft:*
             $innerRight:*
-            $innerOn:* & ^(IsBoundBy2 $innerOn $innerLeft $innerRight)
+            $innerOn:* & ^(IsBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
         )
         $projections:*
     )

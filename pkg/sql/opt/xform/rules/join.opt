@@ -90,7 +90,7 @@
 (InnerJoin | LeftJoin
     $left:*
     (IndexJoin $right:* $indexJoinDef:*)
-    $on:* & (IsBoundBy2 $on $left $right)
+    $on:* & (IsBoundBy $on (OutputCols2 $left $right))
 )
 =>
 (LookupJoin
@@ -118,10 +118,10 @@
 (InnerJoin
     $left:*
     (IndexJoin $right:* $indexJoinDef:*)
-    $on:* & ^(IsBoundBy2 $on $left $right) & (Filters
+    $on:* & ^(IsBoundBy $on $innerCols:(OutputCols2 $left $right)) & (Filters
         $onList: [
             ...
-            $condition:* & (IsBoundBy2 $condition $left $right)
+            $condition:* & (IsBoundBy $condition $innerCols)
             ...
         ]
     )
@@ -131,8 +131,8 @@
     $newJoin:(InnerJoin
         $left
         $right
-        (Filters (ExtractBoundConditions2 $onList $left $right))
+        (Filters (ExtractBoundConditions $onList $innerCols))
     )
-    (Filters (ExtractUnboundConditions $onList $newJoin))
+    (Filters (ExtractUnboundConditions $onList $innerCols))
     (HoistIndexJoinDef $indexJoinDef $newJoin (OpName))
 )
