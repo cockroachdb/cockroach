@@ -63,7 +63,7 @@ func TestOutbox(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -214,7 +214,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -283,7 +283,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
-				EvalCtx:    evalCtx,
+				EvalCtx:    &evalCtx,
 				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 			}
 			flowID := FlowID{uuid.MakeV4()}
@@ -409,7 +409,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
-		EvalCtx:    evalCtx,
+		EvalCtx:    &evalCtx,
 		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -465,7 +465,7 @@ func TestOutboxCancelsFlowOnErrorLegacyInterface(t *testing.T) {
 	flowCtx := FlowCtx{
 		Settings: st,
 		stopper:  stopper,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		rpcCtx:   newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
@@ -524,7 +524,7 @@ func BenchmarkOutbox(b *testing.B) {
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
-				EvalCtx:    evalCtx,
+				EvalCtx:    &evalCtx,
 				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
 			}
 			outbox := newOutbox(&flowCtx, staticNodeID, "", flowID, streamID)

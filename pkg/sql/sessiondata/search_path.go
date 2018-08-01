@@ -88,6 +88,12 @@ func (s SearchPath) IterWithoutImplicitPGCatalog() func() (next string, ok bool)
 	}
 }
 
+// GetPathArray returns the underlying path array of this SearchPath. The
+// resultant slice is not to be modified.
+func (s SearchPath) GetPathArray() []string {
+	return s.paths
+}
+
 func (s SearchPath) String() string {
 	return strings.Join(s.paths, ", ")
 }

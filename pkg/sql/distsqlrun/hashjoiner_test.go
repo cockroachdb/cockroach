@@ -85,7 +85,7 @@ func TestHashJoiner(t *testing.T) {
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
 					Settings:    st,
-					EvalCtx:     evalCtx,
+					EvalCtx:     &evalCtx,
 					TempStorage: tempEngine,
 					diskMonitor: &diskMonitor,
 				}
@@ -211,7 +211,7 @@ func TestHashJoinerError(t *testing.T) {
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
 				Settings:    st,
-				EvalCtx:     evalCtx,
+				EvalCtx:     &evalCtx,
 				TempStorage: tempEngine,
 				diskMonitor: &diskMonitor,
 			}
@@ -351,7 +351,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: settings,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -474,7 +474,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	// Disable external storage for this test to avoid initializing temp storage
@@ -537,7 +537,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
 		Settings:    st,
-		EvalCtx:     evalCtx,
+		EvalCtx:     &evalCtx,
 		diskMonitor: &diskMonitor,
 	}
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)

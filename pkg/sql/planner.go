@@ -506,16 +506,10 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 }
 
 // prepareForDistSQLSupportCheck prepares p.curPlan.plan for a distSQL support
-// check and does additional verification of the planner state. It returns
-// whether the caller should go ahead and check for plan support through
-// shouldUseDistSQL. If returnError is set and false is returned, an error
-// explaining the failure will be returned.
-func (p *planner) prepareForDistSQLSupportCheck(
-	ctx context.Context, returnError bool,
-) (bool, error) {
+// check and does additional verification of the planner state.
+func (p *planner) prepareForDistSQLSupportCheck() {
 	// Trigger limit propagation.
 	p.setUnlimited(p.curPlan.plan)
-	return true, nil
 }
 
 // optionallyUseOptimizer will attempt to make an optimizer plan based on the

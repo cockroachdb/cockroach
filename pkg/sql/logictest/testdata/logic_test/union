@@ -77,7 +77,7 @@ VALUES (NULL) UNION ALL VALUES (NULL)
 NULL
 NULL
 
-query IT
+query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
 1  unknown

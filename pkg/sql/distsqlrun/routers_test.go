@@ -57,7 +57,7 @@ func setupRouter(
 	}
 
 	ctx := context.TODO()
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: *evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.start(ctx, wg, nil /* ctxCancel */)
@@ -589,7 +589,8 @@ func TestRouterBlocks(t *testing.T) {
 			}
 			st := cluster.MakeTestingClusterSettings()
 			ctx := context.TODO()
-			flowCtx := FlowCtx{Settings: st, EvalCtx: tree.MakeTestingEvalContext(st)}
+			evalCtx := tree.MakeTestingEvalContext(st)
+			flowCtx := FlowCtx{Settings: st, EvalCtx: &evalCtx}
 			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(ctx, &wg, nil /* ctxCancel */)
@@ -714,7 +715,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings:    st,
-		EvalCtx:     evalCtx,
+		EvalCtx:     &evalCtx,
 		TempStorage: tempEngine,
 		diskMonitor: &diskMonitor,
 	}
@@ -801,7 +802,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		}
 		// Verify correct order (should be the order in which we added rows).
 		for j, c := range row {
-			if cmp, err := c.Compare(&intType, alloc, &flowCtx.EvalCtx, &rows[i][j]); err != nil {
+			if cmp, err := c.Compare(&intType, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf(

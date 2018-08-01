@@ -420,7 +420,7 @@ func TestAggregator(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: st,
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 			}
 
 			ag, err := newAggregator(&flowCtx, 0 /* processorID */, &ags, in, &PostProcessSpec{}, out)
@@ -480,7 +480,7 @@ func BenchmarkAggregation(b *testing.B) {
 
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	for _, aggFunc := range aggFuncs {
@@ -523,7 +523,7 @@ func BenchmarkGrouping(b *testing.B) {
 
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 	spec := &AggregatorSpec{
 		GroupCols: []uint32{0},
@@ -571,7 +571,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	for _, aggFunc := range aggFuncs {

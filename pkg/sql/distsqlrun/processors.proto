@@ -138,6 +138,7 @@ message ProcessorCoreUnion {
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
+  optional LocalPlanNodeSpec localPlanNode = 24;
 
   reserved 6, 12;
 }
@@ -321,6 +322,17 @@ message ZigzagJoinerSpec {
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+// LocalPlanNodeSpec is the specification for a local planNode wrapping
+// processor. It's created for situations where a planNode has no DistSQL
+// processor equivalent, and constrains the plan to live on the gateway node.
+// This spec contains just an index, which is used by the execution engine to
+// find the planNode instance this processor is executing in an array of local
+// planNodes. See LocalProcessors and LocalProcessorIndexes on
+// distsqlplan.PhysicalPlan.
+message LocalPlanNodeSpec {
+  optional uint32 RowSourceIdx = 1;
 }
 
 message Columns {

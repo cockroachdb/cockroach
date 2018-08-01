@@ -71,8 +71,11 @@ func TestValuesProcessor(t *testing.T) {
 
 					out := &RowBuffer{}
 					st := cluster.MakeTestingClusterSettings()
+					evalCtx := tree.NewTestingEvalContext(st)
+					defer evalCtx.Stop(context.Background())
 					flowCtx := FlowCtx{
 						Settings: st,
+						EvalCtx:  evalCtx,
 					}
 
 					v, err := newValuesProcessor(&flowCtx, 0 /* processorID */, &spec, &PostProcessSpec{}, out)
@@ -97,8 +100,6 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
-					evalCtx := tree.NewTestingEvalContext(st)
-					defer evalCtx.Stop(context.Background())
 					var a sqlbase.DatumAlloc
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
@@ -133,7 +134,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 	post := PostProcessSpec{}
 	output := RowDisposer{}

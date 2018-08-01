@@ -214,7 +214,16 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = flows[thisNodeID]
-	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, evalCtx.Mon, &localReq, recv)
+	var localState distsqlrun.LocalState
+	if planCtx.validExtendedEvalCtx {
+		localState.EvalContext = planCtx.EvalContext()
+	}
+	if planCtx.isLocal {
+		localState.IsLocal = true
+		localState.LocalProcs = plan.LocalProcessors
+		localState.Txn = txn
+	}
+	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
 		return
@@ -360,15 +369,17 @@ func makeDistSQLReceiver(
 		stmtType:     stmtType,
 		tracing:      tracing,
 	}
-	// When the root transaction finishes (i.e. it is abandoned, aborted, or
-	// committed), ensure the flow is canceled so that we don't return results to
-	// the client that might have missed seeing their own writes. The committed
-	// case shouldn't happen.
+	// If this receiver is part of a distributed flow and isn't using the root
+	// transaction, we need to sure that the flow is canceled when the root
+	// transaction finishes (i.e. it is abandoned, aborted, or committed), so that
+	// we don't return results to the client that might have missed seeing their
+	// own writes. The committed case shouldn't happen. This isn't necessary if
+	// the flow is running locally and is using the root transaction.
 	//
 	// TODO(andrei): Instead of doing this, should we lift this transaction
 	// monitoring to connExecutor and have it cancel the SQL txn's context? Or for
 	// that matter, should the TxnCoordSender cancel the context itself?
-	if r.txn != nil {
+	if r.txn != nil && r.txn.Type() == client.LeafTxn {
 		r.txn.OnCurrentIncarnationFinish(func(err error) {
 			r.txnAbortedErr.Store(errWrap{err: err})
 		})
@@ -447,8 +458,10 @@ func (r *distSQLReceiver) Push(
 	}
 
 	if r.stmtType != tree.Rows {
-		// We only need the row count.
-		r.resultWriter.IncrementRowsAffected(1)
+		// We only need the row count. planNodeToRowSource is set up to handle
+		// ensuring that the last stage in the pipeline will return a single-column
+		// row with the row count in it, so just grab that and exit.
+		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
 	if r.row == nil {
@@ -528,15 +541,17 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // distSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
-	ctx context.Context,
-	txn *client.Txn,
-	p *planner,
-	plan planNode,
-	recv *distSQLReceiver,
-	evalCtx *extendedEvalContext,
+	ctx context.Context, p *planner, recv *distSQLReceiver, distribute bool,
 ) {
+	evalCtx := p.ExtendedEvalContext()
+	txn := p.txn
 	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
-	log.VEvent(ctx, 1, "creating DistSQL plan")
+	planCtx.isLocal = !distribute
+	planCtx.planner = p
+	planCtx.stmtType = recv.stmtType
+	planCtx.validExtendedEvalCtx = true
+
+	log.VEventf(ctx, 1, "creating DistSQL plan with distributedMode=%v", distribute)
 
 	if len(p.curPlan.subqueryPlans) != 0 {
 		err := p.curPlan.evalSubqueries(runParams{
@@ -552,7 +567,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		log.VEvent(ctx, 2, "evaluated subqueries")
 	}
 
-	physPlan, err := dsp.createPlanForNode(&planCtx, plan)
+	physPlan, err := dsp.createPlanForNode(&planCtx, p.curPlan.plan)
 	if err != nil {
 		recv.SetError(err)
 		return

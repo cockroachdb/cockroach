@@ -44,7 +44,7 @@ func TestSampleAggregator(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		gossip:   server.Gossip(),
 		clientDB: kvDB,
 		executor: server.InternalExecutor().(sqlutil.InternalExecutor),
