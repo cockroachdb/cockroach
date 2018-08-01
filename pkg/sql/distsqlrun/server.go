@@ -22,6 +22,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -361,7 +363,11 @@ func (ds *ServerImpl) setupFlow(
 			ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 		},
 	}
-	ie := ds.SessionBoundInternalExecutorFactory(ctx, sd)
+	ie := &lazyInternalExecutor{
+		newInternalExecutor: func() tree.SessionBoundInternalExecutor {
+			return ds.SessionBoundInternalExecutorFactory(ctx, sd)
+		},
+	}
 
 	evalCtx := tree.EvalContext{
 		Settings:     ds.ServerConfig.Settings,
@@ -668,4 +674,29 @@ func (so *dummySequenceOperators) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
 ) error {
 	return errSequenceOperators
+}
+
+// lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
+// itself only on the first call to QueryRow.
+type lazyInternalExecutor struct {
+	// Set when an internal executor has been initialized.
+	tree.SessionBoundInternalExecutor
+
+	// Used for initializing the internal executor exactly once.
+	once sync.Once
+
+	// newInternalExecutor must be set when instantiating a lazyInternalExecutor,
+	// it provides an internal executor to use when necessary.
+	newInternalExecutor func() tree.SessionBoundInternalExecutor
+}
+
+var _ tree.SessionBoundInternalExecutor = &lazyInternalExecutor{}
+
+func (ie *lazyInternalExecutor) QueryRow(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	ie.once.Do(func() {
+		ie.SessionBoundInternalExecutor = ie.newInternalExecutor()
+	})
+	return ie.SessionBoundInternalExecutor.QueryRow(ctx, opName, txn, stmt, qargs...)
 }
