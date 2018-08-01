@@ -31,11 +31,15 @@ select
  ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── filters [type=bool]
       └── eq [type=bool]
            ├── subquery [type=string]
@@ -48,9 +52,12 @@ select
            │         └── project
            │              ├── columns: v:7(string)
            │              ├── stats: [rows=1000]
+           │              ├── prune: (7)
            │              └── scan kuv
            │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
            │                   ├── stats: [rows=1000]
            │                   ├── key: (5)
-           │                   └── fd: (5)-->(6,7)
+           │                   ├── fd: (5)-->(6,7)
+           │                   ├── prune: (5-7)
+           │                   └── interesting orderings: (+5)
            └── const: 'foo' [type=string]

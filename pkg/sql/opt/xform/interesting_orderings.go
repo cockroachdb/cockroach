@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-// GetInterestingOrderings calculates and returns the
+// DeriveInterestingOrderings calculates and returns the
 // props.Logical.Rule.InterestingOrderings property of a relational operator.
-func GetInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
+func DeriveInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 	l := ev.Logical().Relational
 	if l.IsAvailable(props.InterestingOrderings) {
 		return l.Rule.InterestingOrderings
@@ -36,7 +36,7 @@ func GetInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 
 	case opt.SelectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		// Pass through child orderings.
-		res = GetInterestingOrderings(ev.Child(0))
+		res = DeriveInterestingOrderings(ev.Child(0))
 
 	case opt.ProjectOp:
 		res = interestingOrderingsForProject(ev)
@@ -86,7 +86,7 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 }
 
 func interestingOrderingsForProject(ev memo.ExprView) opt.OrderingSet {
-	inOrd := GetInterestingOrderings(ev.Child(0))
+	inOrd := DeriveInterestingOrderings(ev.Child(0))
 	passthroughCols := ev.Child(1).Private().(*memo.ProjectionsOpDef).PassthroughCols
 	res := inOrd.Copy()
 	res.RestrictToCols(passthroughCols)
@@ -100,7 +100,7 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 		return nil
 	}
 
-	res := GetInterestingOrderings(ev.Child(0)).Copy()
+	res := DeriveInterestingOrderings(ev.Child(0)).Copy()
 	if !def.Ordering.Any() {
 		ordering := def.Ordering.Ordering()
 		res.RestrictToPrefix(ordering)
@@ -115,7 +115,7 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 }
 
 func interestingOrderingsForLimit(ev memo.ExprView) opt.OrderingSet {
-	res := GetInterestingOrderings(ev.Child(0))
+	res := DeriveInterestingOrderings(ev.Child(0))
 	ord := ev.Private().(*props.OrderingChoice).Ordering()
 	if ord.Empty() {
 		return res
@@ -132,12 +132,12 @@ func interestingOrderingsForJoin(ev memo.ExprView) opt.OrderingSet {
 	if ev.Operator() == opt.SemiJoinOp || ev.Operator() == opt.AntiJoinOp {
 		// TODO(radu): perhaps take into account right-side interesting orderings on
 		// equality columns.
-		return GetInterestingOrderings(ev.Child(0))
+		return DeriveInterestingOrderings(ev.Child(0))
 	}
 	// For a join, we could conceivably preserve the order of one side (even with
 	// hash-join, depending on which side we store).
-	ordLeft := GetInterestingOrderings(ev.Child(0))
-	ordRight := GetInterestingOrderings(ev.Child(1))
+	ordLeft := DeriveInterestingOrderings(ev.Child(0))
+	ordRight := DeriveInterestingOrderings(ev.Child(1))
 	ord := make(opt.OrderingSet, 0, len(ordLeft)+len(ordRight))
 	ord = append(ord, ordLeft...)
 	ord = append(ord, ordRight...)

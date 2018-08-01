@@ -32,11 +32,15 @@ limit
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 1 [type=int]
 
 build
@@ -48,19 +52,23 @@ limit
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(5)
+ ├── prune: (5)
  ├── scalar-group-by
  │    ├── columns: count:5(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)
+ │    ├── prune: (5)
  │    ├── project
  │    │    ├── stats: [rows=1000]
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    │         ├── stats: [rows=1000]
  │    │         ├── key: (1)
- │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │         ├── prune: (1-4)
+ │    │         └── interesting orderings: (+1) (-4,+3,+1)
  │    └── aggregations
  │         └── count-rows [type=int]
  └── const: 10 [type=int]
@@ -73,11 +81,15 @@ limit
  ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── subquery [type=int]
       └── max1-row
            ├── columns: "?column?":5(int!null)
@@ -91,6 +103,7 @@ limit
                 ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(5)
+                ├── prune: (5)
                 ├── values
                 │    ├── cardinality: [1 - 1]
                 │    ├── stats: [rows=1]
@@ -108,11 +121,15 @@ limit
  ├── stats: [rows=1000]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 0 [type=int]
 
 # Propagate outer columns.
@@ -122,11 +139,14 @@ SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 project
  ├── columns: x:9(int)
  ├── stats: [rows=1000]
+ ├── prune: (9)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
@@ -141,16 +161,20 @@ project
                      ├── outer: (1,2)
                      ├── stats: [rows=1000]
                      ├── fd: ()-->(8)
+                     ├── prune: (8)
                      ├── project
                      │    ├── columns: x:8(int)
                      │    ├── outer: (1)
                      │    ├── stats: [rows=1000]
                      │    ├── fd: ()-->(8)
+                     │    ├── prune: (8)
                      │    ├── scan kuv
                      │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
                      │    │    ├── stats: [rows=1000]
                      │    │    ├── key: (5)
-                     │    │    └── fd: (5)-->(6,7)
+                     │    │    ├── fd: (5)-->(6,7)
+                     │    │    ├── prune: (5-7)
+                     │    │    └── interesting orderings: (+5)
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
                      └── variable: xyzs.y [type=int, outer=(2)]
@@ -165,4 +189,6 @@ scan xyzs@secondary
  ├── limit: 4294967296
  ├── stats: [rows=1.42857143]
  ├── key: (1)
- └── fd: ()-->(4)
+ ├── fd: ()-->(4)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (-4)

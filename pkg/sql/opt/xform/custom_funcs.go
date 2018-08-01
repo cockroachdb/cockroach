@@ -432,7 +432,7 @@ func (c *CustomFuncs) ConstructMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	leftOrders := GetInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
+	leftOrders := DeriveInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
 	leftOrders.RestrictToCols(opt.ColListToSet(leftEq))
 	if len(leftOrders) == 0 {
 		return nil

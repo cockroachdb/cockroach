@@ -646,7 +646,6 @@ func (r *RocksDB) open() error {
 func (r *RocksDB) syncLoop() {
 	s := &r.syncer
 	s.Lock()
-	defer s.Unlock()
 
 	var lastSync time.Time
 
@@ -655,6 +654,7 @@ func (r *RocksDB) syncLoop() {
 			s.cond.Wait()
 		}
 		if s.closed {
+			s.Unlock()
 			return
 		}
 
@@ -1722,7 +1722,7 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if leader {
 		// We're the leader of our group. Wait for any running commit to finish and
 		// for our batch to make it to the head of the pending queue.
-		for c.committing && c.pending[0] != r {
+		for c.committing || c.pending[0] != r {
 			c.cond.Wait()
 		}
 
@@ -1758,14 +1758,19 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 		// proceed.
 		c.Lock()
 		c.committing = false
-		c.cond.Signal()
+		// NB: Multiple leaders can be waiting.
+		c.cond.Broadcast()
 		c.Unlock()
 
 		// Propagate the error to all of the batches involved in the commit. If a
 		// batch requires syncing and the commit was successful, add it to the
 		// syncing list. Note that we're reusing the pending list here for the
-		// syncing list.
-		syncing := pending[:0]
+		// syncing list. We need to be careful to cap the capacity so that
+		// extending this slice past the length of the pending list will result in
+		// reallocation. Otherwise we have a race between appending to this list
+		// while holding the sync lock below, and appending to the commit pending
+		// list while holding the commit lock above.
+		syncing := pending[:0:len(pending)]
 		for _, b := range pending {
 			if err != nil || !b.syncCommit {
 				b.commitErr = err
