@@ -184,8 +184,9 @@ func AggregateIgnoresNulls(op Operator) bool {
 // NULL when its input is empty.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp:
+	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp, SqrDiffOp,
+		VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
+		ConcatAggOp:
 		return true
 	}
 	return false
