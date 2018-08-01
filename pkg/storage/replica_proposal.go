@@ -545,44 +545,6 @@ func (r *Replica) handleReplicatedEvalResult(
 			r.mu.state.TruncatedState = newTruncState
 			r.mu.Unlock()
 
-			// TODO(tschottdorf): everything below doesn't need to be on this
-			// goroutine. Worth moving out -- truncations are frequent and missing
-			// one of the side effects below doesn't matter. Need to be careful
-			// about the interaction with `evalTruncateLog` though, which computes
-			// some stats based on the log entries it sees. Also, sideloaded storage
-			// needs to hold the raft mu. Perhaps it should just get its own mutex
-			// (which is usually held together with raftMu, except when accessing
-			// the storage for a truncation). Or, even better, make use of the fact
-			// that all we need to synchronize is disk i/o, and there is no overlap
-			// between files *removed* during truncation and those active in Raft.
-
-			if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
-				// Truncate the Raft log.
-				batch := r.store.Engine().NewWriteOnlyBatch()
-				// We know that all of the deletions from here forward will be to distinct keys.
-				writer := batch.Distinct()
-				start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
-				end := engine.MakeMVCCMetadataKey(
-					keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
-				)
-				iter := r.store.Engine().NewIterator(engine.IterOptions{UpperBound: end.Key})
-				// Clear the log entries. Intentionally don't use range deletion
-				// tombstones (ClearRange()) due to performance concerns connected
-				// to having many range deletion tombstones. There is a chance that
-				// ClearRange will perform well here because the tombstones could be
-				// "collapsed", but it is hardly worth the risk at this point.
-				if err := writer.ClearIterRange(iter, start, end); err != nil {
-					log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
-				}
-				iter.Close()
-				writer.Close()
-
-				if err := batch.Commit(false); err != nil {
-					log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
-				}
-				batch.Close()
-			}
-
 			// Clear any entries in the Raft log entry cache for this range up
 			// to and including the most recently truncated index.
 			r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)

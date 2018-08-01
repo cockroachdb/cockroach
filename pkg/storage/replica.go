@@ -5590,6 +5590,7 @@ func (r *Replica) applyRaftCommand(
 	usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
+	oldTruncatedState := r.mu.state.TruncatedState
 
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
@@ -5675,6 +5676,35 @@ func (r *Replica) applyRaftCommand(
 		ms.Add(deltaStats)
 		if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
+		}
+	}
+
+	if rResult.State != nil && rResult.State.TruncatedState != nil {
+		newTruncatedState := rResult.State.TruncatedState
+
+		if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+			// Truncate the Raft log from the previous truncation index to the
+			// new truncation index. This is performed atomically with the raft
+			// command application so that the TruncatedState index is always
+			// consistent with the state of the Raft log itself. We can use the
+			// distinct writer because we know all writes will be to distinct
+			// keys.
+			start := engine.MakeMVCCMetadataKey(
+				keys.RaftLogKey(r.RangeID, oldTruncatedState.Index),
+			)
+			end := engine.MakeMVCCMetadataKey(
+				keys.RaftLogKey(r.RangeID, newTruncatedState.Index).PrefixEnd(),
+			)
+			// Clear the log entries. Intentionally don't use range deletion
+			// tombstones (ClearRange()) due to performance concerns connected
+			// to having many range deletion tombstones. There is a chance that
+			// ClearRange will perform well here because the tombstones could be
+			// "collapsed", but it is hardly worth the risk at this point.
+			iter := r.store.Engine().NewIterator(engine.IterOptions{UpperBound: end.Key})
+			if err := writer.ClearIterRange(iter, start, end); err != nil {
+				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", rResult.State.TruncatedState, err)
+			}
+			iter.Close()
 		}
 	}
 
