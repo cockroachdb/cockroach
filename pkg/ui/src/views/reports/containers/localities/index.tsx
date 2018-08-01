@@ -100,22 +100,23 @@ class Localities extends React.Component<LocalitiesProps, {}> {
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
           className="loading-image loading-image__spinner-left"
           image={ spinner }
-        >
-          <section className="section">
-            <table className="locality-table">
-              <thead>
-                <tr>
-                  <th>Localities</th>
-                  <th>Nodes</th>
-                  <th>Location</th>
-                </tr>
-              </thead>
-              <tbody>
-                { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
-              </tbody>
-            </table>
-          </section>
-        </Loading>
+          render={() => (
+            <section className="section">
+              <table className="locality-table">
+                <thead>
+                  <tr>
+                    <th>Localities</th>
+                    <th>Nodes</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
+                </tbody>
+              </table>
+            </section>
+          )}
+        />
       </div>
     );
   }

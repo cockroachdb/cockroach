@@ -110,9 +110,8 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
             loading={ !this.props.logs.data }
             className="loading-image loading-image__spinner-left"
             image={ spinner }
-          >
-            { content }
-          </Loading>
+            render={() => content}
+          />
         </section>
       </div>
     );

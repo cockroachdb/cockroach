@@ -446,12 +446,13 @@ class Network extends React.Component<NetworkProps, {}> {
           loading={!contentAvailable(nodesSummary)}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           image={spinner}
-        >
-          <div>
-            <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-            {this.renderContent(nodesSummary, filters)}
-          </div>
-        </Loading>
+          render={() => (
+            <div>
+              <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+              {this.renderContent(nodesSummary, filters)}
+            </div>
+          )}
+        />
       </div>
     );
   }

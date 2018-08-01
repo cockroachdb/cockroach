@@ -31,37 +31,38 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
         loading={!range || range.inFlight}
         className="loading-image loading-image__spinner-left"
         image={spinner}
-      >
-        <table className="connections-table">
-          <tbody>
-            <tr className="connections-table__row connections-table__row--header">
-              <th className="connections-table__cell connections-table__cell--header">Node</th>
-              <th className="connections-table__cell connections-table__cell--header">Valid</th>
-              <th className="connections-table__cell connections-table__cell--header">Replicas</th>
-              <th className="connections-table__cell connections-table__cell--header">Error</th>
-            </tr>
-            {
-              _.map(ids, id => {
-                const resp = range.data.responses_by_node_id[id];
-                const rowClassName = classNames(
-                  "connections-table__row",
-                  { "connections-table__row--warning": !resp.response || !_.isEmpty(resp.error_message) },
-                );
-                return (
-                  <tr key={id} className={rowClassName}>
-                    <td className="connections-table__cell">n{id}</td>
-                    <td className="connections-table__cell">
-                      {resp.response ? "ok" : "error"}
-                    </td>
-                    <td className="connections-table__cell">{resp.infos.length}</td>
-                    <td className="connections-table__cell">{resp.error_message}</td>
-                  </tr>
-                );
-              })
-            }
-          </tbody>
-        </table>
-      </Loading>
+        render={() => (
+          <table className="connections-table">
+            <tbody>
+              <tr className="connections-table__row connections-table__row--header">
+                <th className="connections-table__cell connections-table__cell--header">Node</th>
+                <th className="connections-table__cell connections-table__cell--header">Valid</th>
+                <th className="connections-table__cell connections-table__cell--header">Replicas</th>
+                <th className="connections-table__cell connections-table__cell--header">Error</th>
+              </tr>
+              {
+                _.map(ids, id => {
+                  const resp = range.data.responses_by_node_id[id];
+                  const rowClassName = classNames(
+                    "connections-table__row",
+                    { "connections-table__row--warning": !resp.response || !_.isEmpty(resp.error_message) },
+                  );
+                  return (
+                    <tr key={id} className={rowClassName}>
+                      <td className="connections-table__cell">n{id}</td>
+                      <td className="connections-table__cell">
+                        {resp.response ? "ok" : "error"}
+                      </td>
+                      <td className="connections-table__cell">{resp.infos.length}</td>
+                      <td className="connections-table__cell">{resp.error_message}</td>
+                    </tr>
+                  );
+                })
+              }
+            </tbody>
+          </table>
+        )}
+      />
     </div>
   );
 }
