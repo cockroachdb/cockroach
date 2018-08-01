@@ -221,6 +221,12 @@ func (p *planner) getTableDescByID(
 func (p *planner) getTableScanByRef(
 	ctx context.Context, tref *tree.TableRef, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
+
+	if tref.Columns != nil && len(tref.Columns) == 0 {
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"An explicit list of column IDs must include at least one column")
+	}
+
 	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))

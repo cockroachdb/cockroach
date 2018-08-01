@@ -33,9 +33,12 @@ func TestTableRefs(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Populate the test database.
+	// This test path should not run with the optimizer.
+	// The error paths are different.
 	stmt := `
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
+CREATE TABLE test.hidden(a INT, b INT);
 CREATE INDEX bc ON test.t(b, c);
 `
 	_, err := db.Exec(stmt)
@@ -59,6 +62,17 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 	pkID := tableDesc.PrimaryIndex.ID
 	secID := tableDesc.Indexes[0].ID
+
+	// Retrieve the numeric descriptors.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "hidden")
+	tIDHidden := tableDesc.ID
+	var rowIDHidden sqlbase.ColumnID
+	for _, c := range tableDesc.Columns {
+		switch c.Name {
+		case "rowid":
+			rowIDHidden = c.ID
+		}
+	}
 
 	// Make some schema changes meant to shuffle the ID/name mapping.
 	stmt = `
@@ -87,8 +101,8 @@ ALTER TABLE test.t DROP COLUMN xx;
 		{fmt.Sprintf("[%d(%d) as t]@bc", tID, cID), `(c)`, ``},
 		{fmt.Sprintf("[%d(%d, %d, %d) as t]", tID, cID, bID, aID), `(c, d, p)`, ``},
 		{fmt.Sprintf("[%d(%d, %d, %d) as t(c, b, a)]", tID, cID, bID, aID), `(c, b, a)`, ``},
-		{fmt.Sprintf("[%d() as t]", tID), `()`, ``},
-		{`[666() as t]`, ``, `pq: [666() AS t]: relation "[666]" does not exist`},
+		{fmt.Sprintf("[%d() as t]", tID), ``, `pq: An explicit list of column IDs must include at least one column`},
+		{`[666() as t]`, ``, `pq: An explicit list of column IDs must include at least one column`},
 		{fmt.Sprintf("[%d(666) as t]", tID), ``, `pq: column [666] does not exist`},
 		{fmt.Sprintf("test.t@[%d]", pkID), `(p, d, c)`, ``},
 		{fmt.Sprintf("test.t@[%d]", secID), `(p, d, c)`, ``},
@@ -100,6 +114,8 @@ ALTER TABLE test.t DROP COLUMN xx;
 		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, aID, secID), `(p)`, ``},
 		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, bID, secID), `(d)`, ``},
 		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, cID, secID), `(c)`, ``},
+		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, cID, secID), `(c)`, ``},
+		{fmt.Sprintf("[%d(%d) as t]", tIDHidden, rowIDHidden), `()`, ``},
 	}
 
 	for i, d := range testData {

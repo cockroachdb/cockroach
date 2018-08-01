@@ -195,6 +195,11 @@ type Table interface {
 	// position within the table, where i < ColumnCount.
 	Column(i int) Column
 
+	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
+	// Note that this takes the internal column ID, and has no relation to
+	// ColumnIDs in the optimizer.
+	LookupColumnOrdinal(colID uint32) (int, error)
+
 	// IndexCount returns the number of indexes defined on this table. This
 	// includes the primary index, so the count is always >= 1.
 	IndexCount() int
@@ -219,6 +224,10 @@ type Catalog interface {
 	// FindTable returns a Table interface for the database table matching the
 	// given table name.  Returns an error if the table does not exist.
 	FindTable(ctx context.Context, name *tree.TableName) (Table, error)
+
+	// FindTableByID returns a Table interface for the database table
+	// matching the given table ID. Returns an error if the table does not exist.
+	FindTableByID(ctx context.Context, tableID int64) (Table, error)
 }
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
