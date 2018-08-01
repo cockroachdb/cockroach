@@ -106,7 +106,7 @@ func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) (memo.ListID, 
 // -----------------------------------------------------------------------
 
 // IsBoundBy returns true if all outer references in the source expression are
-// bound by the destination expression. For example:
+// bound by the given columns. For example:
 //
 //   (InnerJoin
 //     (Scan a)
@@ -114,22 +114,16 @@ func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) (memo.ListID, 
 //     (Eq (Variable a.x) (Const 1))
 //   )
 //
-// The (Eq) expression is fully bound by the (Scan a) expression because all of
-// its outer references are satisfied by the columns produced by the Scan.
-func (c *CustomFuncs) IsBoundBy(src, dst memo.GroupID) bool {
-	return c.OuterCols(src).SubsetOf(c.OutputCols(dst))
-}
-
-// IsBoundBy2 returns true if all outer references in the source expression are
-// bound by one of the two destination expressions. This is a variation on the
-// IsBoundBy method.
-func (c *CustomFuncs) IsBoundBy2(src, dst1, dst2 memo.GroupID) bool {
-	return c.OuterCols(src).SubsetOf(c.OutputCols(dst1).Union(c.OutputCols(dst2)))
+// The (Eq) expression is fully bound by the output columns of the (Scan a)
+// expression because all of its outer references are satisfied by the columns
+// produced by the Scan.
+func (c *CustomFuncs) IsBoundBy(src memo.GroupID, cols opt.ColSet) bool {
+	return c.OuterCols(src).SubsetOf(cols)
 }
 
 // ExtractBoundConditions returns a new list containing only those expressions
-// from the given list that are fully bound by the given expression (i.e. all
-// outer references are satisfied by it). For example:
+// from the given list that are fully bound by the given columns (i.e. all
+// outer references are to one of these columns). For example:
 //
 //   (InnerJoin
 //     (Scan a)
@@ -140,42 +134,27 @@ func (c *CustomFuncs) IsBoundBy2(src, dst1, dst2 memo.GroupID) bool {
 //     ])
 //   )
 //
-// Calling extractBoundConditions with the filter conditions list and the output
+// Calling ExtractBoundConditions with the filter conditions list and the output
 // columns of (Scan a) would extract the (Gt) expression, since its outer
 // references only reference columns from a.
-func (c *CustomFuncs) ExtractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+func (c *CustomFuncs) ExtractBoundConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
 	lb := MakeListBuilder(c)
 	for _, item := range c.mem.LookupList(list) {
-		if c.IsBoundBy(item, group) {
+		if c.IsBoundBy(item, cols) {
 			lb.AddItem(item)
 		}
 	}
 	return lb.BuildList()
 }
 
-// ExtractBoundConditions2 is a variant of ExtractBoundConditions which extracts
-// conditions that are fully bound by the union of columns produced by two
-// expressions.
-func (c *CustomFuncs) ExtractBoundConditions2(
-	list memo.ListID, group1, group2 memo.GroupID,
-) memo.ListID {
-	lb := MakeListBuilder(c)
-	for _, item := range c.mem.LookupList(list) {
-		if c.IsBoundBy2(item, group1, group2) {
-			lb.AddItem(item)
-		}
-	}
-	return lb.BuildList()
-}
-
-// ExtractUnboundConditions is the inverse of ExtractBoundConditions. Instead of
+// ExtractUnboundConditions is the opposite of ExtractBoundConditions. Instead of
 // extracting expressions that are bound by the given expression, it extracts
 // list expressions that have at least one outer reference that is *not* bound
-// by the given expression (i.e. it has a "free" variable).
-func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
+// by the given columns (i.e. it has a "free" variable).
+func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
 	lb := MakeListBuilder(c)
 	for _, item := range c.mem.LookupList(list) {
-		if !c.IsBoundBy(item, group) {
+		if !c.IsBoundBy(item, cols) {
 			lb.AddItem(item)
 		}
 	}
@@ -279,6 +258,11 @@ func (c *CustomFuncs) OutputCols(group memo.GroupID) opt.ColSet {
 	default:
 		panic(fmt.Sprintf("OutputCols doesn't support op %s", expr.Operator()))
 	}
+}
+
+// OutputCols2 returns the union of the OutputCols for the two operators.
+func (c *CustomFuncs) OutputCols2(group1, group2 memo.GroupID) opt.ColSet {
+	return c.OutputCols(group1).Union(c.OutputCols(group2))
 }
 
 // OuterCols returns the set of outer columns associated with the given group,
