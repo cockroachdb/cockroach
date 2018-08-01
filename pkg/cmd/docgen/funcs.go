@@ -58,6 +58,11 @@ func init() {
 			); err != nil {
 				return err
 			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
+			); err != nil {
+				return err
+			}
 			return ioutil.WriteFile(
 				filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
 			)
@@ -189,7 +194,9 @@ func generateFunctions(from []string, categorize bool) []byte {
 			if fn.Info == notUsableInfo {
 				continue
 			}
-			if categorize && fn.WindowFunc != nil {
+			// We generate docs for both aggregates and window functions in separate
+			// files, so we want to omit them when processing all builtins.
+			if categorize && (props.Class == tree.AggregateClass || props.Class == tree.WindowClass) {
 				continue
 			}
 			args := fn.Types.String()
