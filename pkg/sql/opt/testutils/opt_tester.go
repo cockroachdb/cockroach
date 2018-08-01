@@ -244,9 +244,16 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 // Fills in lazily-derived properties (for display).
 func fillInLazyProps(ev memo.ExprView) {
 	if !ev.IsScalar() {
+		// Derive columns that are candidates for pruning.
+		norm.DerivePruneCols(ev)
+
+		// Derive columns that are candidates for null rejection.
+		norm.DeriveRejectNullCols(ev)
+
 		// Make sure the interesting orderings are calculated.
-		xform.GetInterestingOrderings(ev)
+		xform.DeriveInterestingOrderings(ev)
 	}
+
 	for i := 0; i < ev.ChildCount(); i++ {
 		fillInLazyProps(ev.Child(i))
 	}
