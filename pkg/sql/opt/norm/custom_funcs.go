@@ -348,14 +348,36 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 //
 // ----------------------------------------------------------------------
 
+// GroupingAndConstCols returns the grouping columns and ConstAgg columns (for
+// which the input and output column IDs match). A filter on these columns can
+// be pushed through a GroupBy.
+func (c *CustomFuncs) GroupingAndConstCols(def memo.PrivateID, aggs memo.GroupID) opt.ColSet {
+	result := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Copy()
+
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsColList := c.ExtractColList(aggsExpr.Cols())
+
+	// Add any ConstAgg columns.
+	for i := range aggsElems {
+		if constAgg := c.f.mem.NormExpr(aggsElems[i]).AsConstAgg(); constAgg != nil {
+			// Verify that the input and output column IDs match.
+			if aggsColList[i] == c.ExtractColID(c.f.mem.NormExpr(constAgg.Input()).AsVariable().Col()) {
+				result.Add(int(aggsColList[i]))
+			}
+		}
+	}
+	return result
+}
+
 // GroupingColsAreKey returns true if the given group by's grouping columns form
 // a strict key for the output rows of the given group. A strict key means that
 // any two rows will have unique key column values. Nulls are treated as equal
 // to one another (i.e. no duplicate nulls allowed). Having a strict key means
 // that the set of key column values uniquely determine the values of all other
 // columns in the relation.
-func (c *CustomFuncs) GroupingColsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
-	colSet := c.f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols
+func (c *CustomFuncs) GroupingColsAreKey(def memo.PrivateID, group memo.GroupID) bool {
+	colSet := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
 	return c.LookupLogical(group).Relational.FuncDeps.ColsAreStrictKey(colSet)
 }
 

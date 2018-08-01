@@ -67,7 +67,11 @@
         $projections:*
     )
     (Filters
-        $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]
+        $list:[
+            ...
+            $condition:* & (IsBoundBy $condition $inputCols:(OutputCols $input))
+            ...
+        ]
     )
 )
 =>
@@ -75,11 +79,11 @@
     (Project
         (Select
             $input
-            (Filters (ExtractBoundConditions $list $input))
+            (Filters (ExtractBoundConditions $list $inputCols))
         )
         $projections
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (Filters (ExtractUnboundConditions $list $inputCols))
 )
 
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
@@ -140,7 +144,7 @@
         $list:[
             ...
             $condition:* &
-                (IsBoundBy $condition $left) &
+                (IsBoundBy $condition (OutputCols $left)) &
                 (CanMap $on $condition $right)
             ...
         ]
@@ -180,7 +184,7 @@
         $list:[
             ...
             $condition:* &
-                (IsBoundBy $condition $right) &
+                (IsBoundBy $condition (OutputCols $right)) &
                 (CanMap $on $condition $left)
             ...
         ]
@@ -224,19 +228,23 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
+    $filter:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $leftCols:(OutputCols $left))
+        ...
+    ])
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters (ExtractBoundConditions $list $left))
+            (Filters (ExtractBoundConditions $list $leftCols))
         )
         $right
         $on
     )
-    (Filters (ExtractUnboundConditions $list $left))
+    (Filters (ExtractUnboundConditions $list $leftCols))
 )
 
 # PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
@@ -249,7 +257,11 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
+    $filter:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $rightCols:(OutputCols $right))
+        ...
+    ])
 )
 =>
 (Select
@@ -257,17 +269,18 @@
         $left
         (Select
             $right
-            (Filters (ExtractBoundConditions $list $right))
+            (Filters (ExtractBoundConditions $list $rightCols))
         )
         $on
     )
-    (Filters (ExtractUnboundConditions $list $right))
+    (Filters (ExtractUnboundConditions $list $rightCols))
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
-# where it does not reference any of the aggregation columns. This only works
-# if this is not an instance of the "scalar" GroupBy, which returns only one
-# row, and which exhibits different behavior if the input is empty:
+# where it only references grouping columns or ConstAgg columns.
+#
+# This rule doesn't work on ScalarGroupBy which exhibits different behavior if
+# the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -283,19 +296,26 @@
         $aggregations:*
         $def:*
     )
-    (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
+    (Filters $list:[
+        ...
+        $condition:* & (IsBoundBy
+            $condition
+            $passthroughCols:(GroupingAndConstCols $def $aggregations)
+        )
+        ...
+    ])
 )
 =>
 (Select
     (GroupBy
         (Select
             $input
-            (Filters (ExtractBoundConditions $list $input))
+            (Filters (ExtractBoundConditions $list $passthroughCols))
         )
         $aggregations
         $def
     )
-    (Filters (ExtractUnboundConditions $list $input))
+    (Filters (ExtractUnboundConditions $list $passthroughCols))
 )
 
 # RemoveNotNullCondition removes a filter with an IS NOT NULL condition

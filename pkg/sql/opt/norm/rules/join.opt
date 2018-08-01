@@ -108,7 +108,7 @@
             ...
             $condition:* &
                 ^(Eq (Variable) (Variable)) &
-                ^(IsBoundBy $condition $left) &
+                ^(IsBoundBy $condition (OutputCols $left)) &
                 (CanMap $filters $condition $left)
             ...
         ]
@@ -134,7 +134,7 @@
             ...
             $condition:* &
                 ^(Eq (Variable) (Variable)) &
-                ^(IsBoundBy $condition $right) &
+                ^(IsBoundBy $condition (OutputCols $right)) &
                 (CanMap $filters $condition $right)
             ...
         ]
@@ -173,16 +173,20 @@
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
     $left:*
     $right:*
-    $on:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
+    $on:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $leftCols:(OutputCols $left))
+        ...
+    ])
 )
 =>
 ((OpName)
     (Select
         $left
-        (Filters (ExtractBoundConditions $list $left))
+        (Filters (ExtractBoundConditions $list $leftCols))
     )
     $right
-    (Filters (ExtractUnboundConditions $list $left))
+    (Filters (ExtractUnboundConditions $list $leftCols))
 )
 
 # PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
@@ -196,16 +200,20 @@
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
     $right:*
-    $on:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
+    $on:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $rightCols:(OutputCols $right))
+        ...
+    ])
 )
 =>
 ((OpName)
     $left
     (Select
         $right
-        (Filters (ExtractBoundConditions $list $right))
+        (Filters (ExtractBoundConditions $list $rightCols))
     )
-    (Filters (ExtractUnboundConditions $list $right))
+    (Filters (ExtractUnboundConditions $list $rightCols))
 )
 
 # SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
