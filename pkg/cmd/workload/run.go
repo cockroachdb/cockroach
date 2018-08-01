@@ -164,7 +164,9 @@ func workerRun(
 	limiter *rate.Limiter,
 	workFn func(context.Context) error,
 ) {
-	defer wg.Done()
+	if wg != nil {
+		defer wg.Done()
+	}
 
 	for {
 		if ctx.Err() != nil {
@@ -174,7 +176,7 @@ func workerRun(
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
 			if err := limiter.Wait(ctx); err != nil {
-				if err == context.Canceled {
+				if err == ctx.Err() {
 					return
 				}
 				panic(err)
@@ -182,7 +184,7 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			if errors.Cause(err) == context.Canceled {
+			if errors.Cause(err) == ctx.Err() {
 				return
 			}
 			errCh <- err
@@ -283,30 +285,36 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var wg sync.WaitGroup
 	wg.Add(len(ops.WorkerFns))
 	go func() {
-		// If a ramp period was specified, start all of the workers
-		// gradually with a new context.
+		// If a ramp period was specified, start all of the workers gradually
+		// with a new context.
+		var rampCtx context.Context
 		if rampDone != nil {
-			var rampWG sync.WaitGroup
-			rampWG.Add(len(ops.WorkerFns))
-			rampCtx, cancelRamp := context.WithCancel(ctx)
-			sleepTime := *ramp / time.Duration(len(ops.WorkerFns))
-			for _, workFn := range ops.WorkerFns {
-				go workerRun(rampCtx, errCh, &rampWG, limiter, workFn)
-				time.Sleep(sleepTime)
-			}
-
-			// Cancel the ramp context. This interupts all worker loops, which
-			// are restarted together below.
-			cancelRamp()
-			rampWG.Wait()
-
-			// Notify the process loop below to reset timers and histograms.
-			close(rampDone)
+			var cancel func()
+			rampCtx, cancel = context.WithTimeout(ctx, *ramp)
+			defer cancel()
 		}
 
-		// Start all of the workers again, this time with the main context.
-		for _, workFn := range ops.WorkerFns {
-			go workerRun(ctx, errCh, &wg, limiter, workFn)
+		for i, workFn := range ops.WorkerFns {
+			i, workFn := i, workFn
+			go func() {
+				// If a ramp period was specified, start all of the workers
+				// gradually with a new context.
+				if rampCtx != nil {
+					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
+					time.Sleep(time.Duration(i) * rampPerWorker)
+					workerRun(rampCtx, errCh, nil, limiter, workFn)
+				}
+
+				// Start worker again, this time with the main context.
+				workerRun(ctx, errCh, &wg, limiter, workFn)
+			}()
+		}
+
+		if rampCtx != nil {
+			// Wait for the ramp period to finish, then notify the process loop
+			// below to reset timers and histograms.
+			<-rampCtx.Done()
+			close(rampDone)
 		}
 	}()
 

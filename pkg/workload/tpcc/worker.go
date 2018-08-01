@@ -149,18 +149,22 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.doWaits {
 		warehouseID = rand.Intn(w.config.warehouses)
 	} else {
-		select {
-		case <-time.After(time.Duration(t.keyingTime) * time.Second):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		// Wait out the entire keying and think time even if the context is
+		// expired. This prevents all workers from immediately restarting when
+		// the workload's ramp period expires, which can overload a cluster.
+		time.Sleep(time.Duration(t.keyingTime) * time.Second)
 	}
 
 	start := timeutil.Now()
 	if _, err := t.run(ctx, w.config, w.db, warehouseID); err != nil {
-		return errors.Wrapf(err, "error in %s", t.name)
+		// If the context was canceled or expired, the worker should still
+		// wait out the rest of its think time.
+		if errors.Cause(err) != ctx.Err() {
+			return errors.Wrapf(err, "error in %s", t.name)
+		}
+	} else {
+		w.hists.Get(t.name).Record(timeutil.Since(start))
 	}
-	w.hists.Get(t.name).Record(timeutil.Since(start))
 
 	if w.config.doWaits {
 		// 5.2.5.4: Think time is taken independently from a negative exponential
@@ -171,11 +175,7 @@ func (w *worker) run(ctx context.Context) error {
 		if thinkTime > (t.thinkTime * 10) {
 			thinkTime = t.thinkTime * 10
 		}
-		select {
-		case <-time.After(time.Duration(thinkTime) * time.Second):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		time.Sleep(time.Duration(thinkTime) * time.Second)
 	}
-	return nil
+	return ctx.Err()
 }

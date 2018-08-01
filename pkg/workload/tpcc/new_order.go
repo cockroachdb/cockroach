@@ -219,6 +219,9 @@ func (n newOrder) run(
 				iData := &iDatas[i]
 
 				if !rows.Next() {
+					if err := rows.Err(); err != nil {
+						return err
+					}
 					if rollback {
 						// 2.4.2.3: roll back when we're expecting a rollback due to
 						// simulated user error (invalid item id) and we actually
@@ -268,6 +271,9 @@ func (n newOrder) run(
 				item := &d.items[i]
 
 				if !rows.Next() {
+					if err := rows.Err(); err != nil {
+						return err
+					}
 					return errors.New("missing stock row")
 				}
 
