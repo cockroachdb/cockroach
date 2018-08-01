@@ -55,11 +55,19 @@ export function BytesToUnitValue(bytes: number): UnitValue {
  * https://stackoverflow.com/questions/10420352/converting-file-size-in-bytes-to-human-readable
  */
 export function Bytes(bytes: number): string {
+  return BytesWithPrecision(bytes, 1);
+}
+
+/**
+ * BytesWithPrecision is like Bytes, but accepts a precision parameter
+ * indicating how many digits after the decimal point are desired.
+ */
+export function BytesWithPrecision(bytes: number, precision: number): string {
   const unitVal = BytesToUnitValue(bytes);
   if (!unitVal.value) {
     return "0 B";
   }
-  return unitVal.value.toFixed(1) + " " + unitVal.units;
+  return unitVal.value.toFixed(precision) + " " + unitVal.units;
 }
 
 /**
