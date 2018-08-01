@@ -92,7 +92,7 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 // If src has a correlated subquery, CanMap returns false.
 func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
 	// Fast path if src is already bound by dst.
-	if c.IsBoundBy(src, dst) {
+	if c.IsBoundBy(src, c.OutputCols(dst)) {
 		return true
 	}
 
@@ -135,7 +135,7 @@ func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
 // a.x = b.x, because it would just return the tautology b.x = b.x.
 func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 	// Fast path if src is already bound by dst.
-	if c.IsBoundBy(src, dst) {
+	if c.IsBoundBy(src, c.OutputCols(dst)) {
 		return src
 	}
 
