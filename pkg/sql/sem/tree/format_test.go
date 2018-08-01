@@ -302,6 +302,74 @@ func TestFormatExpr2(t *testing.T) {
 	}
 }
 
+func TestFormatPgwireText(t *testing.T) {
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{`true`, `t`},
+		{`false`, `f`},
+		{`ROW(1)`, `(1)`},
+		{`ROW(1, NULL)`, `(1,)`},
+		{`ROW(1, true, 3)`, `(1,t,3)`},
+		{`ROW(1, (2, 3))`, `(1,"(2,3)")`},
+		{`ROW(1, (2, 'a b'))`, `(1,"(2,""a b"")")`},
+		{`ROW(1, (2, 'a"b'))`, `(1,"(2,""a""""b"")")`},
+		{`ROW(1, 2, ARRAY[1,2,3])`, `(1,2,"{1,2,3}")`},
+		{`ROW(1, 2, ARRAY[1,NULL,3])`, `(1,2,"{1,NULL,3}")`},
+		{`ROW(1, 2, ARRAY['a','b','c'])`, `(1,2,"{""a"",""b"",""c""}")`},
+		{`ROW(1, 2, ARRAY[true,false,true])`, `(1,2,"{t,f,t}")`},
+		{`ARRAY[(1,2),(3,4)]`, `{"(1,2)","(3,4)"}`},
+		{`ARRAY[(false,'a'),(true,'b')]`, `{"(f,\"a\")","(t,\"b\")"}`},
+		{`ARRAY[(1,ARRAY[2,NULL])]`, `{"(1,\"{2,NULL}\")"}`},
+		{`ARRAY[(1,(1,2)),(2,(3,4))]`, `{"(1,\"(1,2)\")","(2,\"(3,4)\")"}`},
+
+		{`(((1, 'a b', 3), (4, 'c d'), ROW(6)), (7, 8), ROW('e f'))`,
+			`("(""(1,""""a b"""",3)"",""(4,""""c d"""")"",""(6)"")","(7,8)","(""e f"")")`},
+
+		{`(((1, '2', 3), (4, '5'), ROW(6)), (7, 8), ROW('9'))`,
+			// TODO(knz): if/when we change the sub-string formatter
+			// to omit double quotes when not needed, the reference results
+			// needs to become:
+			// ("(""(1,2,3)"",""(4,5)"",""(6)"")","(7,8)","(9)")
+			`("(""(1,""""2"""",3)"",""(4,""""5"""")"",""(6)"")","(7,8)","(""9"")")`},
+
+		{`ARRAY[('a b',ARRAY['c d','e f']), ('g h',ARRAY['i j','k l'])]`,
+			`{"(\"a b\",\"{\"\"c d\"\",\"\"e f\"\"}\")","(\"g h\",\"{\"\"i j\"\",\"\"k l\"\"}\")"}`},
+
+		{`ARRAY[('1',ARRAY['2','3']), ('4',ARRAY['5','6'])]`,
+			// TODO(knz): if/when we change the sub-string formatter
+			// to omit double quotes when not needed, the reference results
+			// needs to become:
+			// {"(1,\"{2,3}\")","(4,\"{5,6}\")"}
+			`{"(\"1\",\"{\"\"2\"\",\"\"3\"\"}\")","(\"4\",\"{\"\"5\"\",\"\"6\"\"}\")"}`},
+
+		{`ARRAY[e'\U00002001☃']`, `{" ☃"}`},
+	}
+	var evalCtx tree.EvalContext
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			expr, err := parser.ParseExpr(test.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := tree.MakeSemaContext(false)
+			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			typeChecked, err = evalCtx.NormalizeExpr(typeChecked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(typeChecked, tree.FmtPgwireText)
+			if exprStr != test.expected {
+				t.Fatalf("expected %s, got %s", test.expected, exprStr)
+			}
+		})
+	}
+}
+
 // BenchmarkFormatRandomStatements measures the time needed to format
 // 1000 random statements.
 func BenchmarkFormatRandomStatements(b *testing.B) {
