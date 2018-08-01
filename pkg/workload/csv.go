@@ -16,13 +16,13 @@ package workload
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
