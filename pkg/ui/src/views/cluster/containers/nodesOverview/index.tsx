@@ -6,7 +6,8 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
+  livenessNomenclature, LivenessStatus, nodeCapacityStats, NodesSummary, nodesSummarySelector,
+  selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
@@ -14,7 +15,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { Bytes } from "src/util/format";
+import {Bytes, BytesWithPrecision} from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -114,8 +115,20 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             },
             // Used Capacity - displays the total persisted bytes maintained by the node.
             {
-              title: "Used Capacity",
-              cell: (ns) => Bytes(BytesUsed(ns)),
+              title: "Capacity Usage",
+              cell: (ns) => {
+                const { usable } = nodeCapacityStats(ns);
+                const used = BytesUsed(ns);
+                return (
+                  <span>
+                    {BytesWithPrecision(used, 0)}
+                    {" / "}
+                    {BytesWithPrecision(usable, 0)}
+                    {" "}
+                    ({Math.round(used / usable * 100)}%)
+                  </span>
+                );
+              },
               sort: (ns) => BytesUsed(ns),
             },
             // Replicas - displays the total number of replicas on the node.
