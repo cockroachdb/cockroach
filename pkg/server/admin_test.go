@@ -1098,6 +1098,7 @@ func TestAdminAPIJobs(t *testing.T) {
 		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
 		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
 		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}},
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{Details: jobspb.WrapPayloadDetails(job.details)}
@@ -1105,7 +1106,20 @@ func TestAdminAPIJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		progress := jobspb.Progress{Details: jobspb.WrapProgressDetails(job.progress)}
+		// Populate progress.Progress field with a specific progress type based on
+		// the job type.
+		if _, ok := job.progress.(jobspb.ChangefeedProgress); ok {
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &hlc.Timestamp{},
+			}
+		} else {
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 1.0,
+			}
+		}
+
 		progressBytes, err := protoutil.Marshal(&progress)
 		if err != nil {
 			t.Fatal(err)
@@ -1122,9 +1136,9 @@ func TestAdminAPIJobs(t *testing.T) {
 		uri         string
 		expectedIDs []int64
 	}{
-		{"jobs", append([]int64{3, 2, 1}, existingIDs...)},
-		{"jobs?limit=1", []int64{3}},
-		{"jobs?status=running", []int64{2, 1}},
+		{"jobs", append([]int64{4, 3, 2, 1}, existingIDs...)},
+		{"jobs?limit=1", []int64{4}},
+		{"jobs?status=running", []int64{4, 2, 1}},
 		{"jobs?status=succeeded", append([]int64{3}, existingIDs...)},
 		{"jobs?status=pending", []int64{}},
 		{"jobs?status=garbage", []int64{}},
