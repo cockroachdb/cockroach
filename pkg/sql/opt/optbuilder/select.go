@@ -290,6 +290,7 @@ func (b *Builder) buildSelectClause(
 		projectionsScope = fromScope.replace()
 		b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 		b.buildOrderBy(orderBy, fromScope, projectionsScope)
+		b.buildDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
 		outScope = fromScope
 	}
 
@@ -301,12 +302,12 @@ func (b *Builder) buildSelectClause(
 	b.constructProjectForScope(outScope, projectionsScope)
 	outScope = projectionsScope
 
-	// Wrap with distinct operator if it exists.
 	if sel.Distinct {
-		if len(sel.DistinctOn) > 0 {
-			panic(unimplementedf("DISTINCT ON is not supported"))
+		if projectionsScope.distinctOnCols.Empty() {
+			outScope.group = b.constructDistinct(outScope)
+		} else {
+			outScope = b.buildDistinctOn(projectionsScope.distinctOnCols, outScope)
 		}
-		outScope.group = b.constructDistinct(outScope)
 	}
 	return outScope
 }
