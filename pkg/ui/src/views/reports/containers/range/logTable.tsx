@@ -103,32 +103,33 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
           loading={!log || log.inFlight}
           className="loading-image loading-image__spinner-left"
           image={spinner}
-        >
-          <table className="log-table">
-            <tbody>
-              <tr className="log-table__row log-table__row--header">
-                <th className="log-table__cell log-table__cell--header">Timestamp</th>
-                <th className="log-table__cell log-table__cell--header">Store</th>
-                <th className="log-table__cell log-table__cell--header">Event Type</th>
-                <th className="log-table__cell log-table__cell--header">Range</th>
-                <th className="log-table__cell log-table__cell--header">Other Range</th>
-                <th className="log-table__cell log-table__cell--header">Info</th>
-              </tr>
-              {_.map(events, (event, key) => (
-                <tr key={key} className="log-table__row">
-                  <td className="log-table__cell log-table__cell--date">
-                    {Print.Timestamp(event.event.timestamp)}
-                  </td>
-                  <td className="log-table__cell">s{event.event.store_id}</td>
-                  <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
-                  <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
+          render={() => (
+            <table className="log-table">
+              <tbody>
+                <tr className="log-table__row log-table__row--header">
+                  <th className="log-table__cell log-table__cell--header">Timestamp</th>
+                  <th className="log-table__cell log-table__cell--header">Store</th>
+                  <th className="log-table__cell log-table__cell--header">Event Type</th>
+                  <th className="log-table__cell log-table__cell--header">Range</th>
+                  <th className="log-table__cell log-table__cell--header">Other Range</th>
+                  <th className="log-table__cell log-table__cell--header">Info</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Loading>
+                {_.map(events, (event, key) => (
+                  <tr key={key} className="log-table__row">
+                    <td className="log-table__cell log-table__cell--date">
+                      {Print.Timestamp(event.event.timestamp)}
+                    </td>
+                    <td className="log-table__cell">s{event.event.store_id}</td>
+                    <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
+                    <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
+                    <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
+                    <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        />
       </div>
     );
   }
