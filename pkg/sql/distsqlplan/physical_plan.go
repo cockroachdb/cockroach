@@ -72,6 +72,9 @@ type PhysicalPlan struct {
 	// Processors in the plan.
 	Processors []Processor
 
+	LocalProcessors       []distsqlrun.RowSourcedProcessor
+	LocalProcessorIndexes []*uint32
+
 	// Streams accumulates the streams in the plan - both local (intra-node) and
 	// remote (inter-node); when we have a final plan, the streams are used to
 	// generate processor input and output specs (see PopulateEndpoints).
@@ -634,16 +637,23 @@ func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
 // that is placed on the given node.
 //
 // For no limit, count should be MaxInt64.
-func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) error {
+func (p *PhysicalPlan) AddLimit(
+	count int64, offset int64, evalCtx *tree.EvalContext, node roachpb.NodeID,
+) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
 	}
 	if offset < 0 {
 		return errors.Errorf("negative offset")
 	}
+	limitZero := false
 	if count == 0 {
-		*p = emptyPlan(p.ResultTypes, node)
-		return nil
+		if len(p.LocalProcessors) == 0 {
+			*p = emptyPlan(p.ResultTypes, node)
+			return nil
+		}
+		count = 1
+		limitZero = true
 	}
 
 	if len(p.ResultRouters) == 1 {
@@ -658,8 +668,12 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
 				// TODO(radu): perform this optimization while propagating filters
 				// instead of having to detect it here.
-				*p = emptyPlan(p.ResultTypes, node)
-				return nil
+				if len(p.LocalProcessors) == 0 {
+					*p = emptyPlan(p.ResultTypes, node)
+					return nil
+				}
+				count = 1
+				limitZero = true
 			}
 			post.Offset += uint64(offset)
 		}
@@ -667,6 +681,9 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 			post.Limit = uint64(count)
 		}
 		p.SetLastStagePost(post, p.ResultTypes)
+		if limitZero {
+			p.AddFilter(tree.DBoolFalse, evalCtx, nil)
+		}
 		return nil
 	}
 
@@ -696,6 +713,9 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 		post,
 		p.ResultTypes,
 	)
+	if limitZero {
+		p.AddFilter(tree.DBoolFalse, evalCtx, nil)
+	}
 	return nil
 }
 
@@ -797,6 +817,13 @@ func MergePlans(
 		}
 	}
 	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
+
+	mergedPlan.LocalProcessors = append(left.LocalProcessors, right.LocalProcessors...)
+	mergedPlan.LocalProcessorIndexes = append(left.LocalProcessorIndexes, right.LocalProcessorIndexes...)
+	// Update the local processor indices in the right streams.
+	for i := len(left.LocalProcessorIndexes); i < len(mergedPlan.LocalProcessorIndexes); i++ {
+		*mergedPlan.LocalProcessorIndexes[i] += uint32(len(left.LocalProcessorIndexes))
+	}
 
 	leftRouters = left.ResultRouters
 	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)

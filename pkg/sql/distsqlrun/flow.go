@@ -18,7 +18,7 @@ import (
 	"context"
 	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -157,6 +157,8 @@ type Flow struct {
 	// or to the local host).
 	syncFlowConsumer RowReceiver
 
+	localProcessors []RowSourcedProcessor
+
 	localStreams map[StreamID]RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
@@ -182,11 +184,17 @@ type Flow struct {
 	spec *FlowSpec
 }
 
-func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
+func newFlow(
+	flowCtx FlowCtx,
+	flowReg *flowRegistry,
+	syncFlowConsumer RowReceiver,
+	localProcessors []RowSourcedProcessor,
+) *Flow {
 	f := &Flow{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
 		syncFlowConsumer: syncFlowConsumer,
+		localProcessors:  localProcessors,
 	}
 	f.status = FlowNotStarted
 	return f
@@ -330,7 +338,7 @@ func (f *Flow) makeProcessor(
 		outputs[i] = &copyingRowReceiver{RowReceiver: outputs[i]}
 	}
 
-	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
 		return nil, err
 	}

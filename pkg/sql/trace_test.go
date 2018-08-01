@@ -72,6 +72,8 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
+				"flow",
+				"table reader",
 				"consuming rows",
 				"dist sender",
 				"/cockroach.roachpb.Internal/Batch",
@@ -158,7 +160,9 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"consuming rows",
 				"dist sender",
+				"table reader",
 				"/cockroach.roachpb.Internal/Batch",
+				"flow",
 			},
 		},
 		{
