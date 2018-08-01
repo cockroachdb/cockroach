@@ -34,7 +34,6 @@ import (
 type tableReader struct {
 	processorBase
 
-	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
 	limitHint int64
 
@@ -63,9 +62,7 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	tr := &tableReader{
-		tableDesc: spec.Table,
-	}
+	tr := &tableReader{}
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
@@ -96,7 +93,7 @@ func newTableReader(
 	neededColumns := tr.out.neededColumns()
 
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
+		&tr.fetcher, &spec.Table, int(spec.IndexIdx), spec.Table.ColumnIdxMap(), spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc,
 	); err != nil {
 		return nil, err
