@@ -879,9 +879,6 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	}
 	if err := txn.Commit(ctx); !testutils.IsError(
 		err, "deadline exceeded before transaction finalization") {
-		// We test for TransactionAbortedError. If this was not a read-only txn,
-		// the error returned by the server would have been different - a
-		// TransactionStatusError. This inconsistency is unfortunate.
 		t.Fatal(err)
 	}
 }
