@@ -72,10 +72,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               cell: (ns) => `n${ns.desc.node_id}`,
               sort: (ns) => ns.desc.node_id,
             },
-            {
-              title: "CPUs",
-              cell: (ns) => ns.num_cpus,
-            },
             // Node address column - displays the node address, links to the
             // node-specific page for this node.
             {
@@ -118,6 +114,17 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
+            // Replicas - displays the total number of replicas on the node.
+            {
+              title: "Replicas",
+              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+              sort: (ns) => ns.metrics[MetricConstants.replicas],
+            },
+            // CPUs - the number of CPUs on this node
+            {
+              title: "CPUs",
+              cell: (ns) => ns.num_cpus,
+            },
             // Used Capacity - displays the total persisted bytes maintained by the node.
             {
               title: "Capacity Usage",
@@ -135,12 +142,6 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 );
               },
               sort: (ns) => BytesUsed(ns),
-            },
-            // Replicas - displays the total number of replicas on the node.
-            {
-              title: "Replicas",
-              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-              sort: (ns) => ns.metrics[MetricConstants.replicas],
             },
             // Mem Usage - total memory being used on this node.
             {
