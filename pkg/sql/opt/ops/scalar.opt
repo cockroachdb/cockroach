@@ -659,6 +659,16 @@ define ConstNotNullAgg {
     Input Expr
 }
 
+# AnyNotNullAgg returns any non-NULL value it receives, with no other guarantees.
+# If it does not receive any values, it returns NULL.
+#
+# AnyNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define AnyNotNullAgg {
+    Input Expr
+}
+
 # FirstAgg is used only by DistinctOn; it returns the value on the first row
 # according to an ordering; if the ordering is unspecified (or partially
 # specified), it is an arbitrary ordering but it must be the same across all

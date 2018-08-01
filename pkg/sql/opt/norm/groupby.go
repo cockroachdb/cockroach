@@ -79,6 +79,31 @@ func (c *CustomFuncs) AppendAggCols(
 	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
 }
 
+// AppendAggCols2 constructs a new Aggregations operator containing the
+// aggregate functions from an existing Aggregations operator plus an
+// additional set of aggregate functions, one for each column in the given set.
+// The new functions are of the given aggregate operator type.
+func (c *CustomFuncs) AppendAggCols2(
+	aggs memo.GroupID, aggOp opt.Operator, cols opt.ColSet, aggOp2 opt.Operator, cols2 opt.ColSet,
+) memo.GroupID {
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsColList := c.ExtractColList(aggsExpr.Cols())
+
+	colsLen := cols.Len()
+	outElems := make([]memo.GroupID, len(aggsElems)+colsLen+cols2.Len())
+	copy(outElems, aggsElems)
+	outColList := make(opt.ColList, len(outElems))
+	copy(outColList, aggsColList)
+
+	offset := len(aggsElems)
+	c.makeAggCols(aggOp, cols, outElems[offset:], outColList[offset:])
+	offset += colsLen
+	c.makeAggCols(aggOp2, cols2, outElems[offset:], outColList[offset:])
+
+	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+}
+
 // makeAggCols is a helper method that constructs a new aggregate function of
 // the given operator type for each column in the given set. The resulting
 // aggregates are written into outElems and outColList. As an example, for
@@ -102,6 +127,9 @@ func (c *CustomFuncs) makeAggCols(
 		switch aggOp {
 		case opt.ConstAggOp:
 			outAgg = c.f.ConstructConstAgg(varExpr)
+
+		case opt.AnyNotNullAggOp:
+			outAgg = c.f.ConstructAnyNotNullAgg(varExpr)
 
 		case opt.FirstAggOp:
 			outAgg = c.f.ConstructFirstAgg(varExpr)
