@@ -15,11 +15,11 @@
 package gossip
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -103,7 +103,7 @@ func monotonicUnixNano() int64 {
 
 // String returns a string representation of an infostore.
 func (is *infoStore) String() string {
-	buf := bytes.Buffer{}
+	var buf strings.Builder
 	if infoCount := len(is.Infos); infoCount > 0 {
 		fmt.Fprintf(&buf, "infostore with %d info(s): ", infoCount)
 	} else {
@@ -116,7 +116,7 @@ func (is *infoStore) String() string {
 		fmt.Fprintf(&buf, "%sinfo %q: %+v", prepend, key, i.Value)
 		prepend = ", "
 		return nil
-	}); err != nil {
+	}, false /* deleteExpired */); err != nil {
 		// This should never happen because the func we pass above never errors out.
 		panic(err)
 	}
@@ -161,13 +161,11 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 }
 
 // getInfo returns the Info at key. Returns nil when key is not present
-// in the infoStore.
+// in the infoStore. Does not modify the infoStore.
 func (is *infoStore) getInfo(key string) *Info {
 	if info, ok := is.Infos[key]; ok {
-		// Check TTL and discard if too old.
-		if info.expired(monotonicUnixNano()) {
-			delete(is.Infos, key)
-		} else {
+		// Check TTL and ignore if too old.
+		if !info.expired(monotonicUnixNano()) {
 			return info
 		}
 	}
@@ -211,7 +209,8 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 }
 
 // getHighWaterStamps returns a copy of the high water stamps map of
-// gossip peer info maintained by this infostore.
+// gossip peer info maintained by this infostore. Does not modify
+// the infoStore.
 func (is *infoStore) getHighWaterStamps() map[roachpb.NodeID]int64 {
 	copy := make(map[roachpb.NodeID]int64, len(is.highWaterStamps))
 	for k, hws := range is.highWaterStamps {
@@ -239,7 +238,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 			is.runCallbacks(key, i.Value, method)
 		}
 		return nil
-	}); err != nil {
+	}, true /* deleteExpired */); err != nil {
 		panic(err)
 	}
 
@@ -304,16 +303,20 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	}
 }
 
-// visitInfos implements a visitor pattern to run the visitInfo
-// function against each info in turn. Be sure to skip over any expired
-// infos.
-func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
+// visitInfos implements a visitor pattern to run the visitInfo function against
+// each info in turn. If deleteExpired is specified as true then the method will
+// delete any infos that it finds which are expired, so it may modify the
+// infoStore. If it is specified as false, the method will ignore expired infos
+// without deleting them or modifying the infoStore.
+func (is *infoStore) visitInfos(visitInfo func(string, *Info) error, deleteExpired bool) error {
 	now := monotonicUnixNano()
 
 	if visitInfo != nil {
 		for k, i := range is.Infos {
 			if i.expired(now) {
-				delete(is.Infos, k)
+				if deleteExpired {
+					delete(is.Infos, k)
+				}
 				continue
 			}
 			if err := visitInfo(k, i); err != nil {
@@ -354,6 +357,8 @@ func (is *infoStore) combine(
 // newer than the high water timestamps indicated by the supplied
 // map (which is taken from the perspective of the peer node we're
 // taking this delta for).
+//
+// May modify the infoStore.
 func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[string]*Info {
 	infos := make(map[string]*Info)
 	// Compute delta of infos.
@@ -362,7 +367,7 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 			infos[key] = i
 		}
 		return nil
-	}); err != nil {
+	}, true /* deleteExpired */); err != nil {
 		panic(err)
 	}
 
@@ -377,6 +382,8 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 // Infos from it) for the purposes of excluding them from the result.
 // This check is particularly useful if mostDistant is called multiple times
 // in quick succession.
+//
+// May modify the infoStore.
 func (is *infoStore) mostDistant(
 	hasOutgoingConn func(roachpb.NodeID) bool,
 ) (roachpb.NodeID, uint32) {
@@ -393,7 +400,7 @@ func (is *infoStore) mostDistant(
 			nodeID = i.NodeID
 		}
 		return nil
-	}); err != nil {
+	}, true /* deleteExpired */); err != nil {
 		panic(err)
 	}
 	return nodeID, maxHops
@@ -402,6 +409,8 @@ func (is *infoStore) mostDistant(
 // leastUseful determines which node ID from amongst the set is
 // currently contributing the least. Returns the node ID. If nodes is
 // empty, returns 0.
+//
+// May modify the infoStore.
 func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 	contrib := make(map[roachpb.NodeID]map[roachpb.NodeID]struct{}, nodes.len())
 	for node := range nodes.nodes {
@@ -413,7 +422,7 @@ func (is *infoStore) leastUseful(nodes nodeSet) roachpb.NodeID {
 		}
 		contrib[i.PeerID][i.NodeID] = struct{}{}
 		return nil
-	}); err != nil {
+	}, true /* deleteExpired */); err != nil {
 		panic(err)
 	}
 
