@@ -618,6 +618,11 @@ func TestParse(t *testing.T) {
 		{`SELECT '192.168.0.1':::INET`},
 		{`SELECT INET '192.168.0.1'`},
 
+		{`SELECT 1:::REGTYPE`},
+		{`SELECT 1:::REGPROC`},
+		{`SELECT 1:::REGCLASS`},
+		{`SELECT 1:::REGNAMESPACE`},
+
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
 		{`SELECT 'a' AS primary`},
