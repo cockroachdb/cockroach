@@ -608,11 +608,6 @@ type allPeers struct{}
 // allPeers implements the peerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) bool { return true }
 
-type noPeers struct{}
-
-// noPeers implements the peerGroupChecker interface.
-func (noPeers) InSameGroup(i, j int) bool { return false }
-
 // peerGroupChecker can check if a pair of row indexes within a partition are
 // in the same peer group.
 type peerGroupChecker interface {
@@ -787,13 +782,8 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				// for functions with syntactically equivalent PARTITION BY and ORDER BY clauses.
 				sort.Sort(sorter)
 				peerGrouper = sorter
-			} else if frameRun.Frame != nil && frameRun.Frame.Mode == tree.ROWS {
-				// If ORDER BY clause is not provided and Frame is specified with ROWS mode,
-				// any row has no peers.
-				peerGrouper = noPeers{}
 			} else {
-				// If ORDER BY clause is not provided and either no Frame is provided or Frame is
-				// specified with RANGE mode, all rows are peers.
+				// If ORDER BY clause is not provided, all rows are peers.
 				peerGrouper = allPeers{}
 			}
 
