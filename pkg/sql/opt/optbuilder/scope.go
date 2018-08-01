@@ -41,12 +41,15 @@ type scope struct {
 	groupby       groupby
 	physicalProps props.Physical
 
-	// extraCols contains columns specified by the ORDER BY clause which don't
-	// appear in cols.
+	// extraCols contains columns specified by the ORDER BY or DISTINCT ON clauses
+	// which don't appear in cols.
 	extraCols []scopeColumn
 
-	// orderByCols remembers the ordering columns by ID (for convenience).
-	orderByCols opt.ColSet
+	// These fields remember the ORDER BY and DISTINCT ON columns by ID. They are
+	// used for convenience so we don't have to pass them around alongside the
+	// scope.
+	orderByCols    opt.ColSet
+	distinctOnCols opt.ColSet
 
 	// group is the memo.GroupID of the relational operator built with this scope.
 	group memo.GroupID
