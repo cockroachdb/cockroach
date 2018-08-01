@@ -18,7 +18,7 @@ import (
 	"context"
 	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -71,7 +71,7 @@ type FlowCtx struct {
 	//
 	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
 	// cores of the processors that need it.
-	EvalCtx tree.EvalContext
+	EvalCtx *tree.EvalContext
 	// rpcCtx and nodeDialer are used by the Outboxes that may be
 	// present in the flow for connecting to other nodes (rpcCtx for
 	// flows initiated by 2.0 nodes that specify addresses, and
@@ -123,7 +123,7 @@ type FlowCtx struct {
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
-	evalCtx := ctx.EvalCtx
+	evalCtx := *ctx.EvalCtx
 	return &evalCtx
 }
 
@@ -157,6 +157,8 @@ type Flow struct {
 	// or to the local host).
 	syncFlowConsumer RowReceiver
 
+	localProcessors []LocalProcessor
+
 	localStreams map[StreamID]RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
@@ -182,11 +184,17 @@ type Flow struct {
 	spec *FlowSpec
 }
 
-func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
+func newFlow(
+	flowCtx FlowCtx,
+	flowReg *flowRegistry,
+	syncFlowConsumer RowReceiver,
+	localProcessors []LocalProcessor,
+) *Flow {
 	f := &Flow{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
 		syncFlowConsumer: syncFlowConsumer,
+		localProcessors:  localProcessors,
 	}
 	f.status = FlowNotStarted
 	return f
@@ -330,7 +338,7 @@ func (f *Flow) makeProcessor(
 		outputs[i] = &copyingRowReceiver{RowReceiver: outputs[i]}
 	}
 
-	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +390,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), &f.EvalCtx, streams)
+				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
 				if err != nil {
 					return err
 				}
