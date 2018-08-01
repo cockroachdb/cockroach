@@ -384,6 +384,7 @@ func (ds *ServerImpl) setupFlow(
 	var haveSequences bool
 	for _, seq := range req.EvalContext.SeqState.Seqs {
 		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
+		haveSequences = true
 	}
 	if haveSequences {
 		evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
