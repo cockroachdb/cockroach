@@ -111,6 +111,12 @@ func initPGBuiltins() {
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		builtins[name] = builtin
 	}
+
+	// Make crdb_internal.create_regfoo builtins.
+	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+		typName := typ.SQLName()
+		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
+	}
 }
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
@@ -510,6 +516,22 @@ func evalPrivilegeCheck(
 		}
 	}
 	return tree.DBoolTrue, nil
+}
+
+func makeCreateRegDef(typ types.TOid) builtinDefinition {
+	return makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"oid", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(typ),
+			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
+				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), coltypes.OidTypeToColType(typ), string(tree.MustBeDString(d[1]))), nil
+			},
+			Info: notUsableInfo,
+		},
+	)
 }
 
 var pgBuiltins = map[string]builtinDefinition{

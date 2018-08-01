@@ -5808,15 +5808,15 @@ typename:
       return 1
     }
   }
+| postgres_oid
+  {
+    $$.val = $1.castTargetType()
+  }
 
 cast_target:
   typename
   {
     $$.val = $1.colType()
-  }
-| postgres_oid
-  {
-    $$.val = $1.castTargetType()
   }
 
 opt_array_bounds:

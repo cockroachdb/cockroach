@@ -3099,6 +3099,16 @@ func NewDOid(d DInt) *DOid {
 	return &oid
 }
 
+// NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
+// and a string.
+func NewDOidWithName(d DInt, typ *coltypes.TOid, name string) *DOid {
+	return &DOid{
+		DInt:         d,
+		semanticType: typ,
+		name:         name,
+	}
+}
+
 // AsRegProc changes the input DOid into a regproc with the given name and
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
@@ -3138,6 +3148,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
 		d.DInt.Format(ctx)
+	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
+		ctx.Buffer.WriteString("crdb_internal.create_" + strings.ToLower(d.semanticType.Name) + "(")
+		ctx.Buffer.WriteString(d.DInt.String())
+		ctx.Buffer.WriteString(`,'`)
+		ctx.Buffer.WriteString(d.name)
+		ctx.Buffer.WriteString(`')`)
 	} else {
 		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
 	}
