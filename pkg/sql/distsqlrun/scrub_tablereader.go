@@ -45,6 +45,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 
 type scrubTableReader struct {
 	tableReader
+	tableDesc sqlbase.TableDescriptor
 	// fetcherResultToColIdx maps RowFetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
