@@ -605,7 +605,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 
 	// Compare the equality columns of the baseRow to that of the curRow.
 	da := &sqlbase.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
 	}
@@ -754,7 +754,7 @@ func (z *zigzagJoiner) nextRow(
 				return nil, z.producerMeta(err)
 			}
 			da := &sqlbase.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}

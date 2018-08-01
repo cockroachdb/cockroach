@@ -99,29 +99,20 @@ true
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
 
-# TODO(radu): can't execbuild index join yet.
-## Index join - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
-#----
-#false
-#
-## Index join with filter on result - don't distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
-#----
-#false
-#
-## Index join with filter on index scan - distribute.
-#query B
-#SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
-#----
-#true
+# Index join - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+----
+false
 
-# OID cast - don't distribute (#22249).
-statement error pq: cast to REGCLASS is not supported by distsql
-EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+# Index join with filter on result - don't distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
+----
+false
 
-# Query with OID expression - don't distribute (#24423).
-statement error pq: OID expressions are not supported by distsql
-EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
+# Index join with filter on index scan - distribute.
+query B
+SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+----
+true

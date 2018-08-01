@@ -128,7 +128,7 @@ func TestTableReader(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 				defer evalCtx.Stop(context.Background())
 				flowCtx := FlowCtx{
-					EvalCtx:  evalCtx,
+					EvalCtx:  &evalCtx,
 					Settings: s.ClusterSettings(),
 					txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 					nodeID:   s.NodeID(),
@@ -212,7 +212,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: st,
 		txn:      client.NewTxn(tc.Server(0).DB(), nodeID, client.RootTxn),
 		nodeID:   nodeID,
@@ -316,7 +316,7 @@ func TestLimitScans(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(kvDB, s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
@@ -409,7 +409,7 @@ func BenchmarkTableReader(b *testing.B) {
 	defer evalCtx.Stop(context.Background())
 
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
