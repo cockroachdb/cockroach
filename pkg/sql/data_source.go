@@ -87,6 +87,7 @@ func (p *planner) getVirtualDataSource(
 	// The resulting node.
 	return planDataSource{
 		info: sqlbase.NewSourceInfoForSingleTable(sourceName, columns),
+
 		plan: &delayedNode{
 			name:    sourceName.String(),
 			columns: columns,

@@ -33,7 +33,10 @@ func TestTableRefs(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Populate the test database.
+	// This test path should not run with the optimizer.
+	// The error paths are different.
 	stmt := `
+SET experimental_opt='off';
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
 CREATE INDEX bc ON test.t(b, c);
