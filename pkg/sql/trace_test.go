@@ -326,8 +326,7 @@ func TestTrace(t *testing.T) {
 								if r >= len(test.expSpans) {
 									t.Errorf("extra span: %s", op)
 									remainingErr = true
-								}
-								if op != test.expSpans[r] {
+								} else if op != test.expSpans[r] {
 									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
 									remainingErr = true
 								}
