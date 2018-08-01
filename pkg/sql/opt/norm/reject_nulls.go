@@ -20,6 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
+// RejectNullCols returns the set of columns that are candidates for NULL
+// rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
+// more details.
+func (c *CustomFuncs) RejectNullCols(group memo.GroupID) opt.ColSet {
+	return DeriveRejectNullCols(memo.MakeNormExprView(c.f.mem, group))
+}
+
 // HasNullRejectingFilter returns true if the filter causes some of the columns
 // in nullRejectCols to be non-null. For example, if nullRejectCols = (x, z),
 // filters such as x < 5, x = y, and z IS NOT NULL all satisfy this property.
@@ -31,48 +38,6 @@ func (c *CustomFuncs) HasNullRejectingFilter(filter memo.GroupID, nullRejectCols
 
 	notNullFilterCols := filterConstraints.ExtractNotNullCols(c.f.evalCtx)
 	return notNullFilterCols.Intersects(nullRejectCols)
-}
-
-// RejectNullCols returns the set of columns that are candidates for NULL
-// rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
-// more details.
-func (c *CustomFuncs) RejectNullCols(group memo.GroupID) opt.ColSet {
-	// Lazily calculate and store the RejectNullCols value.
-	relational := c.LookupRelational(group)
-	if relational.IsAvailable(props.RejectNullCols) {
-		return relational.Rule.RejectNullCols
-	}
-	relational.SetAvailable(props.RejectNullCols)
-
-	// TODO(andyk): Add other operators to make null rejection more comprehensive.
-	ev := memo.MakeNormExprView(c.f.mem, group)
-	switch ev.Operator() {
-	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		// Pass through null-rejecting columns from both inputs.
-		relational.Rule.RejectNullCols = c.RejectNullCols(ev.ChildGroup(0))
-		relational.Rule.RejectNullCols.UnionWith(c.RejectNullCols(ev.ChildGroup(1)))
-
-	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		// Pass through null-rejection columns from left input, and request null-
-		// rejection on right columns.
-		relational.Rule.RejectNullCols = c.RejectNullCols(ev.ChildGroup(0))
-		relational.Rule.RejectNullCols.UnionWith(c.OutputCols(ev.ChildGroup(1)))
-
-	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		// Pass through null-rejection columns from right input, and request null-
-		// rejection on left columns.
-		relational.Rule.RejectNullCols = c.OutputCols(ev.ChildGroup(0))
-		relational.Rule.RejectNullCols.UnionWith(c.RejectNullCols(ev.ChildGroup(1)))
-
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		// Request null-rejection on all output columns.
-		relational.Rule.RejectNullCols = relational.OutputCols
-
-	case opt.GroupByOp:
-		relational.Rule.RejectNullCols = c.deriveGroupByRejectNullCols(ev)
-	}
-
-	return relational.Rule.RejectNullCols
 }
 
 // NullRejectAggVar scans through the list of aggregate functions and returns
@@ -94,6 +59,47 @@ func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
 	panic("couldn't find an aggregate that is not ConstAgg/ConstNotNullAgg")
 }
 
+// DeriveRejectNullCols returns the set of columns that are candidates for NULL
+// rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
+// more details.
+func DeriveRejectNullCols(ev memo.ExprView) opt.ColSet {
+	// Lazily calculate and store the RejectNullCols value.
+	relational := ev.Logical().Relational
+	if relational.IsAvailable(props.RejectNullCols) {
+		return relational.Rule.RejectNullCols
+	}
+	relational.SetAvailable(props.RejectNullCols)
+
+	// TODO(andyk): Add other operators to make null rejection more comprehensive.
+	switch ev.Operator() {
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		// Pass through null-rejecting columns from both inputs.
+		relational.Rule.RejectNullCols = DeriveRejectNullCols(ev.Child(0))
+		relational.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(ev.Child(1)))
+
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		// Pass through null-rejection columns from left input, and request null-
+		// rejection on right columns.
+		relational.Rule.RejectNullCols = DeriveRejectNullCols(ev.Child(0))
+		relational.Rule.RejectNullCols.UnionWith(ev.Child(1).Logical().Relational.OutputCols)
+
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		// Pass through null-rejection columns from right input, and request null-
+		// rejection on left columns.
+		relational.Rule.RejectNullCols = ev.Child(0).Logical().Relational.OutputCols
+		relational.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(ev.Child(1)))
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		// Request null-rejection on all output columns.
+		relational.Rule.RejectNullCols = relational.OutputCols
+
+	case opt.GroupByOp:
+		relational.Rule.RejectNullCols = deriveGroupByRejectNullCols(ev)
+	}
+
+	return relational.Rule.RejectNullCols
+}
+
 // deriveGroupByRejectNullCols returns the set of GroupBy columns that are
 // eligible for null rejection. If an aggregate input column has requested null
 // rejection, then pass along its request if the following criteria are met:
@@ -111,8 +117,8 @@ func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
 //      ignored because all rows in each group must have the same value for this
 //      column, so it doesn't matter which rows are filtered.
 //
-func (c *CustomFuncs) deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
-	input := ev.ChildGroup(0)
+func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
+	input := ev.Child(0)
 	aggs := ev.Child(1)
 	aggColList := aggs.Private().(opt.ColList)
 
@@ -143,7 +149,7 @@ func (c *CustomFuncs) deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !c.RejectNullCols(input).Contains(int(inColID)) {
+		if !DeriveRejectNullCols(input).Contains(int(inColID)) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}

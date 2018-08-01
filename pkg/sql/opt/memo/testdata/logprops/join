@@ -44,16 +44,22 @@ inner-join
  ├── stats: [rows=100000]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
+ ├── prune: (2-4,6,7)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (7)
- │    └── fd: (7)-->(5,6)
+ │    ├── fd: (7)-->(5,6)
+ │    ├── prune: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -66,16 +72,20 @@ SELECT (SELECT (VALUES (x), (y))) FROM xysd
 project
  ├── columns: column1:7(int)
  ├── stats: [rows=1000]
+ ├── prune: (7)
  ├── inner-join-apply
  │    ├── columns: x:1(int!null) y:2(int) column1:5(int)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,5)
+ │    ├── interesting orderings: (+1)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1)
  │    ├── max1-row
  │    │    ├── columns: column1:5(int)
  │    │    ├── outer: (1,2)
@@ -88,6 +98,7 @@ project
  │    │         ├── outer: (1,2)
  │    │         ├── cardinality: [2 - 2]
  │    │         ├── stats: [rows=2]
+ │    │         ├── prune: (5)
  │    │         ├── tuple [type=tuple{int}, outer=(1)]
  │    │         │    └── variable: xysd.x [type=int, outer=(1)]
  │    │         └── tuple [type=tuple{int}, outer=(2)]
@@ -106,16 +117,22 @@ project
  ├── stats: [rows=100]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:6(int!null)
       ├── stats: [rows=100]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── max1-row
       │    ├── columns: v:6(int!null)
       │    ├── outer: (1)
@@ -127,14 +144,18 @@ project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1)
       │         ├── stats: [rows=100]
+      │         ├── prune: (6)
       │         └── inner-join-apply
       │              ├── columns: v:6(int!null) n:9(int!null)
       │              ├── outer: (1)
       │              ├── stats: [rows=100]
       │              ├── fd: ()-->(9)
+      │              ├── interesting orderings: ()
       │              ├── scan uv
       │              │    ├── columns: v:6(int!null)
-      │              │    └── stats: [rows=1000]
+      │              │    ├── stats: [rows=1000]
+      │              │    ├── prune: (6)
+      │              │    └── interesting orderings: ()
       │              ├── max1-row
       │              │    ├── columns: n:9(int!null)
       │              │    ├── outer: (6)
@@ -147,11 +168,14 @@ project
       │              │         ├── outer: (6)
       │              │         ├── stats: [rows=111.111111]
       │              │         ├── fd: ()-->(9)
+      │              │         ├── interesting orderings: (+9)
       │              │         ├── scan mn@secondary
       │              │         │    ├── columns: n:9(int!null)
       │              │         │    ├── constraint: /9: (/NULL - ]
       │              │         │    ├── stats: [rows=333.333333]
-      │              │         │    └── key: (9)
+      │              │         │    ├── key: (9)
+      │              │         │    ├── prune: (9)
+      │              │         │    └── interesting orderings: (+9)
       │              │         └── filters [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │              │              └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ])]
       │              │                   ├── variable: mn.n [type=int, outer=(9)]
@@ -175,16 +199,22 @@ project
  ├── stats: [rows=100]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:6(int!null)
       ├── stats: [rows=100]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
+      ├── prune: (3,4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── max1-row
       │    ├── columns: v:6(int!null)
       │    ├── outer: (1,2)
@@ -196,18 +226,25 @@ project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1,2)
       │         ├── stats: [rows=100000]
+      │         ├── prune: (6)
       │         └── inner-join
       │              ├── columns: v:6(int!null) m:8(int!null)
       │              ├── outer: (1,2)
       │              ├── stats: [rows=100000]
       │              ├── fd: ()-->(8)
+      │              ├── prune: (6)
+      │              ├── interesting orderings: () (+8)
       │              ├── scan uv
       │              │    ├── columns: v:6(int!null)
-      │              │    └── stats: [rows=1000]
+      │              │    ├── stats: [rows=1000]
+      │              │    ├── prune: (6)
+      │              │    └── interesting orderings: ()
       │              ├── scan mn
       │              │    ├── columns: m:8(int!null)
       │              │    ├── stats: [rows=1000]
-      │              │    └── key: (8)
+      │              │    ├── key: (8)
+      │              │    ├── prune: (8)
+      │              │    └── interesting orderings: (+8)
       │              └── filters [type=bool, outer=(1,2,8), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(1,8), (8)==(1,2), (1)==(2,8)]
       │                   ├── eq [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
       │                   │    ├── variable: mn.m [type=int, outer=(8)]
@@ -229,16 +266,23 @@ left-join
  ├── stats: [rows=100000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── prune: (2-4,6,7)
+ ├── reject-nulls: (5-7)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (7)
- │    └── fd: (7)-->(5,6)
+ │    ├── fd: (7)-->(5,6)
+ │    ├── prune: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -253,21 +297,30 @@ project
  ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int)
       ├── stats: [rows=1000, distinct(5)=1]
       ├── key: (1)
       ├── fd: ()-->(5), (1)-->(2-4), (3,4)~~>(1,2)
+      ├── prune: (2-4)
+      ├── interesting orderings: (+1) (-3,+4,+1)
       ├── left-join-apply
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int)
       │    ├── stats: [rows=1000, distinct(5)=1]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+      │    ├── prune: (2-4)
+      │    ├── reject-nulls: (5)
+      │    ├── interesting orderings: (+1) (-3,+4,+1)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    ├── stats: [rows=1000]
       │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    │    ├── prune: (1-4)
+      │    │    └── interesting orderings: (+1) (-3,+4,+1)
       │    ├── max1-row
       │    │    ├── columns: u:5(int!null)
       │    │    ├── outer: (1)
@@ -280,9 +333,12 @@ project
       │    │         ├── outer: (1)
       │    │         ├── stats: [rows=111.111111]
       │    │         ├── fd: ()-->(5)
+      │    │         ├── interesting orderings: ()
       │    │         ├── scan uv
       │    │         │    ├── columns: u:5(int)
-      │    │         │    └── stats: [rows=1000]
+      │    │         │    ├── stats: [rows=1000]
+      │    │         │    ├── prune: (5)
+      │    │         │    └── interesting orderings: ()
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │                   ├── variable: uv.u [type=int, outer=(5)]
@@ -302,16 +358,23 @@ right-join
  ├── stats: [rows=100000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── prune: (2-4,6,7)
+ ├── reject-nulls: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (7)
- │    └── fd: (7)-->(5,6)
+ │    ├── fd: (7)-->(5,6)
+ │    ├── prune: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -325,26 +388,38 @@ right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
  ├── stats: [rows=1000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-6)
+ ├── reject-nulls: (1-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── project
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
  │    └── select
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         ├── stats: [rows=1000, distinct(8)=1]
  │         ├── key: (1)
  │         ├── fd: ()-->(8), (1)-->(2-4), (3,4)~~>(1,2)
+ │         ├── prune: (2-4)
+ │         ├── interesting orderings: (+1) (-3,+4,+1)
  │         ├── left-join-apply
  │         │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) uv.u:8(int)
  │         │    ├── stats: [rows=1000, distinct(8)=1]
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-4,8), (3,4)~~>(1,2)
+ │         │    ├── prune: (2-4)
+ │         │    ├── reject-nulls: (8)
+ │         │    ├── interesting orderings: (+1) (-3,+4,+1)
  │         │    ├── scan xysd
  │         │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │         │    │    ├── stats: [rows=1000]
  │         │    │    ├── key: (1)
- │         │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │         │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │         │    │    ├── prune: (1-4)
+ │         │    │    └── interesting orderings: (+1) (-3,+4,+1)
  │         │    ├── max1-row
  │         │    │    ├── columns: uv.u:8(int!null)
  │         │    │    ├── outer: (1)
@@ -357,14 +432,18 @@ right-join
  │         │    │         ├── outer: (1)
  │         │    │         ├── stats: [rows=110.111111]
  │         │    │         ├── fd: ()-->(8)
+ │         │    │         ├── interesting orderings: ()
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
  │         │    │         │    ├── stats: [rows=111.111111]
  │         │    │         │    ├── fd: ()-->(8)
+ │         │    │         │    ├── interesting orderings: ()
  │         │    │         │    ├── scan uv
  │         │    │         │    │    ├── columns: uv.u:8(int)
- │         │    │         │    │    └── stats: [rows=1000]
+ │         │    │         │    │    ├── stats: [rows=1000]
+ │         │    │         │    │    ├── prune: (8)
+ │         │    │         │    │    └── interesting orderings: ()
  │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
  │         │    │         │              ├── variable: uv.u [type=int, outer=(8)]
@@ -377,7 +456,9 @@ right-join
  │                   └── null [type=unknown]
  ├── scan uv
  │    ├── columns: uv.u:5(int) uv.v:6(int!null)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    ├── prune: (5,6)
+ │    └── interesting orderings: ()
  └── true [type=bool]
 
 # Full-join.
@@ -389,16 +470,23 @@ full-join
  ├── stats: [rows=100000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+ ├── prune: (2-4,6,7)
+ ├── reject-nulls: (1-7)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (7)
- │    └── fd: (7)-->(5,6)
+ │    ├── fd: (7)-->(5,6)
+ │    ├── prune: (5-7)
+ │    └── interesting orderings: (+7)
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -412,23 +500,35 @@ project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
  ├── stats: [rows=100000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-6)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  └── full-join-apply
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
       ├── stats: [rows=100000]
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      ├── prune: (2-6)
+      ├── reject-nulls: (1-6,8)
+      ├── interesting orderings: (+1) (-3,+4,+1) ()
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── left-join
       │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
       │    ├── outer: (1)
       │    ├── stats: [rows=1000]
       │    ├── fd: ()~~>(8)
+      │    ├── prune: (5,6)
+      │    ├── reject-nulls: (8)
+      │    ├── interesting orderings: ()
       │    ├── scan uv
       │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
-      │    │    └── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── prune: (5,6)
+      │    │    └── interesting orderings: ()
       │    ├── max1-row
       │    │    ├── columns: uv.u:8(int!null)
       │    │    ├── outer: (1)
@@ -441,14 +541,18 @@ project
       │    │         ├── outer: (1)
       │    │         ├── stats: [rows=110.111111]
       │    │         ├── fd: ()-->(8)
+      │    │         ├── interesting orderings: ()
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
       │    │         │    ├── stats: [rows=111.111111]
       │    │         │    ├── fd: ()-->(8)
+      │    │         │    ├── interesting orderings: ()
       │    │         │    ├── scan uv
       │    │         │    │    ├── columns: uv.u:8(int)
-      │    │         │    │    └── stats: [rows=1000]
+      │    │         │    │    ├── stats: [rows=1000]
+      │    │         │    │    ├── prune: (8)
+      │    │         │    │    └── interesting orderings: ()
       │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │    │         │         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       │    │         │              ├── variable: uv.u [type=int, outer=(8)]
@@ -469,14 +573,20 @@ semi-join
  ├── stats: [rows=100000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    ├── prune: (5,6)
+ │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -491,24 +601,34 @@ semi-join-apply
  ├── stats: [rows=110111.111]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110.111111]
  │    ├── fd: ()-->(6)
+ │    ├── prune: (5)
+ │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
  │    │    ├── fd: ()-->(6)
+ │    │    ├── prune: (5)
+ │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── prune: (5,6)
+ │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              ├── variable: uv.v [type=int, outer=(6)]
@@ -525,24 +645,34 @@ semi-join-apply
  ├── stats: [rows=100000000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── semi-join
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=100000]
  │    ├── fd: ()-->(6)
+ │    ├── prune: (5)
+ │    ├── interesting orderings: ()
  │    ├── scan uv
  │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── prune: (5,6)
+ │    │    └── interesting orderings: ()
  │    ├── scan mn
  │    │    ├── columns: m:8(int!null) n:9(int)
  │    │    ├── stats: [rows=1000]
  │    │    ├── key: (8)
- │    │    └── fd: (8)-->(9), (9)~~>(8)
+ │    │    ├── fd: (8)-->(9), (9)~~>(8)
+ │    │    ├── prune: (8,9)
+ │    │    └── interesting orderings: (+8) (+9,+8)
  │    └── filters [type=bool, outer=(1,6,8), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(6,8), (8)==(1,6), (6)==(1,8)]
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
  │         │    ├── variable: xysd.x [type=int, outer=(1)]
@@ -561,14 +691,20 @@ anti-join
  ├── stats: [rows=100000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    ├── prune: (5,6)
+ │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
            ├── variable: xysd.x [type=int, outer=(1)]
@@ -583,24 +719,34 @@ anti-join-apply
  ├── stats: [rows=110111.111]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110.111111]
  │    ├── fd: ()-->(6)
+ │    ├── prune: (5)
+ │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
  │    │    ├── fd: ()-->(6)
+ │    │    ├── prune: (5)
+ │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── prune: (5,6)
+ │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │              ├── variable: uv.v [type=int, outer=(6)]
@@ -616,21 +762,29 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=1000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-6)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=1000000]
       ├── key: (1,7)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
+      ├── prune: (1-7)
+      ├── interesting orderings: (+1) (-3,+4,+1) (+7)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+1) (-3,+4,+1)
       ├── scan uv
       │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=1000]
       │    ├── key: (7)
-      │    └── fd: (7)-->(5,6)
+      │    ├── fd: (7)-->(5,6)
+      │    ├── prune: (5-7)
+      │    └── interesting orderings: (+7)
       └── true [type=bool]
 
 # Self-join.
@@ -642,16 +796,22 @@ inner-join
  ├── stats: [rows=1000000]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (1-8)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (5)
- │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── true [type=bool]
 
 # Propagate outer columns.
@@ -663,11 +823,15 @@ select
  ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (4)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  └── filters [type=bool, outer=(1-3)]
       └── exists [type=bool, outer=(1-3)]
            └── inner-join
@@ -677,6 +841,7 @@ select
                 ├── stats: [rows=0.1]
                 ├── key: ()
                 ├── fd: ()-->(5,6)
+                ├── prune: (6)
                 ├── project
                 │    ├── columns: x:5(int)
                 │    ├── outer: (1)
@@ -684,6 +849,7 @@ select
                 │    ├── stats: [rows=1]
                 │    ├── key: ()
                 │    ├── fd: ()-->(5)
+                │    ├── prune: (5)
                 │    ├── values
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
@@ -698,6 +864,7 @@ select
                 │    ├── stats: [rows=1]
                 │    ├── key: ()
                 │    ├── fd: ()-->(6)
+                │    ├── prune: (6)
                 │    ├── values
                 │    │    ├── cardinality: [1 - 1]
                 │    │    ├── stats: [rows=1]
@@ -733,8 +900,10 @@ semi-join
  │    │    ├── stats: [rows=1, distinct(5)=1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(5)
+ │    │    ├── prune: (5)
  │    │    ├── scan xysd@secondary
- │    │    │    └── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── interesting orderings: ()
  │    │    └── aggregations
  │    │         └── count-rows [type=int]
  │    └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
@@ -743,7 +912,9 @@ semi-join
  │              └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:6(int) v:7(int!null)
- │    └── stats: [rows=1000, distinct(5)=700]
+ │    ├── stats: [rows=1000, distinct(5)=700]
+ │    ├── prune: (6,7)
+ │    └── interesting orderings: ()
  └── true [type=bool]
 
 # Calculate semi-join-apply cardinality.
@@ -756,26 +927,36 @@ semi-join-apply
  ├── stats: [rows=50]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── fd: ()-->(5)
+ │    ├── prune: (6)
+ │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
  │    │    ├── fd: ()-->(5)
+ │    │    ├── prune: (6)
+ │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── prune: (5,6)
+ │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │              ├── variable: xysd.x [type=int, outer=(1)]
@@ -799,11 +980,14 @@ anti-join
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:2(int) v:3(int!null)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    ├── prune: (2,3)
+ │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            ├── variable: uv.u [type=int, outer=(2)]
@@ -819,26 +1003,36 @@ anti-join-apply
  ├── stats: [rows=50]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1) (-3,+4,+1) ()
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── limit
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── fd: ()-->(5)
+ │    ├── prune: (6)
+ │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111.111111]
  │    │    ├── fd: ()-->(5)
+ │    │    ├── prune: (6)
+ │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    └── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── prune: (5,6)
+ │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │              ├── variable: xysd.x [type=int, outer=(1)]
@@ -854,10 +1048,12 @@ inner-join
  ├── columns: column1:1(int) u:2(int) v:3(int!null)
  ├── cardinality: [0 - 4]
  ├── stats: [rows=0.4]
+ ├── prune: (1-3)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (1)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    └── tuple [type=tuple{int}]
@@ -866,14 +1062,18 @@ inner-join
  │    ├── columns: u:2(int) v:3(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (2,3)
  │    ├── project
  │    │    ├── columns: u:2(int) v:3(int!null)
  │    │    ├── stats: [rows=1000]
+ │    │    ├── prune: (2,3)
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         ├── key: (4)
- │    │         └── fd: (4)-->(2,3)
+ │    │         ├── fd: (4)-->(2,3)
+ │    │         ├── prune: (2-4)
+ │    │         └── interesting orderings: (+4)
  │    └── const: 2 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
@@ -886,10 +1086,13 @@ left-join
  ├── columns: column1:1(int) u:2(int) v:3(int)
  ├── cardinality: [0 - 6]
  ├── stats: [rows=0.6]
+ ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [3 - 3]
  │    ├── stats: [rows=3]
+ │    ├── prune: (1)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -900,14 +1103,18 @@ left-join
  │    ├── columns: u:2(int) v:3(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (2,3)
  │    ├── project
  │    │    ├── columns: u:2(int) v:3(int!null)
  │    │    ├── stats: [rows=1000]
+ │    │    ├── prune: (2,3)
  │    │    └── scan uv
  │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         ├── key: (4)
- │    │         └── fd: (4)-->(2,3)
+ │    │         ├── fd: (4)-->(2,3)
+ │    │         ├── prune: (2-4)
+ │    │         └── interesting orderings: (+4)
  │    └── const: 2 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
@@ -920,23 +1127,30 @@ right-join
  ├── columns: u:1(int) v:2(int) column1:4(int)
  ├── cardinality: [0 - 6]
  ├── stats: [rows=0.6]
+ ├── prune: (1,2,4)
+ ├── reject-nulls: (1,2)
  ├── limit
  │    ├── columns: u:1(int) v:2(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (1,2)
  │    ├── project
  │    │    ├── columns: u:1(int) v:2(int!null)
  │    │    ├── stats: [rows=1000]
+ │    │    ├── prune: (1,2)
  │    │    └── scan uv
  │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         ├── key: (3)
- │    │         └── fd: (3)-->(1,2)
+ │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── prune: (1-3)
+ │    │         └── interesting orderings: (+3)
  │    └── const: 2 [type=int]
  ├── values
  │    ├── columns: column1:4(int)
  │    ├── cardinality: [3 - 3]
  │    ├── stats: [rows=3]
+ │    ├── prune: (4)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -954,10 +1168,13 @@ full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [0 - 4]
  ├── stats: [rows=0.4]
+ ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (1)
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -966,6 +1183,7 @@ full-join
  │    ├── columns: column1:2(unknown)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (2)
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -981,10 +1199,13 @@ full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [0 - 4]
  ├── stats: [rows=0.4]
+ ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (1)
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown, constraints=(contradiction; tight)]
  │    └── tuple [type=tuple{unknown}]
@@ -993,6 +1214,7 @@ full-join
  │    ├── columns: column1:2(unknown)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (2)
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown, constraints=(contradiction; tight)]
  │    └── tuple [type=tuple{unknown}]
@@ -1008,15 +1230,21 @@ full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
  ├── stats: [rows=200]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-5)
+ ├── reject-nulls: (1-5)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── values
  │    ├── columns: column1:5(int)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
+ │    ├── prune: (5)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    └── tuple [type=tuple{int}]
@@ -1034,17 +1262,24 @@ full-join
  ├── stats: [rows=0.1]
  ├── key: ()
  ├── fd: ()-->(1-8)
+ ├── prune: (1-8)
+ ├── reject-nulls: (1-8)
+ ├── interesting orderings: (+1) (-3,+4,+1) (+5) (-7,+8,+5)
  ├── limit
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (-3,+4,+1)
  │    ├── scan xysd
  │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    │    ├── stats: [rows=1000]
  │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    ├── prune: (1-4)
+ │    │    └── interesting orderings: (+1) (-3,+4,+1)
  │    └── const: 1 [type=int]
  ├── limit
  │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
@@ -1052,11 +1287,15 @@ full-join
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(5-8)
+ │    ├── prune: (5-8)
+ │    ├── interesting orderings: (+5) (-7,+8,+5)
  │    ├── scan xysd
  │    │    ├── columns: xysd.x:5(int!null) xysd.y:6(int) xysd.s:7(string) xysd.d:8(decimal!null)
  │    │    ├── stats: [rows=1000]
  │    │    ├── key: (5)
- │    │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    │    ├── prune: (5-8)
+ │    │    └── interesting orderings: (+5) (-7,+8,+5)
  │    └── const: 1 [type=int]
  └── filters [type=bool]
       └── true [type=bool]
@@ -1070,25 +1309,34 @@ left-join
  ├── stats: [rows=70000]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
+ ├── prune: (1-4,8)
+ ├── reject-nulls: (5,8)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── group-by
  │    ├── columns: u:5(int) sum:8(decimal)
  │    ├── grouping columns: u:5(int)
  │    ├── stats: [rows=700, distinct(5)=700]
  │    ├── key: (5)
  │    ├── fd: (5)-->(8)
+ │    ├── prune: (8)
  │    ├── project
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── stats: [rows=1000, distinct(5)=700]
+ │    │    ├── prune: (5,6)
  │    │    └── scan uv
  │    │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    │         ├── stats: [rows=1000, distinct(5)=700]
  │    │         ├── key: (7)
- │    │         └── fd: (7)-->(5,6)
+ │    │         ├── fd: (7)-->(5,6)
+ │    │         ├── prune: (5-7)
+ │    │         └── interesting orderings: (+7)
  │    └── aggregations [outer=(6)]
  │         └── sum [type=decimal, outer=(6)]
  │              └── variable: uv.v [type=int, outer=(6)]
@@ -1106,30 +1354,41 @@ left-join
  ├── stats: [rows=30777.1544]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
+ ├── prune: (1-4,8)
+ ├── reject-nulls: (5,8)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── group-by
  │    ├── columns: u:5(int!null) sum:8(decimal)
  │    ├── grouping columns: u:5(int!null)
  │    ├── stats: [rows=307.771544, distinct(5)=307.771544]
  │    ├── key: (5)
  │    ├── fd: (5)-->(8)
+ │    ├── prune: (8)
  │    ├── project
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── stats: [rows=333.333333, distinct(5)=307.771544]
+ │    │    ├── prune: (5,6)
  │    │    └── select
  │    │         ├── columns: u:5(int!null) v:6(int!null) rowid:7(int!null)
  │    │         ├── stats: [rows=333.333333, distinct(5)=307.771544]
  │    │         ├── key: (7)
  │    │         ├── fd: (7)-->(5,6)
+ │    │         ├── prune: (6,7)
+ │    │         ├── interesting orderings: (+7)
  │    │         ├── scan uv
  │    │         │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    │         │    ├── stats: [rows=1000, distinct(5)=700]
  │    │         │    ├── key: (7)
- │    │         │    └── fd: (7)-->(5,6)
+ │    │         │    ├── fd: (7)-->(5,6)
+ │    │         │    ├── prune: (5-7)
+ │    │         │    └── interesting orderings: (+7)
  │    │         └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
  │    │              └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
  │    │                   ├── variable: uv.u [type=int, outer=(5)]
@@ -1149,20 +1408,27 @@ right-join
  ├── stats: [rows=70000]
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
+ ├── prune: (4-8)
+ ├── reject-nulls: (1,4)
+ ├── interesting orderings: (+5) (-7,+8,+5)
  ├── group-by
  │    ├── columns: u:1(int) sum:4(decimal)
  │    ├── grouping columns: u:1(int)
  │    ├── stats: [rows=700, distinct(1)=700]
  │    ├── key: (1)
  │    ├── fd: (1)-->(4)
+ │    ├── prune: (4)
  │    ├── project
  │    │    ├── columns: u:1(int) v:2(int!null)
  │    │    ├── stats: [rows=1000, distinct(1)=700]
+ │    │    ├── prune: (1,2)
  │    │    └── scan uv
  │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=1000, distinct(1)=700]
  │    │         ├── key: (3)
- │    │         └── fd: (3)-->(1,2)
+ │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── prune: (1-3)
+ │    │         └── interesting orderings: (+3)
  │    └── aggregations [outer=(2)]
  │         └── sum [type=decimal, outer=(2)]
  │              └── variable: uv.v [type=int, outer=(2)]
@@ -1170,7 +1436,9 @@ right-join
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (5)
- │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
            ├── variable: uv.u [type=int, outer=(1)]
@@ -1185,25 +1453,34 @@ right-join
  ├── stats: [rows=30777.1544]
  ├── key: (1,5)
  ├── fd: (1)-->(4), (5)-->(6-8), (7,8)~~>(5,6)
+ ├── prune: (4-8)
+ ├── reject-nulls: (1,4)
+ ├── interesting orderings: (+5) (-7,+8,+5)
  ├── group-by
  │    ├── columns: u:1(int!null) sum:4(decimal)
  │    ├── grouping columns: u:1(int!null)
  │    ├── stats: [rows=307.771544, distinct(1)=307.771544]
  │    ├── key: (1)
  │    ├── fd: (1)-->(4)
+ │    ├── prune: (4)
  │    ├── project
  │    │    ├── columns: u:1(int!null) v:2(int!null)
  │    │    ├── stats: [rows=333.333333, distinct(1)=307.771544]
+ │    │    ├── prune: (1,2)
  │    │    └── select
  │    │         ├── columns: u:1(int!null) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=333.333333, distinct(1)=307.771544]
  │    │         ├── key: (3)
  │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── prune: (2,3)
+ │    │         ├── interesting orderings: (+3)
  │    │         ├── scan uv
  │    │         │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         │    ├── stats: [rows=1000, distinct(1)=700]
  │    │         │    ├── key: (3)
- │    │         │    └── fd: (3)-->(1,2)
+ │    │         │    ├── fd: (3)-->(1,2)
+ │    │         │    ├── prune: (1-3)
+ │    │         │    └── interesting orderings: (+3)
  │    │         └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
  │    │              └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
  │    │                   ├── variable: uv.u [type=int, outer=(1)]
@@ -1215,7 +1492,9 @@ right-join
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (5)
- │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters [type=bool]
       └── true [type=bool]
 
@@ -1228,25 +1507,34 @@ full-join
  ├── stats: [rows=70000]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
+ ├── prune: (1-4,8)
+ ├── reject-nulls: (1-5,8)
+ ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── group-by
  │    ├── columns: u:5(int) sum:8(decimal)
  │    ├── grouping columns: u:5(int)
  │    ├── stats: [rows=700, distinct(5)=700]
  │    ├── key: (5)
  │    ├── fd: (5)-->(8)
+ │    ├── prune: (8)
  │    ├── project
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── stats: [rows=1000, distinct(5)=700]
+ │    │    ├── prune: (5,6)
  │    │    └── scan uv
  │    │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    │         ├── stats: [rows=1000, distinct(5)=700]
  │    │         ├── key: (7)
- │    │         └── fd: (7)-->(5,6)
+ │    │         ├── fd: (7)-->(5,6)
+ │    │         ├── prune: (5-7)
+ │    │         └── interesting orderings: (+7)
  │    └── aggregations [outer=(6)]
  │         └── sum [type=decimal, outer=(6)]
  │              └── variable: uv.v [type=int, outer=(6)]
@@ -1264,20 +1552,27 @@ full-join
  ├── stats: [rows=70000]
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
+ ├── prune: (4-8)
+ ├── reject-nulls: (1,4-8)
+ ├── interesting orderings: (+5) (-7,+8,+5)
  ├── group-by
  │    ├── columns: u:1(int) sum:4(decimal)
  │    ├── grouping columns: u:1(int)
  │    ├── stats: [rows=700, distinct(1)=700]
  │    ├── key: (1)
  │    ├── fd: (1)-->(4)
+ │    ├── prune: (4)
  │    ├── project
  │    │    ├── columns: u:1(int) v:2(int!null)
  │    │    ├── stats: [rows=1000, distinct(1)=700]
+ │    │    ├── prune: (1,2)
  │    │    └── scan uv
  │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=1000, distinct(1)=700]
  │    │         ├── key: (3)
- │    │         └── fd: (3)-->(1,2)
+ │    │         ├── fd: (3)-->(1,2)
+ │    │         ├── prune: (1-3)
+ │    │         └── interesting orderings: (+3)
  │    └── aggregations [outer=(2)]
  │         └── sum [type=decimal, outer=(2)]
  │              └── variable: uv.v [type=int, outer=(2)]
@@ -1285,7 +1580,9 @@ full-join
  │    ├── columns: x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  │    ├── stats: [rows=1000]
  │    ├── key: (5)
- │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
+ │    ├── prune: (5-8)
+ │    └── interesting orderings: (+5) (-7,+8,+5)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
            ├── variable: uv.u [type=int, outer=(1)]

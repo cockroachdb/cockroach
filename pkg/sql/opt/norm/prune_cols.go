@@ -80,7 +80,21 @@ func (c *CustomFuncs) NeededColsExplain(def memo.PrivateID) opt.ColSet {
 // additional needed columns from that. See the props.Relational.Rule.PruneCols
 // comment for more details.
 func (c *CustomFuncs) CanPruneCols(target memo.GroupID, neededCols opt.ColSet) bool {
-	return !c.candidatePruneCols(target).Difference(neededCols).Empty()
+	ev := memo.MakeNormExprView(c.f.mem, target)
+
+	// Handle special scalar operators.
+	var pruneCols opt.ColSet
+	switch ev.Operator() {
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		// Both Projections and Aggregations allow their columns to be pruned if
+		// they're never used in a higher-level expression.
+		pruneCols = c.OutputCols(target)
+
+	default:
+		pruneCols = DerivePruneCols(ev)
+	}
+
+	return !pruneCols.Difference(neededCols).Empty()
 }
 
 // PruneCols creates an expression that discards any outputs columns of the
@@ -126,7 +140,8 @@ func (c *CustomFuncs) PruneCols(target memo.GroupID, neededCols opt.ColSet) memo
 		// Get the subset of the target group's output columns that should not be
 		// pruned. Don't prune if the target output column is needed by a higher-
 		// level expression, or if it's not part of the PruneCols set.
-		colSet := c.OutputCols(target).Difference(c.candidatePruneCols(target).Difference(neededCols))
+		pruneCols := DerivePruneCols(memo.MakeNormExprView(c.f.mem, target)).Difference(neededCols)
+		colSet := c.OutputCols(target).Difference(pruneCols)
 		return c.f.ConstructSimpleProject(target, colSet)
 	}
 }
@@ -222,23 +237,14 @@ func (c *CustomFuncs) PruneOrderingRowNumber(
 	return c.f.InternRowNumberDef(&defCopy)
 }
 
-// candidatePruneCols returns the subset of the given target group's output
-// columns that can be pruned. Each operator has its own custom rule for what
-// columns it allows to be pruned. Note that if an operator allows columns to
-// be pruned, then there must be logic in the PruneCols method to actually prune
-// those columns when requested.
-func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
-	// Handle special scalar operators.
-	ev := memo.MakeNormExprView(c.f.mem, target)
-	switch ev.Operator() {
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// Both Projections and Aggregations allow their columns to be pruned if
-		// they're never used in a higher-level expression.
-		return c.OutputCols(target)
-	}
-
+// DerivePruneCols returns the subset of the given expression's output columns
+// that are candidates for pruning. Each operator has its own custom rule for
+// what columns it allows to be pruned. Note that if an operator allows columns
+// to be pruned, then there must be logic in the PruneCols method to actually
+// prune those columns when requested.
+func DerivePruneCols(ev memo.ExprView) opt.ColSet {
 	// Must be relational operator.
-	relational := c.LookupRelational(target)
+	relational := ev.Logical().Relational
 	if relational.IsAvailable(props.PruneCols) {
 		return relational.Rule.PruneCols
 	}
@@ -252,7 +258,7 @@ func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
 	case opt.SelectOp:
 		// Any pruneable input columns can potentially be pruned, as long as they're
 		// not used by the filter.
-		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		inputPruneCols := DerivePruneCols(ev.Child(0))
 		relational.Rule.PruneCols = inputPruneCols.Difference(ev.Child(1).Logical().OuterCols())
 
 	case opt.ProjectOp:
@@ -266,8 +272,8 @@ func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
 		// Any pruneable columns from projected inputs can potentially be pruned, as
 		// long as they're not used by the right input (i.e. in Apply case) or by
 		// the join filter.
-		leftPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
-		rightPruneCols := c.candidatePruneCols(ev.ChildGroup(1))
+		leftPruneCols := DerivePruneCols(ev.Child(0))
+		rightPruneCols := DerivePruneCols(ev.Child(1))
 
 		switch ev.Operator() {
 		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -292,7 +298,7 @@ func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
 	case opt.LimitOp, opt.OffsetOp:
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column.
-		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		inputPruneCols := DerivePruneCols(ev.Child(0))
 		ordering := ev.Private().(*props.OrderingChoice).ColSet()
 		relational.Rule.PruneCols = inputPruneCols.Difference(ordering)
 
@@ -301,7 +307,7 @@ func (c *CustomFuncs) candidatePruneCols(target memo.GroupID) opt.ColSet {
 		// they're not used as an ordering column. The new row number column
 		// cannot be pruned without adding an additional Project operator, so
 		// don't add it to the set.
-		inputPruneCols := c.candidatePruneCols(ev.ChildGroup(0))
+		inputPruneCols := DerivePruneCols(ev.Child(0))
 		ordering := ev.Private().(*memo.RowNumberDef).Ordering.ColSet()
 		relational.Rule.PruneCols = inputPruneCols.Difference(ordering)
 

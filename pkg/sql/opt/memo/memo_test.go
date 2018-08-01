@@ -28,9 +28,13 @@ func TestMemo(t *testing.T) {
 	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
-func TestLogicalPropsBuilder(t *testing.T) {
-	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+func TestLogicalProps(t *testing.T) {
+	flags := opt.ExprFmtHideCost | opt.ExprFmtHideQualifications
 	runDataDrivenTest(t, "testdata/logprops/", flags)
+}
+
+func TestStats(t *testing.T) {
+	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
