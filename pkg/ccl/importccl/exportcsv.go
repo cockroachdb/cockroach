@@ -85,10 +85,6 @@ func exportPlanHook(
 		return nil, nil, nil, err
 	}
 
-	if !p.DistSQLPlanner().CheckPossible(sel) {
-		return nil, nil, nil, errors.Errorf("unsupported EXPORT query -- as an alternative try `cockroach sql --format=csv`")
-	}
-
 	fn := func(ctx context.Context, plans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, exportStmt.StatementTag())
 		defer tracing.FinishSpan(span)

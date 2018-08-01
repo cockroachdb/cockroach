@@ -49,7 +49,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	spec := &SamplerSpec{SampleSize: uint32(numSamples)}
@@ -154,7 +154,7 @@ func TestSamplerSketch(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	spec := &SamplerSpec{

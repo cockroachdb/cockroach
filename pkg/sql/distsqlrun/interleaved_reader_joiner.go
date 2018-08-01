@@ -217,7 +217,7 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 		irj.tables[1].ordering,
 		false, /* nullEquality */
 		&irj.alloc,
-		&irj.flowCtx.EvalCtx,
+		irj.flowCtx.EvalCtx,
 	)
 	if err != nil {
 		irj.moveToDraining(err)
@@ -323,7 +323,7 @@ func newInterleavedReaderJoiner(
 		}
 
 		if err := tables[i].post.Init(
-			&table.Post, table.Desc.ColumnTypes(), &flowCtx.EvalCtx, nil, /*output*/
+			&table.Post, table.Desc.ColumnTypes(), flowCtx.EvalCtx, nil, /*output*/
 		); err != nil {
 			return nil, errors.Wrapf(err, "failed to initialize post-processing helper")
 		}
