@@ -277,9 +277,10 @@
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
-# where it does not reference any of the aggregation columns. This only works
-# if this is not an instance of the "scalar" GroupBy, which returns only one
-# row, and which exhibits different behavior if the input is empty:
+# where it only references grouping columns or ConstAgg columns.
+#
+# This rule doesn't work on ScalarGroupBy which exhibits different behavior if
+# the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -297,7 +298,10 @@
     )
     (Filters $list:[
         ...
-        $condition:* & (IsBoundBy $condition $inputCols:(OutputCols $input))
+        $condition:* & (IsBoundBy
+            $condition
+            $passthroughCols:(GroupingAndConstCols $def $aggregations)
+        )
         ...
     ])
 )
@@ -306,12 +310,12 @@
     (GroupBy
         (Select
             $input
-            (Filters (ExtractBoundConditions $list $inputCols))
+            (Filters (ExtractBoundConditions $list $passthroughCols))
         )
         $aggregations
         $def
     )
-    (Filters (ExtractUnboundConditions $list $inputCols))
+    (Filters (ExtractUnboundConditions $list $passthroughCols))
 )
 
 # RemoveNotNullCondition removes a filter with an IS NOT NULL condition
