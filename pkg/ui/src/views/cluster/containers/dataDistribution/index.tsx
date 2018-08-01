@@ -147,13 +147,14 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
             className="loading-image loading-image__spinner-left"
             loading={!this.props.dataDistribution || !this.props.localityTree}
             image={spinner}
-          >
-            <DataDistribution
-              localityTree={this.props.localityTree}
-              dataDistribution={this.props.dataDistribution}
-              sortedZoneConfigs={this.props.sortedZoneConfigs}
-            />
-          </Loading>
+            render={() => (
+              <DataDistribution
+                localityTree={this.props.localityTree}
+                dataDistribution={this.props.dataDistribution}
+                sortedZoneConfigs={this.props.sortedZoneConfigs}
+              />
+            )}
+          />
         </section>
       </div>
     );

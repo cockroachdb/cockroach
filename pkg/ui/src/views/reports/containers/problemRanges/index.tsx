@@ -188,12 +188,13 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           loading={isLoading(this.props.problemRanges)}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           image={spinner}
-        >
-          <div>
-            {this.renderReportBody()}
-            <ConnectionsTable problemRanges={this.props.problemRanges} />
-          </div>
-        </Loading>
+          render={() => (
+            <div>
+              {this.renderReportBody()}
+              <ConnectionsTable problemRanges={this.props.problemRanges} />
+            </div>
+          )}
+        />
       </div>
     );
   }

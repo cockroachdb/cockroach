@@ -30,7 +30,6 @@ type ICollectedStatementStatistics = protos.cockroach.server.serverpb.Statements
 type RouteProps = RouteComponentProps<any, any>;
 
 interface StatementsPageProps {
-  valid: boolean;
   statements: AggregateStatistics[];
   apps: string[];
   totalFingerprints: number;
@@ -72,12 +71,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     this.props.refreshStatements();
   }
 
-  renderStatements() {
-    if (!this.props.valid) {
-      // This should really be handled by a loader component.
-      return null;
-    }
-
+  renderStatements = () => {
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
@@ -143,9 +137,8 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           loading={_.isNil(this.props.statements)}
           className="loading-image loading-image__spinner"
           image={spinner}
-        >
-          {this.renderStatements()}
-        </Loading>
+          render={this.renderStatements}
+        />
       </section>
     );
   }
@@ -248,7 +241,6 @@ const StatementsPageConnected = connect(
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
-    valid: state.cachedData.statements.valid,
   }),
   {
     refreshStatements,
