@@ -377,7 +377,7 @@ project
  │    │    │         │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
  │    │    │         │    │    │    │    ├── key: (72)
  │    │    │         │    │    │    │    ├── fd: ()-->(79), (72)-->(73)
- │    │    │         │    │    │    │    ├── ordering: +73 opt(73,79)
+ │    │    │         │    │    │    │    ├── ordering: +73 opt(79)
  │    │    │         │    │    │    │    └── select
  │    │    │         │    │    │    │         ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
  │    │    │         │    │    │    │         ├── key: (72)

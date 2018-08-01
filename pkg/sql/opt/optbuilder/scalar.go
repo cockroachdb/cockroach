@@ -400,11 +400,6 @@ func (b *Builder) buildFunction(
 		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)
 	}
 
-	// TODO(andyk): Re-enable impure functions once we can properly handle them.
-	if def.Impure && !isGenerator(def) && !b.AllowImpureFuncs {
-		panic(unimplementedf("impure functions are not supported"))
-	}
-
 	argList := make([]memo.GroupID, len(f.Exprs))
 	for i, pexpr := range f.Exprs {
 		argList[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
