@@ -35,8 +35,8 @@ var (
 	// an upgrade before the cluster version is finalized. After the version
 	// upgrade, the rollup threshold is used instead.
 	resolution10sDefaultPruneThreshold  = 30 * 24 * time.Hour
-	resolution10sDefaultRollupThreshold = 7 * 24 * time.Hour
-	resolution30mDefaultPruneThreshold  = 365 * 24 * time.Hour
+	resolution10sDefaultRollupThreshold = 10 * 24 * time.Hour
+	resolution30mDefaultPruneThreshold  = 90 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold = 1 * time.Millisecond
 )
 
@@ -48,11 +48,35 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// Resolution10StoreDuration defines the amount of time to store internal metrics
+// Resolution10StoreDuration is a deprecated setting that previously configured
+// how long time series data was retained; it has been replaced with
+// Resolution10sStorageTTL. We retain this setting for backwards compatibility
+// during a version upgrade.
 var Resolution10StoreDuration = settings.RegisterDurationSetting(
 	"timeseries.resolution_10s.storage_duration",
-	"the amount of time to store timeseries data",
+	"deprecated setting: the amount of time to store timeseries data. "+
+		"Replaced by timeseries.storage.10s_resolution_ttl.",
 	resolution10sDefaultPruneThreshold,
+)
+
+// Resolution10sStorageTTL defines the maximum age of data that will be retained
+// at he 10 second resolution. Data older than this is subject to being "rolled
+// up" into the 30 minute resolution and then deleted.
+var Resolution10sStorageTTL = settings.RegisterDurationSetting(
+	"timeseries.storage.10s_resolution_ttl",
+	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
+		"is subject to rollup and deletion.",
+	resolution10sDefaultRollupThreshold,
+)
+
+// Resolution30mStoreDuration defines the maximum age of data that will be
+// retained at he 30 minute resolution. Data older than this is subject to
+// deletion.
+var Resolution30mStorageTTL = settings.RegisterDurationSetting(
+	"timeseries.storage.30m_resolution_ttl",
+	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
+		"is subject to deletion.",
+	resolution30mDefaultPruneThreshold,
 )
 
 // DB provides Cockroach's Time Series API.
@@ -77,11 +101,11 @@ func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
 		Resolution10s: func() int64 {
 			if settings.Version.IsMinSupported(cluster.VersionColumnarTimeSeries) {
-				return resolution10sDefaultRollupThreshold.Nanoseconds()
+				return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 			}
 			return Resolution10StoreDuration.Get(&settings.SV).Nanoseconds()
 		},
-		Resolution30m:  func() int64 { return resolution30mDefaultPruneThreshold.Nanoseconds() },
+		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
