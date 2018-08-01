@@ -15,8 +15,9 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import {Bytes, BytesWithPrecision} from "src/util/format";
+import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import {FixLong} from "oss/src/util/fixLong";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -140,7 +141,19 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             // Mem Usage - total memory being used on this node.
             {
               title: "Mem Usage",
-              cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
+              cell: (ns) => {
+                const used = ns.metrics[MetricConstants.rss];
+                const available = FixLong(ns.total_system_memory).toNumber();
+                return (
+                  <span>
+                    {BytesWithPrecision(used, 0)}
+                    {" / "}
+                    {BytesWithPrecision(available, 0)}
+                    {" "}
+                    ({Math.round(used / available * 100)}%)
+                  </span>
+                );
+              },
               sort: (ns) => ns.metrics[MetricConstants.rss],
             },
             // Version - the currently running version of cockroach.
