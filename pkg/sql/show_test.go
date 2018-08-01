@@ -25,6 +25,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -738,70 +742,125 @@ func TestShowJobs(t *testing.T) {
 		finished          time.Time
 		modified          time.Time
 		fractionCompleted float32
+		highWater         hlc.Timestamp
 		coordinatorID     roachpb.NodeID
+		details           jobspb.Details
 	}
 
-	in := row{
-		id:          42,
-		typ:         "SCHEMA CHANGE",
-		status:      "superfailed",
-		description: "failjob",
-		username:    "failure",
-		err:         "boom",
-		// lib/pq returns time.Time objects with goofy locations, which breaks
-		// reflect.DeepEqual without this time.FixedZone song and dance.
-		// See: https://github.com/lib/pq/issues/329
-		created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
-		started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
-		finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
-		modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
-		fractionCompleted: 0.42,
-		coordinatorID:     7,
-	}
-
-	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
-	// row struct directly.
-	inPayload, err := protoutil.Marshal(&jobspb.Payload{
-		Description:    in.description,
-		StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
-		FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
-		Username:       in.username,
-		Lease: &jobspb.Lease{
-			NodeID: 7,
+	for _, in := range []row{
+		{
+			id:          42,
+			typ:         "SCHEMA CHANGE",
+			status:      "superfailed",
+			description: "failjob",
+			username:    "failure",
+			err:         "boom",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			fractionCompleted: 0.42,
+			coordinatorID:     7,
+			details:           jobspb.SchemaChangeDetails{},
 		},
-		Error:   in.err,
-		Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	inProgress, err := protoutil.Marshal(&jobspb.Progress{
-		ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
-		Progress: &jobspb.Progress_FractionCompleted{
-			FractionCompleted: in.fractionCompleted,
+		{
+			id:          43,
+			typ:         "CHANGEFEED",
+			status:      "running",
+			description: "persistent feed",
+			username:    "persistent",
+			err:         "",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:  timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:  timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished: timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified: timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			highWater: hlc.Timestamp{
+				WallTime: 1533143242000000,
+				Logical:  4,
+			},
+			coordinatorID: 7,
+			details:       jobspb.ChangefeedDetails{},
 		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.Exec(t,
-		`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
-		in.id, in.status, in.created, inPayload, inProgress,
-	)
+	} {
+		t.Run("", func(t *testing.T) {
+			// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+			// row struct directly.
+			inPayload, err := protoutil.Marshal(&jobspb.Payload{
+				Description:    in.description,
+				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
+				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
+				Username:       in.username,
+				Lease: &jobspb.Lease{
+					NodeID: 7,
+				},
+				Error:   in.err,
+				Details: jobspb.WrapPayloadDetails(in.details),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	var out row
-	sqlDB.QueryRow(t, `
+			progress := &jobspb.Progress{
+				ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+			}
+			if in.highWater != (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{
+					HighWater: &in.highWater,
+				}
+			} else {
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: in.fractionCompleted,
+				}
+			}
+			inProgress, err := protoutil.Marshal(progress)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t,
+				`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
+				in.id, in.status, in.created, inPayload, inProgress,
+			)
+
+			var out row
+			var maybeFractionCompleted *float32
+			var decimalHighWater *apd.Decimal
+			sqlDB.QueryRow(t, `
       SELECT job_id, job_type, status, created, description, started, finished, modified,
-             fraction_completed, user_name, ifnull(error, ''), coordinator_id
-        FROM crdb_internal.jobs`).Scan(
-		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
-		&out.finished, &out.modified, &out.fractionCompleted, &out.username,
-		&out.err, &out.coordinatorID,
-	)
-	if !reflect.DeepEqual(in, out) {
-		diff := strings.Join(pretty.Diff(in, out), "\n")
-		t.Fatalf("in job did not match out job:\n%s", diff)
+             fraction_completed, high_water_timestamp, user_name, ifnull(error, ''), coordinator_id
+        FROM crdb_internal.jobs WHERE job_id = $1`, in.id).Scan(
+				&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+				&out.finished, &out.modified, &maybeFractionCompleted, &decimalHighWater, &out.username,
+				&out.err, &out.coordinatorID,
+			)
+
+			if decimalHighWater != nil {
+				var err error
+				out.highWater, err = tree.DecimalToHLC(decimalHighWater)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if maybeFractionCompleted != nil {
+				out.fractionCompleted = *maybeFractionCompleted
+			}
+
+			// details field is not explicitly checked for equality; its value is
+			// confirmed via the job_type field, which is dependent on the details
+			// field.
+			out.details = in.details
+
+			if !reflect.DeepEqual(in, out) {
+				diff := strings.Join(pretty.Diff(in, out), "\n")
+				t.Fatalf("in job did not match out job:\n%s", diff)
+			}
+		})
 	}
 }
 
