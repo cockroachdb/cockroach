@@ -415,7 +415,17 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	if node.Operator.hasSubOperator() {
 		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
-		binExprFmtWithParen(ctx, node.Left, opStr, node.Right, true)
+		if t, ok := node.Right.(*Tuple); ok {
+			exprFmtWithParen(ctx, node.Left)
+			ctx.WriteByte(' ')
+			ctx.WriteString(opStr)
+			ctx.WriteByte(' ')
+			ctx.WriteByte('(')
+			ctx.FormatNode(&t.Exprs)
+			ctx.WriteByte(')')
+		} else {
+			binExprFmtWithParen(ctx, node.Left, opStr, node.Right, true)
+		}
 	}
 }
 
@@ -756,7 +766,7 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	if len(node.Labels) > 0 {
 		ctx.WriteByte('(')
 	}
-	if node.Row {
+	if ctx.HasFlags(FmtParsable) {
 		ctx.WriteString("ROW")
 	}
 	ctx.WriteByte('(')

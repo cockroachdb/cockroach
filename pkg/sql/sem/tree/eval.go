@@ -3784,6 +3784,7 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 		}
 		tuple.D[i] = d
 	}
+	tuple.row = t.Row
 	return tuple, nil
 }
 
