@@ -31,7 +31,7 @@ func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 		projectionsScope.group = inScope.group
 	} else {
 		projectionsScope.group = b.constructProject(
-			inScope.group, append(projectionsScope.cols, projectionsScope.orderByCols...),
+			inScope.group, append(projectionsScope.cols, projectionsScope.extraCols...),
 		)
 	}
 }

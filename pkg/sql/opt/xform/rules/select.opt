@@ -35,14 +35,11 @@
     $input:*
     $def:*
   )
-  $filter:* & (IsBoundBy $filter $input)
+  $filter:* & (IsBoundBy $filter (OutputCols $input))
 )
 =>
 (IndexJoin
-  (Select
-    $input
-    $filter
-  )
+  (Select $input $filter)
   $def
 )
 
@@ -57,18 +54,22 @@
     $input:*
     $def:*
   )
-  $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]) & ^(IsBoundBy $filter $input)
+  $filter:(Filters $list:[
+      ...
+      $condition:* & (IsBoundBy $condition $inputCols:(OutputCols $input))
+      ...
+  ]) & ^(IsBoundBy $filter $inputCols)
 )
 =>
 (Select
   (IndexJoin
     (Select
       $input
-      (Filters (ExtractBoundConditions $list $input))
+      (Filters (ExtractBoundConditions $list $inputCols))
     )
     $def
   )
-  (Filters (ExtractUnboundConditions $list $input))
+  (Filters (ExtractUnboundConditions $list $inputCols))
 )
 
 # ConstrainIndexJoinScan matches a Select over a index join with an

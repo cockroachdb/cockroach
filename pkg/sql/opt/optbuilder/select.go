@@ -282,7 +282,6 @@ func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
-	outScope = fromScope
 
 	var projectionsScope *scope
 	if b.needsAggregation(sel, orderBy) {
@@ -290,7 +289,8 @@ func (b *Builder) buildSelectClause(
 	} else {
 		projectionsScope = fromScope.replace()
 		b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
-		b.buildOrderBy(orderBy, outScope, projectionsScope)
+		b.buildOrderBy(orderBy, fromScope, projectionsScope)
+		outScope = fromScope
 	}
 
 	if len(fromScope.srfs) > 0 {

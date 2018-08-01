@@ -58,7 +58,7 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 		b.buildOrdering(orderBy[i], inScope, projectionsScope, orderByScope)
 	}
 
-	b.buildOrderByProject(projectionsScope, orderByScope)
+	projectionsScope.setOrdering(orderByScope.cols, &orderByScope.physicalProps.Ordering)
 }
 
 // findIndexByName returns an index in the table with the given name. If the
@@ -217,16 +217,6 @@ func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, or
 		desc := order.Direction == tree.Descending
 		orderByScope.physicalProps.Ordering.AppendCol(orderByScope.cols[i].id, desc)
 	}
-}
-
-// buildOrderByProject adds columns from orderByScope to the orderByCols slice
-// of projectionsScope. buildOrderByProject also sets the ordering and
-// presentation properties on the projectionsScope. These properties later
-// become part of the required physical properties returned by Build.
-func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
-	projectionsScope.orderByCols = append(projectionsScope.orderByCols, orderByScope.cols...)
-	projectionsScope.physicalProps.Ordering = orderByScope.physicalProps.Ordering
-	projectionsScope.setPresentation()
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {
