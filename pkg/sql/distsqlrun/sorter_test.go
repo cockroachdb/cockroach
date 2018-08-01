@@ -312,7 +312,7 @@ func TestSorter(t *testing.T) {
 						diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 						defer diskMonitor.Stop(ctx)
 						flowCtx := FlowCtx{
-							EvalCtx:     evalCtx,
+							EvalCtx:     &evalCtx,
 							Settings:    cluster.MakeTestingClusterSettings(),
 							TempStorage: tempEngine,
 							diskMonitor: &diskMonitor,
@@ -397,7 +397,7 @@ func BenchmarkSortAll(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -437,7 +437,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -481,7 +481,7 @@ func BenchmarkSortChunks(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

@@ -87,6 +87,11 @@ type ProcOutputHelper struct {
 	rowIdx uint64
 }
 
+// Output returns the output RowReciever of this ProcOutputHelper.
+func (h *ProcOutputHelper) Output() RowReceiver {
+	return h.output
+}
+
 // Init sets up a ProcOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
@@ -188,6 +193,11 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 	}
 
 	return colIdxs
+}
+
+// OutputTypes returns the output types of this ProcOutputHelper.
+func (h *ProcOutputHelper) OutputTypes() []sqlbase.ColumnType {
+	return h.outputTypes
 }
 
 // emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
@@ -910,6 +920,7 @@ func newProcessor(
 	post *PostProcessSpec,
 	inputs []RowSource,
 	outputs []RowReceiver,
+	localProcessors []LocalProcessor,
 ) (Processor, error) {
 	if core.Noop != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -1058,7 +1069,24 @@ func newProcessor(
 		}
 		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
 	}
+	if core.LocalPlanNode != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
+		err := processor.InitWithOutput(post, outputs[0])
+		return processor, err
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
+}
+
+// LocalProcessor is a RowSourcedProcessor that needs to be initialized with
+// its post processing spec and output row receiver. Most processors can accept
+// these objects at creation time.
+type LocalProcessor interface {
+	RowSourcedProcessor
+	// InitWithOutput initializes this processor.
+	InitWithOutput(post *PostProcessSpec, output RowReceiver) error
 }
 
 // NewReadImportDataProcessor is externally implemented and registered by

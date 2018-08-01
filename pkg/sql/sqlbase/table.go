@@ -1691,6 +1691,16 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	default:
 		switch typ := t.(type) {
+		case types.TOidWrapper:
+			wrapped := typ.T
+			d, rest, err := decodeUntaggedDatum(a, wrapped, buf)
+			if err != nil {
+				return d, rest, err
+			}
+			return &tree.DOidWrapper{
+				Wrapped: d,
+				Oid:     typ.Oid(),
+			}, rest, nil
 		case types.TCollatedString:
 			b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 			return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err

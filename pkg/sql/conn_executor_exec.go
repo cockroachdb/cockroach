@@ -742,7 +742,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.SetError(err)
 		return nil
 	}
-	defer planner.curPlan.close(ctx)
+	// We only need to close the plan if we don't hand it off to DistSQL. Once
+	// we hand it off, DistSQL will take care of closing it.
+	// TODO(jordan): once we add partial plan wrapping, this will need to change.
+	// We'll need to close all of the nodes that weren't taken over by DistSQL.
+	needClose := true
+	defer func() {
+		if needClose {
+			planner.curPlan.close(ctx)
+		}
+	}()
 
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
@@ -754,29 +763,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
-	useDistSQL := false
+	distributePlan := false
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
 	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
-		ok, err := planner.prepareForDistSQLSupportCheck(
-			ctx, ex.sessionData.DistSQLMode == sessiondata.DistSQLAlways,
-		)
-		if err != nil {
-			ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
-			res.SetError(err)
-			return nil
-		}
-		if ok {
-			useDistSQL, err = shouldUseDistSQL(
-				ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
-			if err != nil {
-				ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
-				res.SetError(err)
-				return nil
-			}
-		}
+		planner.prepareForDistSQLSupportCheck()
+		distributePlan = shouldDistributePlan(
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 	}
-	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, useDistSQL)
+	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
@@ -791,12 +786,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
 	}
 	queryMeta.phase = executing
-	queryMeta.isDistributed = useDistSQL
+	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	if useDistSQL {
+	if ex.sessionData.DistSQLMode != sessiondata.DistSQLOff {
+		needClose = false
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
-		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res)
+		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
 		ex.sessionTracing.TraceExecStart(ctx, "local")
 		err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
@@ -807,7 +803,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return err
 	}
 	ex.recordStatementSummary(
-		planner, stmt, useDistSQL, optimizerPlanned,
+		planner, stmt, distributePlan, optimizerPlanned,
 		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
 		&ex.server.EngineMetrics,
 	)
@@ -913,7 +909,11 @@ func (ex *connExecutor) execWithLocalEngine(
 // If an error is returned, the connection needs to stop processing queries.
 // Query execution errors are written to res; they are not returned.
 func (ex *connExecutor) execWithDistSQLEngine(
-	ctx context.Context, planner *planner, stmtType tree.StatementType, res RestrictedCommandResult,
+	ctx context.Context,
+	planner *planner,
+	stmtType tree.StatementType,
+	res RestrictedCommandResult,
+	distribute bool,
 ) error {
 	recv := makeDistSQLReceiver(
 		ctx, res, stmtType,
@@ -924,9 +924,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		},
 		&ex.sessionTracing,
 	)
-	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, planner.txn, planner, planner.curPlan.plan, recv, planner.ExtendedEvalContext(),
-	)
+	// We pass in whether or not we wanted to distribute this plan, which tells
+	// the planner whether or not to plan remote table readers.
+	ex.server.cfg.DistSQLPlanner.PlanAndRun(ctx, planner, recv, distribute)
 	return recv.commErr
 }
 

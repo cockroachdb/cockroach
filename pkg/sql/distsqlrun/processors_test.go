@@ -399,9 +399,10 @@ func TestProcessorBaseContext(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
+		evalCtx := tree.MakeTestingEvalContext(st)
 		flowCtx := &FlowCtx{
 			Settings: st,
-			EvalCtx:  tree.MakeTestingEvalContext(st),
+			EvalCtx:  &evalCtx,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 

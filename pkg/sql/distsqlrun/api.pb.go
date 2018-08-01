@@ -44,6 +44,7 @@
 		SorterSpec
 		DistinctSpec
 		ZigzagJoinerSpec
+		LocalPlanNodeSpec
 		Columns
 		MergeJoinerSpec
 		HashJoinerSpec

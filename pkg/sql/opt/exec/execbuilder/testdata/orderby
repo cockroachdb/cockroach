@@ -339,6 +339,7 @@ fetched: /abc/primary/1/2/3 -> NULL
 fetched: /abc/primary/1/2/3 -> NULL
 output row: [1]
 
+
 query TTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
