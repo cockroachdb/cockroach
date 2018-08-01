@@ -228,17 +228,15 @@ func TestRotateCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait until client3 succeeds.
+	// Wait until client3 succeeds (both http and sql).
 	testutils.SucceedsSoon(t,
 		func() error {
 			if err := clientTest(thirdClient); err != nil {
-				return errors.Errorf("third client failed: %v", err)
+				return errors.Errorf("third HTTP client failed: %v", err)
+			}
+			if _, err := thirdSQLClient.Exec("SELECT 1"); err != nil {
+				return errors.Errorf("third SQL client failed: %v", err)
 			}
 			return nil
 		})
-
-	// SQL client 3 should also succeed.
-	if _, err := thirdSQLClient.Exec("SELECT 1"); err != nil {
-		t.Fatal(err)
-	}
 }
