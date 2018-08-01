@@ -20,6 +20,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -424,6 +426,7 @@ func (b *Builder) initJoinBuild(
 	}
 	rightPlan, err = b.buildRelational(rightChild)
 	if err != nil {
+		leftPlan.root.Close(context.Background())
 		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
 	}
 

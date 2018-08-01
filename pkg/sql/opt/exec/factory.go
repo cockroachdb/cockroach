@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +27,9 @@ import (
 
 // Node represents a node in the execution tree
 // (currently maps to sql.planNode).
-type Node interface{}
+type Node interface {
+	Close(ctx context.Context)
+}
 
 // Plan represents the plan for a query (currently maps to sql.planTop).
 // For simple queries, the plan is associated with a single Node tree.
