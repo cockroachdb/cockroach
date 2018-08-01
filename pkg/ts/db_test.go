@@ -860,7 +860,7 @@ func TestPruneThreshold(t *testing.T) {
 		if db.WriteRollups() {
 			expected = resolution10sDefaultRollupThreshold.Nanoseconds()
 		} else {
-			expected = resolution10sDefaultPruneThreshold.Nanoseconds()
+			expected = deprecatedResolution10sDefaultPruneThreshold.Nanoseconds()
 		}
 		result := db.PruneThreshold(Resolution10s)
 		if expected != result {
