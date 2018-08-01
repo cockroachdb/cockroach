@@ -199,7 +199,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
-  renderTable(jobs: Job[]) {
+  renderTable = () => {
+    const jobs = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     if (_.isEmpty(jobs)) {
       return <div className="no-results"><h2>No Results</h2></div>;
     }
@@ -218,7 +219,6 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
       <Helmet>
         <title>Jobs</title>
@@ -263,9 +263,12 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           </PageConfigItem>
         </PageConfig>
       </div>
-      <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-          { this.renderTable(data) }
-      </Loading>
+      <Loading
+        loading={_.isNil(this.props.jobs)}
+        className="loading-image loading-image__spinner"
+        image={spinner}
+        render={this.renderTable}
+      />
     </div>;
   }
 }

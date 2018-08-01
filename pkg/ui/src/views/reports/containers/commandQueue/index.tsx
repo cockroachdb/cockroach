@@ -110,9 +110,8 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
           loading={!this.props.commandQueue || this.props.commandQueue.inFlight}
           className="loading-image loading-image__spinner-left"
           image={spinner}
-        >
-          {this.renderReportBody()}
-        </Loading>
+          render={this.renderReportBody}
+        />
       </div>
     );
   }

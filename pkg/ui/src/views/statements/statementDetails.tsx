@@ -145,15 +145,14 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             loading={_.isNil(this.props.statement)}
             className="loading-image loading-image__spinner"
             image={spinner}
-          >
-            { this.renderContent() }
-          </Loading>
+            render={this.renderContent}
+          />
         </section>
       </div>
     );
   }
 
-  renderContent() {
+  renderContent = () => {
     if (!this.props.statement) {
       return null;
     }
