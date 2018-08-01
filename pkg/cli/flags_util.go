@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	humanize "github.com/dustin/go-humanize"
@@ -325,7 +325,7 @@ type percentResolverFunc func(percent int) (int64, error)
 // memoryPercentResolver turns a percent into the respective fraction of the
 // system's internal memory.
 func memoryPercentResolver(percent int) (int64, error) {
-	sizeBytes, err := server.GetTotalMemory(context.TODO())
+	sizeBytes, err := status.GetTotalMemory(context.TODO())
 	if err != nil {
 		return 0, err
 	}

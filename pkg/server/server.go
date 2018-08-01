@@ -1809,7 +1809,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
-	systemMemory, err := GetTotalMemory(ctx)
+	systemMemory, err := status.GetTotalMemory(ctx)
 	if err != nil {
 		log.Warningf(ctx, "Could not compute system memory due to: %s", err)
 		return
