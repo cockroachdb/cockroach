@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // HasHoistableSubquery returns true if the given scalar group contains a
@@ -368,14 +369,14 @@ func (c *CustomFuncs) MakeAggCols2(
 	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
 }
 
-// EnsureNotNullIfCountRows searches for a not-null output column in the given
-// group. If such a column does not exist, it checks whether a CountRows
-// aggregate function exists. If so, it synthesizes a new True constant column
-// that is not-null. EnsureNotNullIfCountRows returns the input group, possibly
-// wrapped in a new Project if a new column was synthesized.
+// EnsureNotNullIfNeeded searches for a not-null output column in the given
+// group. If such a column does not exist, it checks whether an aggregation
+// which cannot ignore nulls exists.  If so, it synthesizes a new True constant
+// column that is not-null. EnsureNotNullIfNeeded returns the input group,
+// possibly wrapped in a new Project if a new column was synthesized.
 //
 // See the TryDecorrelateScalarGroupBy rule comment for more details.
-func (c *CustomFuncs) EnsureNotNullIfCountRows(in, aggs memo.GroupID) memo.GroupID {
+func (c *CustomFuncs) EnsureNotNullIfNeeded(in, aggs memo.GroupID) memo.GroupID {
 	_, ok := c.LookupLogical(in).Relational.NotNullCols.Next(0)
 	if ok {
 		return in
@@ -383,20 +384,266 @@ func (c *CustomFuncs) EnsureNotNullIfCountRows(in, aggs memo.GroupID) memo.Group
 
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+
 	for _, elem := range aggsElems {
-		if c.f.mem.NormExpr(elem).Operator() == opt.CountRowsOp {
+		if !opt.AggregateIgnoresNulls(c.f.mem.NormExpr(elem).Operator()) {
 			notNullColID := c.f.Metadata().AddColumn("notnull", types.Bool)
-			return c.f.projectExtraCol(in, c.f.ConstructTrue(), notNullColID)
+			result := c.f.projectExtraCol(in, c.f.ConstructTrue(), notNullColID)
+			return result
 		}
 	}
 	return in
+}
+
+func (c *CustomFuncs) referencedCols(scalarExpr memo.GroupID) opt.ColSet {
+	e := c.f.mem.NormExpr(scalarExpr)
+	switch e.Operator() {
+	case opt.VariableOp:
+		col := c.f.mem.LookupPrivate(e.AsVariable().Col()).(opt.ColumnID)
+		return util.MakeFastIntSet(int(col))
+	default:
+		var result opt.ColSet
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			result.UnionWith(c.referencedCols(e.ChildGroup(c.f.mem, i)))
+		}
+		return result
+	}
+}
+
+// AggsCanBeDecorrelated returns true if every aggregate satisfies one of the
+// following conditions:
+//
+//   * It is CountRows (because it will be translated into Count),
+//   * It ignores nulls (because nothing extra must be done for it)
+//   * It gives NULL on no input (because this is how we translate non-null ignoring aggregates)
+//
+// TODO(justin): we can lift the third condition if we have a function that
+// gives the correct "on empty" value for a given aggregate.
+func (c *CustomFuncs) AggsCanBeDecorrelated(aggs memo.GroupID) bool {
+	aggList := c.f.mem.LookupList(c.f.mem.NormExpr(aggs).AsAggregations().Aggs())
+
+	for _, a := range aggList {
+		agg := c.f.mem.NormExpr(a)
+		op := agg.Operator()
+		if op != opt.CountRowsOp && !opt.AggregateIsNullOnEmpty(op) && !opt.AggregateIgnoresNulls(op) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// TranslateAggs takes an aggregation list which may or may not require
+// translation due to non-null ignoring aggregations.
+// If this isn't an issue for any aggregates, the input is returned unchanged.
+// If there is an aggregate which requires translation, two things happen:
+// * any null-accepting aggregates are given new column IDs so that the
+//   original column IDs can be projected out properly, and
+// * a const_not_null_agg aggregation is created over a non-nullable column in the
+//   input in order to distinguish whether the aggregate should be considered to
+//   have consumed a single NULL or nothing.
+func (c *CustomFuncs) TranslateAggs(left, in, oldAggs memo.GroupID) memo.GroupID {
+	toTranslate := c.aggsRequiringTranslation(oldAggs, left)
+	if toTranslate.Empty() {
+		return oldAggs
+	}
+
+	a := c.f.mem.NormExpr(oldAggs).AsAggregations()
+
+	// If we have any null-accepting aggregates, then we must synthesize a
+	// const_not_null_agg aggregation over a non-null column (which is assumed to
+	// exist via EnsureNotNullIfNeeded having been called).
+	id, ok := c.LookupLogical(in).Relational.NotNullCols.Next(0)
+	if !ok {
+		panic("expected a non-null col to exist")
+	}
+	canaryID := opt.ColumnID(id)
+
+	aggs := c.f.mem.LookupList(a.Aggs())
+	// The new aggregations should be the same as the old ones, just with one
+	// extra space for the canary aggregation.
+	newAggs := make([]memo.GroupID, len(aggs)+1)
+	newAggCols := make(opt.ColList, len(aggs)+1)
+
+	copy(newAggs, aggs)
+
+	aggCols := c.f.mem.LookupPrivate(a.Cols()).(opt.ColList)
+	for i := range aggCols {
+		if toTranslate.Contains(int(aggCols[i])) {
+			// These aggregations don't produce the right value, so we synthesize
+			// a new column ID for them. This will later be projected properly by
+			// TranslateNonIgnoreAggs.
+			newAggCols[i] = c.f.Metadata().AddColumn("aggregate", c.f.Metadata().ColumnType(aggCols[i]))
+		} else {
+			newAggCols[i] = aggCols[i]
+		}
+	}
+
+	aggCanaryIdx := len(newAggCols) - 1
+
+	aggCanaryID := c.f.Metadata().AddColumn("aggregated_canary", types.Bool)
+	newAggCols[aggCanaryIdx] = aggCanaryID
+
+	canaryVar := c.f.ConstructVariable(c.f.InternColumnID(canaryID))
+	newAggs[aggCanaryIdx] = c.f.ConstructConstNotNullAgg(canaryVar)
+
+	return c.f.ConstructAggregations(
+		c.f.InternList(newAggs),
+		c.f.InternColList(newAggCols),
+	)
+}
+
+// findCanaryAggregation takes a set of aggregations and the associated input
+// and searches for a "canary aggregation".  That is, one which is a
+// const_not_null_agg aggregation over a non-nullable column.  If found, it returns
+// the id of the aggregation column and true, otherwise, it returns false.
+// TODO(justin): this seems slightly ad-hoc and sketchy.
+func (c *CustomFuncs) findCanaryAggregation(aggs, input memo.GroupID) (opt.ColumnID, bool) {
+	a := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggCols := c.f.mem.LookupPrivate(a.Cols()).(opt.ColList)
+	aggExprs := c.f.mem.LookupList(a.Aggs())
+	for i := range aggExprs {
+		id := aggExprs[i]
+		agg := c.f.mem.NormExpr(id)
+		if agg.Operator() == opt.ConstNotNullAggOp {
+			in := c.f.mem.NormExpr(agg.AsConstNotNullAgg().Input())
+			if in.Operator() == opt.VariableOp {
+				v := in.AsVariable()
+				col := c.f.mem.LookupPrivate(v.Col()).(opt.ColumnID)
+				if c.f.mem.GroupProperties(input).Relational.NotNullCols.Contains(int(col)) {
+					return aggCols[i], true
+				}
+			}
+		}
+	}
+
+	return 0, false
+}
+
+// constructCanaryChecker returns a CASE expression which disambiguates an
+// aggregation over a left join having received a NULL column because there
+// were no matches on the right side of the join, and having received a NULL
+// column because a NULL column was matched against.
+func (c *CustomFuncs) constructCanaryChecker(
+	aggCanaryVar memo.GroupID,
+	inputCol opt.ColumnID,
+) memo.GroupID {
+	nullVal := c.f.ConstructNull(c.f.InternType(types.Unknown))
+	return c.f.ConstructCase(
+		c.f.ConstructTrue(),
+		c.f.InternList([]memo.GroupID{
+			c.f.ConstructWhen(
+				c.f.ConstructIsNot(aggCanaryVar, nullVal),
+				c.f.ConstructVariable(c.f.InternColumnID(inputCol)),
+			),
+			nullVal,
+		}),
+	)
+}
+
+// aggsRequiringTranslation returns the set of columns in aggregations which
+// require a discriminating canary aggregation in TryDecorrelateScalarGroupBy.
+// This is true for aggregations which read from the right input and cannot
+// ignore NULL values.
+func (c *CustomFuncs) aggsRequiringTranslation(aggregations, leftInput memo.GroupID) opt.ColSet {
+	aggOp := c.f.mem.NormExpr(aggregations).AsAggregations()
+	aggs := c.f.mem.LookupList(aggOp.Aggs())
+	cols := c.f.mem.LookupPrivate(aggOp.Cols()).(opt.ColList)
+
+	leftOutputCols := c.OutputCols(leftInput)
+
+	var result opt.ColSet
+
+	for i, a := range aggs {
+		agg := c.f.mem.NormExpr(a)
+		aggInput := agg.ChildGroup(c.f.mem, 0)
+
+		// We don't need to do anything if the aggregate only references columns
+		// originating from the left, since there are no ambiguous NULLs in such a
+		// case.
+		referencedCols := c.referencedCols(aggInput)
+
+		if !opt.AggregateIgnoresNulls(agg.Operator()) &&
+			!referencedCols.SubsetOf(leftOutputCols) {
+			result.Add(int(cols[i]))
+		}
+	}
+
+	return result
+}
+
+// TranslateNonIgnoreAggs checks if any of the aggregates being decorrelated
+// are unable to ignore nulls. If that is the case, it inserts projections
+// which check a "canary" aggregation that determines if a group actually had
+// any things grouped into it or not.
+func (c *CustomFuncs) TranslateNonIgnoreAggs(
+	in memo.GroupID,
+	originalAggs memo.GroupID,
+	newAggs memo.GroupID,
+	leftWithKey memo.GroupID,
+	newRight memo.GroupID,
+) memo.GroupID {
+	toTranslate := c.aggsRequiringTranslation(originalAggs, leftWithKey)
+	if toTranslate.Empty() {
+		return in
+	}
+
+	canaryAggregationID, ok := c.findCanaryAggregation(newAggs, newRight)
+	if !ok {
+		panic("didn't find aggregated canary")
+	}
+
+	pb := projectionsBuilder{f: c.f}
+
+	key, ok := c.CandidateKey(leftWithKey)
+	if !ok {
+		panic("expected leftWithKey to have a key")
+	}
+
+	pb.addPassthroughCols(key)
+
+	aggCanaryVar := c.f.ConstructVariable(c.f.InternColumnID(canaryAggregationID))
+
+	origAggs := c.f.mem.NormExpr(originalAggs).AsAggregations()
+	origAggCols := c.f.mem.LookupPrivate(origAggs.Cols()).(opt.ColList)
+
+	// If a column appears in the original aggregation columns, we can safely
+	// pass it through.
+	var originalAggregations opt.ColSet
+	for _, c := range origAggCols {
+		originalAggregations.Add(int(c))
+	}
+
+	// Figure out how to project the columns in aggCols.  If a column also
+	// appears in originalAggregations (that is, it was not translated by
+	// TranslateAggs), it is safe to just pass it through. If not, that means
+	// that TranslateAggs *did* change it, and we must check the canary to
+	// determine what the correct value to project is.
+	aggregations := c.f.mem.NormExpr(newAggs).AsAggregations()
+	aggCols := c.f.mem.LookupPrivate(aggregations.Cols()).(opt.ColList)
+	// TODO(justin): I don't really like this part - it feels pretty ad-hoc and
+	// implicit, but I'm not sure how to clean it up.
+	for i := range origAggCols {
+		// The columns in aggCols align elementwise with those in origAggCols
+		// (though there is one extra in aggCols).
+		if toTranslate.Contains(int(origAggCols[i])) {
+			pb.addSynthesized(
+				c.constructCanaryChecker(aggCanaryVar, aggCols[i]),
+				origAggCols[i],
+			)
+		} else {
+			pb.addPassthroughCol(aggCols[i])
+		}
+	}
+
+	return c.f.ConstructProject(in, pb.buildProjections())
 }
 
 // EnsureAggsIgnoreNulls scans the aggregate list to aggregation functions that
 // don't ignore nulls but can be remapped so that they do:
 //   - CountRows functions are are converted to Count functions that operate
 //     over a not-null column from the given input group. The
-//     EnsureNotNullIfCountRows method should already have been called in order
+//     EnsureNotNullIfNeeded method should already have been called in order
 //     to guarantee such a column exists.
 //   - ConstAgg is remapped to ConstNotNullAgg.
 //
@@ -458,6 +705,15 @@ func (c *CustomFuncs) MakeOrderedGroupByDef(
 	return c.f.InternGroupByDef(&memo.GroupByDef{
 		GroupingCols: groupingCols,
 		Ordering:     *ordering,
+	})
+}
+
+// GroupByKeyWithOrdering constructs a new GroupByDef using the candidate key
+// columns from the given input group as the grouping columns.
+func (c *CustomFuncs) GroupByKeyWithOrdering(groupingCols opt.ColSet, def memo.PrivateID) memo.PrivateID {
+	return c.f.InternGroupByDef(&memo.GroupByDef{
+		GroupingCols: groupingCols,
+		Ordering:     c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering,
 	})
 }
 
