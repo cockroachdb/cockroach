@@ -187,6 +187,16 @@ func (r RangeDescriptor) String() string {
 	return buf.String()
 }
 
+// IncrementGeneration increases the Generation counter of this RangeDescriptor.
+func (r *RangeDescriptor) IncrementGeneration() {
+	if r.Generation != nil {
+		*r.Generation++
+	} else {
+		var one int64 = 1
+		r.Generation = &one
+	}
+}
+
 func (r ReplicationTarget) String() string {
 	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
 }

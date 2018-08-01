@@ -128,6 +128,9 @@ var (
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
+	// LocalRangeSubsumerSuffix is the suffix for the descriptor of the range that
+	// subsumed this range.
+	LocalRangeSubsumerSuffix = []byte("subsumer")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this

@@ -210,6 +210,15 @@ func (rgcq *replicaGCQueue) process(
 	}
 	replyDesc := rs[0]
 	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
+	if desc.RangeID != replyDesc.RangeID {
+		// If we get a different range ID back, then the range was subsumed
+		// by its left-hand neighbor.
+		// repl.Engine().GetProto
+		// But currentMember is true, so we are still a member of the
+		// subsuming range. The subsuming range will clean up the subsumed range
+		// when it applies the merge trigger.
+	}
+
 	log.Errorf(ctx, "currentDesc %v, currentMember %v", currentDesc, currentMember)
 	if !currentMember {
 		// We are no longer a member of this range; clean up our local data.
@@ -238,10 +247,7 @@ func (rgcq *replicaGCQueue) process(
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
-		// If we get a different range ID back, then the range has been merged
-		// away. But currentMember is true, so we are still a member of the
-		// subsuming range. The subsuming range will clean up the subsumed range
-		// when it applies the merge trigger.
+
 		if log.V(1) {
 			log.Infof(ctx, "range merged away; allowing merge trigger on LHS to clean up")
 		}
