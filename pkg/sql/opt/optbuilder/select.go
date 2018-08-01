@@ -88,6 +88,12 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		outScope = b.buildStmt(source.Statement, inScope)
 		return outScope
 
+	case *tree.TableRef:
+		tab := b.resolveTableRef(source)
+		outScope = b.buildScanWithTableRef(tab, tab.TabName(), inScope, source)
+		b.renameSource(source.As, outScope)
+		return outScope
+
 	default:
 		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
 	}
@@ -139,6 +145,56 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	}
 }
 
+func (b *Builder) buildScanWithTableRef(tab opt.Table, tn *tree.TableName, inScope *scope,
+	ref *tree.TableRef) (outScope *scope) {
+
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
+
+	var colsToAdd []int
+	// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified' (all columns)."
+	// whereas an array of length 0 means 'zero columns'.
+	if ref.Columns == nil {
+		for i := 0; i < tab.ColumnCount(); i++ {
+			colsToAdd = append(colsToAdd, i)
+		}
+	} else {
+		for _, c := range ref.Columns {
+			ordinalCol, error := tab.LookupColumnOrdinal(uint32(c))
+			if error != nil {
+				panic(builderError{error})
+			}
+			colsToAdd = append(colsToAdd, ordinalCol)
+		}
+	}
+	var tabCols opt.ColSet
+	outScope = inScope.push()
+	for _, i := range colsToAdd {
+		col := tab.Column(i)
+		colID := b.factory.Metadata().TableColumn(tabID, i)
+		name := tree.Name(col.ColName())
+		colProps := scopeColumn{
+			id:       colID,
+			origName: name,
+			name:     name,
+			table:    *tn,
+			typ:      col.DatumType(),
+			hidden:   col.IsHidden(),
+		}
+		tabCols.Add(int(colID))
+		b.colMap = append(b.colMap, colProps)
+		outScope.cols = append(outScope.cols, colProps)
+	}
+	if tab.IsVirtualTable() {
+		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
+	} else {
+		def := memo.ScanOpDef{Table: tabID, Cols: tabCols}
+		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
+	}
+	return outScope
+}
+
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
 // given table with the given table name.
 //
@@ -162,7 +218,6 @@ func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden(),
 		}
-
 		tabCols.Add(int(colID))
 		b.colMap = append(b.colMap, colProps)
 		outScope.cols = append(outScope.cols, colProps)
