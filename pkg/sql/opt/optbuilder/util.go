@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -340,6 +341,25 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
 	}
+}
+
+func (b *Builder) resolveTableRef(ref *tree.TableRef) opt.Table {
+	tab, err := b.catalog.FindTableByID(b.ctx, ref.TableID)
+	if err != nil {
+		// TODO(madhavsuresh): This branching statement is a hack to maintain compatibility
+		// with the heuristic planner. The problem is that privilege checking in the
+		// heuristic planner happens in a different code path than checking if the table
+		// has been dropped, or if it exists
+		if err.Error() == "table is being dropped" {
+			panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
+		} else if err.Error() == sqlbase.NewUndefinedRelationError(
+			&tree.TableRef{TableID: ref.TableID}).Error() {
+			panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
+		} else {
+			panic(builderError{err})
+		}
+	}
+	return tab
 }
 
 // resolveTable returns the table in the catalog with the given name.

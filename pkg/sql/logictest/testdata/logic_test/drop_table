@@ -33,6 +33,9 @@ b
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a
 
+statement error pq: \[53 AS a\]: table is being dropped
+SELECT * FROM [53 AS a]
+
 statement error pgcode 42P01 relation "a" does not exist
 DROP TABLE a
 
