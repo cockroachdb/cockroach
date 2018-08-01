@@ -73,6 +73,22 @@ func TestTimestampPrev(t *testing.T) {
 	}
 }
 
+func TestTimestampFloorPrev(t *testing.T) {
+	testCases := []struct {
+		ts, expPrev Timestamp
+	}{
+		{makeTS(2, 0), makeTS(1, 0)},
+		{makeTS(1, 2), makeTS(1, 1)},
+		{makeTS(1, 1), makeTS(1, 0)},
+		{makeTS(1, 0), makeTS(0, 0)},
+	}
+	for i, c := range testCases {
+		if prev := c.ts.FloorPrev(); prev != c.expPrev {
+			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
+		}
+	}
+}
+
 func TestAsOfSystemTime(t *testing.T) {
 	testCases := []struct {
 		ts  Timestamp
