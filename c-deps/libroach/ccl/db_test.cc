@@ -227,6 +227,7 @@ TEST_F(CCLTest, EncryptionStats) {
 
     cockroach::ccl::baseccl::EncryptionOptions enc_opts;
     enc_opts.set_key_source(cockroach::ccl::baseccl::KeyFiles);
+    enc_opts.set_data_key_rotation_period(3600);
     enc_opts.mutable_key_files()->set_current_key(dir.Path("aes-128.key"));
     enc_opts.mutable_key_files()->set_old_key("plain");
 

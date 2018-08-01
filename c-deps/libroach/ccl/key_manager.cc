@@ -199,13 +199,13 @@ FileKeyManager::FileKeyManager(rocksdb::Env* env, std::shared_ptr<rocksdb::Logge
 FileKeyManager::~FileKeyManager() {}
 
 rocksdb::Status FileKeyManager::LoadKeys() {
-  std::unique_ptr<enginepbccl::SecretKey> active(new enginepbccl::SecretKey());
+  std::shared_ptr<enginepbccl::SecretKey> active(new enginepbccl::SecretKey());
   rocksdb::Status status = KeyManagerUtils::KeyFromFile(env_, active_key_path_, active.get());
   if (!status.ok()) {
     return status;
   }
 
-  std::unique_ptr<enginepbccl::SecretKey> old(new enginepbccl::SecretKey());
+  std::shared_ptr<enginepbccl::SecretKey> old(new enginepbccl::SecretKey());
   status = KeyManagerUtils::KeyFromFile(env_, old_key_path_, old.get());
   if (!status.ok()) {
     return status;
@@ -220,16 +220,14 @@ rocksdb::Status FileKeyManager::LoadKeys() {
   return rocksdb::Status::OK();
 }
 
-std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::CurrentKey() {
-  return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
-}
+std::shared_ptr<enginepbccl::SecretKey> FileKeyManager::CurrentKey() { return active_key_; }
 
-std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::GetKey(const std::string& id) {
+std::shared_ptr<enginepbccl::SecretKey> FileKeyManager::GetKey(const std::string& id) {
   if (active_key_ != nullptr && active_key_->info().key_id() == id) {
-    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
+    return active_key_;
   }
   if (old_key_ != nullptr && old_key_->info().key_id() == id) {
-    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*old_key_.get()));
+    return old_key_;
   }
   return nullptr;
 }
@@ -287,24 +285,28 @@ rocksdb::Status DataKeyManager::LoadKeys() {
   }
 
   registry_.swap(registry);
+  current_key_ = CurrentKeyLocked();
 
-  auto new_active_key = CurrentKeyLocked();
-  if (new_active_key == nullptr) {
+  if (current_key_ == nullptr) {
     rocksdb::Info(logger_, "no active data key yet");
   } else {
     rocksdb::Info(logger_, "loaded active data key: %s",
-                  KeyManagerUtils::DataKeyInfoSummary(new_active_key->info()).c_str());
+                  KeyManagerUtils::DataKeyInfoSummary(current_key_->info()).c_str());
   }
 
   return rocksdb::Status::OK();
 }
 
-std::unique_ptr<enginepbccl::SecretKey> DataKeyManager::CurrentKey() {
+std::shared_ptr<enginepbccl::SecretKey> DataKeyManager::CurrentKey() {
   std::unique_lock<std::mutex> l(mu_);
-  return CurrentKeyLocked();
+  auto status = MaybeRotateKeyLocked();
+  if (!status.ok()) {
+    rocksdb::Error(logger_, "error while attempting to rotate data key: %s", status.getState());
+  }
+  return current_key_;
 }
 
-std::unique_ptr<enginepbccl::SecretKey> DataKeyManager::CurrentKeyLocked() {
+std::shared_ptr<enginepbccl::SecretKey> DataKeyManager::CurrentKeyLocked() {
   assert(registry_ != nullptr);
   if (registry_->active_data_key_id() == "") {
     return nullptr;
@@ -314,19 +316,24 @@ std::unique_ptr<enginepbccl::SecretKey> DataKeyManager::CurrentKeyLocked() {
 
   // Any modification of the registry should have called Validate.
   assert(iter != registry_->data_keys().cend());
-  return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(iter->second));
+  return std::shared_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(iter->second));
 }
 
-std::unique_ptr<enginepbccl::SecretKey> DataKeyManager::GetKey(const std::string& id) {
+std::shared_ptr<enginepbccl::SecretKey> DataKeyManager::GetKey(const std::string& id) {
   std::unique_lock<std::mutex> l(mu_);
 
   assert(registry_ != nullptr);
+
+  if (id == registry_->active_data_key_id()) {
+    // Shortcut: this is the current key.
+    return current_key_;
+  }
 
   auto key = registry_->data_keys().find(id);
   if (key == registry_->data_keys().cend()) {
     return nullptr;
   }
-  return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(key->second));
+  return std::shared_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(key->second));
 }
 
 std::unique_ptr<enginepbccl::KeyInfo> DataKeyManager::GetActiveStoreKeyInfo() {
@@ -352,10 +359,9 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
         "MaybeRotateKey called before SetActiveStoreKeyInfo: there is no key to rotate");
   }
 
-  auto active_key = CurrentKeyLocked();
-  assert(active_key != nullptr);
+  assert(current_key_ != nullptr);
 
-  if (active_key->info().encryption_type() == enginepbccl::Plaintext) {
+  if (current_key_->info().encryption_type() == enginepbccl::Plaintext) {
     // There's no point in rotating plaintext.
     return rocksdb::Status::OK();
   }
@@ -366,7 +372,7 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
     return status;
   }
 
-  if ((now - active_key->info().creation_time()) < rotation_period_) {
+  if ((now - current_key_->info().creation_time()) < rotation_period_) {
     return rocksdb::Status::OK();
   }
 
@@ -385,10 +391,9 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
     return status;
   }
 
-  auto new_active_key = CurrentKeyLocked();
-  assert(new_active_key != nullptr);
+  assert(current_key_ != nullptr);
   rocksdb::Info(logger_, "rotated to new active data key: %s",
-                KeyManagerUtils::DataKeyInfoSummary(new_active_key->info()).c_str());
+                KeyManagerUtils::DataKeyInfoSummary(current_key_->info()).c_str());
 
   return rocksdb::Status::OK();
 }
@@ -441,10 +446,9 @@ DataKeyManager::SetActiveStoreKeyInfo(std::unique_ptr<enginepbccl::KeyInfo> stor
     return status;
   }
 
-  auto new_active_key = CurrentKeyLocked();
-  assert(new_active_key != nullptr);
+  assert(current_key_ != nullptr);
   rocksdb::Info(logger_, "generated new active data key: %s",
-                KeyManagerUtils::DataKeyInfoSummary(new_active_key->info()).c_str());
+                KeyManagerUtils::DataKeyInfoSummary(current_key_->info()).c_str());
 
   return rocksdb::Status::OK();
 }
@@ -474,6 +478,7 @@ DataKeyManager::PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegis
 
   // Swap registry.
   registry_.swap(reg);
+  current_key_ = CurrentKeyLocked();
 
   return rocksdb::Status::OK();
 }
