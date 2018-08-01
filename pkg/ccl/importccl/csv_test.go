@@ -82,6 +82,14 @@ func TestLoadCSVBytes(t *testing.T) {
 			csv:    `\x0`,
 			err:    "odd length hex string",
 		},
+		{
+			name:   "new line characters",
+			create: `t text`,
+			csv:    "\"hello\r\nworld\"\n\"friend\nfoe\"\n\"mr\rmrs\"",
+			query: map[string][][]string{
+				`SELECT t from d.t`: {{"hello\r\nworld"}, {"friend\nfoe"}, {"mr\rmrs"}},
+			},
+		},
 	}
 
 	var csvString string

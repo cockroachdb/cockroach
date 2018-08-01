@@ -16,7 +16,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
 	"html"
 	"io"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 )
