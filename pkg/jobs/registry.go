@@ -91,6 +91,7 @@ type Registry struct {
 	nodeID   *base.NodeIDContainer
 	settings *cluster.Settings
 	planFn   planHookMaker
+	metrics  Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -147,7 +148,15 @@ func MakeRegistry(
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
+	r.metrics.InitHooks()
 	return r
+}
+
+// MetricsStruct returns the metrics for production monitoring of each job type.
+// They're all stored as the `metric.Struct` interface because of dependency
+// cycles.
+func (r *Registry) MetricsStruct() *Metrics {
+	return &r.metrics
 }
 
 // lenientNow returns the timestamp after which we should attempt
