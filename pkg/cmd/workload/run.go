@@ -273,13 +273,19 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	start := timeutil.Now()
 	errCh := make(chan error)
-	rampDone := make(chan struct{})
+	var rampDone chan struct{}
+	if *ramp > 0 {
+		// Create a channel to signal when the ramp period finishes. Will
+		// be reset to nil when consumed by the process loop below.
+		rampDone = make(chan struct{})
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(len(ops.WorkerFns))
 	go func() {
 		// If a ramp period was specified, start all of the workers
 		// gradually with a new context.
-		if *ramp > 0 {
+		if rampDone != nil {
 			var rampWG sync.WaitGroup
 			rampWG.Add(len(ops.WorkerFns))
 			rampCtx, cancelRamp := context.WithCancel(ctx)
@@ -359,7 +365,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					time.Duration(t.Hist.ValueAtQuantile(100)).Seconds()*1000,
 					t.Name,
 				)
-				if jsonEnc != nil {
+				if jsonEnc != nil && rampDone == nil {
 					_ = jsonEnc.Encode(t.Snapshot())
 				}
 			})
