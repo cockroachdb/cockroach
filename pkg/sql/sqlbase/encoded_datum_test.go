@@ -492,6 +492,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]ColumnType, 1000)
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
 		colTypes[i] = ColumnType{SemanticType: ColumnType_TUPLE}
@@ -527,7 +528,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
+			if cmp := decodedTuple.Compare(evalCtx, test); cmp != 0 {
 				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
 			}
 		default:
