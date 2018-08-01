@@ -703,7 +703,7 @@ func TestMergeJoiner(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: st,
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 			}
 
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
@@ -810,7 +810,7 @@ func TestConsumerClosed(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: st,
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 			}
 			post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
@@ -834,7 +834,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 
 	spec := &MergeJoinerSpec{

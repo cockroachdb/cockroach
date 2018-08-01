@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -718,7 +718,7 @@ func (tc *TxnCoordSender) validateTxnForBatchLocked(
 // Future Send() calls are rejected.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordState) {
 	tc.mu.state = state
-	if tc.mu.onFinishFn != nil {
+	if tc.mu.onFinishFn != nil && tc.mu.txn.Status != roachpb.COMMITTED {
 		// rejectErr is guaranteed to be non-nil because state is done or
 		// aborted on cleanup.
 		rejectErr := tc.maybeRejectClientLocked(ctx, tc.mu.txn.ID, nil /* ba */).GetDetail()

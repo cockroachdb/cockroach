@@ -329,13 +329,13 @@ func runProcessorTest(
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		txn:      txn,
 	}
 
 	p, err := newProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
-		[]RowSource{in}, []RowReceiver{out})
+		[]RowSource{in}, []RowReceiver{out}, []RowSourcedProcessor{})
 	if err != nil {
 		t.Fatal(err)
 	}
