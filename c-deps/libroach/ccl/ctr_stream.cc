@@ -47,8 +47,7 @@ rocksdb::Status CTRCipherStreamCreator::InitSettingsAndCreateCipherStream(
     memcpy(&counter, random_bytes.data() + 12, 4);
     enc_settings.set_counter(counter);
 
-    result->reset(
-        new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
+    result->reset(new CTRCipherStream(key, enc_settings.nonce(), enc_settings.counter()));
   }
 
   // Serialize enc_settings directly into the passed settings pointer. This will be ignored
@@ -81,15 +80,15 @@ rocksdb::Status CTRCipherStreamCreator::CreateCipherStreamFromSettings(
         "key_manager does not have a key with ID %s", enc_settings.key_id().c_str()));
   }
 
-  result->reset(new CTRCipherStream(std::move(key), enc_settings.nonce(), enc_settings.counter()));
+  result->reset(new CTRCipherStream(key, enc_settings.nonce(), enc_settings.counter()));
   return rocksdb::Status::OK();
 }
 
 enginepb::EnvType CTRCipherStreamCreator::GetEnvType() { return env_type_; }
 
-CTRCipherStream::CTRCipherStream(std::unique_ptr<enginepbccl::SecretKey> key,
+CTRCipherStream::CTRCipherStream(std::shared_ptr<enginepbccl::SecretKey> key,
                                  const std::string& nonce, uint32_t counter)
-    : key_(std::move(key)), nonce_(nonce), counter_(counter) {}
+    : key_(key), nonce_(nonce), counter_(counter) {}
 
 CTRCipherStream::~CTRCipherStream() {}
 

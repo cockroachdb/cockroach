@@ -551,7 +551,7 @@ TEST(DataKeyManager, SetStoreKey) {
   }
 }
 
-TEST(DataKeyManager, RotateKey) {
+TEST(DataKeyManager, RotateKeyAtStartup) {
   // MemEnv returns a MockEnv, but use `new mockEnv` to access FakeSleepForMicroseconds.
   // We need to wrap it around a memenv for memory files.
   std::unique_ptr<rocksdb::Env> memenv(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -639,4 +639,64 @@ TEST(DataKeyManager, RotateKey) {
     ASSERT_NE(active_info, nullptr);
     EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), tc.active_key));
   }
+}
+
+TEST(DataKeyManager, RotateKeyWhileRunning) {
+  // MemEnv returns a MockEnv, but use `new mockEnv` to access FakeSleepForMicroseconds.
+  // We need to wrap it around a memenv for memory files.
+  std::unique_ptr<rocksdb::Env> memenv(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+  std::unique_ptr<testutils::FakeTimeEnv> env(new testutils::FakeTimeEnv(memenv.get()));
+
+  DataKeyManager dkm(env.get(), nullptr, "", 10 /* 10 second rotation period */,
+                     false /* read-only */);
+  ASSERT_OK(dkm.LoadKeys());
+
+  // Set new active store key.
+  auto plain_key = testKey("plain", "", enginepbccl::Plaintext, 0, "plain");
+  auto plain_info = std::unique_ptr<enginepbccl::KeyInfo>(
+      new enginepbccl::KeyInfo(keyInfoFromTestKey(plain_key)));
+  ASSERT_OK(dkm.SetActiveStoreKeyInfo(std::move(plain_info)));
+
+  auto key1 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(plain_key.id, key1->key_id());
+
+  // Try as we might, we don't rotate plaintext.
+  env->IncCurrentTime(60);
+  auto key2 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(key1->key_id(), key2->key_id());
+  EXPECT_EQ(key1->creation_time(), key2->creation_time());
+
+  // Switch to actual encryption.
+  auto aes_key = testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key");
+  auto aes_info =
+      std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(aes_key)));
+  ASSERT_OK(dkm.SetActiveStoreKeyInfo(std::move(aes_info)));
+
+  auto aes_key1 = dkm.CurrentKeyInfo();
+  EXPECT_EQ(aes_key.id, aes_key1->parent_key_id());
+  EXPECT_EQ(aes_key1->encryption_type(), enginepbccl::AES128_CTR);
+
+  // Let's grab the key a few times.
+  for (int i = 0; i < 9; i++) {
+    env->IncCurrentTime(1);
+    auto aes_key2 = dkm.CurrentKeyInfo();
+    EXPECT_EQ(aes_key1->key_id(), aes_key2->key_id());
+    EXPECT_EQ(aes_key1->creation_time(), aes_key2->creation_time());
+    EXPECT_EQ(aes_key2->encryption_type(), enginepbccl::AES128_CTR);
+  }
+
+  // Go over the 10s lifetime.
+  env->IncCurrentTime(2);
+  auto aes_key2 = dkm.CurrentKeyInfo();
+  EXPECT_NE(aes_key1->key_id(), aes_key2->key_id());
+  EXPECT_GT(aes_key2->creation_time(), aes_key1->creation_time());
+  EXPECT_EQ(aes_key2->encryption_type(), enginepbccl::AES128_CTR);
+
+  // And again.
+  env->IncCurrentTime(11);
+  auto aes_key3 = dkm.CurrentKeyInfo();
+  EXPECT_NE(aes_key3->key_id(), aes_key2->key_id());
+  EXPECT_NE(aes_key3->key_id(), aes_key1->key_id());
+  EXPECT_GT(aes_key3->creation_time(), aes_key2->creation_time());
+  EXPECT_EQ(aes_key3->encryption_type(), enginepbccl::AES128_CTR);
 }

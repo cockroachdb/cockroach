@@ -61,7 +61,7 @@ class KeyManager {
 
   // CurrentKey returns the key itself.
   // **WARNING**: this must not be logged, displayed, or stored outside the key registry.
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() = 0;
+  virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() = 0;
 
   // GetKeyInfo returns the KeyInfo about the key the requested `id`.
   // It does NOT include the key itself and can be logged, displayed, and stored.
@@ -75,7 +75,7 @@ class KeyManager {
 
   // GetKey returns the key with requested `id`.
   // **WARNING**: this must not be logged, displayed, or stored outside the key registry.
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) = 0;
+  virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) = 0;
 };
 
 // FileKeyManager loads raw keys from files.
@@ -92,8 +92,8 @@ class FileKeyManager : public KeyManager {
   // On error, existing keys held by the object are not overwritten.
   rocksdb::Status LoadKeys();
 
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
  private:
   rocksdb::Env* env_;
@@ -101,8 +101,8 @@ class FileKeyManager : public KeyManager {
   std::string active_key_path_;
   std::string old_key_path_;
   // TODO(mberhault): protect keys by a mutex if we allow reload.
-  std::unique_ptr<enginepbccl::SecretKey> active_key_;
-  std::unique_ptr<enginepbccl::SecretKey> old_key_;
+  std::shared_ptr<enginepbccl::SecretKey> active_key_;
+  std::shared_ptr<enginepbccl::SecretKey> old_key_;
 };
 
 // DataKeyManager generates and handles data keys and persists them to disk.
@@ -132,12 +132,15 @@ class DataKeyManager : public KeyManager {
   // be accurate here.
   std::unique_ptr<enginepbccl::KeyInfo> GetActiveStoreKeyInfo();
 
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
  private:
-  std::unique_ptr<enginepbccl::SecretKey> CurrentKeyLocked();
+  // Lookup registry_->active_data_key_id in the map. This should only be done after
+  // changing the registry, otherwise use current_key_.
+  std::shared_ptr<enginepbccl::SecretKey> CurrentKeyLocked();
   rocksdb::Status LoadKeysHelper(enginepbccl::DataKeysRegistry* registry);
+  // Write the given registry to disk. If successful, update registry_ and current_key_.
   rocksdb::Status PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegistry> reg);
   // MaybeRotateKeyLocked generates a new data key if the active one has expired.
   rocksdb::Status MaybeRotateKeyLocked();
@@ -151,7 +154,10 @@ class DataKeyManager : public KeyManager {
 
   // The registry is read-only and can only be swapped for another one, it cannot be mutated in
   // place. mu_ must be held for any registry access.
+  // current_key_ is the active data key (or nullptr if none present yet) and is updated every time
+  // registry_ is modified.
   // TODO(mberhault): use a shared_mutex for multiple read-only holders.
   std::mutex mu_;
   std::unique_ptr<enginepbccl::DataKeysRegistry> registry_;
+  std::shared_ptr<enginepbccl::SecretKey> current_key_;
 };
