@@ -6,7 +6,8 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
+  livenessNomenclature, LivenessStatus, nodeCapacityStats, NodesSummary, nodesSummarySelector,
+  selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
@@ -14,8 +15,9 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { Bytes } from "src/util/format";
+import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import {FixLong} from "oss/src/util/fixLong";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -112,22 +114,47 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
-            // Used Capacity - displays the total persisted bytes maintained by the node.
-            {
-              title: "Used Capacity",
-              cell: (ns) => Bytes(BytesUsed(ns)),
-              sort: (ns) => BytesUsed(ns),
-            },
             // Replicas - displays the total number of replicas on the node.
             {
               title: "Replicas",
               cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
               sort: (ns) => ns.metrics[MetricConstants.replicas],
             },
+            // CPUs - the number of CPUs on this node
+            {
+              title: "CPUs",
+              cell: (ns) => ns.num_cpus,
+            },
+            // Used Capacity - displays the total persisted bytes maintained by the node.
+            {
+              title: "Capacity Usage",
+              cell: (ns) => {
+                const { usable } = nodeCapacityStats(ns);
+                const used = BytesUsed(ns);
+                return (
+                  <span title={`Total: ${BytesWithPrecision(usable, 0)}`}>
+                    {BytesWithPrecision(used, 0)}
+                    {" "}
+                    ({Math.round(used / usable * 100)}%)
+                  </span>
+                );
+              },
+              sort: (ns) => BytesUsed(ns),
+            },
             // Mem Usage - total memory being used on this node.
             {
               title: "Mem Usage",
-              cell: (ns) => Bytes(ns.metrics[MetricConstants.rss]),
+              cell: (ns) => {
+                const used = ns.metrics[MetricConstants.rss];
+                const available = FixLong(ns.total_system_memory).toNumber();
+                return (
+                  <span title={`Total: ${BytesWithPrecision(available, 0)}`}>
+                    {BytesWithPrecision(used, 0)}
+                    {" "}
+                    ({Math.round(used / available * 100)}%)
+                  </span>
+                );
+              },
               sort: (ns) => ns.metrics[MetricConstants.rss],
             },
             // Version - the currently running version of cockroach.
