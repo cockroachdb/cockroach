@@ -44,8 +44,11 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		ExtraFloatDigits:   int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
 	}
 
-	// Populate the search path.
-	iter := evalCtx.SessionData.SearchPath.Iter()
+	// Populate the search path. Make sure not to include the implicit pg_catalog,
+	// since the remote end already knows to add the implicit pg_catalog if
+	// necessary, and sending it over would make the remote end think that
+	// pg_catalog was explicitly included by the user.
+	iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 	for s, ok := iter(); ok; s, ok = iter() {
 		res.SearchPath = append(res.SearchPath, s)
 	}
