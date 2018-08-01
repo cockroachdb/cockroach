@@ -1129,7 +1129,7 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 	if f.hasKey {
 		closure := f.ComputeClosure(f.key)
 		if !cols.SubsetOf(closure) {
-			cols.DifferenceWith(closure)
+			cols = cols.Difference(closure)
 			f.addDependency(f.key, cols, true /* strict */, false /* equiv */)
 		}
 	}

@@ -21,17 +21,18 @@ SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── a.k > (a.i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       ├── a.i >= (a.k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
       ├── a.k < (a.i * a.i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      └── a.i <= (a.k / 2) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+      └── a.i <= (a.k / 2) [type=bool, outer=(1,2), side-effects, constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # CommuteConstInequality
@@ -52,6 +53,22 @@ select
       ├── (a.i * 2) >= length('bar') [type=bool, outer=(2)]
       ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── a.s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+
+# Impure function should not be considered constant.
+opt
+SELECT * FROM a WHERE random()::int>a.i+a.i
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(2), side-effects]
+      └── random()::INT > (a.i + a.i) [type=bool, outer=(2), side-effects]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst

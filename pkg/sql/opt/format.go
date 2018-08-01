@@ -22,17 +22,9 @@ const (
 	// ExprFmtShowAll shows all properties of the expression.
 	ExprFmtShowAll ExprFmtFlags = 0
 
-	// ExprFmtHideOuterCols does not show outer columns in the output.
-	ExprFmtHideOuterCols ExprFmtFlags = 1 << (iota - 1)
-
-	// ExprFmtHideRowCard does not show row cardinality in the output.
-	ExprFmtHideRowCard
-
-	// ExprFmtHideStats does not show statistics in the output.
-	ExprFmtHideStats
-
-	// ExprFmtHideCost does not show expression cost in the output.
-	ExprFmtHideCost
+	// ExprFmtHideMiscProps does not show outer columns, row cardinality, or
+	// side effects in the output.
+	ExprFmtHideMiscProps ExprFmtFlags = 1 << (iota - 1)
 
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
 	ExprFmtHideConstraints
@@ -42,6 +34,12 @@ const (
 
 	// ExprFmtHideRuleProps does not show rule-specific properties in the output.
 	ExprFmtHideRuleProps
+
+	// ExprFmtHideStats does not show statistics in the output.
+	ExprFmtHideStats
+
+	// ExprFmtHideCost does not show expression cost in the output.
+	ExprFmtHideCost
 
 	// ExprFmtHideQualifications removes the qualification from column labels
 	// (except when a shortened name would be ambiguous).
