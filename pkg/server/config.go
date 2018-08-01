@@ -18,22 +18,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
-	"math"
 	"net"
-	"runtime"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -48,7 +44,6 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// DefaultCacheSize is the default size of the RocksDB cache. We default the
 	// cache size and SQL memory pool size to 128 MiB. Larger values might
 	// provide significantly better performance, but we're not sure what type of
@@ -286,63 +281,6 @@ func (cfg Config) HistogramWindowInterval() time.Duration {
 	return hwi
 }
 
-// GetTotalMemory returns either the total system memory or if possible the
-// cgroups available memory.
-func GetTotalMemory(ctx context.Context) (int64, error) {
-	totalMem, err := func() (int64, error) {
-		mem := gosigar.Mem{}
-		if err := mem.Get(); err != nil {
-			return 0, err
-		}
-		if mem.Total > math.MaxInt64 {
-			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
-				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
-		}
-		return int64(mem.Total), nil
-	}()
-	if err != nil {
-		return 0, err
-	}
-	checkTotal := func(x int64) (int64, error) {
-		if x <= 0 {
-			// https://github.com/elastic/gosigar/issues/72
-			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
-		}
-		return x, nil
-	}
-	if runtime.GOOS != "linux" {
-		return checkTotal(totalMem)
-	}
-
-	var buf []byte
-	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
-		log.Infof(ctx, "can't read available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
-	if err != nil {
-		log.Infof(ctx, "can't parse available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
-		log.Infof(ctx, "available memory from cgroups (%s) is unsupported, using system memory %s instead",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	if totalMem > 0 && int64(cgAvlMem) > totalMem {
-		log.Infof(ctx, "available memory from cgroups (%s) exceeds system memory %s, using system memory",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	return checkTotal(int64(cgAvlMem))
-}
-
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
@@ -440,7 +378,7 @@ func (cfg *Config) String() string {
 // Report logs an overview of the server configuration parameters via
 // the given context.
 func (cfg *Config) Report(ctx context.Context) {
-	if memSize, err := GetTotalMemory(ctx); err != nil {
+	if memSize, err := status.GetTotalMemory(ctx); err != nil {
 		log.Infof(ctx, "unable to retrieve system total memory: %v", err)
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
@@ -503,7 +441,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		var sizeInBytes = spec.Size.InBytes
 		if spec.InMemory {
 			if spec.Size.Percent > 0 {
-				sysMem, err := GetTotalMemory(ctx)
+				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}

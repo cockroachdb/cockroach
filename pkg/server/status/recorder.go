@@ -20,8 +20,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math"
 	"os"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -37,13 +41,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
 
 const (
+	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -422,17 +430,24 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
 	lastStoreMetricCount := atomic.LoadInt64(&mr.lastStoreMetricCount)
 
+	systemMemory, err := GetTotalMemory(ctx)
+	if err != nil {
+		log.Error(ctx, "could not get total system memory:", err)
+	}
+
 	// Generate a node status with no store data.
 	nodeStat := &NodeStatus{
-		Desc:          mr.mu.desc,
-		BuildInfo:     build.GetInfo(),
-		UpdatedAt:     now,
-		StartedAt:     mr.mu.startedAt,
-		StoreStatuses: make([]StoreStatus, 0, lastSummaryCount),
-		Metrics:       make(map[string]float64, lastNodeMetricCount),
-		Args:          os.Args,
-		Env:           envutil.GetEnvVarsUsed(),
-		Activity:      activity,
+		Desc:              mr.mu.desc,
+		BuildInfo:         build.GetInfo(),
+		UpdatedAt:         now,
+		StartedAt:         mr.mu.startedAt,
+		StoreStatuses:     make([]StoreStatus, 0, lastSummaryCount),
+		Metrics:           make(map[string]float64, lastNodeMetricCount),
+		Args:              os.Args,
+		Env:               envutil.GetEnvVarsUsed(),
+		Activity:          activity,
+		NumCpus:           int32(runtime.NumCPU()),
+		TotalSystemMemory: systemMemory,
 	}
 
 	// If the cluster hasn't yet been definitively moved past the network stats
@@ -458,7 +473,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(false /* useCached */)
 		if err != nil {
-			log.Errorf(context.TODO(), "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(ctx, "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -583,4 +598,61 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 			},
 		})
 	})
+}
+
+// GetTotalMemory returns either the total system memory or if possible the
+// cgroups available memory.
+func GetTotalMemory(ctx context.Context) (int64, error) {
+	totalMem, err := func() (int64, error) {
+		mem := gosigar.Mem{}
+		if err := mem.Get(); err != nil {
+			return 0, err
+		}
+		if mem.Total > math.MaxInt64 {
+			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
+				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
+		}
+		return int64(mem.Total), nil
+	}()
+	if err != nil {
+		return 0, err
+	}
+	checkTotal := func(x int64) (int64, error) {
+		if x <= 0 {
+			// https://github.com/elastic/gosigar/issues/72
+			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+		}
+		return x, nil
+	}
+	if runtime.GOOS != "linux" {
+		return checkTotal(totalMem)
+	}
+
+	var buf []byte
+	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+		log.Infof(ctx, "can't read available memory from cgroups (%s), using system memory %s instead", err,
+			humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem)
+	}
+
+	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
+	if err != nil {
+		log.Infof(ctx, "can't parse available memory from cgroups (%s), using system memory %s instead", err,
+			humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem)
+	}
+
+	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
+		log.Infof(ctx, "available memory from cgroups (%s) is unsupported, using system memory %s instead",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem)
+	}
+
+	if totalMem > 0 && int64(cgAvlMem) > totalMem {
+		log.Infof(ctx, "available memory from cgroups (%s) exceeds system memory %s, using system memory",
+			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem)
+	}
+
+	return checkTotal(int64(cgAvlMem))
 }
