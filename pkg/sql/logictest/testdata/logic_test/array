@@ -76,7 +76,7 @@ SELECT ARRAY['one', 'two', 'fünf']
 query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----
-{"\n","g\x10h"}
+{"\x0a","g\x10h"}
 
 query T
 SELECT ARRAY['foo', 'bar']
@@ -582,10 +582,10 @@ query T rowsort
 SELECT b FROM a
 ----
 {}
-{true}
-{false}
-{true,true}
-{false,true}
+{t}
+{f}
+{t,t}
+{f,t}
 
 statement ok
 DROP TABLE a
