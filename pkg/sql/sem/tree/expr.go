@@ -733,8 +733,11 @@ func (node *Placeholder) ResolvedType() types.T {
 type Tuple struct {
 	Exprs  Exprs
 	Labels []string
-	// Row indicates whether or not the tuple should be textually represented as
-	// ROW ( ... ).
+
+	// Row indicates whether `ROW` was used in the input syntax This is
+	// used mainly to generate column names automatically, see
+	// col_name.go. It is also used when pretty-printing for human
+	// consumption, see pretty.go.
 	Row bool
 
 	typ types.TTuple
@@ -756,11 +759,11 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	if len(node.Labels) > 0 {
 		ctx.WriteByte('(')
 	}
-	if node.Row {
-		ctx.WriteString("ROW")
-	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		ctx.WriteByte(',')
+	}
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")
@@ -786,7 +789,6 @@ func (node *Tuple) ResolvedType() types.T {
 func (node *Tuple) Truncate(prefix int) *Tuple {
 	return &Tuple{
 		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
-		Row:   node.Row,
 		typ:   types.TTuple{Types: append([]types.T(nil), node.typ.Types[:prefix]...)},
 	}
 }
@@ -798,7 +800,6 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 func (node *Tuple) Project(set util.FastIntSet) *Tuple {
 	t := &Tuple{
 		Exprs: make(Exprs, 0, set.Len()),
-		Row:   node.Row,
 		typ:   types.TTuple{Types: make([]types.T, 0, set.Len())},
 	}
 	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
@@ -1396,6 +1397,7 @@ var (
 	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.FamArray, types.FamTuple,
 		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.JSON}
 	bytesCastTypes     = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
 	dateCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}

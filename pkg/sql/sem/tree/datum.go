@@ -920,8 +920,8 @@ func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtUnicodeStrings) {
 		buf.WriteString(string(*d))
-	} else if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, string(*d))
+	} else if f.HasFlags(pgwireFormat) {
+		lex.EncodeSQLStringInsidePgwireValue(buf, string(*d))
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
@@ -989,8 +989,8 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, d.Contents)
+	if f.HasFlags(pgwireFormat) {
+		lex.EncodeSQLStringInsidePgwireValue(buf, d.Contents)
 	} else {
 		lex.EncodeSQLString(buf, d.Contents)
 		ctx.WriteString(" COLLATE ")
@@ -1154,7 +1154,7 @@ func writeAsHexString(ctx *FmtCtx, d *DBytes) {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.HasFlags(fmtWithinArray) {
+	if f.HasFlags(pgwireFormat) {
 		ctx.WriteString(`"\\x`)
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
@@ -2672,13 +2672,36 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 // TODO(bram): We don't format tuples in the same way as postgres. See #25522.
-// TODO(knz): this is broken if the tuple is labeled. See #26624.
 func (d *DTuple) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
-		ctx.WriteString("ROW()")
-		return
+	inPgwireValue := ctx.HasFlags(pgwireFormat)
+	showLabels := !inPgwireValue && len(d.typ.Labels) > 0
+	if showLabels {
+		// pgwire tuples are never labeled.
+		ctx.WriteByte('(')
 	}
-	ctx.FormatNode(&d.D)
+	ctx.WriteByte('(')
+	comma := ""
+	for _, v := range d.D {
+		ctx.WriteString(comma)
+		ctx.FormatNode(v)
+		comma = ","
+	}
+	if !inPgwireValue && len(d.D) == 1 {
+		// Ensure the pretty-printed 1-value tuple is not ambiguous with
+		// the equivalent value enclosed in grouping parentheses.
+		ctx.WriteByte(',')
+	}
+	ctx.WriteByte(')')
+	if showLabels {
+		ctx.WriteString(" AS ")
+		comma := ""
+		for i := range d.typ.Labels {
+			ctx.WriteString(comma)
+			ctx.FormatNode((*Name)(&d.typ.Labels[i]))
+			comma = ", "
+		}
+		ctx.WriteByte(')')
+	}
 }
 
 // Sorted returns true if the tuple is known to be sorted (and contains no
@@ -2832,6 +2855,11 @@ func (dNull) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (dNull) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(pgwireFormat) {
+		// NULL sub-expressions in pgwire text values are represented with
+		// the empty string.
+		return
+	}
 	ctx.WriteString("NULL")
 }
 
@@ -2955,14 +2983,20 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
-	ctx.WriteString("ARRAY[")
-	for i, v := range d.Array {
-		if i > 0 {
-			ctx.WriteString(",")
-		}
-		ctx.FormatNode(v)
+	endChar := byte(']')
+	if ctx.HasFlags(pgwireFormat) {
+		ctx.WriteByte('{')
+		endChar = '}'
+	} else {
+		ctx.WriteString("ARRAY[")
 	}
-	ctx.WriteByte(']')
+	comma := ""
+	for _, v := range d.Array {
+		ctx.WriteString(comma)
+		ctx.FormatNode(v)
+		comma = ","
+	}
+	ctx.WriteByte(endChar)
 }
 
 const maxArrayLength = math.MaxInt32

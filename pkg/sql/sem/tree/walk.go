@@ -1297,12 +1297,12 @@ func (stmt *Update) walkStmt(v Visitor) Statement {
 func (stmt *ValuesClause) walkStmt(v Visitor) Statement {
 	ret := stmt
 	for i, tuple := range stmt.Tuples {
-		t, changed := WalkExpr(v, tuple)
+		exprs, changed := walkExprSlice(v, tuple)
 		if changed {
 			if ret == stmt {
-				ret = &ValuesClause{append([]*Tuple(nil), stmt.Tuples...)}
+				ret = &ValuesClause{append([]Exprs(nil), stmt.Tuples...)}
 			}
-			ret.Tuples[i] = t.(*Tuple)
+			ret.Tuples[i] = exprs
 		}
 	}
 	return ret

@@ -130,9 +130,9 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	}
 }
 
-// EncodeSQLStringInsideArray writes a string literal to buf using the "string
+// EncodeSQLStringInsidePgwireValue writes a string literal to buf using the "string
 // within array" formatting.
-func EncodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
+func EncodeSQLStringInsidePgwireValue(buf *bytes.Buffer, in string) {
 	buf.WriteByte('"')
 	// Loop through each unicode code point.
 	for i, r := range in {

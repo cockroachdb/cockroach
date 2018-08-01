@@ -51,8 +51,9 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 // VALUES clause with a single value.
 // e.g. VALUES (a,b,c), (d,e,f) -> VALUES (_, _, _), (__more__)
 func (node *ValuesClause) formatHideConstants(ctx *FmtCtx) {
-	ctx.WriteString("VALUES ")
-	ctx.FormatNode(node.Tuples[0])
+	ctx.WriteString("VALUES (")
+	ctx.FormatNode(&node.Tuples[0])
+	ctx.WriteByte(')')
 	if len(node.Tuples) > 1 {
 		ctx.Printf(", (%s)", arityString(len(node.Tuples)-1))
 	}

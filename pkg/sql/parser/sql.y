@@ -384,8 +384,8 @@ func (u *sqlSymUnion) rangePartitions() []tree.RangePartition {
 func (u *sqlSymUnion) tuples() []*tree.Tuple {
     return u.val.([]*tree.Tuple)
 }
-func (u *sqlSymUnion) tuple() tree.Tuple {
-    return u.val.(tree.Tuple)
+func (u *sqlSymUnion) tuple() *tree.Tuple {
+    return u.val.(*tree.Tuple)
 }
 func (u *sqlSymUnion) windowDef() *tree.WindowDef {
     return u.val.(*tree.WindowDef)
@@ -802,7 +802,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list
 %type <tree.NormalizableTableNames> table_name_list
-%type <tree.Exprs> expr_list opt_expr_list
+%type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
+%type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
 %type <tree.SelectExprs> target_list
 %type <tree.UpdateExprs> set_clause_list
@@ -863,7 +864,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
-%type <tree.Tuple> row
+%type <*tree.Tuple> row
 %type <tree.Expr> case_expr case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
@@ -1791,7 +1792,7 @@ cancel_jobs_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.CancelJob,
     }
@@ -1814,7 +1815,7 @@ cancel_queries_stmt:
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       IfExists: false,
     }
@@ -1823,7 +1824,7 @@ cancel_queries_stmt:
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$5.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
     }
@@ -1850,7 +1851,7 @@ cancel_sessions_stmt:
   {
    $$.val = &tree.CancelSessions{
       Sessions: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       IfExists: false,
     }
@@ -1859,7 +1860,7 @@ cancel_sessions_stmt:
   {
    $$.val = &tree.CancelSessions{
       Sessions: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$5.expr()}}}},
+	    Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
     }
@@ -3493,7 +3494,7 @@ pause_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.PauseJob,
     }
@@ -3721,8 +3722,8 @@ range_partition:
   {
     $$.val = tree.RangePartition{
       Name: tree.UnrestrictedName($1),
-      From: &tree.Tuple{Exprs: $5.exprs()},
-      To: &tree.Tuple{Exprs: $9.exprs()},
+      From: $5.exprs(),
+      To: $9.exprs(),
       Subpartition: $11.partitionBy(),
     }
   }
@@ -4420,7 +4421,7 @@ resume_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Tuples: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.ResumeJob,
     }
@@ -5383,13 +5384,13 @@ having_clause:
 values_clause:
   VALUES '(' expr_list ')' %prec UMINUS
   {
-    $$.val = &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: $3.exprs()}}}
+    $$.val = &tree.ValuesClause{Tuples: []tree.Exprs{$3.exprs()}}
   }
 | VALUES error // SHOW HELP: VALUES
 | values_clause ',' '(' expr_list ')'
   {
     valNode := $1.selectStmt().(*tree.ValuesClause)
-    valNode.Tuples = append(valNode.Tuples, &tree.Tuple{Exprs: $4.exprs()})
+    valNode.Tuples = append(valNode.Tuples, $4.exprs())
     $$.val = valNode
   }
 
@@ -6900,8 +6901,7 @@ d_expr:
   }
 | row
   {
-    t := $1.tuple()
-    $$.val = &t
+    $$.val = $1.tuple()
   }
 | '(' row AS name_list ')'
   {
@@ -6911,7 +6911,7 @@ d_expr:
     for i, l := range labels {
       t.Labels[i] = string(l)
     }
-    $$.val = &t
+    $$.val = t
   }
 
 // TODO(pmattis): Support this notation?
@@ -7348,13 +7348,19 @@ frame_bound:
 // without conflicting with the parenthesized a_expr production. Without the
 // ROW keyword, there must be more than one a_expr inside the parens.
 row:
-  ROW '(' opt_expr_list ')'
+  ROW expr_tuple1_ambiguous
   {
-    $$.val = tree.Tuple{Exprs: $3.exprs(), Row: true}
+    t := $2.tuple()
+    t.Row = true
+    $$.val = t
   }
-| '(' expr_list ',' a_expr ')'
+| ROW '(' ')'
   {
-    $$.val = tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
+    $$.val = &tree.Tuple{Row: true}
+  }
+| expr_tuple_unambiguous
+  {
+    $$.val = $1.tuple()
   }
 
 sub_type:
@@ -7402,6 +7408,62 @@ subquery_op:
   // this transformation is made on the fly by the parser upwards.
   // however the SubLink structure which handles any/some/all stuff
   // is not ready for such a thing.
+
+// expr_tuple1_ambiguous is a tuple expression with at least one expression.
+// The allowable syntax is:
+// ( E )       -- just one value, this is potentially ambiguous with
+//             -- grouping parentheses. The ambiguity is resolved
+//             -- by only allowing expr_tuple1_ambiguous on the RHS
+//             -- of a IN expression.
+// ( E, E, E ) -- comma-separated values, no trailing comma allowed.
+// ( E, )      -- just one value with a comma, makes the syntax unambiguous
+//             -- with grouping parentheses. This is not usually produced
+//             -- by SQL clients, but can be produced by pretty-printing
+//             -- internally in CockroachDB.
+expr_tuple1_ambiguous:
+  '(' tuple1_ambiguous_values ')'
+  {
+    $$.val = &tree.Tuple{Exprs: $2.exprs()}
+  }
+
+tuple1_ambiguous_values:
+  a_expr
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ','
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ',' expr_list
+  {
+     $$.val = append(tree.Exprs{$1.expr()}, $3.exprs()...)
+  }
+
+// expr_tuple_unambiguous is a tuple expression with zero or more
+// expressions. The allowable syntax is:
+// ( )         -- zero values
+// ( E, )      -- just one value. This is unambiguous with the (E) grouping syntax.
+// ( E, E, E ) -- comma-separated values, more than 1.
+expr_tuple_unambiguous:
+  '(' ')'
+  {
+	$$.val = &tree.Tuple{}
+  }
+| '(' tuple1_unambiguous_values ')'
+  {
+	$$.val = &tree.Tuple{Exprs: $2.exprs()}
+  }
+
+tuple1_unambiguous_values:
+  a_expr ','
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ',' expr_list
+  {
+     $$.val = append(tree.Exprs{$1.expr()}, $3.exprs()...)
+  }
 
 opt_expr_list:
   expr_list
@@ -7571,10 +7633,7 @@ in_expr:
   {
     $$.val = &tree.Subquery{Select: $1.selectStmt()}
   }
-| '(' expr_list ')'
-  {
-    $$.val = &tree.Tuple{Exprs: $2.exprs()}
-  }
+| expr_tuple1_ambiguous
 
 // Define SQL-style CASE clause.
 // - Full specification

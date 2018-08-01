@@ -93,7 +93,7 @@ func BenchmarkEncodeSQLString(b *testing.B) {
 	})
 	b.Run("new version", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			lex.EncodeSQLStringInsideArray(bytes.NewBuffer(nil), str)
+			lex.EncodeSQLStringInsidePgwireValue(bytes.NewBuffer(nil), str)
 		}
 	})
 }

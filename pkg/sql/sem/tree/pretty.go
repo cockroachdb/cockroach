@@ -883,8 +883,8 @@ func (node *ValuesClause) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *ValuesClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
 	d := make([]pretty.Doc, len(node.Tuples))
-	for i, n := range node.Tuples {
-		d[i] = p.Doc(n)
+	for i := range node.Tuples {
+		d[i] = pretty.Bracket("(", p.Doc(&node.Tuples[i]), ")")
 	}
 	return []pretty.RLTableRow{p.row("VALUES", pretty.Join(",", d...))}
 }
@@ -905,11 +905,11 @@ func (node *Array) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
-	var row string
-	if node.Row {
-		row = "ROW"
+	exprDoc := p.Doc(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		exprDoc = pretty.Concat(exprDoc, pretty.Text(","))
 	}
-	d := pretty.Bracket(row+"(", p.Doc(&node.Exprs), ")")
+	d := pretty.Bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
 		for i, n := range node.Labels {

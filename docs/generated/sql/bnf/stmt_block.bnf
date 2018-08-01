@@ -989,7 +989,7 @@ b_expr ::=
 
 in_expr ::=
 	select_with_parens
-	| '(' expr_list ')'
+	| expr_tuple1_ambiguous
 
 subquery_op ::=
 	math_op
@@ -1331,6 +1331,9 @@ opt_array_bounds ::=
 	'[' ']'
 	| 
 
+expr_tuple1_ambiguous ::=
+	'(' tuple1_ambiguous_values ')'
+
 math_op ::=
 	'+'
 	| '-'
@@ -1613,8 +1616,9 @@ array_expr ::=
 	| '[' array_expr_list ']'
 
 row ::=
-	'ROW' '(' opt_expr_list ')'
-	| '(' expr_list ',' a_expr ')'
+	'ROW' expr_tuple1_ambiguous
+	| 'ROW' '(' ')'
+	| expr_tuple_unambiguous
 
 array_subscript ::=
 	'[' a_expr ']'
@@ -1655,6 +1659,11 @@ opt_interval ::=
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
 	| 
+
+tuple1_ambiguous_values ::=
+	a_expr
+	| a_expr ','
+	| a_expr ',' expr_list
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -1865,6 +1874,10 @@ opt_expr_list ::=
 array_expr_list ::=
 	( array_expr ) ( ( ',' array_expr ) )*
 
+expr_tuple_unambiguous ::=
+	'(' ')'
+	| '(' tuple1_unambiguous_values ')'
+
 opt_slice_bound ::=
 	a_expr
 	| 
@@ -2026,6 +2039,10 @@ special_function ::=
 	| 'TRIM' '(' trim_list ')'
 	| 'GREATEST' '(' expr_list ')'
 	| 'LEAST' '(' expr_list ')'
+
+tuple1_unambiguous_values ::=
+	a_expr ','
+	| a_expr ',' expr_list
 
 window_definition ::=
 	window_name 'AS' window_specification

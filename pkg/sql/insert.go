@@ -185,7 +185,7 @@ func (p *planner) Insert(
 			if len(values.Tuples) > 0 {
 				// Check to make sure the values clause doesn't have too many or
 				// too few expressions in each tuple.
-				numExprs := len(values.Tuples[0].Exprs)
+				numExprs := len(values.Tuples[0])
 				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
@@ -712,7 +712,7 @@ func newDefaultValuesClause(
 		}
 		row = append(row, defaultExprs[i])
 	}
-	return &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: row}}}
+	return &tree.ValuesClause{Tuples: []tree.Exprs{row}}
 }
 
 // fillDefaults populates default expressions in the provided ValuesClause,
@@ -732,7 +732,7 @@ func fillDefaults(
 	ret := values
 	copyValues := func() {
 		if ret == values {
-			ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
+			ret = &tree.ValuesClause{Tuples: append([]tree.Exprs(nil), values.Tuples...)}
 		}
 	}
 
@@ -746,9 +746,9 @@ func fillDefaults(
 		return defaultExprs[idx]
 	}
 
-	numColsOrig := len(ret.Tuples[0].Exprs)
+	numColsOrig := len(ret.Tuples[0])
 	for tIdx, tuple := range ret.Tuples {
-		if a, e := len(tuple.Exprs), numColsOrig; a != e {
+		if a, e := len(tuple), numColsOrig; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -756,25 +756,24 @@ func fillDefaults(
 		copyTuple := func() {
 			if !tupleCopied {
 				copyValues()
-				tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
-				ret.Tuples[tIdx] = tuple
+				ret.Tuples[tIdx] = append(tree.Exprs(nil), tuple...)
 				tupleCopied = true
 			}
 		}
 
-		for eIdx, val := range tuple.Exprs {
+		for eIdx, val := range tuple {
 			switch val.(type) {
 			case tree.DefaultVal:
 				copyTuple()
-				tuple.Exprs[eIdx] = defaultExpr(eIdx)
+				ret.Tuples[tIdx][eIdx] = defaultExpr(eIdx)
 			}
 		}
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Populate default expressions for those columns.
-		for i := len(tuple.Exprs); i < len(cols); i++ {
+		for i := len(tuple); i < len(cols); i++ {
 			copyTuple()
-			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+			ret.Tuples[tIdx] = append(ret.Tuples[tIdx], defaultExpr(len(tuple)))
 		}
 	}
 	return ret, nil
