@@ -11,7 +11,6 @@ package importccl
 import (
 	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 

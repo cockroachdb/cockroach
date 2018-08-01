@@ -172,6 +172,15 @@ d
 			typ:    "CSV",
 			data:   "1",
 		},
+		{
+			name:   "new line characters",
+			create: `t text`,
+			typ:    "CSV",
+			data:   "\"hello\r\nworld\"\n\"friend\nfoe\"\n\"mr\rmrs\"",
+			query: map[string][][]string{
+				`SELECT t from t`: {{"hello\r\nworld"}, {"friend\nfoe"}, {"mr\rmrs"}},
+			},
+		},
 
 		// MySQL OUTFILE
 		{
