@@ -366,7 +366,6 @@ INSERT INTO c20067 VALUES (1, 1, 'John Doe')
 # constraint on a non-interleaved column.
 
 subtest interleaved_join_on_other_columns
-
 statement ok
 CREATE TABLE users (id INT PRIMARY KEY)
 
@@ -383,3 +382,381 @@ query I
 SELECT count(*) FROM users JOIN documents ON users.id=documents.user_id WHERE documents.id=0
 ----
 1
+
+subtest InterleavedDeleteFastPath
+statement ok
+CREATE TABLE a (
+    a_id INT PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b(
+    b_id INT,
+    a_id INT,
+    FOREIGN KEY (a_id) REFERENCES a(a_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    PRIMARY KEY(a_id, b_id)
+) INTERLEAVE IN PARENT a(a_id)
+
+statement ok
+CREATE TABLE c(
+    c_id INT,
+    a_id INT,
+    b_id INT,
+    FOREIGN KEY (a_id, b_id) REFERENCES b(a_id, b_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    PRIMARY KEY(a_id, b_id, c_id)
+) INTERLEAVE IN PARENT b(a_id, b_id)
+
+statement ok
+INSERT INTO a SELECT generate_series(1,10);
+INSERT INTO b(a_id, b_id) SELECT generate_series(1,10), 1
+
+statement ok
+DELETE FROM a WHERE a_id <= 2
+
+query I
+SELECT count(*) from a
+----
+8
+
+query I
+SELECT count(*) from b
+----
+8
+
+query I colnames
+SELECT * from a order by a_id
+----
+a_id
+3
+4
+5
+6
+7
+8
+9
+10
+
+query II colnames
+SELECT * from b order by a_id, b_id
+----
+b_id  a_id
+1     3
+1     4
+1     5
+1     6
+1     7
+1     8
+1     9
+1     10
+
+statement ok
+INSERT INTO b(a_id, b_id) select a.a_id, 2 from a;
+INSERT INTO c(a_id, b_id, c_id) select a.a_id, b.b_id, 1 from a, b where a.a_id = b.a_id
+
+query III colnames
+SELECT * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+1     3     1
+1     3     2
+1     4     1
+1     4     2
+1     5     1
+1     5     2
+1     6     1
+1     6     2
+1     7     1
+1     7     2
+1     8     1
+1     8     2
+1     9     1
+1     9     2
+1     10    1
+1     10    2
+
+statement ok
+SET TRACING = on,kv,results; DELETE FROM a where a_id <= 7 and a_id >= 5; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+----
+Scan /Table/79/1/{5-7/#}
+querying next range at /Table/79/1/5
+r1: sending batch 1 Scan to (n1,s1):1
+DelRange /Table/79/1/5 - /Table/79/1/7/NULL
+querying next range at /Table/79/1/5
+r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 3
+
+query II colnames
+select * from b order by a_id, b_id
+----
+b_id  a_id
+1     3
+2     3
+1     4
+2     4
+1     8
+2     8
+1     9
+2     9
+1     10
+2     10
+
+query III colnames
+select * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+1     3     1
+1     3     2
+1     4     1
+1     4     2
+1     8     1
+1     8     2
+1     9     1
+1     9     2
+1     10    1
+1     10    2
+
+statement ok
+SET TRACING = on,kv,results; DELETE FROM a; SET tracing = off
+
+query T
+select message FROM [SHOW KV TRACE FOR SESSION]
+----
+Scan /Table/79/{1-2}
+querying next range at /Table/79/1
+r1: sending batch 1 Scan to (n1,s1):1
+DelRange /Table/79/1 - /Table/79/3
+querying next range at /Table/79/1
+r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+fast path completed
+rows affected: 5
+
+query II colnames
+select * from b order by a_id, b_id
+----
+b_id  a_id
+
+query III colnames
+select * from c order by a_id, b_id, c_id
+----
+c_id  a_id  b_id
+
+statement ok
+INSERT INTO a SELECT generate_series(1,10);
+INSERT INTO b(a_id, b_id) SELECT generate_series(1,10), 1
+
+statement ok
+SET TRACING = on,kv,results; 
+
+query I
+delete from a returning *
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+statement ok
+SET TRACING=off;
+
+query T
+select message FROM [SHOW KV TRACE FOR SESSION];
+----
+Scan /Table/79/{1-2}
+querying next range at /Table/79/1
+r1: sending batch 1 Scan to (n1,s1):1
+fetched: /a/primary/1 -> NULL
+Del /Table/79/1/1/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/1/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/1/#/80/1/1/0
+querying next range at /Table/79/1/1/#/80/1/1/0
+r1: sending batch 1 Del, 1 BeginTxn to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/1/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/1/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/2 -> NULL
+Del /Table/79/1/2/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/2/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/2/#/80/1/1/0
+querying next range at /Table/79/1/2/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/2/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/2/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/3 -> NULL
+Del /Table/79/1/3/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/3/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/3/#/80/1/1/0
+querying next range at /Table/79/1/3/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/3/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/3/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/4 -> NULL
+Del /Table/79/1/4/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/4/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/4/#/80/1/1/0
+querying next range at /Table/79/1/4/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/4/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/4/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/5 -> NULL
+Del /Table/79/1/5/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/5/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/5/#/80/1/1/0
+querying next range at /Table/79/1/5/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/5/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/5/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/6 -> NULL
+Del /Table/79/1/6/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/6/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/6/#/80/1/1/0
+querying next range at /Table/79/1/6/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/6/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/6/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/7 -> NULL
+Del /Table/79/1/7/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/7/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/7/#/80/1/1/0
+querying next range at /Table/79/1/7/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/7/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/7/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/8 -> NULL
+Del /Table/79/1/8/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/8/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/8/#/80/1/1/0
+querying next range at /Table/79/1/8/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/8/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/8/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/9 -> NULL
+Del /Table/79/1/9/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/9/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/9/#/80/1/1/0
+querying next range at /Table/79/1/9/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/9/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/9/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+fetched: /a/primary/10 -> NULL
+Del /Table/79/1/10/0
+cascading delete into table: 80 using index: 1
+querying next range at /Table/79/1/10/#/80/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1/1
+r1: sending batch 1 Scan to (n1,s1):1
+Del /Table/79/1/10/#/80/1/1/0
+querying next range at /Table/79/1/10/#/80/1/1/0
+r1: sending batch 1 Del to (n1,s1):1
+cascading delete into table: 81 using index: 1
+querying next range at /Table/79/1/10/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1/1/#/81/1
+r1: sending batch 1 Scan to (n1,s1):1
+querying next range at /Table/79/1/10/#/80/1
+r1: sending batch 1 Scan, 1 QueryIntent to (n1,s1):1
+querying next range at /Table/79/1/1/0
+r1: sending batch 10 Del, 1 EndTxn to (n1,s1):1
+output row: [1]
+output row: [2]
+output row: [3]
+output row: [4]
+output row: [5]
+output row: [6]
+output row: [7]
+output row: [8]
+output row: [9]
+output row: [10]
+rows affected: 10
+
+statement ok
+DROP TABLE c; DROP TABLE b; DROP TABLE a
