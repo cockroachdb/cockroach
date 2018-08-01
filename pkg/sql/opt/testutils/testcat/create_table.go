@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -104,12 +105,15 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
-		}
+
 		// TODO(rytaft): In the future we will likely want to check for unique
 		// constraints, indexes, and foreign key constraints to determine
 		// nullability, uniqueness, etc.
 	}
 
+	// We need to keep track of the tableID from
+	// numeric references
+	tab.tableID = sqlbase.ID(len(tc.tables))
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
 

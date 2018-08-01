@@ -1094,3 +1094,70 @@ project
  ├── columns: x:1(int!null)
  └── scan a
       └── columns: x:1(int!null) y:2(float)
+
+exec-ddl
+CREATE TABLE t (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+----
+TABLE t
+ ├── a int not null
+ ├── xx int
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null
+
+# Numeric Reference Test (1/7)
+build
+SELECT * FROM [1 AS t]
+----
+scan t
+ └── columns: a:1(int!null) xx:2(int) b:3(int) c:4(int)
+
+# Numeric Reference Test (2/7)
+# These columns are off by one from what
+# the logictests will run. This is due
+# to the implementation of the test_catalog
+build
+SELECT * FROM [1(0) AS t]
+----
+scan t
+ └── columns: a:1(int!null)
+
+# Numeric Reference Test (3/7)
+build
+SELECT * FROM [1(0,1) AS t]
+----
+scan t
+ └── columns: a:1(int!null) xx:2(int)
+
+# Numeric Reference Test (4/7)
+build
+SELECT * FROM [1(3) AS t]
+----
+scan t
+ └── columns: c:4(int)
+
+# Numeric Reference Test (5/7)
+build
+SELECT * FROM [1(4) AS t]
+----
+error: column [4] does not exist
+
+# Numeric Reference Test (6/7)
+build
+SELECT * FROM [1(1,3) AS t]
+----
+scan t
+ └── columns: xx:2(int) c:4(int)
+
+# Numeric Reference Test (7/7)
+build
+SELECT * FROM [1(1,2) AS t(col1,col2)]
+----
+scan t
+ └── columns: col1:2(int) col2:3(int)
+
