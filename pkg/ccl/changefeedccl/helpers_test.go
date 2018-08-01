@@ -55,6 +55,7 @@ func createBenchmarkChangefeed(
 		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
 	}
 	progress := jobspb.Progress{}
+	metrics := MakeMetrics().(*Metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
@@ -62,7 +63,7 @@ func createBenchmarkChangefeed(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, resultsCh, nil)
+		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, metrics, resultsCh, nil)
 	}()
 	return func() error {
 		select {
