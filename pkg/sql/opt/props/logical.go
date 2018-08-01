@@ -97,6 +97,12 @@ type Relational struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
 	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
 	// relationships between columns in a base or derived relation. Given two sets
 	// of columns A and B, a functional dependency A-->B holds if A uniquely
@@ -254,6 +260,12 @@ type Scalar struct {
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
 	// Constraints is the set of constraints deduced from a boolean expression.
 	// For the expression to be true, all constraints in the set must be
 	// satisfied.
@@ -346,6 +358,25 @@ func (p *Logical) OuterCols() opt.ColSet {
 		return p.Scalar.OuterCols
 	}
 	return p.Relational.OuterCols
+}
+
+// CanHaveSideEffects is true if the subtree rooted at this expression might
+// trigger a run-time error, might modify outside state, or might not always
+// return the same output given the same input. For example:
+//
+//   10 / col          -- division by zero error possible
+//   nextval(seq)      -- modifies sequence value
+//   col < random()    -- random() returns different value on each call
+//
+// Some transformations are sensitive to side effects. For example, a CASE
+// branch can only be executed when its condition is true. This prevents
+// hoisting correlated subqueries in the usual way, since that would trigger
+// premature evaluation.
+func (p *Logical) CanHaveSideEffects() bool {
+	if p.Scalar != nil {
+		return p.Scalar.CanHaveSideEffects
+	}
+	return p.Relational.CanHaveSideEffects
 }
 
 // Verify runs consistency checks against the logical properties, in order to

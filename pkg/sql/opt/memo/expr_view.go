@@ -364,16 +364,18 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		tp.Childf("key columns: %v = %v", def.KeyCols, idxCols)
 	}
 
-	if !f.HasFlags(opt.ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
-		tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideRowCard) {
+	if !f.HasFlags(opt.ExprFmtHideMiscProps) {
+		if !logProps.Relational.OuterCols.Empty() {
+			tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
+		}
 		if logProps.Relational.Cardinality != props.AnyCardinality {
 			// Suppress cardinality for Scan ops if it's redundant with Limit field.
 			if ev.Operator() != opt.ScanOp || ev.Private().(*ScanOpDef).HardLimit == 0 {
 				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
 			}
+		}
+		if logProps.Relational.CanHaveSideEffects {
+			tp.Child("side-effects")
 		}
 	}
 
@@ -394,7 +396,6 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if ok {
 			tp.Childf("key: %s", key)
 		}
-
 		fd.ClearKey()
 		if !fd.Empty() {
 			tp.Childf("fd: %s", fd)
@@ -458,51 +459,54 @@ func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
 	if scalar == nil {
 		buf.WriteString(" [type=undefined]")
 	} else {
-		showType := true
+		first := true
+		writeProp := func(format string, args ...interface{}) {
+			if first {
+				buf.WriteString(" [")
+				first = false
+			} else {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(buf, format, args...)
+		}
+
 		switch ev.Operator() {
 		case opt.ProjectionsOp, opt.AggregationsOp:
 			// Don't show the type of these ops because they are simply tuple
 			// types of their children's types, and the types of children are
 			// already listed.
-			showType = false
-		}
-		hasOuterCols := !f.HasFlags(opt.ExprFmtHideOuterCols) && !scalar.OuterCols.Empty()
-		hasConstraints := !f.HasFlags(opt.ExprFmtHideConstraints) &&
-			scalar.Constraints != nil &&
-			!scalar.Constraints.IsUnconstrained()
-		hasFuncDeps := !f.HasFlags(opt.ExprFmtHideFuncDeps) && !scalar.FuncDeps.Empty()
 
-		if showType || hasOuterCols || hasConstraints || hasFuncDeps {
-			buf.WriteString(" [")
-			if showType {
-				fmt.Fprintf(buf, "type=%s", scalar.Type)
-				if hasOuterCols || hasConstraints || hasFuncDeps {
-					buf.WriteString(", ")
-				}
+		default:
+			writeProp("type=%s", scalar.Type)
+		}
+
+		if !f.HasFlags(opt.ExprFmtHideMiscProps) {
+			if !scalar.OuterCols.Empty() {
+				writeProp("outer=%s", scalar.OuterCols)
 			}
-			if hasOuterCols {
-				fmt.Fprintf(buf, "outer=%s", scalar.OuterCols)
-				if hasConstraints || hasFuncDeps {
-					buf.WriteString(", ")
-				}
+			if scalar.CanHaveSideEffects {
+				writeProp("side-effects")
 			}
-			if hasConstraints {
-				fmt.Fprintf(buf, "constraints=(%s", scalar.Constraints)
+		}
+
+		if !f.HasFlags(opt.ExprFmtHideConstraints) {
+			if scalar.Constraints != nil && !scalar.Constraints.IsUnconstrained() {
+				writeProp("constraints=(%s", scalar.Constraints)
 				if scalar.TightConstraints {
 					buf.WriteString("; tight")
 				}
 				buf.WriteString(")")
-				if hasFuncDeps {
-					buf.WriteString(", ")
-				}
 			}
-			if hasFuncDeps {
-				fmt.Fprintf(buf, "fd=%s", scalar.FuncDeps)
-			}
+		}
+
+		if !f.HasFlags(opt.ExprFmtHideFuncDeps) && !scalar.FuncDeps.Empty() {
+			writeProp("fd=%s", scalar.FuncDeps)
+		}
+
+		if !first {
 			buf.WriteString("]")
 		}
 	}
-
 }
 
 func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {

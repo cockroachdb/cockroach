@@ -685,7 +685,7 @@ unsupported-expr: 'hello' COLLATE en [type=collatedstring{en}]
 build-scalar
 random()
 ----
-error: impure functions are not supported
+function: random [type=float]
 
 build-scalar
 ARRAY[1, 2] || NULL

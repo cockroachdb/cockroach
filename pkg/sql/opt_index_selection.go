@@ -141,7 +141,6 @@ func (p *planner) selectIndex(
 		}
 		bld := optbuilder.NewScalar(ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory())
 		bld.AllowUnsupportedExpr = true
-		bld.AllowImpureFuncs = true
 		filterGroup, err := bld.Build(s.filter)
 		if err != nil {
 			return nil, err
