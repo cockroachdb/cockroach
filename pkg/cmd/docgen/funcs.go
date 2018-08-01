@@ -58,6 +58,11 @@ func init() {
 			); err != nil {
 				return err
 			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
+			); err != nil {
+				return err
+			}
 			return ioutil.WriteFile(
 				filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
 			)
@@ -189,7 +194,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 			if fn.Info == notUsableInfo {
 				continue
 			}
-			if categorize && fn.WindowFunc != nil {
+			if categorize && (fn.AggregateFunc != nil || fn.WindowFunc != nil) {
 				continue
 			}
 			args := fn.Types.String()
