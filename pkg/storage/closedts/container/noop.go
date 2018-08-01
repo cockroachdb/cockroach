@@ -50,6 +50,7 @@ func NoopContainer() *Container {
 		Provider: noopEverything{},
 		Server:   noopEverything{},
 		Clients:  noopEverything{},
+		noop:     true,
 	}
 }
 

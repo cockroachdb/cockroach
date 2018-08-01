@@ -216,9 +216,10 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	var i int
 	sub := &subscriber{ch, nil}
 	p.mu.Lock()
-	for i = range p.mu.subscribers {
+	for i = 0; i < len(p.mu.subscribers); i++ {
 		if p.mu.subscribers[i] == nil {
 			p.mu.subscribers[i] = sub
+			break
 		}
 	}
 	if i == len(p.mu.subscribers) {

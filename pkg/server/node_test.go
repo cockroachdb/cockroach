@@ -110,11 +110,7 @@ func createTestNode(
 		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
-	cfg.ClosedTimestamp = container.NewContainer(container.Config{
-		Settings: st,
-		Stopper:  stopper,
-		Clock:    cfg.NodeLiveness.AsLiveClock(),
-	})
+	cfg.ClosedTimestamp = container.NoopContainer()
 
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
