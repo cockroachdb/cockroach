@@ -808,10 +808,19 @@ ORDER BY c_id
 5  NULL
 6  false
 
-# ConcatAgg prevents decorrelation.
-statement error could not decorrelate subquery
-SELECT (SELECT concat_agg(ship || ' ') FROM o WHERE o.c_id=c.c_id)
-FROM c;
+query T
+SELECT (SELECT concat_agg(ship || ' ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA CA CA
+CA TX
+NULL
+WY
+NULL
+WA
 
 # ------------------------------------------------------------------------------
 # Subqueries in other interesting locations.
@@ -863,3 +872,31 @@ statement error AS OF SYSTEM TIME must be provided on a top-level statement
 SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-0ns')
 FROM c
 WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+
+# Subquery in ARRAY(...)
+query ITT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id),
+  ARRAY(SELECT o_id FROM o WHERE o.ship = c.bill ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}  {10,20,30,40}
+2  {40,50,60}  {50}
+3  {}          {}
+4  {70,80}     {50}
+5  {}          {}
+6  {90}        {}
+
+query IT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}
+2  {40,50,60}
+3  {}
+4  {70,80}
+5  {}
+6  {90}
