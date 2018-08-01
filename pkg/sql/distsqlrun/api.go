@@ -45,7 +45,7 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	}
 
 	// Populate the search path.
-	iter := evalCtx.SessionData.SearchPath.Iter()
+	iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 	for s, ok := iter(); ok; s, ok = iter() {
 		res.SearchPath = append(res.SearchPath, s)
 	}

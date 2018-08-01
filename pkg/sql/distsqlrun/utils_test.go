@@ -335,7 +335,7 @@ func runProcessorTest(
 
 	p, err := newProcessor(
 		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
-		[]RowSource{in}, []RowReceiver{out})
+		[]RowSource{in}, []RowReceiver{out}, []RowSourcedProcessor{})
 	if err != nil {
 		t.Fatal(err)
 	}

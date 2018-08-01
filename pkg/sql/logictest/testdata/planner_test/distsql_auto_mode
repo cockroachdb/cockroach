@@ -118,12 +118,16 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
 true
 
 # OID cast - don't distribute (#22249).
-statement error pq: cast to REGCLASS is not supported by distsql
+query BT
 EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+----
+false  https://cockroachdb.github.io/distsqlplan/decode.html#eJykkc1qwzAMgO97iqCzobF7Mwwyxtg6RjPS3UYObiy6QGoF2YGNkncfcQ5ZSvfT9ShZnz5JPoAji2uzRw_6FSSUAlqmCr0nHlJjwcq-g04F1K7twpAuBVTECPoAoQ4NgoYXs22wQGORFykIsBhM3cS2Ldd7wx-Z2VYgIO-CTjIJZS-AujB19MHsELTsxf-s8hKr-tY6yTpHbJHRzkTlQP5WcmL0B-PfHql2yAs1nzxfJ5nUuri7v3262WyS6yRTU_iHZZbnnLBA35LzeLzUyc7psAnaHY6X8dRxhc9MVdSMYR65mLDow_iqxmDl4lP846-wPANWx7D6EV7O4LQv-6vPAAAA___WlPjR
 
 # Query with OID expression - don't distribute (#24423).
-statement error pq: OID expressions are not supported by distsql
+query BT
 EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
+----
+false  https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLBDEQhXt_hbw64K6IxVQ2h1yjx3KNSIpc8jgW9pJlkgXlyH-X3RRiIVz53pv53swVMQW-uQsz5BM9rMGsyTPnpKvVBvbhC9IZjHFeympbA5-UkCvKWCZCcHSniQNdoD50MAgsbpw27Kzjxen3izt5GAyMgSr3j0_PIjLsXo8fhx1sNUhL-eXn4s6E9NXcfsPAPKeY-af-P3JXrQHDme3PnBb1PGjyW02T79veZgTm0tK-iX1sUbX17icAAP__JLhsAQ==
 
 # Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
 # statistics.

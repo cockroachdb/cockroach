@@ -190,7 +190,7 @@ func (p *planner) distinct(
 
 func (n *distinctNode) startExec(params runParams) error {
 	flowCtx := &distsqlrun.FlowCtx{
-		EvalCtx: *params.EvalContext(),
+		EvalCtx: params.EvalContext(),
 	}
 
 	cols := make([]int, len(planColumns(n.plan)))
@@ -200,13 +200,14 @@ func (n *distinctNode) startExec(params runParams) error {
 
 	spec := createDistinctSpec(n, cols)
 
-	input, err := makePlanNodeToRowSource(n.plan, params)
+	input, err := makePlanNodeToRowSource(n.plan, params, false)
 	if err != nil {
 		return err
 	}
 	if len(spec.DistinctColumns) == 0 {
 		return errors.New("cannot initialize a distinctNode with 0 columns")
 	}
+	input.InitWithOutput(&distsqlrun.PostProcessSpec{}, nil)
 
 	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
 	var output distsqlrun.RowReceiver     // output is never used as distinct is only run as a RowSource.

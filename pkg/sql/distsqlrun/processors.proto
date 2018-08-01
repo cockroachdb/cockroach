@@ -137,6 +137,7 @@ message ProcessorCoreUnion {
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
+  optional LocalPlanNodeSpec localPlanNode = 23;
 
   reserved 6, 12;
 }
@@ -320,6 +321,10 @@ message ZigzagJoinerSpec {
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+message LocalPlanNodeSpec {
+  optional uint32 RowSourceIdx = 1;
 }
 
 message Columns {
