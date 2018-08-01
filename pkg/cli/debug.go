@@ -1222,7 +1222,9 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeDeadReplicas(db engine.Engine, deadStoreIDs map[roachpb.StoreID]struct{}) (engine.Batch, error) {
+func removeDeadReplicas(
+	db engine.Engine, deadStoreIDs map[roachpb.StoreID]struct{},
+) (engine.Batch, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 
 	ctx := context.Background()
@@ -1278,10 +1280,31 @@ func removeDeadReplicas(db engine.Engine, deadStoreIDs map[roachpb.StoreID]struc
 
 	batch := db.NewBatch()
 	for _, desc := range newDescs {
-		var ms enginepb.MVCCStats
-		err := engine.MVCCPutProto(ctx, batch, &ms, keys.RangeDescriptorKey(desc.StartKey),
-			clock.Now(), nil /* txn */, &desc)
-		if err != nil {
+		key := keys.RangeDescriptorKey(desc.StartKey)
+		err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(), nil /* txn */, &desc)
+		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
+			if len(wiErr.Intents) != 1 {
+				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
+			}
+			intent := wiErr.Intents[0]
+			fmt.Printf("Conflicting intent found on %s. Aborting txn %s to resolve.\n", key, intent.Txn.ID)
+
+			// A crude form of the intent resolution process: abort the
+			// transaction by deleting its record.
+			txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
+			if err := engine.MVCCDelete(ctx, batch, nil /* stats */, txnKey, hlc.Timestamp{}, nil); err != nil {
+				return nil, err
+			}
+			intent.Status = roachpb.ABORTED
+			if err := engine.MVCCResolveWriteIntent(ctx, batch, nil /* stats */, intent); err != nil {
+				return nil, err
+			}
+			// With the intent resolved, we can try again.
+			if err := engine.MVCCPutProto(ctx, batch, nil /* stats */, key, clock.Now(),
+				nil /* txn */, &desc); err != nil {
+				return nil, err
+			}
+		} else if err != nil {
 			batch.Close()
 			return nil, err
 		}
