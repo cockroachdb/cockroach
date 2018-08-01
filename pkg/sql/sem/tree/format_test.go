@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -257,6 +258,39 @@ func TestFormatExpr(t *testing.T) {
 			}
 			ctx := tree.MakeSemaContext(false)
 			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			if err != nil {
+				t.Fatal(err)
+			}
+			exprStr := tree.AsStringWithFlags(typeChecked, test.f)
+			if exprStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, exprStr)
+			}
+		})
+	}
+}
+
+func TestFormatExpr2(t *testing.T) {
+	// This tests formatting from an expr AST. Suitable for use if your input
+	// isn't easily creatable from a string without running an Eval.
+	testData := []struct {
+		expr     tree.Expr
+		f        tree.FmtFlags
+		expected string
+	}{
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegClass, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regclass(10,'foo'):::REGCLASS`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegProc, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegType, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
+		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegNamespace, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
+			ctx := tree.MakeSemaContext(false)
+			typeChecked, err := tree.TypeCheck(test.expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
