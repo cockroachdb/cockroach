@@ -740,7 +740,13 @@ func TestDropWhileBackfill(t *testing.T) {
 
 	var partialBackfillDone atomic.Value
 	partialBackfillDone.Store(false)
-	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	const numNodes, chunkSize = 5, 100
+	maxValue := 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		// We expect this to also reduce the memory footprint of the test.
+		maxValue = 200
+	}
 	params, _ := tests.CreateTestServerParams()
 	notifyBackfill := func() {
 		mu.Lock()
