@@ -989,7 +989,7 @@ b_expr ::=
 
 in_expr ::=
 	select_with_parens
-	| '(' expr_list ')'
+	| expr_tuple1_ambiguous
 
 subquery_op ::=
 	math_op
@@ -1305,8 +1305,7 @@ d_expr ::=
 	| select_with_parens
 	| 'ARRAY' select_with_parens
 	| 'ARRAY' array_expr
-	| row
-	| '(' row 'AS' name_list ')'
+	| labeled_row
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -1330,6 +1329,10 @@ postgres_oid ::=
 	| 'REGCLASS'
 	| 'REGTYPE'
 	| 'REGNAMESPACE'
+
+expr_tuple1_ambiguous ::=
+	'(' ')'
+	| '(' tuple1_ambiguous_values ')'
 
 math_op ::=
 	'+'
@@ -1612,9 +1615,9 @@ array_expr ::=
 	'[' opt_expr_list ']'
 	| '[' array_expr_list ']'
 
-row ::=
-	'ROW' '(' opt_expr_list ')'
-	| '(' expr_list ',' a_expr ')'
+labeled_row ::=
+	row
+	| '(' row 'AS' name_list ')'
 
 array_subscript ::=
 	'[' a_expr ']'
@@ -1655,6 +1658,11 @@ opt_interval ::=
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
 	| 
+
+tuple1_ambiguous_values ::=
+	a_expr
+	| a_expr ','
+	| a_expr ',' expr_list
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -1865,6 +1873,10 @@ opt_expr_list ::=
 array_expr_list ::=
 	( array_expr ) ( ( ',' array_expr ) )*
 
+row ::=
+	'ROW' '(' opt_expr_list ')'
+	| expr_tuple_unambiguous
+
 opt_slice_bound ::=
 	a_expr
 	| 
@@ -2027,6 +2039,10 @@ special_function ::=
 	| 'GREATEST' '(' expr_list ')'
 	| 'LEAST' '(' expr_list ')'
 
+expr_tuple_unambiguous ::=
+	'(' ')'
+	| '(' tuple1_unambiguous_values ')'
+
 window_definition ::=
 	window_name 'AS' window_specification
 
@@ -2106,6 +2122,10 @@ trim_list ::=
 	a_expr 'FROM' expr_list
 	| 'FROM' expr_list
 	| expr_list
+
+tuple1_unambiguous_values ::=
+	a_expr ','
+	| a_expr ',' expr_list
 
 index_hints_param ::=
 	'FORCE_INDEX' '=' index_name

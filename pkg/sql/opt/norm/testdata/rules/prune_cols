@@ -1390,8 +1390,8 @@ SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
 values
  ├── columns: column1:1(int)
  ├── cardinality: [2 - 2]
- ├── (1) [type=tuple{int}]
- └── (3) [type=tuple{int}]
+ ├── (1,) [type=tuple{int}]
+ └── (3,) [type=tuple{int}]
 
 # Discard all but middle Values column.
 opt
@@ -1400,8 +1400,8 @@ SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
 values
  ├── columns: column2:2(int)
  ├── cardinality: [2 - 2]
- ├── (2) [type=tuple{int}]
- └── (5) [type=tuple{int}]
+ ├── (2,) [type=tuple{int}]
+ └── (5,) [type=tuple{int}]
 
 # Discard all but last Values column.
 opt
@@ -1410,8 +1410,8 @@ SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')
 values
  ├── columns: column3:3(string)
  ├── cardinality: [2 - 2]
- ├── ('baz') [type=tuple{string}]
- └── ('cherry') [type=tuple{string}]
+ ├── ('baz',) [type=tuple{string}]
+ └── ('cherry',) [type=tuple{string}]
 
 # Discard all Values columns.
 opt
