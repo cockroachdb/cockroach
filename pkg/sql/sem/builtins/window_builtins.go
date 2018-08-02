@@ -186,7 +186,7 @@ func (w *aggregateWindowFunc) Compute(
 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
-	for i := 0; i < wfr.PeerRowCount; i++ {
+	for i := 0; i < wfr.PeerGroups[wfr.PeerGroupNumByRowIdx[wfr.RowIdx]].RowCount; i++ {
 		args := wfr.ArgsWithRowOffset(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.

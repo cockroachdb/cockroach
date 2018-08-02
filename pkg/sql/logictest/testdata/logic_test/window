@@ -2251,3 +2251,90 @@ Laptop      Dell             800.00   6450.00
 Tablet      iPad             700.00   6450.00
 Tablet      Kindle Fire      150.00   6450.00
 Tablet      Samsung          200.00   6450.00
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (GROUPS NULL PRECEDING) FROM products
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (GROUPS BETWEEN NULL PRECEDING AND 1 FOLLOWING) FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price GROUPS -1 PRECEDING) AS avg_price FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price GROUPS -1 PRECEDING)
+
+statement error frame ending offset must not be null
+SELECT avg(price) OVER (GROUPS BETWEEN 1 PRECEDING AND NULL FOLLOWING) FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING) AS avg_price FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING)
+
+statement error frame ending offset must not be negative
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND -1 FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS 1.5 PRECEDING) AS avg_price FROM products
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS 1.5 PRECEDING)
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING) AS avg_price FROM products
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING)
+
+statement error incompatible window frame end type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING) AS avg_price FROM products
+
+statement error incompatible window frame end type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING)
+
+query TRR
+SELECT product_name, price, sum(price) OVER (ORDER BY price GROUPS 1 PRECEDING) FROM products ORDER BY price, group_id
+----
+Kindle Fire      150.00   150.00
+Microsoft Lumia  200.00   550.00
+Samsung          200.00   550.00
+HTC One          400.00   800.00
+Nexus            500.00   900.00
+Lenovo Thinkpad  700.00   2600.00
+Sony VAIO        700.00   2600.00
+iPad             700.00   2600.00
+Dell             800.00   2900.00
+iPhone           900.00   1700.00
+HP Elite         1200.00  2100.00
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY price GROUPS BETWEEN CURRENT ROW AND 3 FOLLOWING), avg(price) OVER (ORDER BY price GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   500.00   586.36363636363636364
+Smartphone  HTC One          400.00   600.00   586.36363636363636364
+Smartphone  Nexus            500.00   700.00   586.36363636363636364
+Smartphone  iPhone           900.00   900.00   586.36363636363636364
+Laptop      HP Elite         1200.00  1200.00  586.36363636363636364
+Laptop      Lenovo Thinkpad  700.00   850.00   586.36363636363636364
+Laptop      Sony VAIO        700.00   850.00   586.36363636363636364
+Laptop      Dell             800.00   1000.00  586.36363636363636364
+Tablet      iPad             700.00   700.00   586.36363636363636364
+Tablet      Kindle Fire      150.00   350.00   586.36363636363636364
+Tablet      Samsung          200.00   450.00   586.36363636363636364
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (GROUPS BETWEEN 1 PRECEDING AND 2 PRECEDING), avg(price) OVER (ORDER BY price GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   NULL  200.00
+Smartphone  HTC One          400.00   NULL  400.00
+Smartphone  Nexus            500.00   NULL  500.00
+Smartphone  iPhone           900.00   NULL  900.00
+Laptop      HP Elite         1200.00  NULL  1200.00
+Laptop      Lenovo Thinkpad  700.00   NULL  700.00
+Laptop      Sony VAIO        700.00   NULL  700.00
+Laptop      Dell             800.00   NULL  800.00
+Tablet      iPad             700.00   NULL  700.00
+Tablet      Kindle Fire      150.00   NULL  150.00
+Tablet      Samsung          200.00   NULL  200.00
