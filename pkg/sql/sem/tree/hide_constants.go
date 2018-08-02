@@ -51,11 +51,43 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 // VALUES clause with a single value.
 // e.g. VALUES (a,b,c), (d,e,f) -> VALUES (_, _, _), (__more__)
 func (node *ValuesClause) formatHideConstants(ctx *FmtCtx) {
-	ctx.WriteString("VALUES ")
-	ctx.FormatNode(node.Tuples[0])
-	if len(node.Tuples) > 1 {
-		ctx.Printf(", (%s)", arityString(len(node.Tuples)-1))
+	ctx.WriteString("VALUES (")
+	node.Rows[0].formatHideConstants(ctx)
+	ctx.WriteByte(')')
+	if len(node.Rows) > 1 {
+		ctx.Printf(", (%s)", arityString(len(node.Rows)-1))
 	}
+}
+
+// formatHideConstants is used exclusively by ValuesClause above.
+// Other AST that contain Exprs do not use this.
+func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
+	exprs := *node
+	if len(exprs) < 2 {
+		node.Format(ctx)
+		return
+	}
+
+	// First, determine if there are only literals/placeholders.
+	var i int
+	for i = 0; i < len(exprs); i++ {
+		switch exprs[i].(type) {
+		case Datum, Constant, *Placeholder:
+			continue
+		}
+		break
+	}
+	// If so, then use the special representation.
+	if i == len(exprs) {
+		// We copy the node to preserve the "row" boolean flag.
+		v2 := append(make(Exprs, 0, 3), exprs[:2]...)
+		if len(exprs) > 2 {
+			v2 = append(v2, arityIndicator(len(exprs)-2))
+		}
+		v2.Format(ctx)
+		return
+	}
+	node.Format(ctx)
 }
 
 // formatHideConstants formats tuples containing only literals or

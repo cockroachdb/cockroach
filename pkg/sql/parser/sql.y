@@ -1791,7 +1791,7 @@ cancel_jobs_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.CancelJob,
     }
@@ -1814,7 +1814,7 @@ cancel_queries_stmt:
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       IfExists: false,
     }
@@ -1823,7 +1823,7 @@ cancel_queries_stmt:
   {
     $$.val = &tree.CancelQueries{
       Queries: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$5.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
     }
@@ -1850,7 +1850,7 @@ cancel_sessions_stmt:
   {
    $$.val = &tree.CancelSessions{
       Sessions: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       IfExists: false,
     }
@@ -1859,7 +1859,7 @@ cancel_sessions_stmt:
   {
    $$.val = &tree.CancelSessions{
       Sessions: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$5.expr()}}}},
+	    Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
     }
@@ -3493,7 +3493,7 @@ pause_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.PauseJob,
     }
@@ -4420,7 +4420,7 @@ resume_stmt:
   {
     $$.val = &tree.ControlJobs{
       Jobs: &tree.Select{
-        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
       },
       Command: tree.ResumeJob,
     }
@@ -5383,13 +5383,13 @@ having_clause:
 values_clause:
   VALUES '(' expr_list ')' %prec UMINUS
   {
-    $$.val = &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: $3.exprs()}}}
+    $$.val = &tree.ValuesClause{Rows: []tree.Exprs{$3.exprs()}}
   }
 | VALUES error // SHOW HELP: VALUES
 | values_clause ',' '(' expr_list ')'
   {
     valNode := $1.selectStmt().(*tree.ValuesClause)
-    valNode.Tuples = append(valNode.Tuples, &tree.Tuple{Exprs: $4.exprs()})
+    valNode.Rows = append(valNode.Rows, $4.exprs())
     $$.val = valNode
   }
 
