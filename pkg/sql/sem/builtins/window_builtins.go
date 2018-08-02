@@ -198,7 +198,7 @@ func (w *aggregateWindowFunc) Compute(
 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
-	for i := 0; i < wfr.PeerRowCount; i++ {
+	for i := 0; i < wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum); i++ {
 		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(wfr.RowIdx+i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 			continue
 		}

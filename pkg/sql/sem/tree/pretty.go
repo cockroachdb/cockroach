@@ -674,6 +674,8 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
 	kw := "RANGE"
 	if wf.Mode == ROWS {
 		kw = "ROWS"
+	} else if wf.Mode == GROUPS {
+		kw = "GROUPS"
 	}
 	d := p.Doc(wf.Bounds.StartBound)
 	if wf.Bounds.EndBound != nil {
