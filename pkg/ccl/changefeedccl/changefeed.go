@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -70,24 +69,6 @@ func runChangefeedFlow(
 	resultsCh chan<- tree.Datums,
 	progressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 ) error {
-	// Grab the current version of each table and fail fast if any are a virtual
-	// table, view, etc.
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range details.Targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
-			if err != nil {
-				return err
-			}
-			if err := validateChangefeedTable(tableDesc); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
 	details, err := validateDetails(details)
 	if err != nil {
 		return err
@@ -113,10 +94,7 @@ func runChangefeedFlow(
 	//
 	// TODO(dan): Make this into a DistSQL flow.
 	buf := makeBuffer()
-	poller, err := makePoller(ctx, execCfg, details, highWater, buf)
-	if err != nil {
-		return err
-	}
+	poller := makePoller(execCfg, details, highWater, buf)
 	rowsFn := kvsToRows(execCfg, details, buf.Get)
 	emitRowsFn, closeFn, err := emitRows(details, jobProgressedFn, rowsFn, resultsCh)
 	if err != nil {
