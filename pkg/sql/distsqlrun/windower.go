@@ -471,6 +471,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 			frameRun.Rows = partition
 			frameRun.RowIdx = 0
+			frameRun.PeerGroupNumByRowIdx = make([]int, partition.Len())
+			frameRun.PeerGroups = make([]*tree.PeerGroup, 0, tree.PeerGroupsInitialSize)
 
 			if !frameRun.IsDefaultFrame() {
 				// We have a custom frame not equivalent to default one, so if we have
@@ -481,19 +483,28 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 				builtins.ShouldReset(builtin)
 			}
 
-			for frameRun.RowIdx < partition.Len() {
-				// Compute the size of the current peer group.
-				frameRun.FirstPeerIdx = frameRun.RowIdx
-				frameRun.PeerRowCount = 1
-				for ; frameRun.FirstPeerIdx+frameRun.PeerRowCount < frameRun.PartitionSize(); frameRun.PeerRowCount++ {
-					cur := frameRun.FirstPeerIdx + frameRun.PeerRowCount
-					if !peerGrouper.InSameGroup(cur, cur-1) {
+			// Compute peer groups.
+			peerGroupNum := 0
+			for idx := 0; idx < frameRun.PartitionSize(); {
+				peerGroup := &tree.PeerGroup{StartIdx: idx, RowCount: 1}
+				frameRun.PeerGroups = append(frameRun.PeerGroups, peerGroup)
+				frameRun.PeerGroupNumByRowIdx[idx] = peerGroupNum
+				idx++
+				for ; idx < frameRun.PartitionSize(); idx++ {
+					if !peerGrouper.InSameGroup(idx, idx-1) {
 						break
 					}
+					frameRun.PeerGroupNumByRowIdx[idx] = peerGroupNum
+					peerGroup.RowCount++
 				}
+				peerGroupNum++
+			}
 
+			for frameRun.RowIdx < partition.Len() {
 				// Perform calculations on each row in the current peer group.
-				for ; frameRun.RowIdx < frameRun.FirstPeerIdx+frameRun.PeerRowCount; frameRun.RowIdx++ {
+				peerGroup := frameRun.PeerGroups[frameRun.PeerGroupNumByRowIdx[frameRun.RowIdx]]
+				peerGroupEndIdx := peerGroup.StartIdx + peerGroup.RowCount
+				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
 					res, err := builtin.Compute(ctx, evalCtx, frameRun)
 					if err != nil {
 						return err

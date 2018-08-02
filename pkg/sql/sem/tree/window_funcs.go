@@ -31,22 +31,29 @@ type IndexedRow interface {
 	GetDatums(startIdx, endIdx int) Datums // returns datums at indices [startIdx, endIdx)
 }
 
+// PeerGroup represents a single peer group.
+type PeerGroup struct {
+	StartIdx int
+	RowCount int
+}
+
+// PeerGroupsInitialSize defines initial size of PeerGroups slice.
+const PeerGroupsInitialSize = 8
+
 // WindowFrameRun contains the runtime state of window frame during calculations.
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
-	Rows             IndexedRows
-	ArgIdxStart      int          // the index which arguments to the window function begin
-	ArgCount         int          // the number of window function arguments
-	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
-	StartBoundOffset Datum
-	EndBoundOffset   Datum
+	Rows                 IndexedRows
+	ArgIdxStart          int          // the index which arguments to the window function begin
+	ArgCount             int          // the number of window function arguments
+	Frame                *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
+	StartBoundOffset     Datum
+	EndBoundOffset       Datum
+	PeerGroupNumByRowIdx []int        // indicates the number of the peer group a row belongs to, counting from 0
+	PeerGroups           []*PeerGroup // all peer groups in the partition
 
 	// changes for each row (each call to WindowFunc.Add)
 	RowIdx int // the current row index
-
-	// changes for each peer group
-	FirstPeerIdx int // the first index in the current peer group
-	PeerRowCount int // the number of rows in the current peer group
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).
@@ -64,7 +71,7 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 			panic("unsupported WindowFrameBoundType in RANGE mode")
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
-			return wfr.FirstPeerIdx
+			return wfr.PeerGroups[wfr.PeerGroupNumByRowIdx[wfr.RowIdx]].StartIdx
 		case OffsetFollowing:
 			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
 			panic("unsupported WindowFrameBoundType in RANGE mode")
@@ -93,6 +100,33 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 			return idx
 		default:
 			panic("unexpected WindowFrameBoundType in ROWS mode")
+		}
+	case GROUPS:
+		switch wfr.Frame.Bounds.StartBound.BoundType {
+		case UnboundedPreceding:
+			return 0
+		case OffsetPreceding:
+			offset := MustBeDInt(wfr.StartBoundOffset)
+			peerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.RowIdx] - int(offset)
+			if peerGroupNum < 0 {
+				peerGroupNum = 0
+			}
+			return wfr.PeerGroups[peerGroupNum].StartIdx
+		case CurrentRow:
+			// Spec: in GROUPS mode CURRENT ROW means that the frame starts with the current row's first peer.
+			return wfr.PeerGroups[wfr.PeerGroupNumByRowIdx[wfr.RowIdx]].StartIdx
+		case OffsetFollowing:
+			offset := MustBeDInt(wfr.StartBoundOffset)
+			peerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.RowIdx] + int(offset)
+			lastPeerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.PartitionSize()-1]
+			if peerGroupNum > lastPeerGroupNum {
+				// peerGroupNum is out of bounds, so we return the index of the first
+				// row after the partition.
+				return wfr.unboundedFollowing()
+			}
+			return wfr.PeerGroups[peerGroupNum].StartIdx
+		default:
+			panic("unexpected WindowFrameBoundType in GROUPS mode")
 		}
 	default:
 		panic("unexpected WindowFrameMode")
@@ -164,6 +198,38 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 		default:
 			panic("unexpected WindowFrameBoundType in ROWS mode")
 		}
+	case GROUPS:
+		if wfr.Frame.Bounds.EndBound == nil {
+			// We're using default value of CURRENT ROW when EndBound is omitted.
+			// Spec: in GROUPS mode CURRENT ROW means that the frame ends with the current row's last peer.
+			return wfr.DefaultFrameSize()
+		}
+		switch wfr.Frame.Bounds.EndBound.BoundType {
+		case OffsetPreceding:
+			offset := MustBeDInt(wfr.EndBoundOffset)
+			peerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.RowIdx] - int(offset)
+			if peerGroupNum < 0 {
+				// EndBound's peer group is "outside" of the partition.
+				return 0
+			}
+			return wfr.PeerGroups[peerGroupNum].StartIdx + wfr.PeerGroups[peerGroupNum].RowCount
+		case CurrentRow:
+			return wfr.DefaultFrameSize()
+		case OffsetFollowing:
+			offset := MustBeDInt(wfr.EndBoundOffset)
+			peerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.RowIdx] + int(offset)
+			lastPeerGroupNum := wfr.PeerGroupNumByRowIdx[wfr.PartitionSize()-1]
+			if peerGroupNum > lastPeerGroupNum {
+				// peerGroupNum is out of bounds, so we return the index of the first
+				// row after the partition.
+				return wfr.unboundedFollowing()
+			}
+			return wfr.PeerGroups[peerGroupNum].StartIdx + wfr.PeerGroups[peerGroupNum].RowCount
+		case UnboundedFollowing:
+			return wfr.unboundedFollowing()
+		default:
+			panic("unexpected WindowFrameBoundType in GROUPS mode")
+		}
 	default:
 		panic("unexpected WindowFrameMode")
 	}
@@ -200,12 +266,13 @@ func (wfr WindowFrameRun) unboundedFollowing() int {
 // DefaultFrameSize returns the size of default window frame which contains
 // the rows from the start of the partition through the last peer of the current row.
 func (wfr WindowFrameRun) DefaultFrameSize() int {
-	return wfr.FirstPeerIdx + wfr.PeerRowCount
+	peerGroup := wfr.PeerGroups[wfr.PeerGroupNumByRowIdx[wfr.RowIdx]]
+	return peerGroup.StartIdx + peerGroup.RowCount
 }
 
 // FirstInPeerGroup returns if the current row is the first in its peer group.
 func (wfr WindowFrameRun) FirstInPeerGroup() bool {
-	return wfr.RowIdx == wfr.FirstPeerIdx
+	return wfr.RowIdx == wfr.PeerGroups[wfr.PeerGroupNumByRowIdx[wfr.RowIdx]].StartIdx
 }
 
 // Args returns the current argument set in the window frame.

@@ -1104,6 +1104,8 @@ func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
 		*spec = WindowerSpec_Frame_RANGE
 	case tree.ROWS:
 		*spec = WindowerSpec_Frame_ROWS
+	case tree.GROUPS:
+		*spec = WindowerSpec_Frame_GROUPS
 	default:
 		panic("unexpected WindowFrameMode")
 	}
@@ -1188,6 +1190,8 @@ func (spec WindowerSpec_Frame_Mode) convertToAST() tree.WindowFrameMode {
 		return tree.RANGE
 	case WindowerSpec_Frame_ROWS:
 		return tree.ROWS
+	case WindowerSpec_Frame_GROUPS:
+		return tree.GROUPS
 	default:
 		panic("unexpected WindowerSpec_Frame_Mode")
 	}
