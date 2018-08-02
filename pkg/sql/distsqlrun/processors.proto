@@ -930,8 +930,18 @@ message WindowerSpec {
       optional Bound start = 1 [(gogoproto.nullable) = false];
       optional Bound end = 2;
     }
+
+    // Exclusion specifies the type of frame exclusion.
+    enum Exclusion {
+      EXCLUDE_CURRENT_ROW = 0;
+      EXCLUDE_GROUP = 1;
+      EXCLUDE_TIES = 2;
+      EXCLUDE_NO_OTHERS = 3;
+    }
+
     optional Mode mode = 1 [(gogoproto.nullable) = false];
     optional Bounds bounds = 2 [(gogoproto.nullable) = false];
+    optional Exclusion exclusion = 3;
   }
 
   // WindowFn is the specification of a single window function.

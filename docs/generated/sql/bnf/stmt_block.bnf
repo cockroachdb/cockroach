@@ -665,6 +665,7 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENUM'
 	| 'ESCAPE'
+	| 'EXCLUDE'
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
@@ -734,6 +735,7 @@ unreserved_keyword ::=
 	| 'OPTION'
 	| 'OPTIONS'
 	| 'ORDINALITY'
+	| 'OTHERS'
 	| 'OVER'
 	| 'OWNED'
 	| 'PARENT'
@@ -814,6 +816,7 @@ unreserved_keyword ::=
 	| 'TESTING_RANGES'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
+	| 'TIES'
 	| 'TIMESTAMPTZ'
 	| 'TRACE'
 	| 'TRANSACTION'
@@ -2103,9 +2106,9 @@ opt_partition_clause ::=
 	| 
 
 opt_frame_clause ::=
-	'RANGE' frame_extent
-	| 'ROWS' frame_extent
-	| 'GROUPS' frame_extent
+	'RANGE' frame_extent opt_frame_exclusion
+	| 'ROWS' frame_extent opt_frame_exclusion
+	| 'GROUPS' frame_extent opt_frame_exclusion
 	| 
 
 extract_list ::=
@@ -2150,6 +2153,13 @@ partition_name ::=
 frame_extent ::=
 	frame_bound
 	| 'BETWEEN' frame_bound 'AND' frame_bound
+
+opt_frame_exclusion ::=
+	'EXCLUDE' 'CURRENT' 'ROW'
+	| 'EXCLUDE' 'GROUP'
+	| 'EXCLUDE' 'TIES'
+	| 'EXCLUDE' 'NO' 'OTHERS'
+	| 
 
 extract_arg ::=
 	'identifier'

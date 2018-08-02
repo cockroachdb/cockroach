@@ -256,7 +256,7 @@ func newFramableAggregateWindow(
 func (w *framableAggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if !wfr.FirstInPeerGroup() {
+	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
 		return w.agg.peerRes, nil
 	}
 	if !w.shouldReset {
@@ -272,11 +272,17 @@ func (w *framableAggregateWindowFunc) Compute(
 	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx, nil /* arguments */), tree.DNull}
 
 	// Accumulate all values in the window frame.
-	for i := wfr.FrameStartIdx(evalCtx); i < wfr.FrameEndIdx(evalCtx); i++ {
-		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+	for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			// Row idx is filtered out, so we skip it.
 			continue
 		}
-		args := wfr.ArgsByRowIdx(i)
+		if wfr.IsRowExcluded(idx) {
+			// Row idx is excluded from the window frame, so we skip it.
+			continue
+		}
+
+		args := wfr.ArgsByRowIdx(idx)
 		var value tree.Datum
 		var others tree.Datums
 		// COUNT_ROWS takes no arguments.
@@ -536,6 +542,21 @@ func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (firstValueWindow) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	if !wfr.DefaultFrameExclusion() {
+		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			return wfr.Rows.GetRow(idx).GetDatum(wfr.ArgIdxStart), nil
+		}
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
+	if wfr.FrameSize(evalCtx) == 0 {
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
 	return wfr.Rows.GetRow(wfr.FrameStartIdx(evalCtx)).GetDatum(wfr.ArgIdxStart), nil
 }
 
@@ -551,6 +572,21 @@ func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (lastValueWindow) Compute(
 	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	if !wfr.DefaultFrameExclusion() {
+		for idx := wfr.FrameEndIdx(evalCtx) - 1; idx >= wfr.FrameStartIdx(evalCtx); idx-- {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			return wfr.Rows.GetRow(idx).GetDatum(wfr.ArgIdxStart), nil
+		}
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
+	if wfr.FrameSize(evalCtx) == 0 {
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
 	return wfr.Rows.GetRow(wfr.FrameEndIdx(evalCtx) - 1).GetDatum(wfr.ArgIdxStart), nil
 }
 
@@ -582,6 +618,19 @@ func (nthValueWindow) Compute(
 
 	if nth > wfr.FrameSize(evalCtx) {
 		return tree.DNull, nil
+	}
+	if !wfr.DefaultFrameExclusion() {
+		count := 0
+		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			count++
+			if count == nth {
+				return wfr.Rows.GetRow(idx).GetDatum(wfr.ArgIdxStart), nil
+			}
+		}
 	}
 	return wfr.Rows.GetRow(wfr.FrameStartIdx(evalCtx) + nth - 1).GetDatum(wfr.ArgIdxStart), nil
 }

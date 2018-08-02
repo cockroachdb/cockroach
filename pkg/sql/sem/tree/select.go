@@ -722,10 +722,26 @@ func (node *WindowFrameBounds) HasOffset() bool {
 	return node.StartBound.HasOffset() || (node.EndBound != nil && node.EndBound.HasOffset())
 }
 
+// WindowFrameExclusion indicates which mode of exclusion is used.
+type WindowFrameExclusion int
+
+const (
+	// ExcludeCurrentRow represents EXCLUDE CURRENT ROW mode of frame exclusion.
+	ExcludeCurrentRow WindowFrameExclusion = iota
+	// ExcludeGroup represents EXCLUDE GROUP mode of frame exclusion.
+	ExcludeGroup
+	// ExcludeTies represents EXCLUDE TIES mode of frame exclusion.
+	ExcludeTies
+	// ExcludeNoOthers represents EXCLUDE NO OTHERS mode of frame exclusion. It
+	// is equivalent to omitting frame exclusion.
+	ExcludeNoOthers
+)
+
 // WindowFrame represents static state of window frame over which calculations are made.
 type WindowFrame struct {
-	Mode   WindowFrameMode   // the mode of framing being used
-	Bounds WindowFrameBounds // the bounds of the frame
+	Mode      WindowFrameMode       // the mode of framing being used
+	Bounds    WindowFrameBounds     // the bounds of the frame
+	Exclusion *WindowFrameExclusion // optional frame exclusion
 }
 
 // Format implements the NodeFormatter interface.
@@ -749,6 +765,22 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface.
+func (node *WindowFrameExclusion) Format(ctx *FmtCtx) {
+	switch *node {
+	case ExcludeCurrentRow:
+		ctx.WriteString(" EXCLUDE CURRENT ROW")
+	case ExcludeGroup:
+		ctx.WriteString(" EXCLUDE GROUP")
+	case ExcludeTies:
+		ctx.WriteString(" EXCLUDE TIES")
+	case ExcludeNoOthers:
+		ctx.WriteString(" EXCLUDE NO OTHERS")
+	default:
+		panic(fmt.Sprintf("unhandled case: %d", *node))
+	}
+}
+
+// Format implements the NodeFormatter interface.
 func (node *WindowFrame) Format(ctx *FmtCtx) {
 	switch node.Mode {
 	case RANGE:
@@ -767,5 +799,8 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Bounds.EndBound)
 	} else {
 		ctx.FormatNode(node.Bounds.StartBound)
+	}
+	if node.Exclusion != nil {
+		ctx.FormatNode(node.Exclusion)
 	}
 }

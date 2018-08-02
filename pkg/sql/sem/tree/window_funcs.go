@@ -204,7 +204,8 @@ func (wfr *WindowFrameRun) IsDefaultFrame() bool {
 		return true
 	}
 	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
-		return wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow
+		return wfr.DefaultFrameExclusion() &&
+			(wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow)
 	}
 	return false
 }
@@ -327,6 +328,18 @@ func (wfr *WindowFrameRun) FrameSize(evalCtx *EvalContext) int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
+	if !wfr.DefaultFrameExclusion() {
+		size := 0
+		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so it doesn't contribute
+				// to the size of the frame.
+				continue
+			}
+			size++
+		}
+		return size
+	}
 	size := wfr.FrameEndIdx(evalCtx) - wfr.FrameStartIdx(evalCtx)
 	if size <= 0 {
 		size = 0
@@ -385,6 +398,37 @@ func (wfr *WindowFrameRun) valueAt(idx int) Datum {
 // one of the bounds containing an offset.
 func (wfr *WindowFrameRun) RangeModeWithOffsets() bool {
 	return wfr.Frame.Mode == RANGE && wfr.Frame.Bounds.HasOffset()
+}
+
+// DefaultFrameExclusion returns true if optional frame exclusion is omitted or
+// is ExcludeNoOthers (which is equivalent to omitting the clause).
+func (wfr *WindowFrameRun) DefaultFrameExclusion() bool {
+	return wfr.Frame == nil || wfr.Frame.Exclusion == nil || *wfr.Frame.Exclusion == ExcludeNoOthers
+}
+
+// IsRowExcluded returns whether the row at index idx should be excluded from
+// the window frame of the current row.
+func (wfr *WindowFrameRun) IsRowExcluded(idx int) bool {
+	if wfr.Frame == nil || wfr.Frame.Exclusion == nil {
+		// By default, no rows are excluded.
+		return false
+	}
+	switch *wfr.Frame.Exclusion {
+	case ExcludeCurrentRow:
+		return idx == wfr.RowIdx
+	case ExcludeGroup:
+		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
+		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount
+	case ExcludeTies:
+		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
+		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
+		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount && idx != wfr.RowIdx
+	case ExcludeNoOthers:
+		return false
+	default:
+		panic("unexpected WindowFrameExclusion")
+	}
 }
 
 // WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.
