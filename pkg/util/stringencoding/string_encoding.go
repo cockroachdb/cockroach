@@ -81,6 +81,28 @@ func init() {
 	}
 }
 
+// EncodeChar is used internally to write out a character from
+// a larger string to a buffer.
+func EncodeChar(buf *bytes.Buffer, entireString string, currentRune rune, currentIdx int) {
+	ln := utf8.RuneLen(currentRune)
+	if currentRune == utf8.RuneError {
+		// Errors are due to invalid unicode points, so escape the bytes.
+		// Make sure this is run at least once in case ln == -1.
+		buf.Write(HexMap[entireString[currentIdx]])
+		for ri := 1; ri < ln; ri++ {
+			buf.Write(HexMap[entireString[currentIdx+ri]])
+		}
+	} else if ln == 1 {
+		// Escape non-printable characters.
+		buf.Write(HexMap[byte(currentRune)])
+	} else if ln == 2 {
+		// For multi-byte runes, print them based on their width.
+		fmt.Fprintf(buf, `\u%04X`, currentRune)
+	} else {
+		fmt.Fprintf(buf, `\U%08X`, currentRune)
+	}
+}
+
 // EncodeEscapedChar is used internally to write out a character from a larger
 // string that needs to be escaped to a buffer.
 func EncodeEscapedChar(
