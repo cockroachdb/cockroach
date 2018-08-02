@@ -132,10 +132,8 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const { usable } = nodeCapacityStats(ns);
                 const used = BytesUsed(ns);
                 return (
-                  <span>
+                  <span title={`Total: ${BytesWithPrecision(usable, 0)}`}>
                     {BytesWithPrecision(used, 0)}
-                    {" / "}
-                    {BytesWithPrecision(usable, 0)}
                     {" "}
                     ({Math.round(used / usable * 100)}%)
                   </span>
@@ -150,10 +148,8 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const used = ns.metrics[MetricConstants.rss];
                 const available = FixLong(ns.total_system_memory).toNumber();
                 return (
-                  <span>
+                  <span title={`Total: ${BytesWithPrecision(available, 0)}`}>
                     {BytesWithPrecision(used, 0)}
-                    {" / "}
-                    {BytesWithPrecision(available, 0)}
                     {" "}
                     ({Math.round(used / available * 100)}%)
                   </span>
