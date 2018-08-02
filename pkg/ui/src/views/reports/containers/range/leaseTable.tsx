@@ -19,6 +19,10 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
   }
 
   renderLeaseTimestampCell(timestamp: protos.cockroach.util.hlc.ITimestamp) {
+    if (_.isNil(timestamp)) {
+      return this.renderLeaseCell("<no value>");
+    }
+
     const value = Print.Timestamp(timestamp);
     return this.renderLeaseCell(value, `${value}\n${timestamp.wall_time.toString()}`);
   }
