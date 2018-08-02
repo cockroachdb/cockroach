@@ -881,9 +881,11 @@ func (ag *aggregatorBase) encode(
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		// TODO(radu): we should account for the size of impl (this needs to be done
-		// in each aggregate constructor).
-		bucket[i] = f.create(&ag.flowCtx.EvalCtx)
+		agg := f.create(&ag.flowCtx.EvalCtx)
+		if err := ag.bucketsAcc.Grow(ag.ctx, agg.Size()); err != nil {
+			return nil, err
+		}
+		bucket[i] = agg
 	}
 	if err := ag.bucketsAcc.Grow(ag.ctx, sizeOfAggregateFunc*int64(len(ag.funcs))); err != nil {
 		return nil, err
