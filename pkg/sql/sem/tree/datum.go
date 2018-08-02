@@ -835,10 +835,14 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	}
 }
 
+// SizeOfDecimal returns the size in bytes of an apd.Decimal.
+func SizeOfDecimal(d apd.Decimal) uintptr {
+	return uintptr(cap(d.Coeff.Bits())) * unsafe.Sizeof(big.Word(0))
+}
+
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	intVal := d.Decimal.Coeff
-	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
+	return unsafe.Sizeof(*d) + SizeOfDecimal(d.Decimal)
 }
 
 var (
