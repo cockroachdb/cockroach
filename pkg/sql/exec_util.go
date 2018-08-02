@@ -380,7 +380,9 @@ type DistSQLPlannerTestingKnobs struct {
 // mutable cache, but nobody's sharing this holder. We should make up our mind
 // about whether we like the sharing or not and, if we do, share the holder too.
 // Also, we could use the SystemConfigDeltaFilter to limit the updates to
-// databases that chaged.
+// databases that chaged. One of the problems with the existing architecture
+// is if a transaction is completed on a session and the session remains dormant
+// for a long time, the next transaction will see a rather old database cache.
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
@@ -403,20 +405,12 @@ func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
 }
 
 // waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) (bool, error)) error {
+func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
-	for {
-		done, err := cond(dc.mu.c)
-		if err != nil {
-			return err
-		}
-		if done {
-			break
-		}
+	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
 		dc.mu.cv.Wait()
 	}
-	return nil
 }
 
 // databaseCacheHolder implements the dbCacheSubscriber interface.

@@ -479,6 +479,18 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
+
+	// Release leases held by the current transaction before wait loop
+	// that waits on a cluster wide release of old version leases.
+	// This is safe to do even though the transaction hasn't yet committed
+	// only because the transaction timestamp has been fixed using
+	// CommitTimestamp(). This is also required to be done after commit
+	// and before the schema changers run. The schema changers increment
+	// the version on a descriptor and that can get blocked by leases held.
+	// Since releasing leases is needed before the transaction commits
+	// it is done once here.
+	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
+
 	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
 	if err != nil {
 		return err
@@ -509,10 +521,6 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
 	txn.CleanupOnError(ctx, retryErr)
-
-	// Release leases held by the current transaction before waiting
-	// on cluster wide releases of old version leases.
-	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
