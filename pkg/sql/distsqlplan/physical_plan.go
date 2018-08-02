@@ -414,7 +414,7 @@ func (p *PhysicalPlan) AddRendering(
 	evalCtx *tree.EvalContext,
 	indexVarMap []int,
 	outTypes []sqlbase.ColumnType,
-) {
+) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
 	needRendering := false
@@ -432,7 +432,7 @@ func (p *PhysicalPlan) AddRendering(
 	if !needRendering {
 		if identity {
 			// Nothing to do.
-			return
+			return nil
 		}
 		// We don't need to do any rendering: the expressions effectively describe
 		// just a projection.
@@ -445,7 +445,7 @@ func (p *PhysicalPlan) AddRendering(
 			cols[i] = uint32(streamCol)
 		}
 		p.AddProjection(cols)
-		return
+		return nil
 	}
 
 	post := p.GetLastStagePost()
@@ -468,7 +468,11 @@ func (p *PhysicalPlan) AddRendering(
 	}
 	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
 	for i, e := range exprs {
-		post.RenderExprs[i] = MakeExpression(e, evalCtx, compositeMap)
+		var err error
+		post.RenderExprs[i], err = MakeExpression(e, evalCtx, compositeMap)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(p.MergeOrdering.Columns) > 0 {
@@ -492,7 +496,10 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				if err != nil {
+					return err
+				}
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
@@ -507,6 +514,7 @@ func (p *PhysicalPlan) AddRendering(
 	post.Projection = false
 	post.OutputColumns = nil
 	p.SetLastStagePost(post, outTypes)
+	return nil
 }
 
 // reverseProjection remaps expression variable indices to refer to internal
@@ -573,7 +581,7 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
 	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
-) {
+) error {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
 		// The last stage contains render expressions or a limit. The filter refers
@@ -596,13 +604,17 @@ func (p *PhysicalPlan) AddFilter(
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	filter := MakeExpression(expr, evalCtx, compositeMap)
+	filter, err := MakeExpression(expr, evalCtx, compositeMap)
+	if err != nil {
+		return err
+	}
 	if post.Filter.Expr != "" {
 		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
 	}
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post.Filter = filter
 	}
+	return nil
 }
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
