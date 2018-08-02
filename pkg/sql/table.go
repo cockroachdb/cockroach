@@ -165,8 +165,6 @@ type TableCollection struct {
 
 	// dbCacheSubscriber is used to block until the node's database cache has been
 	// updated when releaseTables is called.
-	// Can be nil if releaseTables() is only called with the
-	// dontBlockForDBCacheUpdate option.
 	dbCacheSubscriber dbCacheSubscriber
 
 	// Same as uncommittedTables applying to databases modified within
@@ -185,7 +183,7 @@ type dbCacheSubscriber interface {
 	// waitForCacheState takes a callback depending on the cache state and blocks
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
-	waitForCacheState(cond func(*databaseCache) (bool, error)) error
+	waitForCacheState(cond func(*databaseCache) bool)
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
@@ -367,19 +365,6 @@ func (tc *TableCollection) getTableVersionByID(
 	return table, nil
 }
 
-// releaseOpt specifies options for tc.releaseTables().
-type releaseOpt bool
-
-const (
-	// blockForDBCacheUpdate makes releaseTables() block until the node's database
-	// cache has been updated to reflect the dropped or renamed databases. If used
-	// within a SQL session, this ensures that future queries on that session
-	// behave correctly when trying to use the names of the recently
-	// dropped/renamed databases.
-	blockForDBCacheUpdate     releaseOpt = true
-	dontBlockForDBCacheUpdate releaseOpt = false
-)
-
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
 	if len(tc.leasedTables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
@@ -393,52 +378,46 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 }
 
 // releaseTables releases all tables currently held by the TableCollection.
-func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) error {
-	if len(tc.leasedTables) > 0 {
-		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
-		for _, table := range tc.leasedTables {
-			if err := tc.leaseMgr.Release(table); err != nil {
-				log.Warning(ctx, err)
-			}
-		}
-		tc.leasedTables = tc.leasedTables[:0]
-	}
+func (tc *TableCollection) releaseTables(ctx context.Context) {
+	tc.releaseLeases(ctx)
 	tc.uncommittedTables = nil
 	tc.createdTables = nil
-
-	if opt == blockForDBCacheUpdate {
-		for _, uc := range tc.uncommittedDatabases {
-			if !uc.dropped {
-				continue
-			}
-			// Wait until the database cache has been updated to properly
-			// reflect a dropped database, so that future commands on the
-			// same gateway node observe the dropped database.
-			err := tc.dbCacheSubscriber.waitForCacheState(
-				func(dc *databaseCache) (bool, error) {
-					// Resolve the database name from the database cache.
-					dbID, err := dc.getDatabaseID(ctx,
-						tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
-					if err != nil || dbID == 0 {
-						// dbID can still be 0 if required is false and
-						// the database is not found.
-						return true, err
-					}
-
-					// If the database name still exists but it now references another
-					// db with a more recent id, we're good - it means that the database
-					// name has been reused.
-					return dbID > uc.id, nil
-				})
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
-	return nil
+}
+
+// Wait until the database cache has been updated to properly
+// reflect all dropped databases, so that future commands on the
+// same gateway node observe the dropped databases.
+func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
+	for _, uc := range tc.uncommittedDatabases {
+		if !uc.dropped {
+			continue
+		}
+		// Wait until the database cache has been updated to properly
+		// reflect a dropped database, so that future commands on the
+		// same gateway node observe the dropped database.
+		tc.dbCacheSubscriber.waitForCacheState(
+			func(dc *databaseCache) bool {
+				// Resolve the database name from the database cache.
+				dbID, err := dc.getDatabaseID(ctx,
+					tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
+				if err != nil || dbID == 0 {
+					// dbID can still be 0 if required is false and
+					// the database is not found. Swallowing error here
+					// because it was felt there was no value in returning
+					// it to a higher layer only to be swallow there. This
+					// entire codepath is only called from one place so
+					// it's better to swallow it here.
+					return true
+				}
+
+				// If the database name still exists but it now references another
+				// db with a more recent id, we're good - it means that the database
+				// name has been reused.
+				return dbID > uc.id
+			})
+	}
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {

@@ -215,7 +215,10 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 	return table, err
 }
 
-// Release a previously acquired table descriptor.
+// Release a previously acquired table descriptor. Never let this method
+// read a table descriptor because it can be called while modifying a
+// descriptor through a schema change before the schema change has committed
+// that can result in a deadlock.
 func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *tableVersionState) {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
@@ -320,6 +323,10 @@ func incrementVersion(
 	// the mvcc timestamp of the descriptor. This requires moving the
 	// schema change lease out of the descriptor making the
 	// descriptor truly immutable at a version.
+	// Also recognize that the leases are released before the transaction
+	// is committed through a call to TableCollection.releaseLeases(),
+	// so updating this policy will also need to consider not doing
+	// that.
 	modTime := txn.CommitTimestamp()
 	tableDesc.ModificationTime = modTime
 	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
@@ -984,7 +991,7 @@ func (t *tableState) release(
 	return nil, nil
 }
 
-// release the lease associated with the table version.
+// releaseLease associated with the table version.
 func releaseLease(table *tableVersionState, m *LeaseManager) {
 	m.tableNames.remove(table)
 
