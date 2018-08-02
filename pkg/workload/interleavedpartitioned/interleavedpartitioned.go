@@ -629,7 +629,7 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(int64(rowIdx)))
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
-	sessionID := w.generateSessionID(rng, rowIdx)
+	sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.eastPercent))
 	w.sessionIDs = append(w.sessionIDs, sessionID)
 	return []interface{}{
 		sessionID,            // session_id
@@ -649,7 +649,7 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 ) func(int) [][]interface{} {
 	return func(sessionRowIdx int) [][]interface{} {
 		sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
-		sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
+		sessionID := w.randomSessionID(sessionRNG, w.pickLocality(sessionRNG, w.eastPercent))
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
 		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
 		var rows [][]interface{}
@@ -669,7 +669,7 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int) [][]interface{} {
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
-	sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
+	sessionID := w.randomSessionID(sessionRNG, w.pickLocality(sessionRNG, w.eastPercent))
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	var rows [][]interface{}
 	for i := 0; i < w.devicesPerSession; i++ {
@@ -693,7 +693,7 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 	var rows [][]interface{}
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
-	sessionID := w.generateSessionID(sessionRNG, sessionRowIdx)
+	sessionID := w.randomSessionID(sessionRNG, w.pickLocality(sessionRNG, w.eastPercent))
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 	for i := 0; i < w.queriesPerSession; i++ {
 		rows = append(rows, []interface{}{
@@ -733,14 +733,6 @@ func (w *interleavedPartitioned) randomSessionID(rng *rand.Rand, locality string
 	default:
 		panic("invalid locality")
 	}
-}
-
-func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) string {
-	sessionIDBase := randString(rng, 98)
-	if (rowIdx % 100) >= w.eastPercent {
-		return fmt.Sprintf("E-%s", sessionIDBase)
-	}
-	return fmt.Sprintf("W-%s", sessionIDBase)
 }
 
 func randString(rng *rand.Rand, length int) string {
