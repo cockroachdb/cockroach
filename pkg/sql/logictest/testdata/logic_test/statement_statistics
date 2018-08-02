@@ -108,7 +108,7 @@ SELECT key,flags
 ----
 key                                                               flags
 INSERT INTO test VALUES (_, _, __more1__), (__more1__)            -
-SELECT ROW(_, _, __more3__) FROM test WHERE _                     ·
+SELECT (_, _, __more3__) FROM test WHERE _                        ·
 SELECT key FROM test.crdb_internal.node_statement_statistics      ·
 SELECT sin(_)                                                     ·
 SELECT sqrt(-_)                                                   !
@@ -132,7 +132,7 @@ SELECT anonymized
  WHERE application_name = 'valuetest' ORDER BY key
 ----
 INSERT INTO _ VALUES (_, _, __more1__), (__more1__)
-SELECT ROW(_, _, __more3__) FROM _ WHERE _
+SELECT (_, _, __more3__) FROM _ WHERE _
 SELECT _ FROM _.crdb_internal.node_statement_statistics
 SELECT sin(_)
 SELECT sqrt(-_)

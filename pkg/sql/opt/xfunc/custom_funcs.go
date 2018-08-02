@@ -57,6 +57,9 @@ func MakeCustomFuncs(mem *memo.Memo, evalCtx *tree.EvalContext) CustomFuncs {
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
 func (c *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
+	if list.Length == 0 {
+		return true
+	}
 	ls := listSorter{cf: c, list: c.mem.LookupList(list)}
 	for i := 0; i < int(list.Length-1); i++ {
 		if !ls.less(i, i+1) {

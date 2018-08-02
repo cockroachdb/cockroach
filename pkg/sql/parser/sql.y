@@ -802,7 +802,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list
 %type <tree.NormalizableTableNames> table_name_list
-%type <tree.Exprs> expr_list opt_expr_list
+%type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
+%type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
 %type <tree.SelectExprs> target_list
 %type <tree.UpdateExprs> set_clause_list
@@ -863,7 +864,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
-%type <*tree.Tuple> row
+%type <*tree.Tuple> row labeled_row
 %type <tree.Expr> case_expr case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
@@ -6898,19 +6899,9 @@ d_expr:
   {
     $$.val = $2.expr()
   }
-| row
+| labeled_row
   {
     $$.val = $1.tuple()
-  }
-| '(' row AS name_list ')'
-  {
-    t := $2.tuple()
-    labels := $4.nameList()
-    t.Labels = make([]string, len(labels))
-    for i, l := range labels {
-      t.Labels[i] = string(l)
-    }
-    $$.val = t
   }
 
 // TODO(pmattis): Support this notation?
@@ -7351,9 +7342,22 @@ row:
   {
     $$.val = &tree.Tuple{Exprs: $3.exprs(), Row: true}
   }
-| '(' expr_list ',' a_expr ')'
+| expr_tuple_unambiguous
   {
-    $$.val = &tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
+    $$.val = $1.tuple()
+  }
+
+labeled_row:
+  row
+| '(' row AS name_list ')'
+  {
+    t := $2.tuple()
+    labels := $4.nameList()
+    t.Labels = make([]string, len(labels))
+    for i, l := range labels {
+      t.Labels[i] = string(l)
+    }
+    $$.val = t
   }
 
 sub_type:
@@ -7401,6 +7405,67 @@ subquery_op:
   // this transformation is made on the fly by the parser upwards.
   // however the SubLink structure which handles any/some/all stuff
   // is not ready for such a thing.
+
+// expr_tuple1_ambiguous is a tuple expression with at least one expression.
+// The allowable syntax is:
+// ( )         -- empty tuple.
+// ( E )       -- just one value, this is potentially ambiguous with
+//             -- grouping parentheses. The ambiguity is resolved
+//             -- by only allowing expr_tuple1_ambiguous on the RHS
+//             -- of a IN expression.
+// ( E, E, E ) -- comma-separated values, no trailing comma allowed.
+// ( E, )      -- just one value with a comma, makes the syntax unambiguous
+//             -- with grouping parentheses. This is not usually produced
+//             -- by SQL clients, but can be produced by pretty-printing
+//             -- internally in CockroachDB.
+expr_tuple1_ambiguous:
+  '(' ')'
+  {
+    $$.val = &tree.Tuple{}
+  }
+| '(' tuple1_ambiguous_values ')'
+  {
+    $$.val = &tree.Tuple{Exprs: $2.exprs()}
+  }
+
+tuple1_ambiguous_values:
+  a_expr
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ','
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ',' expr_list
+  {
+     $$.val = append(tree.Exprs{$1.expr()}, $3.exprs()...)
+  }
+
+// expr_tuple_unambiguous is a tuple expression with zero or more
+// expressions. The allowable syntax is:
+// ( )         -- zero values
+// ( E, )      -- just one value. This is unambiguous with the (E) grouping syntax.
+// ( E, E, E ) -- comma-separated values, more than 1.
+expr_tuple_unambiguous:
+  '(' ')'
+  {
+    $$.val = &tree.Tuple{}
+  }
+| '(' tuple1_unambiguous_values ')'
+  {
+    $$.val = &tree.Tuple{Exprs: $2.exprs()}
+  }
+
+tuple1_unambiguous_values:
+  a_expr ','
+  {
+    $$.val = tree.Exprs{$1.expr()}
+  }
+| a_expr ',' expr_list
+  {
+     $$.val = append(tree.Exprs{$1.expr()}, $3.exprs()...)
+  }
 
 opt_expr_list:
   expr_list
@@ -7570,10 +7635,7 @@ in_expr:
   {
     $$.val = &tree.Subquery{Select: $1.selectStmt()}
   }
-| '(' expr_list ')'
-  {
-    $$.val = &tree.Tuple{Exprs: $2.exprs()}
-  }
+| expr_tuple1_ambiguous
 
 // Define SQL-style CASE clause.
 // - Full specification
