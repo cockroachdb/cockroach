@@ -93,16 +93,38 @@ UPSERT INTO system.locations VALUES
 	FAMILY "primary" (session_id, id, created, updated)
 ) INTERLEAVE IN PARENT sessions(session_id)
 `
-	insertQuery           = `INSERT INTO sessions(session_id, affiliate, channel, language, created, updated, status, platform, query_id) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
+	insertQuery = `INSERT INTO sessions(
+	session_id,
+	affiliate,
+	channel,
+	language,
+	created,
+	updated,
+	status,
+	platform,
+	query_id
+) VALUES ($1, $2, $3, $4, now(), now(), $5, $6, $7)`
+
 	insertQueryCustomers  = `INSERT INTO customers(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
 	insertQueryVariants   = `INSERT INTO variants(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
 	insertQueryParameters = `INSERT INTO parameters(session_id, key, value, created, updated) VALUES ($1, $2, $3, now(), now())`
-	insertQueryDevices    = `INSERT INTO devices(id, session_id, device_id, name, make, macaddress, model, serialno, created, updated) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`
-	insertQueryQuery      = `INSERT INTO queries(session_id, id, created, updated) VALUES ($1, $2, now(), now())`
-	deleteWestQuery       = `DELETE FROM sessions WHERE session_id LIKE 'W-%' AND created < now() - interval '5' minute LIMIT $1`
-	deleteEastQuery       = `DELETE FROM sessions WHERE session_id LIKE 'E-%' AND created < now() - interval '5' minute LIMIT $1`
-	retrieveQuery0        = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
-	retrieveQuery1        = `
+	insertQueryDevices    = `INSERT INTO devices(
+	id,
+	session_id,
+	device_id,
+	name,
+	make,
+	macaddress,
+	model,
+	serialno,
+	created,
+	updated
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`
+	insertQueryQuery = `INSERT INTO queries(session_id, id, created, updated) VALUES ($1, $2, now(), now())`
+	deleteWestQuery  = `DELETE FROM sessions WHERE session_id LIKE 'W-%' AND created < now() - interval '5' minute LIMIT $1`
+	deleteEastQuery  = `DELETE FROM sessions WHERE session_id LIKE 'E-%' AND created < now() - interval '5' minute LIMIT $1`
+	retrieveQuery0   = `SELECT session_id FROM sessions WHERE session_id > $1 LIMIT 1`
+	retrieveQuery1   = `
 SELECT session_id, affiliate, channel, created, language, status, platform, query_id, updated
 FROM sessions
 WHERE session_id = $1
