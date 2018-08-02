@@ -501,7 +501,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
-		mbox.start(ctx, &f.waitGroup, ctxCancel)
+		f.startables = append(f.startables, mbox)
 		ds.Metrics.FlowStart()
 		if err := f.StartSync(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
