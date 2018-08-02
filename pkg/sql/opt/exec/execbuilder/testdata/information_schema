@@ -3,12 +3,12 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-values  ·     ·                  (catalog_name, schema_name, default_character_set_name, sql_path)  ·
-·       size  4 columns, 4 rows  ·                                                                  ·
+virtual table  ·       ·  (catalog_name, schema_name, default_character_set_name, sql_path)  ·
+·              source  ·  ·                                                                  ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-filter       ·     ·
- └── values  ·     ·
-·            size  6 columns, 102 rows
+filter              ·       ·
+ └── virtual table  ·       ·
+·                   source  ·
