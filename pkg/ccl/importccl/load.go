@@ -290,9 +290,9 @@ func insertStmtToKVs(
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}
-	for _, tuple := range values.Tuples {
-		row := make([]tree.Datum, len(tuple.Exprs))
-		for i, expr := range tuple.Exprs {
+	for _, tuple := range values.Rows {
+		row := make([]tree.Datum, len(tuple))
+		for i, expr := range tuple {
 			if expr == tree.DNull {
 				row[i] = tree.DNull
 				continue

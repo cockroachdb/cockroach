@@ -30,15 +30,15 @@ import (
 // return values.
 func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (outScope *scope) {
 	var numCols int
-	if len(values.Tuples) > 0 {
-		numCols = len(values.Tuples[0].Exprs)
+	if len(values.Rows) > 0 {
+		numCols = len(values.Rows[0])
 	}
 
 	colTypes := make([]types.T, numCols)
 	for i := range colTypes {
 		colTypes[i] = types.Unknown
 	}
-	rows := make([]memo.GroupID, 0, len(values.Tuples))
+	rows := make([]memo.GroupID, 0, len(values.Rows))
 
 	// elems is used to store tuple values, and can be allocated once and reused
 	// repeatedly, since InternList will copy values to memo storage.
@@ -52,15 +52,15 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	// Ensure there are no special functions in the clause.
 	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 
-	for _, tuple := range values.Tuples {
-		if numCols != len(tuple.Exprs) {
+	for _, tuple := range values.Rows {
+		if numCols != len(tuple) {
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeSyntaxError,
 				"VALUES lists must all be the same length, expected %d columns, found %d",
-				numCols, len(tuple.Exprs))})
+				numCols, len(tuple))})
 		}
 
-		for i, expr := range tuple.Exprs {
+		for i, expr := range tuple {
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
 			elems[i] = b.buildScalar(texpr, inScope)
