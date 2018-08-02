@@ -159,6 +159,11 @@ type Flow struct {
 
 	localProcessors []LocalProcessor
 
+	// startedGoroutines specifies whether this flow started any goroutines. This
+	// is used in Wait() to avoid the overhead of waiting for non-existent
+	// goroutines.
+	startedGoroutines bool
+
 	localStreams map[StreamID]RowReceiver
 
 	// inboundStreams are streams that receive data from other hosts; this map
@@ -535,6 +540,7 @@ func (f *Flow) startInternal(ctx context.Context, doneFn func()) error {
 		f.waitGroup.Add(1)
 		go f.processors[i].Run(ctx, &f.waitGroup)
 	}
+	f.startedGoroutines = len(f.startables) > 0 || len(f.processors) > 1 || !f.isLocal()
 	return nil
 }
 
@@ -562,6 +568,7 @@ func (f *Flow) StartAsync(ctx context.Context, doneFn func()) error {
 	if len(f.processors) > 0 {
 		f.waitGroup.Add(1)
 		go f.processors[len(f.processors)-1].Run(ctx, &f.waitGroup)
+		f.startedGoroutines = true
 	}
 	return nil
 }
@@ -588,6 +595,9 @@ func (f *Flow) StartSync(ctx context.Context, doneFn func()) error {
 // Wait waits for all the goroutines for this flow to exit. If the context gets
 // canceled before all goroutines exit, it calls f.cancel().
 func (f *Flow) Wait() {
+	if !f.startedGoroutines {
+		return
+	}
 	waitChan := make(chan struct{})
 
 	go func() {
