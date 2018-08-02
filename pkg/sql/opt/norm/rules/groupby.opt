@@ -2,14 +2,25 @@
 # groupby.opt contains normalization rules for the GroupBy operator.
 # =============================================================================
 
-# EliminateDistinct discards a GroupBy operator that is eliminating duplicate
+# ConvertGroupByToDsitinct converts a GroupBy operator that has no aggregations
+# to an equivalent DistinctOn operator.
+[ConvertGroupByToDistinct, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:* & (HasNoCols $aggregations)
+    $def:*
+)
+=>
+(DistinctOn $input $aggregations $def)
+
+# EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
 # rows by using grouping columns that are statically known to form a strong key.
 # By definition, a strong key does not allow duplicate values, so the GroupBy is
 # redundant and can be eliminated.
 [EliminateDistinct, Normalize]
-(GroupBy
+(DistinctOn
     $input:*
-    $aggregations:* & (HasNoCols $aggregations)
+    *
     $def:* & (GroupingColsAreKey $def $input)
 )
 =>
@@ -19,7 +30,7 @@ $input
 # removing columns from its input (and not synthesizing new ones). That's
 # something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
-(GroupBy | ScalarGroupBy
+(GroupBy | ScalarGroupBy | DistinctOn
     $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
     $aggregations:*
     $def:*
@@ -39,13 +50,13 @@ $input
 # an ConstAgg aggregate, since all rows in the group have the same value for
 # that column.
 [ReduceGroupingCols, Normalize]
-(GroupBy
+(GroupBy | DistinctOn
     $input:*
     $aggregations:*
     $def:* & (CanReduceGroupingCols $input $def)
 )
 =>
-(GroupBy
+((OpName)
     $input
     (AppendReducedGroupingCols $input $aggregations $def)
     (ReduceGroupingCols $input $def)

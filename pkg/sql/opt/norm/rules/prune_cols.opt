@@ -185,7 +185,7 @@
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
 [PruneAggCols, Normalize]
 (Project
-    $input:(GroupBy | ScalarGroupBy
+    $input:(GroupBy | ScalarGroupBy | DistinctOn
         $innerInput:*
         $aggregations:*
         $def:*
@@ -204,13 +204,13 @@
 
 # PruneGroupByCols discards GroupBy input columns that are never used.
 [PruneGroupByCols, Normalize]
-(GroupBy
+(GroupBy | DistinctOn
     $input:*
     $aggregations:*
     $def:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $def))
 )
 =>
-(GroupBy
+((OpName)
     $newInput:(PruneCols $input (NeededColsGroupBy $aggregations $def))
     $aggregations
     (PruneOrderingGroupBy $newInput $def)

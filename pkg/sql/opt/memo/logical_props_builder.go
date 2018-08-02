@@ -77,7 +77,7 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return b.buildSetProps(ev)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		return b.buildGroupByProps(ev)
 
 	case opt.LimitOp:
@@ -575,9 +575,9 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 		// Scalar GroupBy returns exactly one row.
 		relational.Cardinality = props.OneCardinality
 	} else {
-		// GroupBy acts like a filter, never returning more rows than the input
+		// GroupBy and DistinctOn act like a filter, never returning more rows than the input
 		// has. However, if the input has at least one row, then at least one row
-		// will also be returned by GroupBy.
+		// will also be returned by GroupBy and DistinctOn.
 		relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
 		if relational.FuncDeps.HasMax1Row() {
 			relational.Cardinality = relational.Cardinality.AtMost(1)

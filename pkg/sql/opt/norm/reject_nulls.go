@@ -93,7 +93,7 @@ func DeriveRejectNullCols(ev memo.ExprView) opt.ColSet {
 		// Request null-rejection on all output columns.
 		relational.Rule.RejectNullCols = relational.OutputCols
 
-	case opt.GroupByOp:
+	case opt.GroupByOp, opt.DistinctOnOp:
 		relational.Rule.RejectNullCols = deriveGroupByRejectNullCols(ev)
 	}
 

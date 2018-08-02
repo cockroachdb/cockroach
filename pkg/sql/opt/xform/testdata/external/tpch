@@ -2045,7 +2045,7 @@ sort
       ├── grouping columns: p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
       ├── key: (9-11)
       ├── fd: (9-11)-->(22)
-      ├── group-by
+      ├── distinct-on
       │    ├── columns: ps_suppkey:2(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
       │    ├── grouping columns: ps_suppkey:2(int!null) p_brand:9(string!null) p_type:10(string) p_size:11(int!null)
       │    ├── key: (2,9-11)

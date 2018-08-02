@@ -36,7 +36,7 @@ inner-join
 opt
 SELECT * FROM (SELECT * FROM upper('abc') a, generate_series(1, 2) b) GROUP BY a, b
 ----
-group-by
+distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── stats: [rows=700, distinct(1,2)=700]

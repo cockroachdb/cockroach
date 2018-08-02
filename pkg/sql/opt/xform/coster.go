@@ -114,7 +114,7 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		cost = c.computeSetOpCost(candidate, logical)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		cost = c.computeGroupByCost(candidate, logical)
 
 	case opt.LimitOp:

@@ -124,7 +124,7 @@ group-by
 opt
 SELECT y, s FROM a GROUP BY y, s
 ----
-group-by
+distinct-on
  ├── columns: y:2(int) s:3(string)
  ├── grouping columns: y:2(int) s:3(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]

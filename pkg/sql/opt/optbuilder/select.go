@@ -302,7 +302,9 @@ func (b *Builder) buildSelectClause(
 	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.
-	outScope = b.buildDistinct(sel.Distinct, sel.DistinctOn, outScope)
+	if sel.Distinct || len(sel.DistinctOn) > 0 {
+		outScope = b.buildDistinct(sel.DistinctOn, outScope)
+	}
 	return outScope
 }
 

@@ -387,6 +387,17 @@ func (ef *execFactory) constructGroupBy(
 	return n, nil
 }
 
+// ConstructDistinct is part of the exec.Factory interface.
+func (ef *execFactory) ConstructDistinct(
+	input exec.Node, distinctCols, orderedCols exec.ColumnOrdinalSet,
+) (exec.Node, error) {
+	return &distinctNode{
+		plan:              input.(planNode),
+		distinctOnColIdxs: distinctCols,
+		columnsInOrder:    orderedCols,
+	}, nil
+}
+
 // ConstructSetOp is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSetOp(
 	typ tree.UnionType, all bool, left, right exec.Node,

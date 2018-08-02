@@ -16,7 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -28,13 +28,7 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildDistinct(
-	distinct bool, distinctOn tree.DistinctOn, inScope *scope,
-) (outScope *scope) {
-	if !distinct {
-		return inScope
-	}
-
+func (b *Builder) buildDistinct(distinctOn tree.DistinctOn, inScope *scope) (outScope *scope) {
 	if len(distinctOn) > 0 {
 		panic(unimplementedf("DISTINCT ON is not supported"))
 	}
@@ -66,8 +60,14 @@ func (b *Builder) buildDistinct(
 		}
 	}
 
-	outScope.group = b.constructGroupBy(
-		inScope.group, groupCols, nil /* cols */, props.OrderingChoice{},
+	// Because the ordering can only refer to the projected columns, it doesn't
+	// affect the results; we don't need to set def.Ordering.
+	def := memo.GroupByDef{GroupingCols: groupCols}
+
+	outScope.group = b.factory.ConstructDistinctOn(
+		inScope.group,
+		b.factory.ConstructAggregations(memo.EmptyList, b.factory.InternColList(nil)),
+		b.factory.InternGroupByDef(&def),
 	)
 	return outScope
 }
