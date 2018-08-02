@@ -242,13 +242,13 @@ func (sc *SchemaChanger) truncateIndexes(
 					sc.tableID, sc.mutationID, row, resume)
 			}
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				if sc.testingKnobs.RunBeforeBackfillChunk != nil {
-					if err := sc.testingKnobs.RunBeforeBackfillChunk(resume); err != nil {
+				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
+					if err := fn(resume); err != nil {
 						return err
 					}
 				}
-				if sc.testingKnobs.RunAfterBackfillChunk != nil {
-					defer sc.testingKnobs.RunAfterBackfillChunk()
+				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunAfterBackfillChunk; fn != nil {
+					defer fn()
 				}
 
 				tc := &TableCollection{leaseMgr: sc.leaseMgr}
