@@ -908,9 +908,11 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		// TODO(radu): we should account for the size of impl (this needs to be done
-		// in each aggregate constructor).
-		bucket[i] = f.create(ag.flowCtx.EvalCtx, f.arguments)
+		agg := f.create(ag.flowCtx.EvalCtx, f.arguments)
+		if err := ag.bucketsAcc.Grow(ag.Ctx, agg.Size()); err != nil {
+			return nil, err
+		}
+		bucket[i] = agg
 	}
 	return bucket, nil
 }

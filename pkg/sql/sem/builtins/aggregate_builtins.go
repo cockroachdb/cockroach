@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -377,11 +378,14 @@ func makeAggOverloadWithReturnType(
 var _ tree.AggregateFunc = &arrayAggregate{}
 var _ tree.AggregateFunc = &avgAggregate{}
 var _ tree.AggregateFunc = &countAggregate{}
+var _ tree.AggregateFunc = &countRowsAggregate{}
 var _ tree.AggregateFunc = &MaxAggregate{}
 var _ tree.AggregateFunc = &MinAggregate{}
+var _ tree.AggregateFunc = &smallIntSumAggregate{}
 var _ tree.AggregateFunc = &intSumAggregate{}
 var _ tree.AggregateFunc = &decimalSumAggregate{}
 var _ tree.AggregateFunc = &floatSumAggregate{}
+var _ tree.AggregateFunc = &intervalSumAggregate{}
 var _ tree.AggregateFunc = &intSqrDiffAggregate{}
 var _ tree.AggregateFunc = &floatSqrDiffAggregate{}
 var _ tree.AggregateFunc = &decimalSqrDiffAggregate{}
@@ -393,8 +397,39 @@ var _ tree.AggregateFunc = &floatStdDevAggregate{}
 var _ tree.AggregateFunc = &decimalStdDevAggregate{}
 var _ tree.AggregateFunc = &anyNotNullAggregate{}
 var _ tree.AggregateFunc = &concatAggregate{}
+var _ tree.AggregateFunc = &boolAndAggregate{}
+var _ tree.AggregateFunc = &boolOrAggregate{}
 var _ tree.AggregateFunc = &bytesXorAggregate{}
 var _ tree.AggregateFunc = &intXorAggregate{}
+var _ tree.AggregateFunc = &jsonAggregate{}
+
+const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
+const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
+const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
+const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
+const sizeOfMaxAggregate = int64(unsafe.Sizeof(MaxAggregate{}))
+const sizeOfMinAggregate = int64(unsafe.Sizeof(MinAggregate{}))
+const sizeOfSmallIntSumAggregate = int64(unsafe.Sizeof(smallIntSumAggregate{}))
+const sizeOfIntSumAggregate = int64(unsafe.Sizeof(intSumAggregate{}))
+const sizeOfDecimalSumAggregate = int64(unsafe.Sizeof(decimalSumAggregate{}))
+const sizeOfFloatSumAggregate = int64(unsafe.Sizeof(floatSumAggregate{}))
+const sizeOfIntervalSumAggregate = int64(unsafe.Sizeof(intervalSumAggregate{}))
+const sizeOfIntSqrDiffAggregate = int64(unsafe.Sizeof(intSqrDiffAggregate{}))
+const sizeOfFloatSqrDiffAggregate = int64(unsafe.Sizeof(floatSqrDiffAggregate{}))
+const sizeOfDecimalSqrDiffAggregate = int64(unsafe.Sizeof(decimalSqrDiffAggregate{}))
+const sizeOfFloatSumSqrDiffsAggregate = int64(unsafe.Sizeof(floatSumSqrDiffsAggregate{}))
+const sizeOfDecimalSumSqrDiffsAggregate = int64(unsafe.Sizeof(decimalSumSqrDiffsAggregate{}))
+const sizeOfFloatVarianceAggregate = int64(unsafe.Sizeof(floatVarianceAggregate{}))
+const sizeOfDecimalVarianceAggregate = int64(unsafe.Sizeof(decimalVarianceAggregate{}))
+const sizeOfFloatStdDevAggregate = int64(unsafe.Sizeof(floatStdDevAggregate{}))
+const sizeOfDecimalStdDevAggregate = int64(unsafe.Sizeof(decimalStdDevAggregate{}))
+const sizeOfAnyNotNullAggregate = int64(unsafe.Sizeof(anyNotNullAggregate{}))
+const sizeOfConcatAggregate = int64(unsafe.Sizeof(concatAggregate{}))
+const sizeOfBoolAndAggregate = int64(unsafe.Sizeof(boolAndAggregate{}))
+const sizeOfBoolOrAggregate = int64(unsafe.Sizeof(boolOrAggregate{}))
+const sizeOfBytesXorAggregate = int64(unsafe.Sizeof(bytesXorAggregate{}))
+const sizeOfIntXorAggregate = int64(unsafe.Sizeof(intXorAggregate{}))
+const sizeOfJsonAggregate = int64(unsafe.Sizeof(jsonAggregate{}))
 
 // See NewAnyNotNullAggregate.
 type anyNotNullAggregate struct {
@@ -441,6 +476,11 @@ func (a *anyNotNullAggregate) Result() (tree.Datum, error) {
 // Close is no-op in aggregates using constant space.
 func (a *anyNotNullAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *anyNotNullAggregate) Size() int64 {
+	return sizeOfAnyNotNullAggregate
+}
+
 type arrayAggregate struct {
 	arr *tree.DArray
 	acc mon.BoundAccount
@@ -475,6 +515,11 @@ func (a *arrayAggregate) Result() (tree.Datum, error) {
 // operation.
 func (a *arrayAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *arrayAggregate) Size() int64 {
+	return sizeOfArrayAggregate
 }
 
 type avgAggregate struct {
@@ -533,6 +578,11 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *avgAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *avgAggregate) Size() int64 {
+	return sizeOfAvgAggregate
+}
 
 type concatAggregate struct {
 	forBytes      bool
@@ -637,6 +687,11 @@ func (a *concatAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
 }
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *concatAggregate) Size() int64 {
+	return sizeOfConcatAggregate
+}
+
 type boolAndAggregate struct {
 	sawNonNull bool
 	result     bool
@@ -668,6 +723,11 @@ func (a *boolAndAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *boolAndAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *boolAndAggregate) Size() int64 {
+	return sizeOfBoolAndAggregate
+}
+
 type boolOrAggregate struct {
 	sawNonNull bool
 	result     bool
@@ -696,6 +756,11 @@ func (a *boolOrAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *boolOrAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *boolOrAggregate) Size() int64 {
+	return sizeOfBoolOrAggregate
+}
+
 type countAggregate struct {
 	count int
 }
@@ -719,6 +784,11 @@ func (a *countAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *countAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *countAggregate) Size() int64 {
+	return sizeOfCountAggregate
+}
+
 type countRowsAggregate struct {
 	count int
 }
@@ -738,6 +808,11 @@ func (a *countRowsAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *countRowsAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *countRowsAggregate) Size() int64 {
+	return sizeOfCountRowsAggregate
+}
 
 // MaxAggregate keeps track of the largest value passed to Add.
 type MaxAggregate struct {
@@ -776,6 +851,11 @@ func (a *MaxAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *MaxAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *MaxAggregate) Size() int64 {
+	return sizeOfMaxAggregate
+}
+
 // MinAggregate keeps track of the smallest value passed to Add.
 type MinAggregate struct {
 	min     tree.Datum
@@ -813,6 +893,11 @@ func (a *MinAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *MinAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *MinAggregate) Size() int64 {
+	return sizeOfMinAggregate
+}
+
 type smallIntSumAggregate struct {
 	sum         int64
 	seenNonNull bool
@@ -843,6 +928,11 @@ func (a *smallIntSumAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *smallIntSumAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *smallIntSumAggregate) Size() int64 {
+	return sizeOfSmallIntSumAggregate
+}
 
 type intSumAggregate struct {
 	// Either the `intSum` and `decSum` fields contains the
@@ -912,6 +1002,11 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *intSumAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *intSumAggregate) Size() int64 {
+	return sizeOfIntSumAggregate
+}
+
 type decimalSumAggregate struct {
 	sum        apd.Decimal
 	sawNonNull bool
@@ -948,6 +1043,11 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalSumAggregate) Size() int64 {
+	return sizeOfDecimalSumAggregate
+}
+
 type floatSumAggregate struct {
 	sum        float64
 	sawNonNull bool
@@ -979,6 +1079,11 @@ func (a *floatSumAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatSumAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatSumAggregate) Size() int64 {
+	return sizeOfFloatSumAggregate
+}
+
 type intervalSumAggregate struct {
 	sum        duration.Duration
 	sawNonNull bool
@@ -1009,6 +1114,11 @@ func (a *intervalSumAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intervalSumAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *intervalSumAggregate) Size() int64 {
+	return sizeOfIntervalSumAggregate
+}
 
 // Read-only constants used for square difference computations.
 var (
@@ -1055,6 +1165,11 @@ func (a *intSqrDiffAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intSqrDiffAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *intSqrDiffAggregate) Size() int64 {
+	return sizeOfIntSqrDiffAggregate
+}
 
 type floatSqrDiffAggregate struct {
 	count   int64
@@ -1107,6 +1222,11 @@ func (a *floatSqrDiffAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatSqrDiffAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatSqrDiffAggregate) Size() int64 {
+	return sizeOfFloatSqrDiffAggregate
+}
 
 type decimalSqrDiffAggregate struct {
 	// Variables used across iterations.
@@ -1176,6 +1296,11 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalSqrDiffAggregate) Size() int64 {
+	return sizeOfDecimalSqrDiffAggregate
+}
+
 type floatSumSqrDiffsAggregate struct {
 	count   int64
 	mean    float64
@@ -1240,6 +1365,11 @@ func (a *floatSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatSumSqrDiffsAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatSumSqrDiffsAggregate) Size() int64 {
+	return sizeOfFloatSumSqrDiffsAggregate
+}
 
 type decimalSumSqrDiffsAggregate struct {
 	// Variables used across iterations.
@@ -1328,6 +1458,11 @@ func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumSqrDiffsAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalSumSqrDiffsAggregate) Size() int64 {
+	return sizeOfDecimalSumSqrDiffsAggregate
+}
 
 type floatSqrDiff interface {
 	tree.AggregateFunc
@@ -1439,8 +1574,18 @@ func (a *decimalVarianceAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatVarianceAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatVarianceAggregate) Size() int64 {
+	return sizeOfFloatVarianceAggregate
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalVarianceAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalVarianceAggregate) Size() int64 {
+	return sizeOfDecimalVarianceAggregate
+}
 
 type floatStdDevAggregate struct {
 	agg tree.AggregateFunc
@@ -1541,8 +1686,18 @@ func (a *decimalStdDevAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatStdDevAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatStdDevAggregate) Size() int64 {
+	return sizeOfFloatStdDevAggregate
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalStdDevAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalStdDevAggregate) Size() int64 {
+	return sizeOfDecimalStdDevAggregate
+}
 
 type bytesXorAggregate struct {
 	sum        []byte
@@ -1585,6 +1740,11 @@ func (a *bytesXorAggregate) Result() (tree.Datum, error) {
 // Close is part of the tree.AggregateFunc interface.
 func (a *bytesXorAggregate) Close(context.Context) {}
 
+// Size is part of the tree.AggregateFunc interface.
+func (a *bytesXorAggregate) Size() int64 {
+	return sizeOfBytesXorAggregate
+}
+
 type intXorAggregate struct {
 	sum        int64
 	sawNonNull bool
@@ -1615,6 +1775,11 @@ func (a *intXorAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intXorAggregate) Close(context.Context) {}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *intXorAggregate) Size() int64 {
+	return sizeOfIntXorAggregate
+}
 
 type jsonAggregate struct {
 	builder    *json.ArrayBuilderWithCounter
@@ -1657,4 +1822,9 @@ func (a *jsonAggregate) Result() (tree.Datum, error) {
 // operation.
 func (a *jsonAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *jsonAggregate) Size() int64 {
+	return sizeOfJsonAggregate
 }
