@@ -35,8 +35,8 @@ import (
 const (
 	zoneLocationsStmt = `
 UPSERT INTO system.locations VALUES
-	('zone', 'us-east1-b', 33.0641249, -80.0433347),
-	('zone', 'us-west1-b', 45.6319052, -121.2010282)
+	('zone', $1, 33.0641249, -80.0433347),
+	('zone', $2, 45.6319052, -121.2010282)
 `
 	sessionSchema = `
 (
@@ -184,7 +184,6 @@ UPDATE sessions
 SET status = $1, updated = now()
 WHERE session_id = $2
 `
-	deleteSetSize = 100
 )
 
 var (
@@ -212,17 +211,23 @@ type interleavedPartitioned struct {
 	updatePercent   int
 	deletePercent   int
 
+	eastZoneName    string
+	westZoneName    string
+	centralZoneName string
+
 	eastPercent          int
 	east                 bool
 	insertLocalPercent   int
 	retrieveLocalPercent int
 	updateLocalPercent   int
 
+	deleteSetSize         int
 	currentSetDeleteCount int
 	currentSet            int
 
-	local           bool
-	deleteBatchSize int
+	local bool
+
+	rowsPerDelete int
 
 	sessionIDs []string
 }
@@ -251,9 +256,14 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage (0-100) of operations that are update queries`)
 		g.flags.IntVar(&g.updateLocalPercent, `update-local-percent`, 100, `Percentage of update operations that are local`)
 		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage (0-100) of operations that are delete queries`)
-		g.flags.IntVar(&g.deleteBatchSize, `delete-batch-size`, 100, `Number of rows per delete operation`)
+		g.flags.IntVar(&g.rowsPerDelete, `rows-per-delete`, 20, `Number of rows per delete operation`)
+		g.flags.IntVar(&g.deleteSetSize, `delete-set-size`, 100, `Number of delete queries for a particular zone before switching over`)
 		g.flags.BoolVar(&g.east, `east`, false, `Is this location in the east (true) or the west (false)`)
 		g.flags.BoolVar(&g.local, `local`, false, `Are you running workload locally?`)
+
+		g.flags.StringVar(&g.eastZoneName, `east-zone-name`, `us-east1-b`, `name of the zone to be used as east`)
+		g.flags.StringVar(&g.westZoneName, `west-zone-name`, `us-east1-b`, `name of the zone to be used as west`)
+		g.flags.StringVar(&g.westZoneName, `central-zone-name`, `us-central1-a`, `name of the zone to be used as west`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -519,12 +529,12 @@ func (w *interleavedPartitioned) Ops(
 				}
 			}
 			w.currentSetDeleteCount++
-			if w.currentSetDeleteCount == deleteSetSize {
+			if w.currentSetDeleteCount == w.deleteSetSize {
 				w.currentSetDeleteCount = 0
 				w.currentSet++
 			}
 
-			_, err = deleteStatement.ExecContext(ctx, w.deleteBatchSize)
+			_, err = deleteStatement.ExecContext(ctx, w.rowsPerDelete)
 			if err != nil {
 				return err
 			}
@@ -550,7 +560,7 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			if w.local {
 				return nil
 			}
-			if _, err := db.Exec(zoneLocationsStmt); err != nil {
+			if _, err := db.Exec(zoneLocationsStmt, w.eastZoneName, w.westZoneName); err != nil {
 				return err
 			}
 			if _, err := db.Exec(

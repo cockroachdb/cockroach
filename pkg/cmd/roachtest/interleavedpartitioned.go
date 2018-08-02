@@ -40,7 +40,8 @@ func registerInterleaved(r *registry) {
 		retrieveLocalPercent int,
 		updatePercent int,
 		updateLocalPercent int,
-		deleteBatchSize int,
+		deleteSetSize int,
+		rowsPerDelete int,
 	) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -87,8 +88,9 @@ func registerInterleaved(r *registry) {
 			)
 
 			cmdCentral := fmt.Sprintf(
-				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-batch-size %d"+duration+histograms+" {pgurl:7-9}",
-				deleteBatchSize,
+				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-set-size %d --rows-per-delete %d"+duration+histograms+" {pgurl:7-9}",
+				deleteSetSize,
+				rowsPerDelete,
 			)
 
 			t.Status("initializing database")
@@ -136,7 +138,8 @@ func registerInterleaved(r *registry) {
 				100,   /*retrieveLocalPercent*/
 				10,    /*updatePercent*/
 				100,   /*updateLocalPercent*/
-				20,    /*deleteBatchSize*/
+				100,   /*deleteSetSize*/
+				20,    /*rowsPerDelete*/
 			)
 		},
 	})
