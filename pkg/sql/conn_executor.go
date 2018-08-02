@@ -706,7 +706,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnAborted, ex.server.dbCache); err != nil {
+	if err := ex.resetExtraTxnState(ctx, ex.server.dbCache); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -977,19 +977,12 @@ func (ns *prepStmtNamespace) copy() prepStmtNamespace {
 }
 
 func (ex *connExecutor) resetExtraTxnState(
-	ctx context.Context, ev txnEvent, dbCacheHolder *databaseCacheHolder,
+	ctx context.Context, dbCacheHolder *databaseCacheHolder,
 ) error {
 	ex.extraTxnState.schemaChangers.reset()
 
-	var opt releaseOpt
-	if ev == txnCommit {
-		opt = blockForDBCacheUpdate
-	} else {
-		opt = dontBlockForDBCacheUpdate
-	}
-	if err := ex.extraTxnState.tables.releaseTables(ctx, opt); err != nil {
-		return err
-	}
+	ex.extraTxnState.tables.releaseTables(ctx)
+
 	ex.extraTxnState.tables.databaseCache = dbCacheHolder.getDatabaseCache()
 
 	ex.extraTxnState.autoRetryCounter = 0
@@ -1846,11 +1839,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 	case txnCommit:
-		// If we have schema changers to run, release leases early so that schema
-		// changers can run.
-		if len(ex.extraTxnState.schemaChangers.schemaChangers) > 0 {
-			ex.extraTxnState.tables.releaseLeases(ex.Ctx())
-		}
 		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
 			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
 		); schemaChangeErr != nil {
@@ -1863,13 +1851,17 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			// schema changes failed. We don't have a good way to indicate this.
 			if implicitTxn {
 				res.SetError(schemaChangeErr)
-				return advInfo, nil
+			} else {
+				res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
 			}
-			res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
 		}
+
+		// Wait for the cache to reflect the dropped databases if any.
+		ex.extraTxnState.tables.waitForCacheToDropDatabases(ctx)
+
 		fallthrough
 	case txnRestart, txnAborted:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, ex.server.dbCache); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), ex.server.dbCache); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
