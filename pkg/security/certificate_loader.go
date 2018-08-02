@@ -255,11 +255,11 @@ func (cl *CertificateLoader) MaybeCreateCertsDir() error {
 	}
 
 	if !os.IsNotExist(err) {
-		return errors.Wrapf(err, "could not stat certs directory %s", cl.certsDir)
+		return makeErrorf(err, "could not stat certs directory %s", cl.certsDir)
 	}
 
 	if err := os.Mkdir(cl.certsDir, defaultCertsDirPerm); err != nil {
-		return errors.Wrapf(err, "could not create certs directory %s", cl.certsDir)
+		return makeErrorf(err, "could not create certs directory %s", cl.certsDir)
 	}
 	return nil
 }
@@ -390,7 +390,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 // The Error field must be nil
 func parseCertificate(ci *CertInfo) error {
 	if ci.Error != nil {
-		return errors.Wrapf(ci.Error, "parseCertificate called on bad CertInfo object: %s", ci.Filename)
+		return makeErrorf(ci.Error, "parseCertificate called on bad CertInfo object: %s", ci.Filename)
 	}
 
 	if len(ci.FileContents) == 0 {
@@ -400,7 +400,7 @@ func parseCertificate(ci *CertInfo) error {
 	// PEM-decode the file.
 	derCerts, err := PEMToCertificates(ci.FileContents)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse certificate file %s as PEM", ci.Filename)
+		return makeErrorf(err, "failed to parse certificate file %s as PEM", ci.Filename)
 	}
 
 	// Make sure we get at least one certificate.
@@ -413,11 +413,11 @@ func parseCertificate(ci *CertInfo) error {
 	for i, c := range derCerts {
 		x509Cert, err := x509.ParseCertificate(c.Bytes)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse certificate %d in file %s", i, ci.Filename)
+			return makeErrorf(err, "failed to parse certificate %d in file %s", i, ci.Filename)
 		}
 
 		if err := validateCockroachCertificate(ci, x509Cert); err != nil {
-			return errors.Wrapf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
+			return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
 		}
 		if x509Cert.NotAfter.After(latest) {
 			latest = x509Cert.NotAfter

@@ -339,62 +339,6 @@ func TestQuit(t *testing.T) {
 	c.Run("quit")
 	// Wait until this async command cleanups the server.
 	<-c.Stopper().IsStopped()
-
-	// NB: if this test is ever flaky due to port reuse, we could run against
-	// :0 (which however changes some of the errors we get).
-	// One way of getting that is:
-	//	c.Cfg.AdvertiseAddr = "127.0.0.1:0"
-
-	styled := func(s string) string {
-		const preamble = `unable to connect or connection lost.
-
-Please check the address and credentials such as certificates \(if attempting to
-communicate with a secure cluster\).
-
-`
-		return preamble + s
-	}
-
-	for _, test := range []struct {
-		cmd, expOutPattern string
-	}{
-		// Error returned from GRPC to internal/client (which has to pass it
-		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
-		// Error returned directly from GRPC.
-		{`quit`, styled(
-			`Failed to connect to the node: initial connection heartbeat failed: rpc ` +
-				`error: code = Unavailable desc = all SubConns are in TransientFailure, ` +
-				`latest connection error: connection error: desc = "transport: Error while dialing dial tcp .*: ` +
-				`connect: connection refused"`),
-		},
-		// Going through the SQL client libraries gives a *net.OpError which
-		// we also handle.
-		//
-		// On *nix, this error is:
-		//
-		// dial tcp 127.0.0.1:65054: getsockopt: connection refused
-		//
-		// On Windows, this error is:
-		//
-		// dial tcp 127.0.0.1:59951: connectex: No connection could be made because the target machine actively refused it.
-		//
-		// So we look for the common bit.
-		{`zone ls`, styled(
-			`dial tcp .*: .* refused`),
-		},
-	} {
-		t.Run(test.cmd, func(t *testing.T) {
-			out, err := c.RunWithCapture(test.cmd)
-			if err != nil {
-				t.Fatal(err)
-			}
-			exp := test.cmd + "\n" + test.expOutPattern
-			re := regexp.MustCompile(exp)
-			if !re.MatchString(out) {
-				t.Errorf("expected '%s' to match pattern:\n%s\ngot:\n%s", test.cmd, exp, out)
-			}
-		})
-	}
 }
 
 func Example_logging() {
