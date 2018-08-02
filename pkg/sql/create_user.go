@@ -106,25 +106,23 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	}
 	if row != nil {
 		isRole := bool(*row[0].(*tree.DBool))
-		if isRole == n.isRole && n.ifNotExists {
-			// The username exists with the same role setting, and we asked to skip
-			// if it exists: no error.
-			return nil
+		if isRole == n.isRole && !n.ifNotExists {
+			// The username exists with the same role setting.
+			msg := "a user"
+			if isRole {
+				msg = "a role"
+			}
+			return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
+				"%s named %s already exists",
+				msg, normalizedUsername)
 		}
-		msg := "a user"
-		if isRole {
-			msg = "a role"
-		}
-		return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
-			"%s named %s already exists",
-			msg, normalizedUsername)
 	}
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		"insert into system.users values ($1, $2, $3)",
+		`upsert into system.users(username, "hashedPassword", "isRole") values ($1, $2, $3)`,
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
