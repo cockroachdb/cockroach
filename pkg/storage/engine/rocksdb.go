@@ -462,6 +462,7 @@ type RocksDB struct {
 		syncutil.Mutex
 		cond       sync.Cond
 		committing bool
+		groupSize  int
 		pending    []*rocksDBBatch
 	}
 
@@ -626,7 +627,6 @@ func (r *RocksDB) open() error {
 func (r *RocksDB) syncLoop() {
 	s := &r.syncer
 	s.Lock()
-	defer s.Unlock()
 
 	var lastSync time.Time
 
@@ -635,6 +635,7 @@ func (r *RocksDB) syncLoop() {
 			s.cond.Wait()
 		}
 		if s.closed {
+			s.Unlock()
 			return
 		}
 
@@ -1623,6 +1624,47 @@ func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
 	return iter
 }
 
+const maxBatchGroupSize = 1 << 20 // 1 MiB
+
+// makeBatchGroup add the specified batch to the pending list of batches to
+// commit. Groups are delimited by a nil batch in the pending list. Group
+// leaders are the first batch in the pending list and the first batch after a
+// nil batch. The size of a group is limited by the maxSize parameter which is
+// measured as the number of bytes in the group's batches. The groupSize
+// parameter is the size of the current group being formed. Returns the new
+// list of pending batches, the new size of the current group and whether the
+// batch that was added is the leader of its group.
+func makeBatchGroup(
+	pending []*rocksDBBatch, b *rocksDBBatch, groupSize, maxSize int,
+) (_ []*rocksDBBatch, _ int, leader bool) {
+	leader = len(pending) == 0
+	if n := len(b.unsafeRepr()); leader {
+		groupSize = n
+	} else if groupSize+n > maxSize {
+		leader = true
+		groupSize = n
+		pending = append(pending, nil)
+	} else {
+		groupSize += n
+	}
+	pending = append(pending, b)
+	return pending, groupSize, leader
+}
+
+// nextBatchGroup extracts the group of batches from the pending list. See
+// makeBatchGroup for an explanation of how groups are encoded into the pending
+// list. Returns the next group in the prefix return value, and the remaining
+// groups in the suffix parameter (the next group is always a prefix of the
+// pending argument).
+func nextBatchGroup(pending []*rocksDBBatch) (prefix []*rocksDBBatch, suffix []*rocksDBBatch) {
+	for i := 1; i < len(pending); i++ {
+		if pending[i] == nil {
+			return pending[:i], pending[i+1:]
+		}
+	}
+	return pending, pending[len(pending):]
+}
+
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	if r.Closed() {
 		panic("this batch was already committed")
@@ -1643,16 +1685,19 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	// slice. Every batch has an associated wait group which is signaled when
 	// the commit is complete.
 	c.Lock()
-	leader := len(c.pending) == 0
-	c.pending = append(c.pending, r)
+
+	var leader bool
+	c.pending, c.groupSize, leader = makeBatchGroup(c.pending, r, c.groupSize, maxBatchGroupSize)
 
 	if leader {
-		// We're the leader. Wait for any running commit to finish.
-		for c.committing {
+		// We're the leader of our group. Wait for any running commit to finish and
+		// for our batch to make it to the head of the pending queue.
+		for c.committing || c.pending[0] != r {
 			c.cond.Wait()
 		}
-		pending := c.pending
-		c.pending = nil
+
+		var pending []*rocksDBBatch
+		pending, c.pending = nextBatchGroup(c.pending)
 		c.committing = true
 		c.Unlock()
 
@@ -1683,14 +1728,19 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 		// proceed.
 		c.Lock()
 		c.committing = false
-		c.cond.Signal()
+		// NB: Multiple leaders can be waiting.
+		c.cond.Broadcast()
 		c.Unlock()
 
 		// Propagate the error to all of the batches involved in the commit. If a
 		// batch requires syncing and the commit was successful, add it to the
 		// syncing list. Note that we're reusing the pending list here for the
-		// syncing list.
-		syncing := pending[:0]
+		// syncing list. We need to be careful to cap the capacity so that
+		// extending this slice past the length of the pending list will result in
+		// reallocation. Otherwise we have a race between appending to this list
+		// while holding the sync lock below, and appending to the commit pending
+		// list while holding the commit lock above.
+		syncing := pending[:0:len(pending)]
 		for _, b := range pending {
 			if err != nil || !b.syncCommit {
 				b.commitErr = err
