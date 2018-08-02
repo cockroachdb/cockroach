@@ -173,12 +173,6 @@ func (s *scope) copyOrdering(src *scope) {
 	}
 }
 
-// copyPhysicalProps copies the physicalProps from the src scope to this scope.
-func (s *scope) copyPhysicalProps(src *scope) {
-	s.physicalProps.Presentation = src.physicalProps.Presentation
-	s.copyOrdering(src)
-}
-
 // getColumn returns the scopeColumn with the given id (either in cols or
 // extraCols).
 func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
@@ -277,24 +271,6 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 	}
 
 	return true
-}
-
-// hasColumn returns true if the given column id is found within this scope.
-func (s *scope) hasColumn(id opt.ColumnID) bool {
-	// We only allow hidden columns in the current scope. Hidden columns
-	// in parent scopes are not accessible.
-	allowHidden := true
-
-	for curr := s; curr != nil; curr, allowHidden = curr.parent, false {
-		for i := range curr.cols {
-			col := &curr.cols[i]
-			if col.id == id && (allowHidden || !col.hidden) {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 // colSet returns a ColSet of all the columns in this scope,
