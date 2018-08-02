@@ -7,7 +7,7 @@ query TT colnames
 SELECT (1, 2, 'hello', NULL, NULL) AS t, (true, NULL, (false, 6.6, false)) AS u
 ----
 t                u
-(1,2,'hello',,)  (true,,(false, 6.6, false))
+(1,2,"hello",,)  (t,,"(f,6.6,f)")
 
 query BBBBBBBBB colnames
 SELECT
@@ -634,7 +634,7 @@ SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5) AS r,
        ((true, NULL, (false, 6.6, false)) AS a1, b2, c3) AS s
 ----
 r                s
-(1,2,'hello',,)  (true,,(false, 6.6, false))
+(1,2,"hello",,)  (t,,"(f,6.6,f)")
 
 # Comparing tuples
 query BBB colnames
@@ -709,7 +709,7 @@ query T colnames
 SELECT ((((((1, '2', 3) AS a, b, c), ((4,'5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c) AS r
 ----
 r
-(((1, '2', 3), (4, '5'), (6)),(7, 8),('9'))
+("(""(1,""""2"""",3)"",""(4,""""5"""")"",""(6)"")","(7,8)","(""9"")")
 
 subtest labeled_tuple_column_access
 
@@ -767,7 +767,7 @@ a  b  c
 query T
 SELECT (((ROW(1,'2',true) AS a,b,c)).*, 456)
 ----
-((1, '2', true),456)
+("(1,""2"",t)",456)
 
 query I colnames
 SELECT ((ROW(1) AS a)).*

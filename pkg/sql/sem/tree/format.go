@@ -82,9 +82,10 @@ const (
 	// using numeric notation (@S123).
 	FmtSymbolicSubqueries
 
-	// If set, strings will be formatted for being contents of ARRAYs.
-	// Used internally in combination with FmtArrays defined below.
-	fmtWithinArray
+	// If set, strings will be formatted using the postgres datum-to-text
+	// conversion. See comments in pgwire_encode.go.
+	// Used internally in combination with FmtPgwireText defined below.
+	fmtPgwireFormat
 
 	// If set, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
@@ -113,9 +114,10 @@ const (
 	// identifiers without wrapping quotes in any case.
 	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
 
-	// FmtArrays instructs the pretty-printer to print strings without
-	// wrapping quotes, if the string contains no special characters.
-	FmtArrays FmtFlags = fmtWithinArray | FmtFlags(lex.EncBareStrings)
+	// FmtPgwireText instructs the pretty-printer to use
+	// a pg-compatible conversion to strings. See comments
+	// in pgwire_encode.go.
+	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression (useful for serialization of
