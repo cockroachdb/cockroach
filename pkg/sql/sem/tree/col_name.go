@@ -186,7 +186,7 @@ func computeColNameInternalSubquery(
 	case *ParenSelect:
 		return computeColNameInternalSubquery(sp, e.Select.Select)
 	case *ValuesClause:
-		if len(e.Tuples) > 0 && len(e.Tuples[0].Exprs) == 1 {
+		if len(e.Rows) > 0 && len(e.Rows[0]) == 1 {
 			return 2, "column1", nil
 		}
 	case *SelectClause:

@@ -1296,13 +1296,13 @@ func (stmt *Update) walkStmt(v Visitor) Statement {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *ValuesClause) walkStmt(v Visitor) Statement {
 	ret := stmt
-	for i, tuple := range stmt.Tuples {
-		t, changed := WalkExpr(v, tuple)
+	for i, tuple := range stmt.Rows {
+		exprs, changed := walkExprSlice(v, tuple)
 		if changed {
 			if ret == stmt {
-				ret = &ValuesClause{append([]*Tuple(nil), stmt.Tuples...)}
+				ret = &ValuesClause{append([]Exprs(nil), stmt.Rows...)}
 			}
-			ret.Tuples[i] = t.(*Tuple)
+			ret.Rows[i] = exprs
 		}
 	}
 	return ret

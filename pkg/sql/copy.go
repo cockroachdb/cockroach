@@ -54,7 +54,7 @@ type copyMachine struct {
 	// row between protocol messages.
 	buf bytes.Buffer
 	// rows accumulates a batch of rows to be eventually inserted.
-	rows []*tree.Tuple
+	rows []tree.Exprs
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
@@ -313,7 +313,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	vc := &tree.ValuesClause{Tuples: c.rows}
+	vc := &tree.ValuesClause{Rows: c.rows}
 	numRows := len(c.rows)
 	// Reuse the same backing array once the Insert is complete.
 	c.rows = c.rows[:0]
@@ -393,12 +393,11 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 
 		exprs[i] = d
 	}
-	tuple := &tree.Tuple{Exprs: exprs}
-	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
+	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(exprs))); err != nil {
 		return err
 	}
 
-	c.rows = append(c.rows, tuple)
+	c.rows = append(c.rows, exprs)
 	return nil
 }
 

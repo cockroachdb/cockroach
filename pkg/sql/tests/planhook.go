@@ -37,8 +37,8 @@ func init() {
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: types.String},
 		}
-		rows := &tree.Tuple{Exprs: tree.Exprs{tree.NewStrVal(show.Name)}}
-		sel := &tree.Select{Select: &tree.ValuesClause{Tuples: []*tree.Tuple{rows}}}
+		rows := tree.Exprs{tree.NewStrVal(show.Name)}
+		sel := &tree.Select{Select: &tree.ValuesClause{Rows: []tree.Exprs{rows}}}
 		subPlan, err := state.Select(ctx, sel, nil)
 
 		return func(_ context.Context, subPlans []sql.PlanNode, resultsCh chan<- tree.Datums) error {

@@ -51,14 +51,14 @@ func (p *planner) Values(
 		specifiedInQuery: true,
 		isConst:          true,
 	}
-	if len(n.Tuples) == 0 {
+	if len(n.Rows) == 0 {
 		return v, nil
 	}
 
-	numCols := len(n.Tuples[0].Exprs)
+	numCols := len(n.Rows[0])
 
-	v.tuples = make([][]tree.TypedExpr, 0, len(n.Tuples))
-	tupleBuf := make([]tree.TypedExpr, len(n.Tuples)*numCols)
+	v.tuples = make([][]tree.TypedExpr, 0, len(n.Rows))
+	tupleBuf := make([]tree.TypedExpr, len(n.Rows)*numCols)
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
@@ -72,8 +72,8 @@ func (p *planner) Values(
 	// Ensure there are no special functions in the clause.
 	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 
-	for num, tuple := range n.Tuples {
-		if a, e := len(tuple.Exprs), numCols; a != e {
+	for num, tuple := range n.Rows {
+		if a, e := len(tuple), numCols; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -81,7 +81,7 @@ func (p *planner) Values(
 		tupleRow := tupleBuf[:numCols:numCols]
 		tupleBuf = tupleBuf[numCols:]
 
-		for i, expr := range tuple.Exprs {
+		for i, expr := range tuple {
 			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
