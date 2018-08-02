@@ -17,6 +17,8 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -115,24 +117,13 @@ func (p *Processor) ConsumeLogicalOp(op enginepb.MVCCLogicalOp) {
 	p.ConsumeLogicalOps([]enginepb.MVCCLogicalOp{op})
 }
 
-// Synchronize synchronizes access to the Processor goroutine, allowing events
-// on its goroutine to establish causality with events on the caller of this
-// method's goroutine.
-//
-// NOTE: only synchronizes the Processors eventC if it is given a capacity of
-// 0 with Config.EventChanCap.
-func (p *Processor) Synchronize() {
-	// Len requires a synchronization point.
-	_ = p.Len()
-}
-
 func newTestProcessor() (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	p := NewProcessor(Config{
 		AmbientContext:       log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Span:                 roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
-		EventChanCap:         0, // easier testing
+		EventChanCap:         16,
 		PushIntentsInterval:  0, // disable
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
@@ -160,7 +151,7 @@ func TestProcessor(t *testing.T) {
 			abortIntentOp(txn2),
 		}
 		p.ConsumeLogicalOps(ops)
-		p.Synchronize()
+		p.syncEventC()
 		require.Equal(t, 0, p.rts.intentQ.Len())
 	})
 	require.NotPanics(t, func() { p.ForwardClosedTS(hlc.Timestamp{}) })
@@ -179,7 +170,7 @@ func TestProcessor(t *testing.T) {
 
 	// Test checkpoint with one registration.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
@@ -192,7 +183,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOp(
 		writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedValue(
 			roachpb.Key("c"),
@@ -208,18 +199,18 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOp(
 		writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 
 	// Test intent that is aborted with one registration.
 	txn1 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Abort.
 	p.ConsumeLogicalOp(abortIntentOp(txn1))
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	require.Equal(t, 0, p.rts.intentQ.Len())
 
@@ -227,11 +218,11 @@ func TestProcessor(t *testing.T) {
 	txn2 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOp(writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Forward closed timestamp. Should now be stuck on intent.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
@@ -241,7 +232,7 @@ func TestProcessor(t *testing.T) {
 	)
 	// Update the intent. Should forward resolved timestamp.
 	p.ConsumeLogicalOp(updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
@@ -253,7 +244,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOp(
 		commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13}, []byte("ival")),
 	)
-	p.Synchronize()
+	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{
 			rangeFeedValue(
@@ -284,7 +275,7 @@ func TestProcessor(t *testing.T) {
 
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
-	p.Synchronize()
+	p.syncEventC()
 	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
 		hlc.Timestamp{WallTime: 20},
@@ -296,7 +287,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOp(
 		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 22}, []byte("val2")),
 	)
-	p.Synchronize()
+	p.syncEventC()
 	valEvent := []*roachpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("k"),
 		roachpb.Value{
@@ -311,7 +302,7 @@ func TestProcessor(t *testing.T) {
 	p.ConsumeLogicalOp(
 		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")),
 	)
-	p.Synchronize()
+	p.syncEventC()
 	valEvent2 := []*roachpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("v"),
 		roachpb.Value{
@@ -349,4 +340,53 @@ func TestNilProcessor(t *testing.T) {
 	// to call on a nil Processor.
 	require.Panics(t, func() { p.Start(stop.NewStopper()) })
 	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil) })
+}
+
+// TestProcessorConcurrentStop tests that all methods in Processor's API
+// correctly handle the processor concurrently shutting down. If they did
+// not then it would be possible for them to deadlock.
+func TestProcessorConcurrentStop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const trials = 10
+	for i := 0; i < trials; i++ {
+		p, stopper := newTestProcessor()
+
+		var wg sync.WaitGroup
+		wg.Add(6)
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			s := newTestStream()
+			errC := make(chan<- *roachpb.Error, 1)
+			p.Register(p.Span, hlc.Timestamp{}, s, errC)
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			p.Len()
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			p.ConsumeLogicalOp(
+				writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")),
+			)
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			p.ForwardClosedTS(hlc.Timestamp{WallTime: 2})
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			p.Stop()
+		}()
+		go func() {
+			defer wg.Done()
+			runtime.Gosched()
+			stopper.Stop(context.Background())
+		}()
+		wg.Wait()
+	}
 }
