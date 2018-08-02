@@ -222,12 +222,20 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	}
 }
 
-// Register registers the stream over the specified span of keys. The channel
-// will be provided an error when the registration closes. NOT safe to call on
-// nil Processor.
+// Register registers the stream over the specified span of keys. The
+// registration will not observe any events that were consumed before this
+// method was called. It is undefined whether the registration will observe
+// events that are consumed concurrently with this call. The channel will be
+// provided an error when the registration closes. NOT safe to call on nil
+// Processor.
 func (p *Processor) Register(
 	span roachpb.RSpan, startTS hlc.Timestamp, stream Stream, errC chan<- *roachpb.Error,
 ) {
+	// Synchronize the event channel so that this registration doesn't see any
+	// events that were consumed before it. Instead, it should see these events
+	// during its catch up scan.
+	p.syncEventC()
+
 	r := registration{
 		span:    span.AsRawSpanWithNoLocals(),
 		startTS: startTS,

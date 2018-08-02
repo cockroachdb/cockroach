@@ -383,3 +383,53 @@ func TestProcessorConcurrentStop(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+// TestProcessorRegistrationObservesOnlyNewEvents tests that a registration
+// observes only operations that are consumed after it has registered.
+func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	p, stopper := newTestProcessor()
+	defer stopper.Stop(context.Background())
+
+	firstC := make(chan int64)
+	regDone := make(chan struct{})
+	regs := make(map[*testStream]int64)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := int64(1); i < 10000; i++ {
+			// Add a new registration every 100 ops.
+			if i%100 == 0 {
+				firstC <- i
+				<-regDone
+			}
+
+			// Consume the logical op. Encode the index in the timestamp.
+			p.ConsumeLogicalOps(writeValueOp(hlc.Timestamp{WallTime: i}))
+		}
+		close(firstC)
+	}()
+	go func() {
+		defer wg.Done()
+		for firstIdx := range firstC {
+			// For each index, create a new registration. The first
+			// operation is should see is firstIdx.
+			s := newTestStream()
+			regs[s] = firstIdx
+			p.Register(p.Span, hlc.Timestamp{}, s, make(chan *roachpb.Error, 1))
+			regDone <- struct{}{}
+		}
+	}()
+	wg.Wait()
+
+	// Verify that no registrations were given operations
+	// from before they registered.
+	for s, expFirstIdx := range regs {
+		events := s.Events()
+		firstEvent := events[0].GetValue().(*roachpb.RangeFeedValue)
+		firstIdx := firstEvent.Value.Timestamp.WallTime
+		require.Equal(t, expFirstIdx, firstIdx)
+	}
+}
