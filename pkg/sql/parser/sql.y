@@ -384,8 +384,8 @@ func (u *sqlSymUnion) rangePartitions() []tree.RangePartition {
 func (u *sqlSymUnion) tuples() []*tree.Tuple {
     return u.val.([]*tree.Tuple)
 }
-func (u *sqlSymUnion) tuple() tree.Tuple {
-    return u.val.(tree.Tuple)
+func (u *sqlSymUnion) tuple() *tree.Tuple {
+    return u.val.(*tree.Tuple)
 }
 func (u *sqlSymUnion) windowDef() *tree.WindowDef {
     return u.val.(*tree.WindowDef)
@@ -863,7 +863,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
-%type <tree.Tuple> row
+%type <*tree.Tuple> row
 %type <tree.Expr> case_expr case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
@@ -6900,8 +6900,7 @@ d_expr:
   }
 | row
   {
-    t := $1.tuple()
-    $$.val = &t
+    $$.val = $1.tuple()
   }
 | '(' row AS name_list ')'
   {
@@ -6911,7 +6910,7 @@ d_expr:
     for i, l := range labels {
       t.Labels[i] = string(l)
     }
-    $$.val = &t
+    $$.val = t
   }
 
 // TODO(pmattis): Support this notation?
@@ -7350,11 +7349,11 @@ frame_bound:
 row:
   ROW '(' opt_expr_list ')'
   {
-    $$.val = tree.Tuple{Exprs: $3.exprs(), Row: true}
+    $$.val = &tree.Tuple{Exprs: $3.exprs(), Row: true}
   }
 | '(' expr_list ',' a_expr ')'
   {
-    $$.val = tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
+    $$.val = &tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
 
 sub_type:
