@@ -119,7 +119,7 @@ func (dsp *DistSQLPlanner) Exec(ctx context.Context, localPlanner interface{}, s
 		p.ExtendedEvalContext().Tracing,
 	)
 	dsp.PlanAndRun(
-		ctx, p.Txn(), p.curPlan.plan, recv, p.ExtendedEvalContext(),
+		ctx, p.Txn(), p, p.curPlan.plan, recv, p.ExtendedEvalContext(),
 	)
 	return nil
 }

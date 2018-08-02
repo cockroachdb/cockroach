@@ -809,8 +809,12 @@ func initTableReaderSpec(
 		return s, distsqlrun.PostProcessSpec{}, nil
 	}
 
+	filter, err := distsqlplan.MakeExpression(n.filter, evalCtx, indexVarMap)
+	if err != nil {
+		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+	}
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, indexVarMap),
+		Filter: filter,
 	}
 
 	if n.hardLimit != 0 {
@@ -1085,7 +1089,10 @@ func (dsp *DistSQLPlanner) selectRenders(
 	if err != nil {
 		return err
 	}
-	p.AddRendering(renders, evalCtx, p.planToStreamColMap, types)
+	err = p.AddRendering(renders, evalCtx, p.planToStreamColMap, types)
+	if err != nil {
+		return err
+	}
 	p.planToStreamColMap = planToStreamColMap
 	return nil
 }
@@ -1552,9 +1559,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 					// aggregations if they are equivalent
 					// across and within stages.
 					mappedIdx := int(finalIdxMap[finalIdx])
-					renderExprs[i] = distsqlplan.MakeExpression(
+					var err error
+					renderExprs[i], err = distsqlplan.MakeExpression(
 						h.IndexedVar(mappedIdx), planCtx.EvalContext(),
 						nil /* indexVarMap */)
+					if err != nil {
+						return err
+					}
 				} else {
 					// We have multiple final aggregation
 					// values that we need to be mapped to
@@ -1570,9 +1581,12 @@ func (dsp *DistSQLPlanner) addAggregators(
 					if err != nil {
 						return err
 					}
-					renderExprs[i] = distsqlplan.MakeExpression(
+					renderExprs[i], err = distsqlplan.MakeExpression(
 						expr, planCtx.EvalContext(),
 						nil /* indexVarMap */)
+					if err != nil {
+						return err
+					}
 				}
 				finalIdx += len(info.FinalStage)
 			}
@@ -1694,9 +1708,13 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		IndexIdx: 0,
 	}
 
+	filter, err := distsqlplan.MakeExpression(
+		n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */)
+	if err != nil {
+		return physicalPlan{}, err
+	}
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(
-			n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */),
+		Filter:     filter,
 		Projection: true,
 	}
 
@@ -1807,9 +1825,13 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		for i := range n.table.cols {
 			indexVarMap[numInputNodeCols+i] = int(post.OutputColumns[numLeftCols+i])
 		}
-		joinReaderSpec.OnExpr = distsqlplan.MakeExpression(
+		var err error
+		joinReaderSpec.OnExpr, err = distsqlplan.MakeExpression(
 			n.onCond, planCtx.EvalContext(), indexVarMap,
 		)
+		if err != nil {
+			return physicalPlan{}, err
+		}
 	}
 
 	// Instantiate one join reader for every stream.
@@ -1993,7 +2015,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	}
 
 	post, joinToStreamColMap := joinOutColumns(n, leftPlan.planToStreamColMap, rightMap)
-	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan.planToStreamColMap, rightMap)
+	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, leftPlan.planToStreamColMap, rightMap)
+	if err != nil {
+		return physicalPlan{}, err
+	}
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
@@ -2028,7 +2053,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		// it will be applied before joining to the left side.
 		var indexFilterExpr distsqlrun.Expression
 		if lookupJoinScan.origFilter != nil {
-			indexFilterExpr = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx.EvalContext(), nil)
+			var err error
+			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx.EvalContext(), nil)
+			if err != nil {
+				return physicalPlan{}, err
+			}
 		}
 
 		indexIdx, err := getIndexIdx(lookupJoinScan)
@@ -2208,7 +2237,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		plan.AddFilter(n.filter, planCtx.EvalContext(), plan.planToStreamColMap)
+		if err := plan.AddFilter(n.filter, planCtx.EvalContext(), plan.planToStreamColMap); err != nil {
+			return physicalPlan{}, err
+		}
 
 	case *limitNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
@@ -2427,7 +2458,11 @@ func createProjectSetSpec(
 		NumColsPerGen:    make([]uint32, len(n.exprs)),
 	}
 	for i, expr := range n.exprs {
-		spec.Exprs[i] = distsqlplan.MakeExpression(expr, &planCtx.extendedEvalCtx.EvalContext, indexVarMap)
+		var err error
+		spec.Exprs[i], err = distsqlplan.MakeExpression(expr, &planCtx.extendedEvalCtx.EvalContext, indexVarMap)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for i, col := range n.columns[n.numColsInSource:] {
 		columnType, err := sqlbase.DatumTypeToColumnType(col.Typ)
