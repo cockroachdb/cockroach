@@ -55,7 +55,7 @@ func (p *planner) Values(
 		return v, nil
 	}
 
-	numCols := len(n.Tuples[0].Exprs)
+	numCols := len(n.Tuples[0])
 
 	v.tuples = make([][]tree.TypedExpr, 0, len(n.Tuples))
 	tupleBuf := make([]tree.TypedExpr, len(n.Tuples)*numCols)
@@ -73,7 +73,7 @@ func (p *planner) Values(
 	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 
 	for num, tuple := range n.Tuples {
-		if a, e := len(tuple.Exprs), numCols; a != e {
+		if a, e := len(tuple), numCols; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -81,7 +81,7 @@ func (p *planner) Values(
 		tupleRow := tupleBuf[:numCols:numCols]
 		tupleBuf = tupleBuf[numCols:]
 
-		for i, expr := range tuple.Exprs {
+		for i, expr := range tuple {
 			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]

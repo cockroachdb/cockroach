@@ -25,16 +25,18 @@ package tree
 
 // ValuesClause represents a VALUES clause.
 type ValuesClause struct {
-	Tuples []*Tuple
+	Tuples []Exprs
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ValuesClause) Format(ctx *FmtCtx) {
 	ctx.WriteString("VALUES ")
-	for i, n := range node.Tuples {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNode(n)
+	comma := ""
+	for i := range node.Tuples {
+		ctx.WriteString(comma)
+		ctx.WriteByte('(')
+		ctx.FormatNode(&node.Tuples[i])
+		ctx.WriteByte(')')
+		comma = ", "
 	}
 }

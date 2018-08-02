@@ -83,11 +83,11 @@ func TestValues(t *testing.T) {
 		return []tree.Datums{datums}
 	}
 
-	makeValues := func(tuples ...*tree.Tuple) *tree.ValuesClause {
+	makeValues := func(tuples ...tree.Exprs) *tree.ValuesClause {
 		return &tree.ValuesClause{Tuples: tuples}
 	}
-	makeTuple := func(exprs ...tree.Expr) *tree.Tuple {
-		return &tree.Tuple{Exprs: exprs}
+	makeTuple := func(exprs ...tree.Expr) tree.Exprs {
+		return tree.Exprs(exprs)
 	}
 
 	testCases := []struct {

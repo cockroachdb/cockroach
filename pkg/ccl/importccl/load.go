@@ -291,8 +291,8 @@ func insertStmtToKVs(
 		Cols:    tableDesc.Columns,
 	}
 	for _, tuple := range values.Tuples {
-		row := make([]tree.Datum, len(tuple.Exprs))
-		for i, expr := range tuple.Exprs {
+		row := make([]tree.Datum, len(tuple))
+		for i, expr := range tuple {
 			if expr == tree.DNull {
 				row[i] = tree.DNull
 				continue
