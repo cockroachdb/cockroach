@@ -140,7 +140,8 @@ func (wfr WindowFrameRun) IsDefaultFrame() bool {
 		return true
 	}
 	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
-		return wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow
+		return !wfr.NonDefaultFrameExclusion() &&
+			(wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow)
 	}
 	return false
 }
@@ -240,6 +241,15 @@ func (wfr WindowFrameRun) FrameSize() int {
 	if wfr.Frame == nil {
 		return wfr.DefaultFrameSize()
 	}
+	if wfr.NonDefaultFrameExclusion() {
+		size := 0
+		for i := wfr.FrameStartIdx(); i < wfr.FrameEndIdx(); i++ {
+			if !wfr.IsRowExcluded(i) {
+				size++
+			}
+		}
+		return size
+	}
 	size := wfr.FrameEndIdx() - wfr.FrameStartIdx()
 	if size <= 0 {
 		size = 0
@@ -288,6 +298,33 @@ func (wfr WindowFrameRun) ArgsWithRowOffset(offset int) Datums {
 // ArgsByRowIdx returns the argument set of the row at idx.
 func (wfr WindowFrameRun) ArgsByRowIdx(idx int) Datums {
 	return wfr.Rows.GetRow(idx).GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+}
+
+// NonDefaultFrameExclusion returns true if optional frame exclusion is present
+// and is not ExcludeNoOthers (which is equivalent to omitting the clause).
+func (wfr WindowFrameRun) NonDefaultFrameExclusion() bool {
+	return wfr.Frame != nil && wfr.Frame.Exclusion != nil && *wfr.Frame.Exclusion != ExcludeNoOthers
+}
+
+// IsRowExcluded returns whether the row at index idx should be excluded from
+// the window frame of the current row.
+func (wfr WindowFrameRun) IsRowExcluded(idx int) bool {
+	if wfr.Frame == nil || wfr.Frame.Exclusion == nil {
+		// By default, no rows are excluded.
+		return false
+	}
+	switch *wfr.Frame.Exclusion {
+	case ExcludeCurrentRow:
+		return idx == wfr.RowIdx
+	case ExcludeGroup:
+		return wfr.PeerGroupNumByRowIdx[idx] == wfr.PeerGroupNumByRowIdx[wfr.RowIdx]
+	case ExcludeTies:
+		return wfr.PeerGroupNumByRowIdx[idx] == wfr.PeerGroupNumByRowIdx[wfr.RowIdx] && idx != wfr.RowIdx
+	case ExcludeNoOthers:
+		return false
+	default:
+		panic("unexpected WindowFrameExclusion")
+	}
 }
 
 // WindowFunc performs a computation on each row using data from a provided WindowFrameRun.

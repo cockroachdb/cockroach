@@ -684,6 +684,12 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
 	}
+	if wf.Exclusion != nil {
+		d = p.rlTable(
+			p.row("", d),
+			p.row("EXCLUDE", p.Doc(wf.Exclusion)),
+		)
+	}
 	return p.row(kw, d)
 }
 
@@ -701,6 +707,21 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 		return pretty.Text("UNBOUNDED FOLLOWING")
 	default:
 		panic(fmt.Sprintf("unexpected type %d", node.BoundType))
+	}
+}
+
+func (node *WindowFrameExclusion) doc(p *PrettyCfg) pretty.Doc {
+	switch *node {
+	case ExcludeCurrentRow:
+		return pretty.Text("CURRENT ROW")
+	case ExcludeGroup:
+		return pretty.Text("GROUP")
+	case ExcludeTies:
+		return pretty.Text("TIES")
+	case ExcludeNoOthers:
+		return pretty.Text("NO OTHERS")
+	default:
+		panic(fmt.Sprintf("unexpected type %d", *node))
 	}
 }
 

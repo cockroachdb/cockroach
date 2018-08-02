@@ -180,8 +180,30 @@ type slidingWindowFunc struct {
 
 // Compute implements WindowFunc interface.
 func (w *slidingWindowFunc) Compute(
-	_ context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
+	_ context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	if wfr.NonDefaultFrameExclusion() {
+		// We cannot use sliding window approach because we have frame exclusion
+		// clause - some row or rows will be in and out of the frame which breaks
+		// the necessary assumption, so we fallback to naive quadratic approach.
+		var res tree.Datum
+		for idx := wfr.FrameStartIdx(); idx < wfr.FrameEndIdx(); idx++ {
+			if !wfr.IsRowExcluded(idx) {
+				if res == nil {
+					res = wfr.ArgsByRowIdx(idx)[0]
+				} else {
+					if w.sw.cmp(evalCtx, wfr.ArgsByRowIdx(idx)[0], res) > 0 {
+						res = wfr.ArgsByRowIdx(idx)[0]
+					}
+				}
+			}
+		}
+		if res == nil {
+			// Spec: the frame is empty, so we return NULL.
+			return tree.DNull, nil
+		}
+		return res, nil
+	}
 	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
 
 	// We need to discard all values that are no longer in the frame.
@@ -257,6 +279,49 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 func (w *slidingWindowSumFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	if wfr.NonDefaultFrameExclusion() {
+		// We cannot use sliding window approach because we have frame exclusion
+		// clause - some row or rows will be in and out of the frame which breaks
+		// the necessary assumption, so we fallback to naive quadratic approach.
+		var sum tree.Datum
+		for idx := wfr.FrameStartIdx(); idx < wfr.FrameEndIdx(); idx++ {
+			if !wfr.IsRowExcluded(idx) {
+				value := wfr.ArgsByRowIdx(idx)[0]
+				switch v := value.(type) {
+				case *tree.DInt:
+					if sum == nil {
+						sum = tree.NewDInt(0)
+					}
+					sum = tree.NewDInt(*sum.(*tree.DInt) + *v)
+				case *tree.DDecimal:
+					if sum == nil {
+						sum = &tree.DDecimal{}
+					}
+					_, err := tree.ExactCtx.Add(&sum.(*tree.DDecimal).Decimal, &v.Decimal, &sum.(*tree.DDecimal).Decimal)
+					if err != nil {
+						return tree.DNull, err
+					}
+				case *tree.DFloat:
+					if sum == nil {
+						sum = tree.NewDFloat(0)
+					}
+					sum = tree.NewDFloat(*sum.(*tree.DFloat) + *v)
+				case *tree.DInterval:
+					if sum == nil {
+						sum = &tree.DInterval{}
+					}
+					sum.(*tree.DInterval).Duration = sum.(*tree.DInterval).Duration.Add(v.Duration)
+				default:
+					return tree.DNull, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected value %v", v)
+				}
+			}
+		}
+		if sum == nil {
+			// Spec: the frame is empty, so we return NULL.
+			return tree.DNull, nil
+		}
+		return sum, nil
+	}
 	start, end := wfr.FrameStartIdx(), wfr.FrameEndIdx()
 
 	// We need to discard all values that are no longer in the frame.

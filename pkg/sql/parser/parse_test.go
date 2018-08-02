@@ -815,6 +815,11 @@ func TestParse(t *testing.T) {
 		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t`},
 		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c GROUPS UNBOUNDED PRECEDING) FROM t`},
 
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE CURRENT ROW) FROM t`},
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t`},
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t`},
+		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE NO OTHERS) FROM t`},
+
 		{`SELECT avg(1) FILTER (WHERE a > b)`},
 		{`SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)`},
 
@@ -2078,30 +2083,30 @@ HINT: See: https://github.com/cockroachdb/cockroach/issues/23620`,
 		},
 		{
 			`SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t`,
-			`RANGE PRECEDING is only supported with UNBOUNDED at or near "preceding"
+			`RANGE PRECEDING is only supported with UNBOUNDED at or near ")"
 SELECT avg(1) OVER (RANGE 1 PRECEDING) FROM t
-                            ^
+                                     ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
-			`RANGE FOLLOWING is only supported with UNBOUNDED at or near "following"
+			`RANGE FOLLOWING is only supported with UNBOUNDED at or near ")"
 SELECT avg(1) OVER (RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
-                                                            ^
+                                                                     ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t`,
-			`RANGE PRECEDING is only supported with UNBOUNDED at or near "preceding"
+			`RANGE PRECEDING is only supported with UNBOUNDED at or near ")"
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
-                                                            ^
+                                                                     ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t`,
-			`RANGE FOLLOWING is only supported with UNBOUNDED at or near "following"
+			`RANGE FOLLOWING is only supported with UNBOUNDED at or near ")"
 SELECT avg(1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM t
-                                                            ^
+                                                                     ^
 `,
 		},
 		{
