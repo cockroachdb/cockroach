@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -337,21 +338,8 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate frame of the window definition if present.
 		if windowDef.Frame != nil {
-			bounds := windowDef.Frame.Bounds
-			startBound, endBound := bounds.StartBound, bounds.EndBound
-			if startBound.OffsetExpr != nil {
-				typedStartOffsetExpr, err := tree.TypeCheckAndRequire(startBound.OffsetExpr, &p.semaCtx, types.Int, "window frame start")
-				if err != nil {
-					return err
-				}
-				startBound.OffsetExpr = typedStartOffsetExpr
-			}
-			if endBound != nil && endBound.OffsetExpr != nil {
-				typedEndOffsetExpr, err := tree.TypeCheckAndRequire(endBound.OffsetExpr, &p.semaCtx, types.Int, "window frame end")
-				if err != nil {
-					return err
-				}
-				endBound.OffsetExpr = typedEndOffsetExpr
+			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
+				return err
 			}
 		}
 
@@ -665,11 +653,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				if err != nil {
 					return err
 				}
-				startOffset := int(tree.MustBeDInt(dStartOffset))
-				if startOffset < 0 {
+				if dStartOffset == tree.DNull {
+					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
+				}
+				if isNegative(evalCtx, dStartOffset) {
 					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
 				}
-				frameRun.StartBoundOffset = startOffset
+				frameRun.StartBoundOffset = dStartOffset
 			}
 			if bounds.EndBound != nil && bounds.EndBound.OffsetExpr != nil {
 				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
@@ -677,11 +667,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				if err != nil {
 					return err
 				}
-				endOffset := int(tree.MustBeDInt(dEndOffset))
-				if endOffset < 0 {
+				if dEndOffset == tree.DNull {
+					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
+				}
+				if isNegative(evalCtx, dEndOffset) {
 					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
 				}
-				frameRun.EndBoundOffset = endOffset
+				frameRun.EndBoundOffset = dEndOffset
 			}
 		}
 
@@ -833,6 +825,22 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		}
 	}
 	return nil
+}
+
+// isNegative returns whether offset is negative.
+func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
+	switch o := offset.(type) {
+	case *tree.DInt:
+		return *o < 0
+	case *tree.DDecimal:
+		return o.Negative
+	case *tree.DFloat:
+		return *o < 0
+	case *tree.DInterval:
+		return o.Compare(evalCtx, &tree.DInterval{Duration: duration.Duration{}}) < 0
+	default:
+		panic("unexpected offset type")
+	}
 }
 
 // populateValues populates n.run.values with final datum values after computing
