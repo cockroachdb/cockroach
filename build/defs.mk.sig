@@ -1,0 +1,1 @@
+/Users/vivek/go/src/github.com/cockroachdb/cockroach/bin:/Users/vivek/google-cloud-sdk/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/X11/bin:/usr/local/go/bin:/Users/vivek/go/src/github.com/cockroachdb/cockroach:go:/Users/vivek/go:cc:c++:x86_64-apple-darwin16.7.0:development:
