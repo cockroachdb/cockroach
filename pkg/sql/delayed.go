@@ -52,3 +52,13 @@ func (d *delayedNode) enableAutoCommit() {
 		ac.enableAutoCommit()
 	}
 }
+
+// startExec constructs the wrapped planNode now that execution is underway.
+func (d *delayedNode) startExec(params runParams) error {
+	if d.plan != nil {
+		panic("wrapped plan should not yet exist")
+	}
+	var err error
+	d.plan, err = d.constructor(params.ctx, params.p)
+	return err
+}

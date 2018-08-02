@@ -401,7 +401,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	ev := o.Optimize(root, props)
 
-	factory := makeExecFactory(ctx, p)
+	factory := makeExecFactory(p)
 	plan, err := execbuilder.New(&factory, ev).Build()
 	if err != nil {
 		return err
