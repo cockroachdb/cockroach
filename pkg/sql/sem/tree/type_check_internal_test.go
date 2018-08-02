@@ -499,7 +499,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 	}
 	for i, d := range testData {
 		args := d.initArgs
-		stmt := &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: d.stmtExprs}}}
+		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
 		if err := args.ProcessPlaceholderAnnotations(stmt); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
 		} else if !reflect.DeepEqual(args, d.desired) {
@@ -569,7 +569,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		args := d.initArgs
-		stmt := &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: d.stmtExprs}}}
+		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
 		if err := args.ProcessPlaceholderAnnotations(stmt); !testutils.IsError(err, d.expected) {
 			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
 		}

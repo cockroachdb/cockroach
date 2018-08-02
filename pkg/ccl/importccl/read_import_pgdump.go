@@ -459,12 +459,12 @@ func (m *pgDumpReader) readFile(
 			}
 			inserts++
 			startingCount := count
-			for _, tuple := range values.Tuples {
+			for _, tuple := range values.Rows {
 				count++
-				if expected, got := len(conv.visibleCols), len(tuple.Exprs); expected != got {
+				if expected, got := len(conv.visibleCols), len(tuple); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
 				}
-				for i, expr := range tuple.Exprs {
+				for i, expr := range tuple {
 					typed, err := expr.TypeCheck(semaCtx, conv.visibleColTypes[i])
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
