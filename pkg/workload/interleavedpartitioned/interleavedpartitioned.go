@@ -411,6 +411,12 @@ func (w *interleavedPartitioned) Ops(
 		if opRand < w.insertPercent {
 			log.Info(context.TODO(), "inserting")
 			start := timeutil.Now()
+
+			tx, err := db.Begin()
+			if err != nil {
+				return err
+			}
+
 			insertStatement, err := db.Prepare(insertQuery)
 			if err != nil {
 				return err
@@ -425,7 +431,7 @@ func (w *interleavedPartitioned) Ops(
 				randString(rng, 50),  // platform
 				randString(rng, 100), // query_id
 			}
-			_, err = insertStatement.ExecContext(ctx, args...)
+			_, err = tx.StmtContext(ctx, insertStatement).Exec(args...)
 			if err != nil {
 				return err
 			}
@@ -439,7 +445,7 @@ func (w *interleavedPartitioned) Ops(
 					randString(rng, 50),
 					randString(rng, 50),
 				}
-				_, err = insertCustomerStatement.ExecContext(ctx, args...)
+				_, err = tx.StmtContext(ctx, insertCustomerStatement).Exec(args...)
 				if err != nil {
 					return err
 				}
@@ -459,7 +465,7 @@ func (w *interleavedPartitioned) Ops(
 					randString(rng, 50), // model
 					randString(rng, 50), // serialno
 				}
-				_, err = insertDeviceStatement.ExecContext(ctx, args...)
+				_, err = tx.StmtContext(ctx, insertDeviceStatement).Exec(args...)
 				if err != nil {
 					return err
 				}
@@ -474,12 +480,12 @@ func (w *interleavedPartitioned) Ops(
 					randString(rng, 50),
 					randString(rng, 50),
 				}
-				_, err = insertVariantStatement.ExecContext(ctx, args...)
+				_, err = tx.StmtContext(ctx, insertVariantStatement).Exec(args...)
 				if err != nil {
 					return err
 				}
 			}
-			for i := 0; i < w.customersPerSession; i++ {
+			for i := 0; i < w.parametersPerSession; i++ {
 				insertParameterStatement, err := db.Prepare(insertQueryParameters)
 				if err != nil {
 					return err
@@ -489,12 +495,12 @@ func (w *interleavedPartitioned) Ops(
 					randString(rng, 50),
 					randString(rng, 50),
 				}
-				_, err = insertParameterStatement.ExecContext(ctx, args...)
+				_, err = tx.StmtContext(ctx, insertParameterStatement).Exec(args...)
 				if err != nil {
 					return err
 				}
 			}
-			for i := 0; i < w.customersPerSession; i++ {
+			for i := 0; i < w.queriesPerSession; i++ {
 				insertQueryStatement, err := db.Prepare(insertQueryQuery)
 				if err != nil {
 					return err
@@ -503,10 +509,13 @@ func (w *interleavedPartitioned) Ops(
 					sessionID,
 					randString(rng, 50),
 				}
-				_, err = insertQueryStatement.ExecContext(ctx, args...)
+				_, err = tx.StmtContext(ctx, insertQueryStatement).Exec(args...)
 				if err != nil {
 					return err
 				}
+			}
+			if err := tx.Commit(); err != nil {
+				return nil
 			}
 			hists.Get(`insert`).Record(timeutil.Since(start))
 			return nil
