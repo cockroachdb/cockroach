@@ -49,6 +49,8 @@ class AxisDomain {
   label: string = "";
   // tickFormat returns a function used to format the tick values for display.
   tickFormat: (n: number) => string = _.identity;
+  // guideFormat returns a function used to format the guide values for display.
+  guideFormat?: (n: number) => string = _.identity;
 
   // constructs a new AxisDomain with the given minimum and maximum value, with
   // ticks placed at intervals of the given increment in between the min and

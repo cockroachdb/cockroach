@@ -17,7 +17,14 @@ import { MetricsDataComponentProps } from "src/views/shared/components/metricQue
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
 
-type TSDatapoint = protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties;
+type TSDatapoint = protos.cockroach.ts.tspb.ITimeSeriesDatapoint;
+
+export interface ForwardProps {
+  hoverOn?: typeof hoverOn;
+  hoverOff?: typeof hoverOff;
+  hoverState?: HoverState;
+  chartKey?: string;
+}
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -25,10 +32,6 @@ interface LineGraphProps extends MetricsDataComponentProps {
   legend?: boolean;
   xAxis?: boolean;
   tooltip?: React.ReactNode;
-  hoverOn?: typeof hoverOn;
-  hoverOff?: typeof hoverOff;
-  hoverState?: HoverState;
-  chartKey?: string;
 }
 
 // Find which data point is closest to a specific time.
@@ -66,7 +69,7 @@ function bisectSeries(datapoints: TSDatapoint[], time: number) {
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, {}> {
+export class LineGraph extends React.Component<LineGraphProps & ForwardProps, {}> {
   // The SVG Element in the DOM used to render the graph.
   graphEl: SVGElement;
 

@@ -20,6 +20,7 @@ import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
 import extend from "src/util/nextState";
+import { ForwardProps } from "src/views/cluster/components/linegraph";
 import DetailsTooltip from "src/views/cluster/containers/detailsTooltip";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
@@ -183,7 +184,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       tooltipSelection,
     };
 
-    const forwardParams = {
+    const forwardParams: ForwardProps = {
       hoverOn: this.props.hoverOn,
       hoverOff: this.props.hoverOff,
       hoverState: this.props.hoverState,
