@@ -16,20 +16,50 @@ package cli
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 )
+
+// reConnRefused is a regular expression that can be applied
+// to the details of a GRPC connection failure.
+//
+// On *nix, a connect error looks like:
+//    dial tcp <addr>: <syscall>: connection refused
+// On Windows, it looks like:
+//    dial tcp <addr>: <syscall>: No connection could be made because the target machine actively refused it.
+// So we look for the common bit.
+var reGRPCConnRefused = regexp.MustCompile(`Error while dialing dial tcp .*: connection.* refused`)
+
+// reGRPCNoTLS is a regular expression that can be applied to the
+// details of a GRPC auth failure when the server is insecure.
+var reGRPCNoTLS = regexp.MustCompile(`authentication handshake failed: tls: first record does not look like a TLS handshake`)
+
+// reGRPCAuthFailure is a regular expression that can be applied to
+// the details of a GRPC auth failure when the SSL handshake fails.
+var reGRPCAuthFailure = regexp.MustCompile(`authentication handshake failed: x509`)
+
+// reGRPCConnFailed is a regular expression that can be applied
+// to the details of a GRPC connection failure when, perhaps,
+// the server was expecting a TLS handshake but the client didn't
+// provide one (i.e. the client was started with --insecure).
+// Note however in that case it's not certain what the problem is,
+// as the same error could be raised for other reasons.
+var reGRPCConnFailed = regexp.MustCompile(`desc = transport is closing`)
 
 // MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
 // message to the user.
@@ -43,34 +73,115 @@ func MaybeDecorateGRPCError(
 			return nil
 		}
 
-		connDropped := func() error {
-			const format = `unable to connect or connection lost.
+		extraInsecureHint := func() string {
+			extra := ""
+			if baseCfg.Insecure {
+				extra = "\nIf the node is configured to require secure connections,\n" +
+					"remove --insecure and configure secure credentials instead.\n"
+			}
+			return extra
+		}
 
-Please check the address and credentials such as certificates (if attempting to
-communicate with a secure cluster).
-
-%s`
+		connFailed := func() error {
+			const format = "cannot dial server.\n" +
+				"Is the server running?\n" +
+				"If the server is running, check --host client-side and --advertise server-side.\n\n%v"
 			return errors.Errorf(format, err)
 		}
-		opTimeout := func() error {
-			const format = `operation timed out.
 
-%s`
-			return errors.Errorf(format, err)
+		connSecurityHint := func() error {
+			const format = "SSL authentication error while connecting.\n%s\n%v"
+			return errors.Errorf(format, extraInsecureHint(), err)
+		}
+
+		connInsecureHint := func() error {
+			return errors.Errorf("cannot establish secure connection to insecure server.\n"+
+				"Maybe use --insecure?\n\n%v", err)
+		}
+
+		connRefused := func() error {
+			extra := extraInsecureHint()
+			return errors.Errorf("server closed the connection.\n"+
+				"Is this a CockroachDB node?\n"+extra+"\n%v", err)
 		}
 
 		// Is this an "unable to connect" type of error?
 		unwrappedErr := errors.Cause(err)
-		switch unwrappedErr.(type) {
-		case *roachpb.SendError:
-			return connDropped()
-		case *net.OpError:
-			return connDropped()
-		case *netutil.InitialHeartbeatFailedError:
-			return connDropped()
+
+		if unwrappedErr == pq.ErrSSLNotSupported {
+			// SQL command failed after establishing a TCP connection
+			// successfully, but discovering that it cannot use TLS while it
+			// expected the server supports TLS.
+			return connInsecureHint()
 		}
 
-		// No, it's not. Is it a plain context cancellation (i.e. timeout)?
+		switch wErr := unwrappedErr.(type) {
+		case *security.Error:
+			return errors.Errorf("cannot load certificates.\n"+
+				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v",
+				unwrappedErr)
+
+		case *x509.UnknownAuthorityError:
+			// A SQL connection was attempted with an incorrect CA.
+			return connSecurityHint()
+
+		case *initialSQLConnectionError:
+			// SQL handshake failed after establishing a TCP connection
+			// successfully, something else than CockroachDB responded, was
+			// confused and closed the door on us.
+			return connRefused()
+
+		case *pq.Error:
+			// SQL commands will fail with a pq error but only after
+			// establishing a TCP connection successfully. So if we got
+			// here, there was a TCP connection already.
+
+			// Did we fail due to security settings?
+			if wErr.Code == pgerror.CodeProtocolViolationError {
+				return connSecurityHint()
+			}
+			// Otherwise, there was a regular SQL error. Just report that.
+			return wErr
+
+		case *net.OpError:
+			// A non-RPC client command was used (e.g. a SQL command) and an
+			// error occurred early while establishing the TCP connection.
+
+			// Is this a TLS error?
+			if msg := wErr.Err.Error(); strings.HasPrefix(msg, "tls: ") {
+				// Error during the SSL handshake: a provided client
+				// certificate was invalid, but the CA was OK. (If the CA was
+				// not OK, we'd get a x509 error, see case above.)
+				return connSecurityHint()
+			}
+			return connFailed()
+
+		case *netutil.InitialHeartbeatFailedError:
+			// A GRPC TCP connection was established but there was an early failure.
+			// Try to distinguish the cases.
+			msg := wErr.Error()
+			if reGRPCConnRefused.MatchString(msg) {
+				return connFailed()
+			}
+			if reGRPCNoTLS.MatchString(msg) {
+				return connInsecureHint()
+			}
+			if reGRPCAuthFailure.MatchString(msg) {
+				return connSecurityHint()
+			}
+			if reGRPCConnFailed.MatchString(msg) {
+				return connRefused()
+			}
+
+			// Other cases may be timeouts or other situations, these
+			// will be handled below.
+		}
+
+		opTimeout := func() error {
+			return errors.Errorf("operation timed out.\n\n%v", err)
+		}
+
+		// Is it a plain context cancellation (i.e. timeout)?
 		switch unwrappedErr {
 		case context.DeadlineExceeded:
 			return opTimeout()
@@ -88,7 +199,7 @@ communicate with a secure cluster).
 			return fmt.Errorf(
 				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
 		} else if grpcutil.IsClosedConnection(unwrappedErr) {
-			return connDropped()
+			return errors.Errorf("connection lost.\n\n%v", err)
 		}
 
 		// Nothing we can special case, just return what we have.
