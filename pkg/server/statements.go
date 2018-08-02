@@ -29,7 +29,6 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.StatementsResponse{

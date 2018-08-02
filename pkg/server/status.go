@@ -38,7 +38,6 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -50,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -93,23 +91,11 @@ const (
 var (
 	// Pattern for local used when determining the node ID.
 	localRE = regexp.MustCompile(`(?i)local`)
-
-	// Error used to convey that remote debugging is needs to be enabled for an
-	// endpoint to be usable.
-	remoteDebuggingErr = grpcstatus.Error(
-		codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
 )
 
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
-}
-
-func propagateGatewayMetadata(ctx context.Context) context.Context {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		return metadata.NewOutgoingContext(ctx, md)
-	}
-	return ctx
 }
 
 // A statusServer provides a RESTful status API.
@@ -209,11 +195,6 @@ func (s *statusServer) dialNode(
 func (s *statusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -235,13 +216,6 @@ func (s *statusServer) Gossip(
 func (s *statusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
 ) (*serverpb.AllocatorResponse, error) {
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -343,13 +317,6 @@ func recordedSpansToAllocatorEvents(
 func (s *statusServer) AllocatorRange(
 	ctx context.Context, req *serverpb.AllocatorRangeRequest,
 ) (*serverpb.AllocatorRangeResponse, error) {
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 	defer cancel()
@@ -433,7 +400,6 @@ func (s *statusServer) AllocatorRange(
 func (s *statusServer) Certificates(
 	ctx context.Context, req *serverpb.CertificatesRequest,
 ) (*serverpb.CertificatesResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -548,7 +514,6 @@ func extractCertFields(contents []byte, details *serverpb.CertificateDetails) er
 func (s *statusServer) Details(
 	ctx context.Context, req *serverpb.DetailsRequest,
 ) (*serverpb.DetailsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -596,7 +561,6 @@ func (s *statusServer) Details(
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -621,11 +585,6 @@ func (s *statusServer) LogFilesList(
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -696,11 +655,6 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -762,7 +716,6 @@ func (s *statusServer) Logs(
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -832,7 +785,6 @@ func (s *statusServer) Profile(
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
@@ -895,7 +847,6 @@ type NodeStatusWithLiveness struct {
 func (s *statusServer) Node(
 	ctx context.Context, req *serverpb.NodeRequest,
 ) (*status.NodeStatus, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -923,7 +874,6 @@ func (s *statusServer) Node(
 func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
 ) (*serverpb.JSONResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -944,7 +894,6 @@ func (s *statusServer) Metrics(
 func (s *statusServer) RaftDebug(
 	ctx context.Context, req *serverpb.RaftDebugRequest,
 ) (*serverpb.RaftDebugResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodes, err := s.Nodes(ctx, nil)
 	if err != nil {
@@ -1051,7 +1000,6 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -1100,8 +1048,6 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
-
 	constructRangeInfo := func(
 		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, metrics storage.ReplicaMetrics,
 	) serverpb.RangeInfo {
@@ -1109,18 +1055,9 @@ func (s *statusServer) Ranges(
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
 		var span serverpb.PrettySpan
-		if includeRawKeys {
-			span.StartKey = desc.StartKey.String()
-			span.EndKey = desc.EndKey.String()
-		} else {
-			span.StartKey = omittedKeyStr
-			span.EndKey = omittedKeyStr
-		}
+		span.StartKey = desc.StartKey.String()
+		span.EndKey = desc.EndKey.String()
 		state := rep.State()
-		if !includeRawKeys {
-			state.ReplicaState.Desc.StartKey = nil
-			state.ReplicaState.Desc.EndKey = nil
-		}
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1213,7 +1150,6 @@ func (s *statusServer) Ranges(
 func (s *statusServer) Range(
 	ctx context.Context, req *serverpb.RangeRequest,
 ) (*serverpb.RangeResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.RangeResponse{
@@ -1272,13 +1208,8 @@ func (s *statusServer) CommandQueue(
 
 // ListLocalSessions returns a list of SQL sessions on this node.
 func (s *statusServer) ListLocalSessions(
-	ctx context.Context, req *serverpb.ListSessionsRequest,
+	_ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	registry := s.sessionRegistry
 
 	sessions := registry.SerializeAll()
@@ -1375,11 +1306,6 @@ func (s *statusServer) iterateNodes(
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.ListSessionsResponse{
@@ -1444,7 +1370,6 @@ func (s *statusServer) CancelSession(
 func (s *statusServer) CancelQuery(
 	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 
@@ -1476,7 +1401,6 @@ func (s *statusServer) CancelQuery(
 func (s *statusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
@@ -1513,7 +1437,6 @@ func (s *statusServer) SpanStats(
 func (s *statusServer) Diagnostics(
 	ctx context.Context, req *serverpb.DiagnosticsRequest,
 ) (*diagnosticspb.DiagnosticReport, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -1535,7 +1458,6 @@ func (s *statusServer) Diagnostics(
 func (s *statusServer) Stores(
 	ctx context.Context, req *serverpb.StoresRequest,
 ) (*serverpb.StoresResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {

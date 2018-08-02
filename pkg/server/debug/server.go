@@ -15,7 +15,6 @@
 package debug
 
 import (
-	"context"
 	"expvar"
 	"fmt"
 	"net"
@@ -27,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"golang.org/x/net/trace"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
@@ -178,25 +176,6 @@ func isLocalhost(remoteAddr string) bool {
 	default:
 		return false
 	}
-}
-
-// GatewayRemoteAllowed returns whether a request that has been passed through
-// the grpc gateway should be allowed accessed to privileged debugging
-// information. Because this function assumes the presence of a context field
-// populated by the grpc gateway, it's not applicable for other uses.
-func GatewayRemoteAllowed(ctx context.Context, st *cluster.Settings) bool {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		// This should only happen for direct grpc connections, which are allowed.
-		return true
-	}
-	peerAddr, ok := md["x-forwarded-for"]
-	if !ok || len(peerAddr) == 0 {
-		// This should only happen for direct grpc connections, which are allowed.
-		return true
-	}
-
-	return authRequest(peerAddr[0], st)
 }
 
 func handleLanding(w http.ResponseWriter, r *http.Request) {

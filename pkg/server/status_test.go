@@ -23,7 +23,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -767,118 +766,6 @@ func TestRangeResponse(t *testing.T) {
 
 	if len(info.LeaseHistory) == 0 {
 		t.Error("expected at least one lease history entry")
-	}
-}
-
-func TestRemoteDebugModeSetting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-			base.DefaultTestStoreSpec,
-		},
-	})
-	ts := s.(*TestServer)
-	defer ts.Stopper().Stop(context.TODO())
-
-	if _, err := db.Exec(`SET CLUSTER SETTING server.remote_debugging.mode = 'off'`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify that the remote debugging mode is respected for HTTP requests.
-	// This needs to be wrapped in SucceedsSoon because settings changes have to
-	// propagate through gossip and thus don't always take effect immediately.
-	testutils.SucceedsSoon(t, func() error {
-		for _, tc := range []struct {
-			path     string
-			response protoutil.Message
-		}{
-			{"gossip/local", &gossip.InfoStatus{}},
-			{"allocator/node/local", &serverpb.AllocatorResponse{}},
-			{"allocator/range/1", &serverpb.AllocatorResponse{}},
-			{"logs/local", &serverpb.LogEntriesResponse{}},
-			{"logfiles/local/cockroach.log", &serverpb.LogEntriesResponse{}},
-			{"local_sessions", &serverpb.ListSessionsResponse{}},
-			{"sessions", &serverpb.ListSessionsResponse{}},
-		} {
-			err := getStatusJSONProto(ts, tc.path, tc.response)
-			if !testutils.IsError(err, "403 Forbidden") {
-				return fmt.Errorf("expected '403 Forbidden' error, but %q returned %+v: %v",
-					tc.path, tc.response, err)
-			}
-		}
-		return nil
-	})
-
-	// But not for grpc requests. The fact that the above gets an error but these
-	// don't indicate that the grpc gateway is correctly adding the necessary
-	// metadata for differentiating between the two (and that we're correctly
-	// interpreting said metadata).
-	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
-	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := serverpb.NewStatusClient(conn)
-	ctx := context.Background()
-	if _, err := client.Gossip(ctx, &serverpb.GossipRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.Allocator(ctx, &serverpb.AllocatorRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.Allocator(ctx, &serverpb.AllocatorRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.AllocatorRange(ctx, &serverpb.AllocatorRangeRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.Logs(ctx, &serverpb.LogsRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.ListLocalSessions(ctx, &serverpb.ListSessionsRequest{}); err != nil {
-		t.Error(err)
-	}
-	if _, err := client.ListSessions(ctx, &serverpb.ListSessionsRequest{}); err != nil {
-		t.Error(err)
-	}
-
-	// Check that keys are properly omitted from the Ranges and RangeLog endpoints.
-	var rangesResp serverpb.RangesResponse
-	if err := getStatusJSONProto(ts, "ranges/local", &rangesResp); err != nil {
-		t.Fatal(err)
-	}
-	if len(rangesResp.Ranges) == 0 {
-		t.Errorf("didn't get any ranges")
-	}
-	for _, ri := range rangesResp.Ranges {
-		if ri.Span.StartKey != omittedKeyStr || ri.Span.EndKey != omittedKeyStr ||
-			ri.State.ReplicaState.Desc.StartKey != nil || ri.State.ReplicaState.Desc.EndKey != nil {
-			t.Errorf("unexpected key value found in RangeInfo: %+v", ri)
-		}
-	}
-
-	var rangelogResp serverpb.RangeLogResponse
-	if err := getAdminJSONProto(ts, "rangelog", &rangelogResp); err != nil {
-		t.Fatal(err)
-	}
-	if len(rangelogResp.Events) == 0 {
-		t.Errorf("didn't get any Events")
-	}
-	for _, event := range rangelogResp.Events {
-		if event.Event.Info.NewDesc.StartKey != nil || event.Event.Info.NewDesc.EndKey != nil ||
-			event.Event.Info.UpdatedDesc.StartKey != nil || event.Event.Info.UpdatedDesc.EndKey != nil {
-			t.Errorf("unexpected key value found in rangelog event: %+v", event)
-		}
-		if strings.Contains(event.PrettyInfo.NewDesc, "Min-System") ||
-			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {
-			t.Errorf("unexpected key value found in rangelog event info: %+v", event.PrettyInfo)
-		}
 	}
 }
 
