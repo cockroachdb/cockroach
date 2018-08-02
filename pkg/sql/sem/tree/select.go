@@ -679,6 +679,8 @@ const (
 	RANGE WindowFrameMode = iota
 	// ROWS is the mode of specifying frame in terms of physical offsets (e.g. 1 row before etc).
 	ROWS
+	// GROUPS is the mode of specifying frame in terms of peer groups.
+	GROUPS
 )
 
 // WindowFrameBoundType indicates which type of boundary is used.
@@ -753,6 +755,8 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 		ctx.WriteString("RANGE ")
 	case ROWS:
 		ctx.WriteString("ROWS ")
+	case GROUPS:
+		ctx.WriteString("GROUPS ")
 	default:
 		panic(fmt.Sprintf("unhandled case: %d", node.Mode))
 	}
