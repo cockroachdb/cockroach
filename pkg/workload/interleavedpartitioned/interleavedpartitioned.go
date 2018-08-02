@@ -36,7 +36,8 @@ const (
 	zoneLocationsStmt = `
 UPSERT INTO system.locations VALUES
 	('zone', $1, 33.0641249, -80.0433347),
-	('zone', $2, 45.6319052, -121.2010282)
+	('zone', $2, 45.6319052, -121.2010282),
+	('zone', $3, 41.238785 , -95.854239)
 `
 	sessionSchema = `
 (
@@ -231,21 +232,21 @@ type interleavedPartitioned struct {
 	insertPercent   int
 	retrievePercent int
 	updatePercent   int
-	deletePercent   int
+
+	deletes bool
 
 	eastZoneName    string
 	westZoneName    string
 	centralZoneName string
 
 	eastPercent          int
-	east                 bool
 	insertLocalPercent   int
 	retrieveLocalPercent int
 	updateLocalPercent   int
 
-	deleteSetSize         int
-	currentSetDeleteCount int
-	currentSet            int
+	locality string
+
+	currentDelete int
 
 	local bool
 
@@ -271,21 +272,19 @@ var interleavedPartitionedMeta = workload.Meta{
 		g.flags.IntVar(&g.parametersPerSession, `parameters-per-session`, 1, `Number of parameters associated with each session`)
 		g.flags.IntVar(&g.queriesPerSession, `queries-per-session`, 1, `Number of queries associated with each session`)
 		g.flags.IntVar(&g.eastPercent, `east-percent`, 50, `Percentage (0-100) of sessions that are in us-east`)
-		g.flags.IntVar(&g.insertPercent, `insert-percent`, 50, `Percentage (0-100) of operations that are inserts`)
-		g.flags.IntVar(&g.insertLocalPercent, `insert-local-percent`, 100, `Percentage of insert operations that are local`)
-		g.flags.IntVar(&g.retrievePercent, `retrieve-percent`, 0, `Percentage (0-100) of operations that are retrieval queries`)
+		g.flags.IntVar(&g.insertPercent, `insert-percent`, 70, `Percentage (0-100) of operations that are inserts`)
+		g.flags.IntVar(&g.insertLocalPercent, `local-percent`, 100, `Percentage of insert operations that are local`)
+		g.flags.IntVar(&g.retrievePercent, `retrieve-percent`, 20, `Percentage (0-100) of operations that are retrieval queries`)
 		g.flags.IntVar(&g.retrieveLocalPercent, `retrieve-local-percent`, 100, `Percentage of retrieve operations that are local`)
-		g.flags.IntVar(&g.updatePercent, `update-percent`, 0, `Percentage (0-100) of operations that are update queries`)
+		g.flags.IntVar(&g.updatePercent, `update-percent`, 10, `Percentage (0-100) of operations that are update queries`)
 		g.flags.IntVar(&g.updateLocalPercent, `update-local-percent`, 100, `Percentage of update operations that are local`)
-		g.flags.IntVar(&g.deletePercent, `delete-percent`, 50, `Percentage (0-100) of operations that are delete queries`)
+		g.flags.BoolVar(&g.deletes, `deletes`, false, `Is this workload only running deletes? (Deletes and other forms of load are mutually exclusive for this workload)`)
 		g.flags.IntVar(&g.rowsPerDelete, `rows-per-delete`, 20, `Number of rows per delete operation`)
-		g.flags.IntVar(&g.deleteSetSize, `delete-set-size`, 100, `Number of delete queries for a particular zone before switching over`)
-		g.flags.BoolVar(&g.east, `east`, false, `Is this location in the east (true) or the west (false)`)
 		g.flags.BoolVar(&g.local, `local`, false, `Are you running workload locally?`)
-
 		g.flags.StringVar(&g.eastZoneName, `east-zone-name`, `us-east1-b`, `name of the zone to be used as east`)
-		g.flags.StringVar(&g.westZoneName, `west-zone-name`, `us-east1-b`, `name of the zone to be used as west`)
-		g.flags.StringVar(&g.westZoneName, `central-zone-name`, `us-central1-a`, `name of the zone to be used as west`)
+		g.flags.StringVar(&g.westZoneName, `west-zone-name`, `us-west1-b`, `name of the zone to be used as west`)
+		g.flags.StringVar(&g.centralZoneName, `central-zone-name`, `us-central1-a`, `name of the zone to be used as west`)
+		g.flags.StringVar(&g.locality, `locality`, `east`, `Which locality is the workload running in? (east,west,central)`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -379,6 +378,36 @@ func (w *interleavedPartitioned) Ops(
 		hists := reg.GetHandle()
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		opRand := rng.Intn(100)
+
+		if w.deletes {
+			log.Info(context.TODO(), "deleting")
+			start := timeutil.Now()
+			var deleteStatement *gosql.Stmt
+
+			if w.currentDelete%2 == 0 {
+				var err error
+				deleteStatement, err = db.Prepare(deleteEastQuery)
+				if err != nil {
+					return err
+				}
+			} else {
+				var err error
+				deleteStatement, err = db.Prepare(deleteWestQuery)
+				if err != nil {
+					return err
+				}
+			}
+			w.currentDelete++
+
+			_, err = deleteStatement.ExecContext(ctx, w.rowsPerDelete)
+			if err != nil {
+				return err
+			}
+			hists.Get(`delete`).Record(timeutil.Since(start))
+
+			return nil
+		}
+
 		if opRand < w.insertPercent {
 			log.Info(context.TODO(), "inserting")
 			start := timeutil.Now()
@@ -531,36 +560,6 @@ func (w *interleavedPartitioned) Ops(
 			_, err = updateStatement2.ExecContext(ctx, randString(rng, 20), sessionID)
 			hists.Get(`updates`).Record(timeutil.Since(start))
 			return err
-		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent { // delete
-			log.Info(context.TODO(), "deleting")
-			start := timeutil.Now()
-			var deleteStatement *gosql.Stmt
-
-			// `deleteSetSize` delete ops are performed on sessions in east, then the same number in west, alternating
-			if w.currentSet%2 == 0 {
-				var err error
-				deleteStatement, err = db.Prepare(deleteEastQuery)
-				if err != nil {
-					return err
-				}
-			} else {
-				var err error
-				deleteStatement, err = db.Prepare(deleteWestQuery)
-				if err != nil {
-					return err
-				}
-			}
-			w.currentSetDeleteCount++
-			if w.currentSetDeleteCount == w.deleteSetSize {
-				w.currentSetDeleteCount = 0
-				w.currentSet++
-			}
-
-			_, err = deleteStatement.ExecContext(ctx, w.rowsPerDelete)
-			if err != nil {
-				return err
-			}
-			hists.Get(`delete`).Record(timeutil.Since(start))
 		}
 
 		return nil
@@ -577,12 +576,11 @@ func (w *interleavedPartitioned) Ops(
 func (w *interleavedPartitioned) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PreLoad: func(db *gosql.DB) error {
-			w.currentSet = 0
-			w.currentSetDeleteCount = 0
+			w.currentDelete = 0
 			if w.local {
 				return nil
 			}
-			if _, err := db.Exec(zoneLocationsStmt, w.eastZoneName, w.westZoneName); err != nil {
+			if _, err := db.Exec(zoneLocationsStmt, w.eastZoneName, w.westZoneName, w.centralZoneName); err != nil {
 				return err
 			}
 			if _, err := db.Exec(
@@ -598,8 +596,21 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			return nil
 		},
 		Validate: func() error {
-			if w.insertPercent+w.retrievePercent+w.updatePercent+w.deletePercent != 100 {
-				return errors.New("operation percents ({insert,retrieve,update,delete}-percent flags) must add up to 100")
+			switch w.locality {
+			case `east`, `west`:
+			case `central`:
+				w.deletes = true
+				w.insertPercent = 0
+				w.retrievePercent = 0
+				w.updatePercent = 0
+				log.Info(context.TODO(), "locality is set to central, turning deletes on and everything else off")
+				return nil
+
+			default:
+				return errors.New("invalid locality (needs to be east, west, or central)")
+			}
+			if w.insertPercent+w.retrievePercent+w.updatePercent != 100 {
+				return errors.New("operation percents ({insert,retrieve,delete}-percent flags) must add up to 100")
 			}
 			return nil
 		},
@@ -686,20 +697,33 @@ func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int) [][]int
 	return rows
 }
 
-func (w *interleavedPartitioned) pickLocality(rng *rand.Rand, percent int) bool {
+func (w *interleavedPartitioned) pickLocality(rng *rand.Rand, percent int) string {
 	localRand := rng.Intn(100)
 	if localRand < percent {
-		return w.east
+		return w.locality
 	}
-	return !w.east
+	// return the opposite of the locality if it's not local
+	// - central not supported
+	switch w.locality {
+	case `east`:
+		return `west`
+	case `west`:
+		return `east`
+	default:
+		panic("invalid locality")
+	}
 }
 
-func (w *interleavedPartitioned) randomSessionID(rng *rand.Rand, east bool) string {
+func (w *interleavedPartitioned) randomSessionID(rng *rand.Rand, locality string) string {
 	id := randString(rng, 98)
-	if east {
+	switch locality {
+	case `east`:
 		return fmt.Sprintf("E-%s", id)
+	case `west`:
+		return fmt.Sprintf("W-%s", id)
+	default:
+		panic("invalid locality")
 	}
-	return fmt.Sprintf("W-%s", id)
 }
 
 func (w *interleavedPartitioned) generateSessionID(rng *rand.Rand, rowIdx int) string {

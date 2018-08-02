@@ -40,7 +40,6 @@ func registerInterleaved(r *registry) {
 		retrieveLocalPercent int,
 		updatePercent int,
 		updateLocalPercent int,
-		deleteSetSize int,
 		rowsPerDelete int,
 	) {
 		nodes := c.nodes
@@ -54,9 +53,7 @@ func registerInterleaved(r *registry) {
 			histograms := " --histograms ./histograms"
 
 			// Just to initialize the database
-			cmdInit := "./workload run interleavedpartitioned --init --east --sessions 0" +
-				" --insert-percent 0 --retrieve-percent 100 --update-percent 0 --delete-percent 0 --duration 5s {pgurl:4}"
-
+			cmdInit := "./workload init interleavedpartitioned --drop --locality east --sessions 0"
 			cmdEast := fmt.Sprintf(
 				"./workload run interleavedpartitioned --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d --delete-percent 0"+duration+histograms+" {pgurl:4-6}",
 				customersPerSession,
@@ -88,8 +85,7 @@ func registerInterleaved(r *registry) {
 			)
 
 			cmdCentral := fmt.Sprintf(
-				"./workload run interleavedpartitioned --insert-percent 0 --retrieve-percent 0 --update-percent 0  --delete-percent 100 --delete-set-size %d --rows-per-delete %d"+duration+histograms+" {pgurl:7-9}",
-				deleteSetSize,
+				"./workload run interleavedpartitioned --deletes --rows-per-delete %d"+duration+histograms+" {pgurl:8}",
 				rowsPerDelete,
 			)
 
@@ -138,7 +134,6 @@ func registerInterleaved(r *registry) {
 				100,   /*retrieveLocalPercent*/
 				10,    /*updatePercent*/
 				100,   /*updateLocalPercent*/
-				100,   /*deleteSetSize*/
 				20,    /*rowsPerDelete*/
 			)
 		},
