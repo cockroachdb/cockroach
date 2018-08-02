@@ -827,6 +827,17 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		}
 		log.Warning(ctx, buf.String())
 	}
+
+	// Check that the total suggested "max" memory is well below the available memory.
+	if maxMemory, err := server.GetTotalMemory(ctx); err == nil {
+		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
+		maxRecommendedMem := int64(.75 * float64(maxMemory))
+		if requestedMem > maxRecommendedMem {
+			log.Shout(ctx, log.Severity_WARNING, fmt.Sprintf(
+				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
+				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem)))
+		}
+	}
 }
 
 func logOutputDirectory() string {
