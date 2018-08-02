@@ -1813,7 +1813,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
 
 	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
-		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank`)
+		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank WHERE id % 4 = 1`)
 		if err != nil {
 			return err
 		}
@@ -1823,8 +1823,8 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if expected := 0; rowCount != expected {
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
+	if expected := numAccounts * 3 / 4; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
@@ -1842,8 +1842,8 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, equalDir)
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if expected := 0; rowCount != expected {
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
+	if expected := numAccounts * 3 / 4; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 }
