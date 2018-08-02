@@ -25,98 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-// indexedValue combines a value from the row with the index of that row.
-type indexedValue struct {
-	value tree.Datum
-	idx   int
-}
-
-// RingBufferInitialSize defines the initial size of the ring buffer.
-const RingBufferInitialSize = 8
-
-// ringBuffer is a deque of indexedValue's maintained over a ring buffer.
-type ringBuffer struct {
-	values []*indexedValue
-	head   int // the index of the front of the deque.
-	tail   int // the index of the first position right after the end of the deque.
-
-	nonEmpty bool // indicates whether the deque is empty, necessary to distinguish
-	// between an empty deque and a deque that uses all of its capacity.
-}
-
-// len returns number of indexedValue's in the deque.
-func (r *ringBuffer) len() int {
-	if !r.nonEmpty {
-		return 0
-	}
-	if r.head < r.tail {
-		return r.tail - r.head
-	} else if r.head == r.tail {
-		return cap(r.values)
-	} else {
-		return cap(r.values) + r.tail - r.head
-	}
-}
-
-// add adds value to the end of the deque
-// and doubles it's underlying slice if necessary.
-func (r *ringBuffer) add(value *indexedValue) {
-	if cap(r.values) == 0 {
-		r.values = make([]*indexedValue, RingBufferInitialSize)
-		r.values[0] = value
-		r.tail = 1
-	} else {
-		if r.len() == cap(r.values) {
-			newValues := make([]*indexedValue, 2*cap(r.values))
-			if r.head < r.tail {
-				copy(newValues[:r.len()], r.values[r.head:r.tail])
-			} else {
-				copy(newValues[:cap(r.values)-r.head], r.values[r.head:])
-				copy(newValues[cap(r.values)-r.head:r.len()], r.values[:r.tail])
-			}
-			r.head = 0
-			r.tail = cap(r.values)
-			r.values = newValues
-		}
-		r.values[r.tail] = value
-		r.tail = (r.tail + 1) % cap(r.values)
-	}
-	r.nonEmpty = true
-}
-
-// get returns indexedValue at position pos in the deque (zero-based).
-func (r *ringBuffer) get(pos int) *indexedValue {
-	if !r.nonEmpty || pos < 0 || pos >= r.len() {
-		panic("unexpected behavior: index out of bounds")
-	}
-	return r.values[(pos+r.head)%cap(r.values)]
-}
-
-// removeHead removes a single element from the front of the deque.
-func (r *ringBuffer) removeHead() {
-	if r.len() == 0 {
-		panic("removing head from empty ring buffer")
-	}
-	r.values[r.head] = nil
-	r.head = (r.head + 1) % cap(r.values)
-	if r.head == r.tail {
-		r.nonEmpty = false
-	}
-}
-
-// removeTail removes a single element from the end of the deque.
-func (r *ringBuffer) removeTail() {
-	if r.len() == 0 {
-		panic("removing tail from empty ring buffer")
-	}
-	lastPos := (cap(r.values) + r.tail - 1) % cap(r.values)
-	r.values[lastPos] = nil
-	r.tail = lastPos
-	if r.tail == r.head {
-		r.nonEmpty = false
-	}
-}
-
 // slidingWindow maintains a deque of values along with corresponding indices
 // based on cmp function:
 // for Min behavior, cmp = -a.Compare(b)
@@ -125,7 +33,7 @@ func (r *ringBuffer) removeTail() {
 // It assumes that the frame bounds will never go back, i.e. non-decreasing sequences
 // of frame start and frame end indices.
 type slidingWindow struct {
-	values  ringBuffer
+	values  tree.RingBuffer
 	evalCtx *tree.EvalContext
 	cmp     func(*tree.EvalContext, tree.Datum, tree.Datum) int
 }
@@ -143,32 +51,32 @@ func makeSlidingWindow(
 // from the end of the deque and then appends 'iv' to the end. This way, the deque
 // always contains unique values sorted in descending order of their "priority"
 // (when we encounter duplicates, we always keep the one with the largest idx).
-func (sw *slidingWindow) add(iv *indexedValue) {
-	for i := sw.values.len() - 1; i >= 0; i-- {
-		if sw.cmp(sw.evalCtx, sw.values.get(i).value, iv.value) > 0 {
+func (sw *slidingWindow) add(iv *tree.IndexedValue) {
+	for i := sw.values.Len() - 1; i >= 0; i-- {
+		if sw.cmp(sw.evalCtx, sw.values.Get(i).Value, iv.Value) > 0 {
 			break
 		}
-		sw.values.removeTail()
+		sw.values.RemoveTail()
 	}
-	sw.values.add(iv)
+	sw.values.Add(iv)
 }
 
 // removeAllBefore removes all values from the beginning of the deque that have indices
 // smaller than given 'idx'.
 // This operation corresponds to shifting the start of the frame up to 'idx'.
 func (sw *slidingWindow) removeAllBefore(idx int) {
-	for i := 0; i < sw.values.len() && i < idx; i++ {
-		if sw.values.get(i).idx >= idx {
+	for i := 0; i < sw.values.Len() && i < idx; i++ {
+		if sw.values.Get(i).Idx >= idx {
 			break
 		}
-		sw.values.removeHead()
+		sw.values.RemoveHead()
 	}
 }
 
 func (sw *slidingWindow) string() string {
 	var builder strings.Builder
-	for i := 0; i < sw.values.len(); i++ {
-		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.get(i).value, sw.values.get(i).idx))
+	for i := 0; i < sw.values.Len(); i++ {
+		builder.WriteString(fmt.Sprintf("(%v, %v)\t", sw.values.Get(i).Value, sw.values.Get(i).Idx))
 	}
 	return builder.String()
 }
@@ -192,17 +100,17 @@ func (w *slidingWindowFunc) Compute(
 		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 			continue
 		}
-		w.sw.add(&indexedValue{wfr.ArgsByRowIdx(idx)[0], idx})
+		w.sw.add(&tree.IndexedValue{Value: wfr.ArgsByRowIdx(idx)[0], Idx: idx})
 	}
 	w.prevEnd = end
 
-	if w.sw.values.len() == 0 {
+	if w.sw.values.Len() == 0 {
 		// Spec: the frame is empty, so we return NULL.
 		return tree.DNull, nil
 	}
 
 	// The datum with "highest priority" within the frame is at the very front of the deque.
-	return w.sw.values.get(0).value, nil
+	return w.sw.values.Get(0).Value, nil
 }
 
 func max(a, b int) int {

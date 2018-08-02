@@ -1106,6 +1106,8 @@ func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
 		*spec = WindowerSpec_Frame_RANGE
 	case tree.ROWS:
 		*spec = WindowerSpec_Frame_ROWS
+	case tree.GROUPS:
+		*spec = WindowerSpec_Frame_GROUPS
 	default:
 		panic("unexpected WindowFrameMode")
 	}
@@ -1171,6 +1173,12 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				return err
 			}
 			spec.Start.TypedOffset = buf
+		case tree.GROUPS:
+			startOffset := int(tree.MustBeDInt(dStartOffset))
+			if startOffset < 0 {
+				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+			}
+			spec.Start.IntOffset = uint32(startOffset)
 		}
 	}
 
@@ -1210,6 +1218,12 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 					return err
 				}
 				spec.End.TypedOffset = buf
+			case tree.GROUPS:
+				endOffset := int(tree.MustBeDInt(dEndOffset))
+				if endOffset < 0 {
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+				}
+				spec.End.IntOffset = uint32(endOffset)
 			}
 		}
 	}
@@ -1246,6 +1260,8 @@ func (spec WindowerSpec_Frame_Mode) convertToAST() tree.WindowFrameMode {
 		return tree.RANGE
 	case WindowerSpec_Frame_ROWS:
 		return tree.ROWS
+	case WindowerSpec_Frame_GROUPS:
+		return tree.GROUPS
 	default:
 		panic("unexpected WindowerSpec_Frame_Mode")
 	}
