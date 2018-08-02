@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -402,6 +403,57 @@ func TestChangefeedComputedColumn(t *testing.T) {
 	assertPayloads(t, rows, []string{
 		`cc: [11, 10]->{"a": 10, "b": 11, "c": 12}`,
 	})
+}
+
+func TestChangefeedTruncateRenameDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	// TODO(dan): TRUNCATE cascades, test for this too.
+	sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO truncate VALUES (1)`)
+	truncate := sqlDB.Query(t, `CREATE CHANGEFEED FOR truncate`)
+	defer closeFeedRowsHack(t, sqlDB, truncate)
+	assertPayloads(t, truncate, []string{`truncate: [1]->{"a": 1}`})
+	sqlDB.Exec(t, `TRUNCATE TABLE truncate`)
+	truncate.Next()
+	if err := truncate.Err(); !testutils.IsError(err, `"truncate" was dropped or truncated`) {
+		t.Errorf(`expected ""truncate" was dropped or truncated" error got: %+v`, err)
+	}
+
+	sqlDB.Exec(t, `CREATE TABLE rename (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO rename VALUES (1)`)
+	rename := sqlDB.Query(t, `CREATE CHANGEFEED FOR rename`)
+	defer closeFeedRowsHack(t, sqlDB, rename)
+	assertPayloads(t, rename, []string{`rename: [1]->{"a": 1}`})
+	sqlDB.Exec(t, `ALTER TABLE rename RENAME TO renamed`)
+	sqlDB.Exec(t, `INSERT INTO renamed VALUES (2)`)
+	rename.Next()
+	if err := rename.Err(); !testutils.IsError(err, `"rename" was renamed to "renamed"`) {
+		t.Errorf(`expected ""rename" was renamed to "renamed"" error got: %+v`, err)
+	}
+
+	sqlDB.Exec(t, `CREATE TABLE drop (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
+	drop := sqlDB.Query(t, `CREATE CHANGEFEED FOR drop`)
+	defer closeFeedRowsHack(t, sqlDB, drop)
+	assertPayloads(t, drop, []string{`drop: [1]->{"a": 1}`})
+	sqlDB.Exec(t, `DROP TABLE drop`)
+	drop.Next()
+	if err := drop.Err(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
+		t.Errorf(`expected ""drop" was dropped or truncated" error got: %+v`, err)
+	}
 }
 
 func TestChangefeedErrors(t *testing.T) {

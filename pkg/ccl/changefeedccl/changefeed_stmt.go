@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -153,9 +154,6 @@ func changefeedPlanHook(
 		}
 
 		// This grabs table descriptors once to get their ids.
-		//
-		// TODO(dan): Prevent or detect if/when the id for a table changes, such
-		// as with TRUNCATE.
 		descriptorTime := now
 		if highWater != (hlc.Timestamp{}) {
 			descriptorTime = highWater
@@ -310,7 +308,11 @@ func (b *changefeedResumer) Resume(
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	return runChangefeedFlow(ctx, execCfg, details, progress, startedCh, job.HighWaterProgressed)
+	err := runChangefeedFlow(ctx, execCfg, details, progress, startedCh, job.HighWaterProgressed)
+	if err != nil {
+		log.Infof(ctx, `CHANGEFEED job %d returning with error: %+v`, *job.ID(), err)
+	}
+	return err
 }
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
