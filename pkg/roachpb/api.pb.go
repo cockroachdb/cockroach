@@ -1135,7 +1135,12 @@ func (*AdminChangeReplicasResponse) Descriptor() ([]byte, []int) { return fileDe
 // gossip protocol.
 type HeartbeatTxnRequest struct {
 	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Now           cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=now" json:"now"`
+	// now is the client's timestamp. It will be recorded as the transaction's
+	// last active time.
+	// If not set, then the heartbeat doesn't update the transaction, and just
+	// returns the transaction record. This serves as a convenience for reading a
+	// transaction record used by some tests.
+	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=now" json:"now"`
 }
 
 func (m *HeartbeatTxnRequest) Reset()                    { *m = HeartbeatTxnRequest{} }
