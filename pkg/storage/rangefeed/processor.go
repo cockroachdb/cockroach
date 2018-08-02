@@ -63,19 +63,21 @@ type Processor struct {
 	reg registry
 	rts resolvedTimestamp
 
-	regC    chan registration
-	lenReqC chan struct{}
-	lenResC chan int
-	eventC  chan event
-	stopC   chan *roachpb.Error
+	regC     chan registration
+	lenReqC  chan struct{}
+	lenResC  chan int
+	eventC   chan event
+	stopC    chan *roachpb.Error
+	stoppedC chan struct{}
 }
 
 // event is a union of different event types that the Processor goroutine needs
 // to be informed of. It is used so that all events can be sent over the same
 // channel, which is necessary to prevent reordering.
 type event struct {
-	ops []enginepb.MVCCLogicalOp
-	ct  hlc.Timestamp
+	ops   []enginepb.MVCCLogicalOp
+	ct    hlc.Timestamp
+	syncC chan struct{}
 }
 
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
@@ -88,11 +90,12 @@ func NewProcessor(cfg Config) *Processor {
 		reg:    makeRegistry(),
 		rts:    makeResolvedTimestamp(),
 
-		regC:    make(chan registration),
-		lenReqC: make(chan struct{}),
-		lenResC: make(chan int),
-		eventC:  make(chan event, cfg.EventChanCap),
-		stopC:   make(chan *roachpb.Error),
+		regC:     make(chan registration),
+		lenReqC:  make(chan struct{}),
+		lenResC:  make(chan int),
+		eventC:   make(chan event, cfg.EventChanCap),
+		stopC:    make(chan *roachpb.Error),
+		stoppedC: make(chan struct{}),
 	}
 }
 
@@ -101,6 +104,8 @@ func NewProcessor(cfg Config) *Processor {
 func (p *Processor) Start(stopper *stop.Stopper) {
 	ctx := p.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
+		defer close(p.stoppedC)
+
 		// intentPushTicker periodically pushes all unresolved intents that are
 		// above a certain age, helping to ensure that the resolved timestamp
 		// continues to make progress.
@@ -177,15 +182,6 @@ func (p *Processor) Start(stopper *stop.Stopper) {
 
 			// Close registrations and exit when signaled.
 			case pErr := <-p.stopC:
-				// Process any events still in the event channel.
-				for loop := true; loop; {
-					select {
-					case e := <-p.eventC:
-						p.consumeEvent(ctx, e)
-					default:
-						loop = false
-					}
-				}
 				p.reg.DisconnectWithErr(all, pErr)
 				return
 
@@ -205,11 +201,16 @@ func (p *Processor) Start(stopper *stop.Stopper) {
 func (p *Processor) Register(
 	span roachpb.RSpan, startTS hlc.Timestamp, stream Stream, errC chan<- *roachpb.Error,
 ) {
-	p.regC <- registration{
+	r := registration{
 		span:    span.AsRawSpanWithNoLocals(),
 		startTS: startTS,
 		stream:  stream,
 		errC:    errC,
+	}
+	select {
+	case p.regC <- r:
+	case <-p.stoppedC:
+		errC <- roachpb.NewErrorf("rangefeed processor closed")
 	}
 }
 
@@ -218,9 +219,15 @@ func (p *Processor) Len() int {
 	if p == nil {
 		return 0
 	}
+
 	// Ask the processor goroutine.
-	p.lenReqC <- struct{}{}
-	return <-p.lenResC
+	select {
+	case p.lenReqC <- struct{}{}:
+		// Wait for response.
+		return <-p.lenResC
+	case <-p.stoppedC:
+		return 0
+	}
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
@@ -237,11 +244,17 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	if p == nil {
 		return
 	}
+	// Flush any remaining events before stopping.
+	p.syncEventC()
 	// Send on the channel instead of closing it. This ensures synchronous
 	// communication so that when this method returns the caller can be sure
 	// that the Processor goroutine is canceling all registrations and shutting
 	// down.
-	p.stopC <- pErr
+	select {
+	case p.stopC <- pErr:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -254,7 +267,11 @@ func (p *Processor) ConsumeLogicalOps(ops []enginepb.MVCCLogicalOp) {
 		return
 	}
 	// TODO(nvanbenschoten): backpressure or disconnect on blocking call.
-	p.eventC <- event{ops: ops}
+	select {
+	case p.eventC <- event{ops: ops}:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
@@ -267,7 +284,29 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) {
 	if closedTS == (hlc.Timestamp{}) {
 		return
 	}
-	p.eventC <- event{ct: closedTS}
+	select {
+	case p.eventC <- event{ct: closedTS}:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
+}
+
+// syncEventC synchronizes access to the Processor goroutine, allowing events
+// on its goroutine to establish causality with events on the caller of this
+// method's goroutine.
+func (p *Processor) syncEventC() {
+	syncC := make(chan struct{})
+	select {
+	case p.eventC <- event{syncC: syncC}:
+		select {
+		case <-syncC:
+		// Synchronized.
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		}
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
 }
 
 func (p *Processor) consumeEvent(ctx context.Context, e event) {
@@ -276,6 +315,8 @@ func (p *Processor) consumeEvent(ctx context.Context, e event) {
 		p.consumeLogicalOps(ctx, e.ops)
 	case e.ct != hlc.Timestamp{}:
 		p.forwardClosedTS(ctx, e.ct)
+	case e.syncC != nil:
+		close(e.syncC)
 	default:
 		panic("missing event variant")
 	}
