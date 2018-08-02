@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -182,7 +183,7 @@ func changefeedPlanHook(
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
 		startedCh := make(chan tree.Datums)
 		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
-			Description: changefeedJobDescription(changefeedStmt),
+			Description: changefeedJobDescription(changefeedStmt, sinkURI, opts),
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
 				for _, desc := range targetDescs {
@@ -213,8 +214,24 @@ func changefeedPlanHook(
 	return fn, header, nil, nil
 }
 
-func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
-	return tree.AsStringWithFlags(changefeed, tree.FmtAlwaysQualifyTableNames)
+func changefeedJobDescription(
+	changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+) string {
+	c := &tree.CreateChangefeed{
+		Targets: changefeed.Targets,
+		// If/when we start accepting export storage uris (or ones with
+		// secrets), we'll need to sanitize sinkURI.
+		SinkURI: tree.NewDString(sinkURI),
+	}
+	for k, v := range opts {
+		opt := tree.KVOption{Key: tree.Name(k)}
+		if changefeedOptionExpectValues[k] {
+			opt.Value = tree.NewDString(v)
+		}
+		c.Options = append(c.Options, opt)
+	}
+	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
+	return tree.AsStringWithFlags(c, tree.FmtAlwaysQualifyTableNames)
 }
 
 func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
