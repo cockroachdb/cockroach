@@ -50,13 +50,19 @@ eexpect "empty passwords are not permitted"
 eexpect $prompt
 end_test
 
+start_test "Make the user without password."
+send "$argv user set carl --certs-dir=$certs_dir\r"
+eexpect "CREATE USER"
+eexpect $prompt
+end_test
+
 start_test "Check a password can be changed."
 send "$argv user set carl --password --certs-dir=$certs_dir\r"
 eexpect "Enter password:"
 send "woof\r"
 eexpect "Confirm password:"
 send "woof\r"
-eexpect "CREATE USER"
+eexpect "ALTER USER"
 eexpect $prompt
 end_test
 

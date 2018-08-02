@@ -17,9 +17,11 @@ package cli
 import (
 	"os"
 
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 var password bool
@@ -147,9 +149,15 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	}
 
 	if password {
-		return runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`CREATE USER IF NOT EXISTS $1 PASSWORD $2`, args[0], pwdString),
-		)
+		if err := runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`CREATE USER $1 PASSWORD $2`, args[0], pwdString),
+		); err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == pgerror.CodeDuplicateObjectError {
+				return runQueryAndFormatResults(conn, os.Stdout,
+					makeQuery(`ALTER USER $1 WITH PASSWORD $2`, args[0], pwdString))
+			}
+			return err
+		}
 	}
 	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0]))
