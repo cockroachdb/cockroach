@@ -27,6 +27,17 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that memory max flags do not exceed available RAM."
+send "$argv start --insecure --cache=.40 --max-sql-memory=.40\r"
+eexpect "WARNING: the sum of --max-sql-memory"
+eexpect "is larger than"
+eexpect "of total RAM"
+eexpect "increased risk"
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
 start_test {Check that the "failed running SUBCOMMAND" message does not consider a flag the subcommand}
 send "$argv --verbosity 2 start --garbage\r"
 eexpect {Failed running "start"}
