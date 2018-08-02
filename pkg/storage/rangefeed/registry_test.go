@@ -21,7 +21,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -215,4 +217,41 @@ func TestRegistry(t *testing.T) {
 	reg.Disconnect(spAC)
 	require.Equal(t, 0, reg.Len())
 	require.Nil(t, rAB.Err())
+}
+
+func TestRegistrationString(t *testing.T) {
+	testCases := []struct {
+		r   registration
+		exp string
+	}{
+		{
+			r: registration{
+				span: roachpb.Span{Key: roachpb.Key("a")},
+			},
+			exp: `[a @ 0.000000000,0+]`,
+		},
+		{
+			r: registration{span: roachpb.Span{
+				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			},
+			exp: `[{a-c} @ 0.000000000,0+]`,
+		},
+		{
+			r: registration{
+				span:    roachpb.Span{Key: roachpb.Key("d")},
+				startTS: hlc.Timestamp{WallTime: 10, Logical: 1},
+			},
+			exp: `[d @ 0.000000010,1+]`,
+		},
+		{
+			r: registration{span: roachpb.Span{
+				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
+				startTS: hlc.Timestamp{WallTime: 40, Logical: 9},
+			},
+			exp: `[{d-z} @ 0.000000040,9+]`,
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.exp, tc.r.String())
+	}
 }
