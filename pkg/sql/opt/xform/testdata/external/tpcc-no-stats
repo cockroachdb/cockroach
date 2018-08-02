@@ -721,7 +721,7 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
- ├── group-by
+ ├── distinct-on
  │    ├── columns: stock.s_i_id:11(int!null)
  │    ├── grouping columns: stock.s_i_id:11(int!null)
  │    ├── stats: [rows=0.476141881, distinct(11)=0.476141881]

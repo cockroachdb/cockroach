@@ -12,10 +12,8 @@ CREATE TABLE xyz (
 query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
-group      ·            ·
- │         aggregate 0  y
- │         aggregate 1  z
- │         group by     @1-@2
+distinct   ·            ·
+ │         distinct on  y, z
  └── scan  ·            ·
 ·          table        xyz@primary
 ·          spans        ALL
@@ -25,10 +23,8 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 sort            ·            ·
  │              order        +z
- └── group      ·            ·
-      │         aggregate 0  y
-      │         aggregate 1  z
-      │         group by     @1-@2
+ └── distinct   ·            ·
+      │         distinct on  y, z
       └── scan  ·            ·
 ·               table        xyz@primary
 ·               spans        ALL
@@ -38,10 +34,8 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 sort            ·            ·
  │              order        +y
- └── group      ·            ·
-      │         aggregate 0  y
-      │         aggregate 1  z
-      │         group by     @1-@2
+ └── distinct   ·            ·
+      │         distinct on  y, z
       └── scan  ·            ·
 ·               table        xyz@primary
 ·               spans        ALL
@@ -51,10 +45,8 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 sort            ·            ·
  │              order        +y,+z
- └── group      ·            ·
-      │         aggregate 0  y
-      │         aggregate 1  z
-      │         group by     @1-@2
+ └── distinct   ·            ·
+      │         distinct on  y, z
       └── scan  ·            ·
 ·               table        xyz@primary
 ·               spans        ALL
@@ -64,9 +56,8 @@ EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
 sort                 ·            ·
  │                   order        +r
- └── group           ·            ·
-      │              aggregate 0  r
-      │              group by     @1
+ └── distinct        ·            ·
+      │              distinct on  r
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        xyz@primary
@@ -77,10 +68,8 @@ EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
 sort            ·            ·
  │              order        +z
- └── group      ·            ·
-      │         aggregate 0  y
-      │         aggregate 1  z
-      │         group by     @1-@2
+ └── distinct   ·            ·
+      │         distinct on  w, z
       └── scan  ·            ·
 ·               table        xyz@primary
 ·               spans        ALL
@@ -90,9 +79,8 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
 sort            ·            ·
  │              order        +w
- └── group      ·            ·
-      │         aggregate 0  y
-      │         group by     @1
+ └── distinct   ·            ·
+      │         distinct on  w
       └── scan  ·            ·
 ·               table        xyz@primary
 ·               spans        ALL
@@ -110,6 +98,19 @@ EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 scan  ·      ·            (x, y, z)  ·
 ·     table  xyz@primary  ·          ·
 ·     spans  ALL          ·          ·
+
+# Test the case when the DistinctOn operator is projecting away a column.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
+----
+distinct        ·            ·            (z)     weak-key(z)
+ │              distinct on  z            ·       ·
+ └── render     ·            ·            (z)     ·
+      │         render 0     z            ·       ·
+      └── scan  ·            ·            (y, z)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
+·               filter       y > 1        ·       ·
 
 statement ok
 CREATE TABLE abcd (
@@ -135,10 +136,8 @@ render     ·         ·                  (z, d, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
-group      ·            ·             (a, b)  ·
- │         aggregate 0  a             ·       ·
- │         aggregate 1  b             ·       ·
- │         group by     @1-@2         ·       ·
+distinct   ·            ·             (a, b)  weak-key(a,b)
+ │         distinct on  a, b          ·       ·
  └── scan  ·            ·             (a, b)  ·
 ·          table        abcd@primary  ·       ·
 ·          spans        ALL           ·       ·
@@ -163,9 +162,8 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
-group      ·            ·           (v)  ·
- │         aggregate 0  v           ·    ·
- │         group by     @1          ·    ·
+distinct   ·            ·           (v)  weak-key(v)
+ │         distinct on  v           ·    ·
  └── scan  ·            ·           (v)  ·
 ·          table        kv@primary  ·    ·
 ·          spans        ALL         ·    ·

@@ -358,9 +358,8 @@ limit            ·       ·
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t
 ----
-group      ·            ·
- │         aggregate 0  v
- │         group by     @1
+distinct   ·            ·
+ │         distinct on  v
  └── scan  ·            ·
 ·          table        t@primary
 ·          spans        ALL
@@ -371,9 +370,8 @@ SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t
 limit           ·            ·
  │              count        1
  │              offset       1
- └── group      ·            ·
-      │         aggregate 0  v
-      │         group by     @1
+ └── distinct   ·            ·
+      │         distinct on  v
       └── scan  ·            ·
 ·               table        t@primary
 ·               spans        ALL

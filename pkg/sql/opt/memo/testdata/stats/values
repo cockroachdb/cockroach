@@ -33,7 +33,7 @@ select
 norm
 SELECT x, y FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3)) AS q(x, y) GROUP BY x, y
 ----
-group-by
+distinct-on
  ├── columns: x:1(int) y:2(int)
  ├── grouping columns: column1:1(int) column2:2(int)
  ├── cardinality: [1 - 4]

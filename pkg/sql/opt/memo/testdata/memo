@@ -382,9 +382,9 @@ memo
 SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
 memo (optimized)
- ├── G1: (group-by G2 G3 cols=(3))
+ ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── "[presentation: field:3]"
- │         ├── best: (group-by G2 G3 cols=(3))
+ │         ├── best: (distinct-on G2 G3 cols=(3))
  │         └── cost: 0.03
  ├── G2: (explain G4 [presentation: k:1])
  │    └── ""
@@ -407,9 +407,9 @@ memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
 memo (optimized)
- ├── G1: (group-by G2 G3 cols=(4))
+ ├── G1: (distinct-on G2 G3 cols=(4))
  │    └── "[presentation: tag:4]"
- │         ├── best: (group-by G2 G3 cols=(4))
+ │         ├── best: (distinct-on G2 G3 cols=(4))
  │         └── cost: 0.00
  ├── G2: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │    └── ""
