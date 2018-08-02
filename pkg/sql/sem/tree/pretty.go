@@ -905,11 +905,11 @@ func (node *Array) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
-	var row string
-	if node.Row {
-		row = "ROW"
+	exprDoc := p.Doc(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		exprDoc = pretty.Concat(exprDoc, pretty.Text(","))
 	}
-	d := pretty.Bracket(row+"(", p.Doc(&node.Exprs), ")")
+	d := pretty.Bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
 		for i, n := range node.Labels {

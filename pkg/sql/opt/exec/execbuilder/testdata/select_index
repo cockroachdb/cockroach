@@ -626,12 +626,12 @@ CREATE TABLE tab0(
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-render     ·         ·                                     (k)        ·
- │         render 0  k                                     ·          ·
- └── scan  ·         ·                                     (k, a, b)  ·
-·          table     tab0@primary                          ·          ·
-·          spans     ALL                                   ·          ·
-·          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·          ·
+render     ·         ·                                      (k)        ·
+ │         render 0  k                                      ·          ·
+ └── scan  ·         ·                                      (k, a, b)  ·
+·          table     tab0@primary                           ·          ·
+·          spans     ALL                                    ·          ·
+·          filter    ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check

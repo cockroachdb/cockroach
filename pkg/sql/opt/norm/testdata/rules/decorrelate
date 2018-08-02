@@ -95,8 +95,8 @@ semi-join-apply
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
  │    ├── cardinality: [2 - 2]
- │    ├── (a.k) [type=tuple{int}, outer=(1)]
- │    └── (a.i) [type=tuple{int}, outer=(2)]
+ │    ├── (a.k,) [type=tuple{int}, outer=(1)]
+ │    └── (a.i,) [type=tuple{int}, outer=(2)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -115,8 +115,8 @@ anti-join-apply
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
  │    ├── cardinality: [2 - 2]
- │    ├── (a.k) [type=tuple{int}, outer=(1)]
- │    └── (a.i) [type=tuple{int}, outer=(2)]
+ │    ├── (a.k,) [type=tuple{int}, outer=(1)]
+ │    └── (a.i,) [type=tuple{int}, outer=(2)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
@@ -2735,9 +2735,9 @@ project
  │    │              │    ├── columns: column1:8(int)
  │    │              │    ├── outer: (6,7)
  │    │              │    ├── cardinality: [3 - 3]
- │    │              │    ├── (r) [type=tuple{int}, outer=(6)]
- │    │              │    ├── (10) [type=tuple{int}]
- │    │              │    └── (s) [type=tuple{int}, outer=(7)]
+ │    │              │    ├── (r,) [type=tuple{int}, outer=(6)]
+ │    │              │    ├── (10,) [type=tuple{int}]
+ │    │              │    └── (s,) [type=tuple{int}, outer=(7)]
  │    │              └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]
@@ -2811,7 +2811,7 @@ project
  │    │         │    ├── cardinality: [1 - 1]
  │    │         │    ├── key: ()
  │    │         │    ├── fd: ()-->(8)
- │    │         │    └── (exists) [type=tuple{bool}, outer=(11)]
+ │    │         │    └── (exists,) [type=tuple{bool}, outer=(11)]
  │    │         └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]
@@ -2892,7 +2892,7 @@ project
  │    │         │    ├── cardinality: [1 - 1]
  │    │         │    ├── key: ()
  │    │         │    ├── fd: ()-->(8)
- │    │         │    └── (case) [type=tuple{bool}, outer=(11)]
+ │    │         │    └── (case,) [type=tuple{bool}, outer=(11)]
  │    │         └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]

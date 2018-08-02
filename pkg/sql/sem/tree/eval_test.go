@@ -910,6 +910,9 @@ func TestEval(t *testing.T) {
 		{`(NULL, NULL) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((3, 4))`, `NULL`},
+		{`NULL IN ()`, `false`},
+		{`1 IN ()`, `false`},
+
 		// ANY, SOME, and ALL expressions.
 		{`1   = ANY ARRAY[]`, `false`},
 		{`1   = ANY (ARRAY[2, 3, 4])`, `false`},
