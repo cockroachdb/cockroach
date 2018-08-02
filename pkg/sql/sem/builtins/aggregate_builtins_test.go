@@ -40,6 +40,7 @@ func testAggregateResultDeepCopy(
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx)
+	defer aggImpl.Close(context.Background())
 	runningDatums := make([]tree.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
@@ -292,6 +293,7 @@ func runBenchmarkAggregate(
 		if err != nil || res == nil {
 			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
 		}
+		aggImpl.Close(context.Background())
 	}
 }
 
