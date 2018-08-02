@@ -566,6 +566,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+			fmt.Fprintf(tw, "client flags:\t%s\n", clientFlags())
 			if len(serverCfg.SocketFile) != 0 {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
@@ -785,6 +786,22 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	return returnErr
+}
+
+func clientFlags() string {
+	flags := []string{os.Args[0]}
+	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
+	if err == nil {
+		flags = append(flags,
+			"--host="+host,
+			"--port="+port)
+	}
+	if startCtx.serverInsecure {
+		flags = append(flags, "--insecure")
+	} else {
+		flags = append(flags, "--certs-dir="+startCtx.serverSSLCertsDir)
+	}
+	return strings.Join(flags, " ")
 }
 
 func reportConfiguration(ctx context.Context) {
