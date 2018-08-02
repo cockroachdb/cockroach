@@ -271,7 +271,7 @@ func (p *planner) SelectClause(
 			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
 				return nil, pgerror.NewErrorf(
 					pgerror.CodeSyntaxError,
-					"SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions",
+					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 				)
 			}
 		}

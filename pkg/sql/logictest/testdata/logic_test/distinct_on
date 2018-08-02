@@ -171,13 +171,13 @@ SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 # With ORDER BY #
 #################
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (x) x, y, z FROM xyz ORDER BY y
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (y) x, y, z FROM xyz ORDER BY x, y
 
-statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
 SELECT DISTINCT ON (y, z) x, y, z FROM xyz ORDER BY x
 
 query I
