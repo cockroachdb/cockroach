@@ -19,7 +19,6 @@ package distsqlplan
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -74,7 +73,7 @@ func MakeExpression(
 	}
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
 	}
 	return distsqlrun.Expression{Expr: buf.String()}
 }
