@@ -617,31 +617,34 @@ func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var baseTest preparedQueryTest
 
-	queryTests := map[string][]preparedQueryTest{
-		"SELECT $1 > 0": {
+	queryTests := []struct {
+		sql   string
+		ptest []preparedQueryTest
+	}{
+		{"SELECT $1 > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs("1").Results(true),
 			baseTest.SetArgs(1.1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.1": invalid syntax`).Results(true),
 			baseTest.SetArgs("1.0").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "1.0": invalid syntax`),
 			baseTest.SetArgs(true).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
-		},
-		"SELECT ($1) > 0": {
+		}},
+		{"SELECT ($1) > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs(-1).Results(false),
-		},
-		"SELECT ((($1))) > 0": {
+		}},
+		{"SELECT ((($1))) > 0", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs(-1).Results(false),
-		},
-		"SELECT TRUE AND $1": {
+		}},
+		{"SELECT TRUE AND $1", []preparedQueryTest{
 			baseTest.SetArgs(true).Results(true),
 			baseTest.SetArgs(false).Results(false),
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
 			// Make sure we can run another after a failure.
 			baseTest.SetArgs(true).Results(true),
-		},
-		"SELECT $1::bool": {
+		}},
+		{"SELECT $1::bool", []preparedQueryTest{
 			baseTest.SetArgs(true).Results(true),
 			baseTest.SetArgs("true").Results(true),
 			baseTest.SetArgs("false").Results(false),
@@ -649,76 +652,76 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "2": invalid syntax`),
 			baseTest.SetArgs(3.1).Error(`pq: error in argument for $1: strconv.ParseBool: parsing "3.1": invalid syntax`),
 			baseTest.SetArgs("").Error(`pq: error in argument for $1: strconv.ParseBool: parsing "": invalid syntax`),
-		},
-		"SELECT CASE 40+2 WHEN 42 THEN 51 ELSE $1::INT END": {
+		}},
+		{"SELECT CASE 40+2 WHEN 42 THEN 51 ELSE $1::INT END", []preparedQueryTest{
 			baseTest.Error(
 				"pq: no value provided for placeholder: $1",
 			).PreparedError(
 				wrongArgCountString(1, 0),
 			),
-		},
-		"SELECT $1::int > $2::float": {
+		}},
+		{"SELECT $1::int > $2::float", []preparedQueryTest{
 			baseTest.SetArgs(2, 1).Results(true),
 			baseTest.SetArgs("2", 1).Results(true),
 			baseTest.SetArgs(1, "2").Results(false),
 			baseTest.SetArgs("2", "1.0").Results(true),
 			baseTest.SetArgs("2.0", "1").Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.0": invalid syntax`),
 			baseTest.SetArgs(2.1, 1).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "2.1": invalid syntax`),
-		},
-		"SELECT greatest($1, 0, $2), $2": {
+		}},
+		{"SELECT greatest($1, 0, $2), $2", []preparedQueryTest{
 			baseTest.SetArgs(1, -1).Results(1, -1),
 			baseTest.SetArgs(-1, 10).Results(10, 10),
 			baseTest.SetArgs("-2", "-1").Results(0, -1),
 			baseTest.SetArgs(1, 2.1).Error(`pq: error in argument for $2: strconv.ParseInt: parsing "2.1": invalid syntax`),
-		},
-		"SELECT $1::int, $1::float": {
+		}},
+		{"SELECT $1::int, $1::float", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1, 1.0),
 			baseTest.SetArgs("1").Results(1, 1.0),
-		},
-		"SELECT 3 + $1, $1 + $2": {
+		}},
+		{"SELECT 3 + $1, $1 + $2", []preparedQueryTest{
 			baseTest.SetArgs("1", "2").Results(4, 3),
 			baseTest.SetArgs(3, "4").Results(6, 7),
 			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
-		},
+		}},
 		// Check for name resolution.
-		"SELECT count(*)": {
+		{"SELECT count(*)", []preparedQueryTest{
 			baseTest.Results(1),
-		},
-		"SELECT CASE WHEN $1 THEN 1-$3 WHEN $2 THEN 1+$3 END": {
+		}},
+		{"SELECT CASE WHEN $1 THEN 1-$3 WHEN $2 THEN 1+$3 END", []preparedQueryTest{
 			baseTest.SetArgs(true, false, 2).Results(-1),
 			baseTest.SetArgs(false, true, 3).Results(4),
 			baseTest.SetArgs(false, false, 2).Results(gosql.NullBool{}),
-		},
-		"SELECT CASE 1 WHEN $1 THEN $2 ELSE 2 END": {
+		}},
+		{"SELECT CASE 1 WHEN $1 THEN $2 ELSE 2 END", []preparedQueryTest{
 			baseTest.SetArgs(1, 3).Results(3),
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "true": invalid syntax`),
-		},
-		"SELECT $1[2] LIKE 'b'": {
+		}},
+		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
-		},
-		"SET application_name = $1": {
+		}},
+		{"SET application_name = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
-		},
-		"SET CLUSTER SETTING cluster.organization = $1": {
+		}},
+		{"SET CLUSTER SETTING cluster.organization = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
-		},
-		"SHOW DATABASE": {
+		}},
+		{"SHOW DATABASE", []preparedQueryTest{
 			baseTest.Results("defaultdb"),
-		},
-		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
+		}},
+		{"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1", []preparedQueryTest{
 			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
-		},
-		"SHOW COLUMNS FROM system.users": {
+		}},
+		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{\"primary\"}").
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}").
 				Results("isRole", "BOOL", false, false, "", "{}"),
-		},
-		"SHOW DATABASES": {
+		}},
+		{"SHOW DATABASES", []preparedQueryTest{
 			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
-		},
-		"SHOW GRANTS ON system.users": {
+		}},
+		{"SHOW GRANTS ON system.users", []preparedQueryTest{
 			baseTest.Results("system", "public", "users", sqlbase.AdminRole, "DELETE").
 				Results("system", "public", "users", sqlbase.AdminRole, "GRANT").
 				Results("system", "public", "users", sqlbase.AdminRole, "INSERT").
@@ -729,46 +732,58 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", security.RootUser, "INSERT").
 				Results("system", "public", "users", security.RootUser, "SELECT").
 				Results("system", "public", "users", security.RootUser, "UPDATE"),
-		},
-		"SHOW INDEXES FROM system.users": {
+		}},
+		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
-		},
-		"SHOW TABLES FROM system": {
+		}},
+		{"SHOW TABLES FROM system", []preparedQueryTest{
 			baseTest.Results("descriptor").Others(13),
-		},
-		"SHOW SCHEMAS FROM system": {
+		}},
+		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal").Others(3),
-		},
-		"SHOW CONSTRAINTS FROM system.users": {
+		}},
+		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true),
-		},
-		"SHOW TIME ZONE": {
+		}},
+		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),
-		},
-		"SHOW USERS": {
-			baseTest.Results("root"),
-		},
-		"SELECT (SELECT 1+$1)": {
+		}},
+		{"CREATE USER IF NOT EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
+			baseTest.SetArgs("abc", "def"),
+			baseTest.SetArgs("woo", "waa"),
+		}},
+		{"ALTER USER IF EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
+			baseTest.SetArgs("abc", "def"),
+			baseTest.SetArgs("woo", "waa"),
+		}},
+		{"SHOW USERS", []preparedQueryTest{
+			baseTest.Results("abc").Results("root").Results("woo"),
+		}},
+		{"DROP USER $1", []preparedQueryTest{
+			baseTest.SetArgs("abc"),
+			baseTest.SetArgs("woo"),
+		}},
+		{"SELECT (SELECT 1+$1)", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(2),
-		},
-		"SELECT CASE WHEN $1 THEN $2 ELSE 3 END": {
+		}},
+		{"SELECT CASE WHEN $1 THEN $2 ELSE 3 END", []preparedQueryTest{
 			baseTest.SetArgs(true, 2).Results(2),
 			baseTest.SetArgs(false, 2).Results(3),
-		},
-		"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END": {
+		}},
+		{"SELECT CASE WHEN TRUE THEN 1 ELSE $1 END", []preparedQueryTest{
 			baseTest.SetArgs(2).Results(1),
-		},
-		"SELECT CASE $1 WHEN 1 THEN 1 END": {
+		}},
+		{"SELECT CASE $1 WHEN 1 THEN 1 END", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1),
 			baseTest.SetArgs(2).Results(gosql.NullInt64{}),
-		},
-		"SELECT $1::timestamp, $2::date": {
+		}},
+		{"SELECT $1::timestamp, $2::date", []preparedQueryTest{
 			baseTest.SetArgs("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
-		},
-		"SELECT $1::date, $2::timestamp": {
+		}},
+		{"SELECT $1::date, $2::timestamp", []preparedQueryTest{
 			baseTest.SetArgs(
 				time.Date(2006, 7, 8, 0, 0, 0, 9, time.FixedZone("", 0)),
 				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
@@ -776,173 +791,173 @@ func TestPGPreparedQuery(t *testing.T) {
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 				time.Date(2001, 1, 2, 3, 4, 5, 6000, time.FixedZone("", 0)),
 			),
-		},
-		"INSERT INTO d.ts VALUES($1, $2) RETURNING *": {
+		}},
+		{"INSERT INTO d.ts VALUES($1, $2) RETURNING *", []preparedQueryTest{
 			baseTest.SetArgs("2001-01-02 03:04:05", "2006-07-08").Results(
 				time.Date(2001, 1, 2, 3, 4, 5, 0, time.FixedZone("", 0)),
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
-		},
-		"INSERT INTO d.ts VALUES(current_timestamp(), $1) RETURNING b": {
+		}},
+		{"INSERT INTO d.ts VALUES(current_timestamp(), $1) RETURNING b", []preparedQueryTest{
 			baseTest.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
-		},
-		"INSERT INTO d.ts VALUES(statement_timestamp(), $1) RETURNING b": {
+		}},
+		{"INSERT INTO d.ts VALUES(statement_timestamp(), $1) RETURNING b", []preparedQueryTest{
 			baseTest.SetArgs("2006-07-08").Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 0, time.FixedZone("", 0)),
 			),
-		},
-		"INSERT INTO d.ts (a) VALUES ($1) RETURNING a": {
+		}},
+		{"INSERT INTO d.ts (a) VALUES ($1) RETURNING a", []preparedQueryTest{
 			baseTest.SetArgs(
 				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			).Results(
 				time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("", 0)),
 			),
-		},
-		"INSERT INTO d.T VALUES ($1) RETURNING 1": {
+		}},
+		{"INSERT INTO d.T VALUES ($1) RETURNING 1", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1),
 			baseTest.SetArgs(nil).Results(1),
-		},
-		"INSERT INTO d.T VALUES ($1::INT) RETURNING 1": {
+		}},
+		{"INSERT INTO d.T VALUES ($1::INT) RETURNING 1", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1),
-		},
-		"INSERT INTO d.T VALUES ($1) RETURNING $1": {
+		}},
+		{"INSERT INTO d.T VALUES ($1) RETURNING $1", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1),
 			baseTest.SetArgs(3).Results(3),
-		},
-		"INSERT INTO d.T VALUES ($1) RETURNING $1, 1 + $1": {
+		}},
+		{"INSERT INTO d.T VALUES ($1) RETURNING $1, 1 + $1", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(1, 2),
 			baseTest.SetArgs(3).Results(3, 4),
-		},
-		"INSERT INTO d.T VALUES (greatest(42, $1)) RETURNING a": {
+		}},
+		{"INSERT INTO d.T VALUES (greatest(42, $1)) RETURNING a", []preparedQueryTest{
 			baseTest.SetArgs(40).Results(42),
 			baseTest.SetArgs(45).Results(45),
-		},
+		}},
 		// TODO(justin): match this with the optimizer. Currently we only report
 		// one placeholder not being filled in, since we only detect so at eval
 		// time, #26901.
-		// "SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)": {
+		// {"SELECT a FROM d.T WHERE a = $1 AND (SELECT a >= $2 FROM d.T WHERE a = $1)",  []preparedQueryTest{
 		// 	baseTest.SetArgs(10, 5).Results(10),
 		// 	baseTest.Error(
 		// 		"pq: no value provided for placeholders: $1, $2",
 		// 	).PreparedError(
 		// 		wrongArgCountString(2, 0),
 		// 	),
-		// },
-		"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2": {
+		// }},
+		{"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2", []preparedQueryTest{
 			baseTest.SetArgs(1, 0).Results(1),
 			baseTest.SetArgs(1, 1).Results(2),
 			baseTest.SetArgs(1, 2).Results(3),
-		},
-		"SELECT 3 + CASE (4) WHEN 4 THEN $1 ELSE 42 END": {
+		}},
+		{"SELECT 3 + CASE (4) WHEN 4 THEN $1 ELSE 42 END", []preparedQueryTest{
 			baseTest.SetArgs(12).Results(15),
 			baseTest.SetArgs(-12).Results(-9),
-		},
-		"SELECT DATE '2001-01-02' + ($1 + $1:::int)": {
+		}},
+		{"SELECT DATE '2001-01-02' + ($1 + $1:::int)", []preparedQueryTest{
 			baseTest.SetArgs(12).Results("2001-01-26T00:00:00Z"),
-		},
+		}},
 		// Hint for INT type to distinguish from ~INET functionality.
-		"SELECT to_hex(~(~$1:::INT))": {
+		{"SELECT to_hex(~(~$1:::INT))", []preparedQueryTest{
 			baseTest.SetArgs(12).Results("c"),
-		},
-		"SELECT $1::INT": {
+		}},
+		{"SELECT $1::INT", []preparedQueryTest{
 			baseTest.SetArgs(12).Results(12),
-		},
-		"SELECT ANNOTATE_TYPE($1, int)": {
+		}},
+		{"SELECT ANNOTATE_TYPE($1, int)", []preparedQueryTest{
 			baseTest.SetArgs(12).Results(12),
-		},
-		"SELECT $1 + $2, ANNOTATE_TYPE($2, float)": {
+		}},
+		{"SELECT $1 + $2, ANNOTATE_TYPE($2, float)", []preparedQueryTest{
 			baseTest.SetArgs(12, 23).Results(35, 23),
-		},
-		"INSERT INTO d.T VALUES ($1 + 1) RETURNING a": {
+		}},
+		{"INSERT INTO d.T VALUES ($1 + 1) RETURNING a", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(2),
 			baseTest.SetArgs(11).Results(12),
-		},
-		"INSERT INTO d.T VALUES (-$1) RETURNING a": {
+		}},
+		{"INSERT INTO d.T VALUES (-$1) RETURNING a", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(-1),
 			baseTest.SetArgs(-999).Results(999),
-		},
-		"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b": {
+		}},
+		{"INSERT INTO d.two (a, b) VALUES (~$1, $1 + $2) RETURNING a, b", []preparedQueryTest{
 			baseTest.SetArgs(5, 6).Results(-6, 11),
-		},
-		"INSERT INTO d.str (s) VALUES (left($1, 3)) RETURNING s": {
+		}},
+		{"INSERT INTO d.str (s) VALUES (left($1, 3)) RETURNING s", []preparedQueryTest{
 			baseTest.SetArgs("abcdef").Results("abc"),
 			baseTest.SetArgs("123456").Results("123"),
-		},
-		"INSERT INTO d.str (b) VALUES (COALESCE($1, 'strLit')) RETURNING b": {
+		}},
+		{"INSERT INTO d.str (b) VALUES (COALESCE($1, 'strLit')) RETURNING b", []preparedQueryTest{
 			baseTest.SetArgs(nil).Results("strLit"),
 			baseTest.SetArgs("123456").Results("123456"),
-		},
-		"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
+		}},
+		{"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *", []preparedQueryTest{
 			baseTest.SetArgs(123).Results(123, "hello 123"),
-		},
-		"SELECT * from d.T WHERE a = ANY($1)": {
+		}},
+		{"SELECT * from d.T WHERE a = ANY($1)", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int{10})).Results(10),
-		},
-		"SELECT s from (VALUES ('foo'), ('bar')) as t(s) WHERE s = ANY($1)": {
+		}},
+		{"SELECT s from (VALUES ('foo'), ('bar')) as t(s) WHERE s = ANY($1)", []preparedQueryTest{
 			baseTest.SetArgs(pq.StringArray([]string{"foo"})).Results("foo"),
-		},
+		}},
 		// #13725
-		"SELECT * FROM d.emptynorows": {
+		{"SELECT * FROM d.emptynorows", []preparedQueryTest{
 			baseTest.SetArgs(),
-		},
-		"SELECT * FROM d.emptyrows": {
+		}},
+		{"SELECT * FROM d.emptyrows", []preparedQueryTest{
 			baseTest.SetArgs().Results().Results().Results(),
-		},
+		}},
 		// #14238
-		"EXPLAIN SELECT 1": {
+		{"EXPLAIN SELECT 1", []preparedQueryTest{
 			baseTest.SetArgs().Results("render", "", "").Results(" └── emptyrow", "", ""),
-		},
+		}},
 		// #14245
-		"SELECT 1::oid = $1": {
+		{"SELECT 1::oid = $1", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(true),
 			baseTest.SetArgs(2).Results(false),
 			baseTest.SetArgs("1").Results(true),
 			baseTest.SetArgs("2").Results(false),
-		},
-		"SELECT * FROM d.pg_catalog.pg_class WHERE relnamespace = $1": {
+		}},
+		{"SELECT * FROM d.pg_catalog.pg_class WHERE relnamespace = $1", []preparedQueryTest{
 			baseTest.SetArgs(1),
-		},
-		"SELECT $1::UUID": {
+		}},
+		{"SELECT $1::UUID", []preparedQueryTest{
 			baseTest.SetArgs("63616665-6630-3064-6465-616462656562").Results("63616665-6630-3064-6465-616462656562"),
-		},
-		"SELECT $1::INET": {
+		}},
+		{"SELECT $1::INET", []preparedQueryTest{
 			baseTest.SetArgs("192.168.0.1/32").Results("192.168.0.1"),
-		},
-		"SELECT $1::TIME": {
+		}},
+		{"SELECT $1::TIME", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00").Results("0000-01-01T12:00:00Z"),
-		},
-		"SELECT $1::TIMETZ": {
+		}},
+		{"SELECT $1::TIMETZ", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00-07").Results("0000-01-01T19:00:00Z"),
-		},
-		"SELECT $1:::FLOAT[]": {
+		}},
+		{"SELECT $1:::FLOAT[]", []preparedQueryTest{
 			baseTest.SetArgs("{}").Results("{}"),
 			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
-		},
-		"SELECT $1:::DECIMAL[]": {
+		}},
+		{"SELECT $1:::DECIMAL[]", []preparedQueryTest{
 			baseTest.SetArgs("{1.000}").Results("{1.000}"),
-		},
-		"SELECT $1:::STRING[]": {
+		}},
+		{"SELECT $1:::STRING[]", []preparedQueryTest{
 			baseTest.SetArgs(`{aaa}`).Results(`{"aaa"}`),
 			baseTest.SetArgs(`{"aaa"}`).Results(`{"aaa"}`),
 			baseTest.SetArgs(`{aaa,bbb,ccc}`).Results(`{"aaa","bbb","ccc"}`),
-		},
-		"SELECT $1:::JSON": {
+		}},
+		{"SELECT $1:::JSON", []preparedQueryTest{
 			baseTest.SetArgs(`true`).Results(`true`),
 			baseTest.SetArgs(`"hello"`).Results(`"hello"`),
-		},
+		}},
 
-		"SELECT $1::INT[]": {
+		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
-		},
+		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
 		//   as top-level constants, and instead are simply resolved to their natural type.
-		//"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2": {
+		//{"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
 		// 	baseTest.SetArgs("hello").Results("one").Results("hello"),
-		//},
+		//}},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1059,7 +1074,9 @@ ALTER TABLE d.emptyrows DROP COLUMN x; -- zero columns, 3 rows
 	}
 
 	t.Run("exec", func(t *testing.T) {
-		for query, tests := range queryTests {
+		for _, test := range queryTests {
+			query := test.sql
+			tests := test.ptest
 			t.Run(query, func(t *testing.T) {
 				runTests(t, query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
 					return db.Query(query, args...)
@@ -1069,7 +1086,9 @@ ALTER TABLE d.emptyrows DROP COLUMN x; -- zero columns, 3 rows
 	})
 
 	t.Run("prepare", func(t *testing.T) {
-		for query, tests := range queryTests {
+		for _, test := range queryTests {
+			query := test.sql
+			tests := test.ptest
 			t.Run(query, func(t *testing.T) {
 				if stmt, err := db.Prepare(query); err != nil {
 					t.Errorf("%s: prepare error: %s", query, err)
