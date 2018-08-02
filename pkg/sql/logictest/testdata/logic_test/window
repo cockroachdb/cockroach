@@ -2811,3 +2811,150 @@ Dell             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenov
 iPad             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad"}
 Kindle Fire      {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire"}
 Samsung          {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire","Samsung"}
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (GROUPS NULL PRECEDING) FROM products
+
+statement error frame starting offset must not be null
+SELECT avg(price) OVER (GROUPS BETWEEN NULL PRECEDING AND 1 FOLLOWING) FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price GROUPS -1 PRECEDING) AS avg_price FROM products
+
+statement error frame starting offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price GROUPS -1 PRECEDING)
+
+statement error frame ending offset must not be null
+SELECT avg(price) OVER (GROUPS BETWEEN 1 PRECEDING AND NULL FOLLOWING) FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER (PARTITION BY price GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING) AS avg_price FROM products
+
+statement error frame ending offset must not be negative
+SELECT price, avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY price GROUPS BETWEEN 1 FOLLOWING AND -1 FOLLOWING)
+
+statement error frame ending offset must not be negative
+SELECT product_name, price, min(price) OVER (PARTITION BY group_name GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS min_over_three, max(price) OVER (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND -1 FOLLOWING) AS max_over_partition FROM products ORDER BY group_id
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS 1.5 PRECEDING) AS avg_price FROM products
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS 1.5 PRECEDING)
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING) AS avg_price FROM products
+
+statement error incompatible window frame start type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS BETWEEN 1.5 PRECEDING AND UNBOUNDED FOLLOWING)
+
+statement error incompatible window frame end type: decimal
+SELECT avg(price) OVER (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING) AS avg_price FROM products
+
+statement error incompatible window frame end type: decimal
+SELECT avg(price) OVER w AS avg_price FROM products WINDOW w AS (PARTITION BY group_name GROUPS BETWEEN UNBOUNDED PRECEDING AND 1.5 FOLLOWING)
+
+query RRRRR
+SELECT price, sum(price) OVER (ORDER BY price GROUPS UNBOUNDED PRECEDING), sum(price) OVER (ORDER BY price GROUPS 100 PRECEDING), sum(price) OVER (ORDER BY price GROUPS 1 PRECEDING), sum(price) OVER (ORDER BY group_name GROUPS CURRENT ROW) FROM products ORDER BY price, group_id
+----
+150.00   150.00   150.00   150.00   1050.00
+200.00   550.00   550.00   550.00   2000.00
+200.00   550.00   550.00   550.00   1050.00
+400.00   950.00   950.00   800.00   2000.00
+500.00   1450.00  1450.00  900.00   2000.00
+700.00   3550.00  3550.00  2600.00  3400.00
+700.00   3550.00  3550.00  2600.00  3400.00
+700.00   3550.00  3550.00  2600.00  1050.00
+800.00   4350.00  4350.00  2900.00  3400.00
+900.00   5250.00  5250.00  1700.00  2000.00
+1200.00  6450.00  6450.00  2100.00  3400.00
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 100 PRECEDING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 PRECEDING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  NULL  NULL                   150.00                 237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+400.00   3  NULL  150.00                 237.50                 443.75                 586.36363636363636364  586.36363636363636364
+500.00   4  NULL  183.33333333333333333  290.00                 483.33333333333333333  586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+700.00   5  NULL  237.50                 443.75                 525.00                 586.36363636363636364  586.36363636363636364
+800.00   6  NULL  290.00                 483.33333333333333333  586.36363636363636364  586.36363636363636364  586.36363636363636364
+900.00   7  NULL  443.75                 525.00                 586.36363636363636364  586.36363636363636364  586.36363636363636364
+1200.00  8  NULL  483.33333333333333333  586.36363636363636364  586.36363636363636364  586.36363636363636364  586.36363636363636364
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 4 PRECEDING AND 100 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 3 PRECEDING AND 2 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 2 PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  NULL  NULL                   150.00                 237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+200.00   2  NULL  NULL                   183.33333333333333333  290.00                 586.36363636363636364  586.36363636363636364
+400.00   3  NULL  150.00                 237.50                 485.71428571428571429  630.00                 630.00
+500.00   4  NULL  183.33333333333333333  325.00                 633.33333333333333333  737.50                 737.50
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+700.00   5  NULL  266.66666666666666667  600.00                 716.66666666666666667  785.71428571428571429  785.71428571428571429
+800.00   6  NULL  450.00                 680.00                 833.33333333333333333  833.33333333333333333  833.33333333333333333
+900.00   7  NULL  650.00                 760.00                 966.66666666666666667  966.66666666666666667  966.66666666666666667
+1200.00  8  NULL  725.00                 966.66666666666666667  1050.00                1050.00                1050.00
+
+query RIRRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND 0 PRECEDING), avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN 0 PRECEDING AND 0 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND CURRENT ROW), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND 2 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  150.00   150.00   150.00   150.00   237.50                 586.36363636363636364  586.36363636363636364
+200.00   2  200.00   200.00   200.00   200.00   325.00                 630.00                 630.00
+200.00   2  200.00   200.00   200.00   200.00   325.00                 630.00                 630.00
+400.00   3  400.00   400.00   400.00   400.00   600.00                 737.50                 737.50
+500.00   4  500.00   500.00   500.00   500.00   680.00                 785.71428571428571429  785.71428571428571429
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+700.00   5  700.00   700.00   700.00   700.00   760.00                 833.33333333333333333  833.33333333333333333
+800.00   6  800.00   800.00   800.00   800.00   966.66666666666666667  966.66666666666666667  966.66666666666666667
+900.00   7  900.00   900.00   900.00   900.00   1050.00                1050.00                1050.00
+1200.00  8  1200.00  1200.00  1200.00  1200.00  1200.00                1200.00                1200.00
+
+query RIRRRRRR
+SELECT price, dense_rank() OVER w, avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 100 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 1 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 2 FOLLOWING AND 6 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 3 FOLLOWING AND 3 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 0 FOLLOWING AND 4 FOLLOWING), avg(price) OVER (w GROUPS BETWEEN 5 FOLLOWING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (ORDER BY price) ORDER BY price
+----
+150.00   1  785.71428571428571429  NULL  671.42857142857142857  500.00   443.75                 966.66666666666666667
+200.00   2  833.33333333333333333  NULL  785.71428571428571429  700.00   525.00                 1050.00
+200.00   2  833.33333333333333333  NULL  785.71428571428571429  700.00   525.00                 1050.00
+400.00   3  966.66666666666666667  NULL  833.33333333333333333  800.00   671.42857142857142857  1200.00
+500.00   4  1050.00                NULL  966.66666666666666667  900.00   785.71428571428571429  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+700.00   5  1200.00                NULL  1050.00                1200.00  833.33333333333333333  NULL
+800.00   6  NULL                   NULL  1200.00                NULL     966.66666666666666667  NULL
+900.00   7  NULL                   NULL  NULL                   NULL     1050.00                NULL
+1200.00  8  NULL                   NULL  NULL                   NULL     1200.00                NULL
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name ORDER BY price GROUPS BETWEEN CURRENT ROW AND 3 FOLLOWING), avg(price) OVER (ORDER BY price GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   500.00   586.36363636363636364
+Smartphone  HTC One          400.00   600.00   586.36363636363636364
+Smartphone  Nexus            500.00   700.00   586.36363636363636364
+Smartphone  iPhone           900.00   900.00   586.36363636363636364
+Laptop      HP Elite         1200.00  1200.00  586.36363636363636364
+Laptop      Lenovo Thinkpad  700.00   850.00   586.36363636363636364
+Laptop      Sony VAIO        700.00   850.00   586.36363636363636364
+Laptop      Dell             800.00   1000.00  586.36363636363636364
+Tablet      iPad             700.00   700.00   586.36363636363636364
+Tablet      Kindle Fire      150.00   350.00   586.36363636363636364
+Tablet      Samsung          200.00   450.00   586.36363636363636364
+
+query TTRRR
+SELECT group_name, product_name, price, avg(price) OVER (GROUPS BETWEEN 1 PRECEDING AND 2 PRECEDING), avg(price) OVER (ORDER BY price GROUPS BETWEEN CURRENT ROW AND CURRENT ROW) FROM products ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   NULL  200.00
+Smartphone  HTC One          400.00   NULL  400.00
+Smartphone  Nexus            500.00   NULL  500.00
+Smartphone  iPhone           900.00   NULL  900.00
+Laptop      HP Elite         1200.00  NULL  1200.00
+Laptop      Lenovo Thinkpad  700.00   NULL  700.00
+Laptop      Sony VAIO        700.00   NULL  700.00
+Laptop      Dell             800.00   NULL  800.00
+Tablet      iPad             700.00   NULL  700.00
+Tablet      Kindle Fire      150.00   NULL  150.00
+Tablet      Samsung          200.00   NULL  200.00

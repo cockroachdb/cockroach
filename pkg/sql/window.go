@@ -597,7 +597,7 @@ func (n *partitionSorter) Swap(i, j int) {
 }
 func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 
-// partitionSorter implements the peerGroupChecker interface.
+// partitionSorter implements the PeerGroupChecker interface.
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
@@ -618,14 +618,8 @@ func (n *partitionSorter) Compare(i, j int) int {
 
 type allPeers struct{}
 
-// allPeers implements the peerGroupChecker interface.
+// allPeers implements the PeerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) bool { return true }
-
-// peerGroupChecker can check if a pair of row indexes within a partition are
-// in the same peer group.
-type peerGroupChecker interface {
-	InSameGroup(i, j int) bool
-}
 
 // computeWindows populates n.run.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs. This needs to be performed
@@ -806,10 +800,10 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
-			var peerGrouper peerGroupChecker
+			var peerGrouper tree.PeerGroupChecker
 			if windowFn.columnOrdering != nil {
 				// If an ORDER BY clause is provided, order the partition and use the
-				// sorter as our peerGroupChecker.
+				// sorter as our PeerGroupChecker.
 				sorter := &partitionSorter{
 					evalCtx:       evalCtx,
 					rows:          partition,
@@ -841,19 +835,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				builtins.ShouldReset(builtin)
 			}
 
-			for frameRun.RowIdx < partition.Len() {
-				// Compute the size of the current peer group.
-				frameRun.FirstPeerIdx = frameRun.RowIdx
-				frameRun.PeerRowCount = 1
-				for ; frameRun.FirstPeerIdx+frameRun.PeerRowCount < frameRun.PartitionSize(); frameRun.PeerRowCount++ {
-					cur := frameRun.FirstPeerIdx + frameRun.PeerRowCount
-					if !peerGrouper.InSameGroup(cur, cur-1) {
-						break
-					}
-				}
+			frameRun.PeerHelper.Init(frameRun, peerGrouper)
+			frameRun.CurRowPeerGroupNum = 0
 
+			for frameRun.RowIdx < partition.Len() {
 				// Perform calculations on each row in the current peer group.
-				for ; frameRun.RowIdx < frameRun.FirstPeerIdx+frameRun.PeerRowCount; frameRun.RowIdx++ {
+				peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
+				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
 					res, err := builtin.Compute(ctx, evalCtx, frameRun)
 					if err != nil {
 						return err
@@ -869,6 +857,8 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					valRowIdx := partition.rows[frameRun.RowIdx].idx
 					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
+				frameRun.PeerHelper.Update(frameRun)
+				frameRun.CurRowPeerGroupNum++
 			}
 		}
 	}

@@ -490,7 +490,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
-%token <str> GIN GRANT GRANTS GREATEST GROUP GROUPING
+%token <str> GIN GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HIGH HISTOGRAM HOUR
 
@@ -972,11 +972,11 @@ func newNameFromStr(s string) *tree.Name {
 // between POSTFIXOP and OP. We can safely assign the same priority to various
 // unreserved keywords as needed to resolve ambiguities (this can't have any
 // bad effects since obviously the keywords will still behave the same as if
-// they weren't keywords). We need to do this for PARTITION, RANGE, ROWS to
-// support opt_existing_window_name; and for RANGE, ROWS so that they can
-// follow a_expr without creating postfix-operator problems; and for NULL so
-// that it can follow b_expr in col_qual_list without creating postfix-operator
-// problems.
+// they weren't keywords). We need to do this for PARTITION, RANGE, ROWS,
+// GROUPS to support opt_existing_window_name; and for RANGE, ROWS, GROUPS so
+// that they can follow a_expr without creating postfix-operator problems; and
+// for NULL so that it can follow b_expr in col_qual_list without creating
+// postfix-operator problems.
 //
 // To support CUBE and ROLLUP in GROUP BY without reserving them, we give them
 // an explicit priority lower than '(', so that a rule with CUBE '(' will shift
@@ -992,7 +992,7 @@ func newNameFromStr(s string) *tree.Name {
 // anywhere else in the grammar, but it's definitely risky. We can blame any
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
-%nonassoc  IDENT NULL PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
+%nonassoc  IDENT NULL PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
 %left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH  // multi-character ops
 %left      '|'
 %left      '#'
@@ -7223,8 +7223,8 @@ window_specification:
     }
   }
 
-// If we see PARTITION, RANGE, or ROWS as the first token after the '(' of a
-// window_specification, we want the assumption to be that there is no
+// If we see PARTITION, RANGE, ROWS, or GROUPS as the first token after the '('
+// of a window_specification, we want the assumption to be that there is no
 // existing_window_name; but those keywords are unreserved and so could be
 // names. We fix this by making them have the same precedence as IDENT and
 // giving the empty production here a slightly higher precedence, so that the
@@ -7265,6 +7265,13 @@ opt_frame_clause:
   {
     $$.val = &tree.WindowFrame{
       Mode: tree.ROWS,
+      Bounds: $2.windowFrameBounds(),
+    }
+  }
+| GROUPS frame_extent
+  {
+    $$.val = &tree.WindowFrame{
+      Mode: tree.GROUPS,
       Bounds: $2.windowFrameBounds(),
     }
   }
@@ -8193,6 +8200,7 @@ unreserved_keyword:
 | FORCE_INDEX
 | GIN
 | GRANTS
+| GROUPS
 | HIGH
 | HISTOGRAM
 | HOUR

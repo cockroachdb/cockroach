@@ -252,3 +252,15 @@ window          ·         ·                                                   
       └── scan  ·         ·                                                                                                                              (k int, v[omitted] int, w[omitted] int, f[omitted] float, d[omitted] decimal, s[omitted] string, b[omitted] bool, t timestamp)  k!=NULL; key(k)
 ·               table     kv@primary                                                                                                                     ·                                                                                                                               ·
 ·               spans     ALL                                                                                                                            ·                                                                                                                               ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT max(k) OVER (GROUPS 1 PRECEDING) FROM kv
+----
+window          ·         ·                                                      (max int)                                                                                                                                ·
+ │              window 0  (max((k)[int]) OVER (GROUPS (1)[int] PRECEDING))[int]  ·                                                                                                                                        ·
+ │              render 0  (max((k)[int]) OVER (GROUPS (1)[int] PRECEDING))[int]  ·                                                                                                                                        ·
+ └── render     ·         ·                                                      (k int)                                                                                                                                  k!=NULL; key(k)
+      │         render 0  (k)[int]                                               ·                                                                                                                                        ·
+      └── scan  ·         ·                                                      (k int, v[omitted] int, w[omitted] int, f[omitted] float, d[omitted] decimal, s[omitted] string, b[omitted] bool, t[omitted] timestamp)  k!=NULL; key(k)
+·               table     kv@primary                                             ·                                                                                                                                        ·
+·               spans     ALL                                                    ·                                                                                                                                        ·
