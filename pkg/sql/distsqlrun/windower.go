@@ -410,7 +410,7 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 // After all window functions have been computed, the remaining columns
 // are also simply appended to corresponding rows in outputRows.
 func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
-	var peerGrouper peerGroupChecker
+	var peerGrouper tree.PeerGroupChecker
 	usage := sliceOfRowsSliceOverhead + sizeOfSliceOfRows*int64(len(w.windowFns))
 	if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
 		return err
@@ -500,6 +500,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						return errors.Errorf("%d trailing bytes in encoded value", len(rem))
 					}
 					frameRun.StartBoundOffset = datum
+				case WindowerSpec_Frame_GROUPS:
+					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
 					panic("unexpected WindowFrameMode")
 				}
@@ -519,6 +521,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 							return errors.Errorf("%d trailing bytes in encoded value", len(rem))
 						}
 						frameRun.EndBoundOffset = datum
+					case WindowerSpec_Frame_GROUPS:
+						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
 						panic("unexpected WindowFrameMode")
 					}
@@ -611,25 +615,21 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 				builtins.ShouldReset(builtin)
 			}
 
-			for frameRun.RowIdx < partition.Len() {
-				// Compute the size of the current peer group.
-				frameRun.FirstPeerIdx = frameRun.RowIdx
-				frameRun.PeerRowCount = 1
-				for ; frameRun.FirstPeerIdx+frameRun.PeerRowCount < frameRun.PartitionSize(); frameRun.PeerRowCount++ {
-					cur := frameRun.FirstPeerIdx + frameRun.PeerRowCount
-					if !peerGrouper.InSameGroup(cur, cur-1) {
-						break
-					}
-				}
+			frameRun.PeerHelper.Init(frameRun, peerGrouper)
+			frameRun.CurRowPeerGroupNum = 0
 
+			for frameRun.RowIdx < partition.Len() {
 				// Perform calculations on each row in the current peer group.
-				for ; frameRun.RowIdx < frameRun.FirstPeerIdx+frameRun.PeerRowCount; frameRun.RowIdx++ {
+				peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
+				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
 					res, err := builtin.Compute(ctx, evalCtx, frameRun)
 					if err != nil {
 						return err
 					}
 					w.windowValues[windowFnIdx][partitionIdx][frameRun.Rows.GetRow(frameRun.RowIdx).GetIdx()] = res
 				}
+				frameRun.PeerHelper.Update(frameRun)
+				frameRun.CurRowPeerGroupNum++
 			}
 		}
 	}
@@ -695,7 +695,7 @@ func (n *partitionSorter) Swap(i, j int) {
 }
 func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 
-// partitionSorter implements the peerGroupChecker interface.
+// partitionSorter implements the tree.PeerGroupChecker interface.
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
@@ -717,12 +717,6 @@ type allPeers struct{}
 
 // allPeers implements the peerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) bool { return true }
-
-// peerGroupChecker can check if a pair of row indexes within a partition are
-// in the same peer group.
-type peerGroupChecker interface {
-	InSameGroup(i, j int) bool
-}
 
 const sizeOfIndexedRowsStruct = int64(unsafe.Sizeof(indexedRows{}))
 const indexedRowsStructSliceOverhead = int64(unsafe.Sizeof([]indexedRows{}))
