@@ -16,6 +16,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -59,6 +60,10 @@ func (r *registration) ID() uintptr {
 // Range implements interval.Interface.
 func (r *registration) Range() interval.Range {
 	return r.keys
+}
+
+func (r registration) String() string {
+	return fmt.Sprintf("[%s @ %s+]", r.span, r.startTS)
 }
 
 // registry holds a set of registrations and manages their lifecycle.

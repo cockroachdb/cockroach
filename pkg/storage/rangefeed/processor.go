@@ -128,7 +128,7 @@ func (p *Processor) Start(stopper *stop.Stopper) {
 			// Handle new registrations.
 			case r := <-p.regC:
 				if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-					log.Fatalf(ctx, "registration %+v not contained in processor span %v", r, p.Span)
+					log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 				}
 
 				// TODO(nvanbenschoten): catch up scan.
