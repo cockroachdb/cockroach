@@ -706,8 +706,10 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "on_conflict",
-		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list", "insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list"},
+		name: "on_conflict",
+		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list",
+			"insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list",
+			"expr_tuple1_ambiguous", "tuple1_ambiguous_values"},
 		replace: map[string]string{
 			"select_with_parens": "'(' select_stmt ')'",
 		},
@@ -1088,6 +1090,8 @@ var specs = []stmtSpec{
 			"multiple_set_clause",
 			"in_expr",
 			"expr_list",
+			"expr_tuple1_ambiguous",
+			"tuple1_ambiguous_values",
 			"where_clause",
 			"opt_sort_clause",
 			"returning_clause",

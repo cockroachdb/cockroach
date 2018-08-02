@@ -733,8 +733,10 @@ func (node *Placeholder) ResolvedType() types.T {
 type Tuple struct {
 	Exprs  Exprs
 	Labels []string
-	// Row indicates whether or not the tuple should be textually represented as
-	// ROW ( ... ).
+
+	// Row indicates whether `ROW` was used in the input syntax. This is
+	// used solely to generate column names automatically, see
+	// col_name.go.
 	Row bool
 
 	typ types.TTuple
@@ -756,11 +758,11 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	if len(node.Labels) > 0 {
 		ctx.WriteByte('(')
 	}
-	if node.Row {
-		ctx.WriteString("ROW")
-	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		ctx.WriteByte(',')
+	}
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")

@@ -157,57 +157,57 @@ func TestDatumOrdering(t *testing.T) {
 		// Tuples
 		{`row()`, valIsMin, valIsMax, `()`, `()`},
 
-		{`row(NULL)`, valIsMin, valIsMax, `(NULL)`, `(NULL)`},
+		{`(NULL,)`, valIsMin, valIsMax, `(NULL,)`, `(NULL,)`},
 
-		{`row(true)`, `(false)`, valIsMax, `(false)`, `(true)`},
-		{`row(false)`, valIsMin, `(true)`, `(false)`, `(true)`},
+		{`(true,)`, `(false,)`, valIsMax, `(false,)`, `(true,)`},
+		{`(false,)`, valIsMin, `(true,)`, `(false,)`, `(true,)`},
 
-		{`row(true, false, false)`, `(false, true, true)`, `(true, false, true)`,
+		{`(true, false, false)`, `(false, true, true)`, `(true, false, true)`,
 			`(false, false, false)`, `(true, true, true)`},
-		{`row(false, true, true)`, `(false, true, false)`, `(true, NULL, NULL)`,
+		{`(false, true, true)`, `(false, true, false)`, `(true, NULL, NULL)`,
 			`(false, false, false)`, `(true, true, true)`},
 
-		{`row(0, 0)`, `(0, -1)`, `(0, 1)`,
+		{`(0, 0)`, `(0, -1)`, `(0, 1)`,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
 
-		{`row(0, 9223372036854775807)`,
+		{`(0, 9223372036854775807)`,
 			`(0, 9223372036854775806)`, `(1, NULL)`,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
-		{`row(9223372036854775807, 9223372036854775807)`,
+		{`(9223372036854775807, 9223372036854775807)`,
 			`(9223372036854775807, 9223372036854775806)`, valIsMax,
 			`(-9223372036854775808, -9223372036854775808)`,
 			`(9223372036854775807, 9223372036854775807)`},
 
-		{`row(0, 0:::decimal)`, noPrev, noNext,
+		{`(0, 0:::decimal)`, noPrev, noNext,
 			`(-9223372036854775808, NaN)`,
 			`(9223372036854775807, Infinity)`},
-		{`row(0:::decimal, 0)`, `(0, -1)`, `(0, 1)`,
+		{`(0:::decimal, 0)`, `(0, -1)`, `(0, 1)`,
 			`(NaN, -9223372036854775808)`,
 			`(Infinity, 9223372036854775807)`},
 
-		{`row(10, '')`, noPrev, `(10, e'\x00')`,
+		{`(10, '')`, noPrev, `(10, e'\x00')`,
 			`(-9223372036854775808, '')`, noMax},
-		{`row(-9223372036854775808, '')`, valIsMin, `(-9223372036854775808, e'\x00')`,
+		{`(-9223372036854775808, '')`, valIsMin, `(-9223372036854775808, e'\x00')`,
 			`(-9223372036854775808, '')`, noMax},
-		{`row(-9223372036854775808, 'abc')`, noPrev, `(-9223372036854775808, e'abc\x00')`,
+		{`(-9223372036854775808, 'abc')`, noPrev, `(-9223372036854775808, e'abc\x00')`,
 			`(-9223372036854775808, '')`, noMax},
 
-		{`row(10, NULL)`, `(9, NULL)`, `(11, NULL)`,
+		{`(10, NULL)`, `(9, NULL)`, `(11, NULL)`,
 			`(-9223372036854775808, NULL)`, `(9223372036854775807, NULL)`},
-		{`row(NULL, 10)`, `(NULL, 9)`, `(NULL, 11)`,
+		{`(NULL, 10)`, `(NULL, 9)`, `(NULL, 11)`,
 			`(NULL, -9223372036854775808)`, `(NULL, 9223372036854775807)`},
 
-		{`row(true, NULL, false)`, `(false, NULL, true)`, `(true, NULL, true)`,
+		{`(true, NULL, false)`, `(false, NULL, true)`, `(true, NULL, true)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
-		{`row(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, NULL)`,
+		{`(false, NULL, true)`, `(false, NULL, false)`, `(true, NULL, NULL)`,
 			`(false, NULL, false)`, `(true, NULL, true)`},
 
-		{`row(row(true), row(false))`, `((false), (true))`, `((true), (true))`,
-			`((false), (false))`, `((true), (true))`},
-		{`row(row(false), row(true))`, `((false), (false))`, `((true), NULL)`,
-			`((false), (false))`, `((true), (true))`},
+		{`((true,), (false,))`, `((false,), (true,))`, `((true,), (true,))`,
+			`((false,), (false,))`, `((true,), (true,))`},
+		{`((false,), (true,))`, `((false,), (false,))`, `((true,), NULL)`,
+			`((false,), (false,))`, `((true,), (true,))`},
 
 		// Arrays
 
@@ -217,10 +217,10 @@ func TestDatumOrdering(t *testing.T) {
 		{`array[true]`, noPrev, `ARRAY[true,NULL]`, `ARRAY[]`, noMax},
 
 		// Mixed tuple/array datums.
-		{`row(ARRAY[true], row(true))`, `(ARRAY[true], (false))`, `(ARRAY[true,NULL], NULL)`,
-			`(ARRAY[], (false))`, noMax},
-		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
-			`((false), ARRAY[])`, noMax},
+		{`(ARRAY[true], (true,))`, `(ARRAY[true], (false,))`, `(ARRAY[true,NULL], NULL)`,
+			`(ARRAY[], (false,))`, noMax},
+		{`((false,), ARRAY[true])`, noPrev, `((false,), ARRAY[true,NULL])`,
+			`((false,), ARRAY[])`, noMax},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, td := range testData {
