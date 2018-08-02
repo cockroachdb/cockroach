@@ -2719,15 +2719,15 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-// TODO(knz): this is broken if the tuple is labeled. See #26624.
 func (d *DTuple) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
 		d.pgwireFormat(ctx)
 		return
 	}
 
-	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
-		ctx.WriteString("ROW")
+	showLabels := len(d.typ.Labels) > 0
+	if showLabels {
+		ctx.WriteByte('(')
 	}
 	ctx.WriteByte('(')
 	comma := ""
@@ -2736,7 +2736,22 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 		ctx.FormatNode(v)
 		comma = ", "
 	}
+	if len(d.D) == 1 {
+		// Ensure the pretty-printed 1-value tuple is not ambiguous with
+		// the equivalent value enclosed in grouping parentheses.
+		ctx.WriteByte(',')
+	}
 	ctx.WriteByte(')')
+	if showLabels {
+		ctx.WriteString(" AS ")
+		comma := ""
+		for i := range d.typ.Labels {
+			ctx.WriteString(comma)
+			ctx.FormatNode((*Name)(&d.typ.Labels[i]))
+			comma = ", "
+		}
+		ctx.WriteByte(')')
+	}
 }
 
 // Sorted returns true if the tuple is known to be sorted (and contains no

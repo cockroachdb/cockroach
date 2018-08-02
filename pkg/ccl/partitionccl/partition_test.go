@@ -1191,10 +1191,10 @@ func TestSelectPartitionExprs(t *testing.T) {
 		{`p33dp44d`, `(((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5))))`},
 		// NB See the TODO in the impl for why this next case has some clearly
 		// unrelated `!=`s.
-		{`p6d`, `((a) = (6)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
-		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a) = (6)))`},
+		{`p6d`, `((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
+		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a,) = (6,)))`},
 
-		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a) = (6)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
+		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
 
 		// TODO(dan): The expression simplification in this method is all done
 		// by our normal SQL expression simplification code. Seems like it could

@@ -16,6 +16,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -47,6 +48,10 @@ func HeartbeatTxn(
 
 	if err := VerifyTransaction(h, args); err != nil {
 		return result.Result{}, err
+	}
+
+	if args.Now.IsEmpty() {
+		return result.Result{}, fmt.Errorf("Now not specified for heartbeat")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)

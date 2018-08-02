@@ -111,12 +111,12 @@ func TestTypeCheck(t *testing.T) {
 		{`$1:::INT`, `$1:::INT`},
 
 		// Tuples with labels
-		{`(ROW (1) AS a)`, `(ROW(1:::INT) AS a)`},
-		{`(ROW(1:::INT) AS a)`, `(ROW(1:::INT) AS a)`},
+		{`(ROW (1) AS a)`, `((1:::INT,) AS a)`},
+		{`(ROW(1:::INT) AS a)`, `((1:::INT,) AS a)`},
 		{`((1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
 		{`((1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW (1,2) AS a,b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW (1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
 		{
 			`((1,2,3) AS "One","Two","Three")`,
 			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
@@ -127,19 +127,19 @@ func TestTypeCheck(t *testing.T) {
 		},
 		{
 			`(ROW (1,2,3) AS "One",Two,"Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
 		},
 		{
 			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
 		},
 		// And tuples without labels still work as advertized
-		{`(ROW (1))`, `ROW(1:::INT)`},
-		{`ROW(1:::INT)`, `ROW(1:::INT)`},
+		{`(ROW (1))`, `(1:::INT,)`},
+		{`ROW(1:::INT)`, `(1:::INT,)`},
 		{`((1,2))`, `(1:::INT, 2:::INT)`},
 		{`(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
-		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
-		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
+		{`(ROW (1,2))`, `(1:::INT, 2:::INT)`},
+		{`ROW(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
 
 		{`((ROW (1) AS a)).a`, `1:::INT`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
@@ -153,7 +153,7 @@ func TestTypeCheck(t *testing.T) {
 			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).*`,
 			`information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])`,
 		},
-		{`((ROW (1) AS a)).*`, `(ROW(1:::INT) AS a)`},
+		{`((ROW (1) AS a)).*`, `((1:::INT,) AS a)`},
 		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
 
 		// These outputs, while bizarre looking, are correct and expected. The

@@ -404,20 +404,25 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachpb.Error) {
-	hb := &roachpb.HeartbeatTxnRequest{
+	txnMeta := txn.Proto().TxnMeta
+	qt := &roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Proto().Key,
+			Key: txnMeta.Key,
 		},
+		Txn: txnMeta,
 	}
-	ba := roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn.Proto()}
-	ba.Add(hb)
 
-	br, pErr := txn.Send(ctx, ba)
+	ba := roachpb.BatchRequest{}
+	ba.Add(qt)
+
+	db := txn.DB()
+	sender := db.NonTransactionalSender()
+
+	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	return br.Txn, nil
+	return &br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn, nil
 }
 
 func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*TxnCoordSender) {
