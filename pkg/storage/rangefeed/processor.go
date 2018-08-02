@@ -195,6 +195,33 @@ func (p *Processor) Start(stopper *stop.Stopper) {
 	})
 }
 
+// Stop shuts down the processor and closes all registrations. Safe to call on
+// nil Processor. It is not valid to restart a processor after it has been
+// stopped.
+func (p *Processor) Stop() {
+	p.StopWithErr(nil)
+}
+
+// StopWithErr shuts down the processor and closes all registrations with the
+// specified error. Safe to call on nil Processor. It is not valid to restart a
+// processor after it has been stopped.
+func (p *Processor) StopWithErr(pErr *roachpb.Error) {
+	if p == nil {
+		return
+	}
+	// Flush any remaining events before stopping.
+	p.syncEventC()
+	// Send on the channel instead of closing it. This ensures synchronous
+	// communication so that when this method returns the caller can be sure
+	// that the Processor goroutine is canceling all registrations and shutting
+	// down.
+	select {
+	case p.stopC <- pErr:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
+}
+
 // Register registers the stream over the specified span of keys. The channel
 // will be provided an error when the registration closes. NOT safe to call on
 // nil Processor.
@@ -227,33 +254,6 @@ func (p *Processor) Len() int {
 		return <-p.lenResC
 	case <-p.stoppedC:
 		return 0
-	}
-}
-
-// Stop shuts down the processor and closes all registrations. Safe to call on
-// nil Processor. It is not valid to restart a processor after it has been
-// stopped.
-func (p *Processor) Stop() {
-	p.StopWithErr(nil)
-}
-
-// StopWithErr shuts down the processor and closes all registrations with the
-// specified error. Safe to call on nil Processor. It is not valid to restart a
-// processor after it has been stopped.
-func (p *Processor) StopWithErr(pErr *roachpb.Error) {
-	if p == nil {
-		return
-	}
-	// Flush any remaining events before stopping.
-	p.syncEventC()
-	// Send on the channel instead of closing it. This ensures synchronous
-	// communication so that when this method returns the caller can be sure
-	// that the Processor goroutine is canceling all registrations and shutting
-	// down.
-	select {
-	case p.stopC <- pErr:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
 	}
 }
 
