@@ -259,7 +259,7 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
 // operations. Safe to call on nil Processor.
-func (p *Processor) ConsumeLogicalOps(ops []enginepb.MVCCLogicalOp) {
+func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) {
 	if p == nil {
 		return
 	}

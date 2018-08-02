@@ -111,12 +111,6 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 	})
 }
 
-// ConsumeLogicalOp is a utility function that operates the same as
-// ConsumeLogicalOps but on only a single MVCCLogicalOp.
-func (p *Processor) ConsumeLogicalOp(op enginepb.MVCCLogicalOp) {
-	p.ConsumeLogicalOps([]enginepb.MVCCLogicalOp{op})
-}
-
 func newTestProcessor() (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	p := NewProcessor(Config{
@@ -138,19 +132,18 @@ func TestProcessor(t *testing.T) {
 
 	// Test processor without registrations.
 	require.Equal(t, 0, p.Len())
-	require.NotPanics(t, func() { p.ConsumeLogicalOps(nil) })
-	require.NotPanics(t, func() { p.ConsumeLogicalOps([]enginepb.MVCCLogicalOp{}) })
+	require.NotPanics(t, func() { p.ConsumeLogicalOps() })
+	require.NotPanics(t, func() { p.ConsumeLogicalOps([]enginepb.MVCCLogicalOp{}...) })
 	require.NotPanics(t, func() {
 		txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-		ops := []enginepb.MVCCLogicalOp{
+		p.ConsumeLogicalOps(
 			writeValueOp(hlc.Timestamp{WallTime: 1}),
 			writeIntentOp(txn1, hlc.Timestamp{WallTime: 2}),
 			updateIntentOp(txn1, hlc.Timestamp{WallTime: 3}),
 			commitIntentOp(txn1, hlc.Timestamp{WallTime: 4}),
 			writeIntentOp(txn2, hlc.Timestamp{WallTime: 5}),
 			abortIntentOp(txn2),
-		}
-		p.ConsumeLogicalOps(ops)
+		)
 		p.syncEventC()
 		require.Equal(t, 0, p.rts.intentQ.Len())
 	})
@@ -180,7 +173,7 @@ func TestProcessor(t *testing.T) {
 	)
 
 	// Test value with one registration.
-	p.ConsumeLogicalOp(
+	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
 	p.syncEventC()
@@ -196,7 +189,7 @@ func TestProcessor(t *testing.T) {
 	)
 
 	// Test value to non-overlapping key with one registration.
-	p.ConsumeLogicalOp(
+	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 	)
 	p.syncEventC()
@@ -205,11 +198,11 @@ func TestProcessor(t *testing.T) {
 	// Test intent that is aborted with one registration.
 	txn1 := uuid.MakeV4()
 	// Write intent.
-	p.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
+	p.ConsumeLogicalOps(writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
 	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Abort.
-	p.ConsumeLogicalOp(abortIntentOp(txn1))
+	p.ConsumeLogicalOps(abortIntentOp(txn1))
 	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	require.Equal(t, 0, p.rts.intentQ.Len())
@@ -217,7 +210,7 @@ func TestProcessor(t *testing.T) {
 	// Test intent that is committed with one registration.
 	txn2 := uuid.MakeV4()
 	// Write intent.
-	p.ConsumeLogicalOp(writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
+	p.ConsumeLogicalOps(writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
 	p.syncEventC()
 	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Forward closed timestamp. Should now be stuck on intent.
@@ -231,7 +224,7 @@ func TestProcessor(t *testing.T) {
 		r1Stream.Events(),
 	)
 	// Update the intent. Should forward resolved timestamp.
-	p.ConsumeLogicalOp(updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
+	p.ConsumeLogicalOps(updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
 	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
@@ -241,7 +234,7 @@ func TestProcessor(t *testing.T) {
 		r1Stream.Events(),
 	)
 	// Commit intent. Should forward resolved timestamp to closed timestamp.
-	p.ConsumeLogicalOp(
+	p.ConsumeLogicalOps(
 		commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13}, []byte("ival")),
 	)
 	p.syncEventC()
@@ -284,7 +277,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t, chEvent, r2Stream.Events())
 
 	// Test value with two registration that overlaps both.
-	p.ConsumeLogicalOp(
+	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 22}, []byte("val2")),
 	)
 	p.syncEventC()
@@ -299,7 +292,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t, valEvent, r2Stream.Events())
 
 	// Test value that only overlaps the second registration.
-	p.ConsumeLogicalOp(
+	p.ConsumeLogicalOps(
 		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")),
 	)
 	p.syncEventC()
@@ -331,8 +324,8 @@ func TestNilProcessor(t *testing.T) {
 	require.Equal(t, 0, p.Len())
 	require.NotPanics(t, func() { p.Stop() })
 	require.NotPanics(t, func() { p.StopWithErr(nil) })
-	require.NotPanics(t, func() { p.ConsumeLogicalOps(nil) })
-	require.NotPanics(t, func() { p.ConsumeLogicalOps(make([]enginepb.MVCCLogicalOp, 5)) })
+	require.NotPanics(t, func() { p.ConsumeLogicalOps() })
+	require.NotPanics(t, func() { p.ConsumeLogicalOps(make([]enginepb.MVCCLogicalOp, 5)...) })
 	require.NotPanics(t, func() { p.ForwardClosedTS(hlc.Timestamp{}) })
 	require.NotPanics(t, func() { p.ForwardClosedTS(hlc.Timestamp{WallTime: 1}) })
 
@@ -368,7 +361,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			runtime.Gosched()
-			p.ConsumeLogicalOp(
+			p.ConsumeLogicalOps(
 				writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")),
 			)
 		}()
