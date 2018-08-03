@@ -2731,9 +2731,21 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteByte('(')
 	comma := ""
-	for _, v := range d.D {
+	parsable := ctx.HasFlags(FmtParsable)
+	for i, v := range d.D {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
+		if parsable && (v == DNull) && len(d.typ.Types) > i {
+			coltype, err := coltypes.DatumTypeToColumnType(d.typ.Types[i])
+			// If err != nil, we can't determine the column type to write this
+			// annotation. This will primarily happen if the Tuple has types.Unknown
+			// for this slot. Somebody else will provide an error message in this
+			// case, if necessary, so just skip the annotation and continue.
+			if err == nil {
+				ctx.WriteString("::")
+				coltype.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+			}
+		}
 		comma = ", "
 	}
 	if len(d.D) == 1 {
