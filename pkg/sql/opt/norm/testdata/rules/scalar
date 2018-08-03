@@ -393,6 +393,38 @@ select
                      └── max [type=string, outer=(10)]
                           └── variable: a.s [type=string, outer=(10)]
 
+opt
+SELECT * FROM a WHERE EXISTS(SELECT DISTINCT s FROM a)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool]
+      └── exists [type=bool]
+           └── scan a
+                └── columns: a.s:10(string)
+
+opt
+SELECT * FROM a WHERE EXISTS(SELECT DISTINCT ON (i) s FROM a)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool]
+      └── exists [type=bool]
+           └── scan a
+                └── columns: a.i:8(int) a.s:10(string)
+
 # --------------------------------------------------
 # EliminateExistsGroupBy + EliminateExistsProject
 # --------------------------------------------------
