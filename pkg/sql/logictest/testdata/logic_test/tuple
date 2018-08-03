@@ -15,6 +15,11 @@ SELECT 1 IN ()
 ----
 false
 
+query B
+SELECT 1 = ANY ()
+----
+false
+
 subtest unlabeled_tuple
 
 # TODO(bram): We don't pretty print tuples the same way as postgres. See #25522.
