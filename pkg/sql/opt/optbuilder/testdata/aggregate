@@ -921,7 +921,6 @@ SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 scalar-group-by
  ├── columns: array_agg:5(int[]) array_agg:6(string[])
- ├── ordering: +1
  ├── project
  │    ├── columns: k:1(int!null) s:4(string)
  │    ├── ordering: +1
@@ -939,7 +938,6 @@ SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 scalar-group-by
  ├── columns: array_agg:5(int[])
- ├── ordering: +4
  ├── sort
  │    ├── columns: k:1(int!null) s:4(string)
  │    ├── ordering: +4
@@ -958,7 +956,6 @@ project
  ├── columns: "?column?":6(int[])
  ├── scalar-group-by
  │    ├── columns: column5:5(int[])
- │    ├── ordering: +4
  │    ├── sort
  │    │    ├── columns: k:1(int!null) s:4(string)
  │    │    ├── ordering: +4
@@ -1781,7 +1778,6 @@ SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
  ├── columns: concat_agg:5(string)
- ├── ordering: +1
  ├── project
  │    ├── columns: k:1(int!null) s:4(string)
  │    ├── ordering: +1
@@ -1797,7 +1793,6 @@ SELECT json_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
  ├── columns: json_agg:5(jsonb)
- ├── ordering: +1
  ├── project
  │    ├── columns: k:1(int!null) s:4(string)
  │    ├── ordering: +1
@@ -1813,7 +1808,6 @@ SELECT jsonb_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
  ├── columns: jsonb_agg:5(jsonb)
- ├── ordering: +1
  ├── project
  │    ├── columns: k:1(int!null) s:4(string)
  │    ├── ordering: +1
@@ -2653,7 +2647,6 @@ SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x+y)
 ----
 scalar-group-by
  ├── columns: array_agg:5(int[])
- ├── ordering: +4
  ├── sort
  │    ├── columns: y:2(int) column4:4(int)
  │    ├── ordering: +4
@@ -2676,7 +2669,6 @@ SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
 ----
 scalar-group-by
  ├── columns: array_agg:4(int[])
- ├── ordering: -1
  ├── sort
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── ordering: -1

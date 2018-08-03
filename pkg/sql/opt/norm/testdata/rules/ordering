@@ -124,7 +124,6 @@ SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
 ----
 scalar-group-by
  ├── columns: array_agg:6(int[])
- ├── ordering: +1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)

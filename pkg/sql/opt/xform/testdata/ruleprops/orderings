@@ -123,7 +123,6 @@ SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 group-by
  ├── columns: array_agg:5(int[]) b:2(int) c:3(int)
  ├── grouping columns: b:2(int) c:3(int)
- ├── ordering: +2,+1
  ├── key: (2,3)
  ├── fd: (3)~~>(2), (2,3)-->(5)
  ├── prune: (5)
