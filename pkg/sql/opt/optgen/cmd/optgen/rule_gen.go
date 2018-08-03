@@ -79,6 +79,7 @@ type ruleGen struct {
 	normalize  bool
 	exprLookup string
 	thisVar    string
+	factoryVar string
 
 	// innerExploreMatch is the innermost match expression in an explore rule.
 	// Match expressions in an explore rule generate nested "for" loops, and
@@ -104,10 +105,12 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 	if g.normalize {
 		g.exprLookup = "NormExpr"
 		g.thisVar = "_f"
+		g.factoryVar = "_f"
 		exprName = fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 	} else {
 		g.exprLookup = "Expr"
 		g.thisVar = "_e"
+		g.factoryVar = "_e.f"
 		g.innerExploreMatch = g.findInnerExploreMatch(rule.Match)
 		exprName = "_rootExpr"
 	}
@@ -219,9 +222,17 @@ func (g *ruleGen) genMatch(match lang.Expr, contextName string, noMatch bool) {
 
 	case *lang.StringExpr:
 		if noMatch {
-			g.w.nestIndent("if %s != m.mem.InternPrivate(%s) {\n", contextName, t)
+			g.w.nestIndent("if %s != m.mem.InternDatum(tree.NewDString(%s)) {\n", contextName, t)
 		} else {
-			g.w.nestIndent("if %s == m.mem.InternPrivate(%s) {\n", contextName, t)
+			g.w.nestIndent("if %s == m.mem.InternDatum(tree.NewDString(%s)) {\n", contextName, t)
+		}
+
+	case *lang.NumberExpr:
+		// Delegate to custom function that matches Int, Float, and Decimal types.
+		if noMatch {
+			g.w.nestIndent("if !%s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, contextName, t)
+		} else {
+			g.w.nestIndent("if %s.funcs.EqualsNumber(%s, %s) {\n", g.factoryVar, contextName, t)
 		}
 
 	case *lang.AnyExpr:
@@ -764,7 +775,11 @@ func (g *ruleGen) genNestedExpr(e lang.Expr) {
 
 	case *lang.StringExpr:
 		// Literal string expressions construct DString datums.
-		g.w.write("m.mem.InternPrivate(tree.NewDString(%s))", t)
+		g.w.write("%s.mem.InternDatum(tree.NewDString(%s))", g.thisVar, t)
+
+	case *lang.NumberExpr:
+		// Literal numeric expressions construct DInt datums.
+		g.w.write("%s.mem.InternDatum(tree.NewDInt(%s))", g.thisVar, t)
 
 	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
@@ -779,17 +794,10 @@ func (g *ruleGen) genNestedExpr(e lang.Expr) {
 // genConstruct generates code to invoke an op construction function or a user-
 // defined custom function.
 func (g *ruleGen) genConstruct(construct *lang.FuncExpr) {
-	var factoryVar string
-	if g.normalize {
-		factoryVar = "_f"
-	} else {
-		factoryVar = "_e.f"
-	}
-
 	switch t := construct.Name.(type) {
 	case *lang.NameExpr:
 		// Standard op construction function.
-		g.w.nest("%s.Construct%s(\n", factoryVar, *t)
+		g.w.nest("%s.Construct%s(\n", g.factoryVar, *t)
 		for _, arg := range construct.Args {
 			g.w.writeIndent("")
 			g.genNestedExpr(arg)
@@ -800,7 +808,7 @@ func (g *ruleGen) genConstruct(construct *lang.FuncExpr) {
 	case *lang.CustomFuncExpr:
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
-		g.w.nest("%s.DynamicConstruct(\n", factoryVar)
+		g.w.nest("%s.DynamicConstruct(\n", g.factoryVar)
 		g.w.writeIndent("%s.mem.NormExpr(%s).Operator(),\n", g.thisVar, ref.Label)
 		g.w.nestIndent("memo.DynamicOperands{\n")
 		for _, arg := range construct.Args {

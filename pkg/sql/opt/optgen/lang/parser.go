@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -269,7 +270,7 @@ func (p *Parser) parseMatch() Expr {
 	return p.parseFunc()
 }
 
-// replace = func | ref | STRING
+// replace = func | ref
 func (p *Parser) parseReplace() Expr {
 	switch p.scan() {
 	case LPAREN:
@@ -279,10 +280,6 @@ func (p *Parser) parseReplace() Expr {
 	case DOLLAR:
 		p.unscan()
 		return p.parseRef()
-
-	case STRING:
-		p.unscan()
-		return p.parseString()
 
 	default:
 		p.addExpectedTokenErr("replace pattern")
@@ -412,7 +409,7 @@ func (p *Parser) parseAnd() Expr {
 	return &AndExpr{Src: src, Left: left, Right: right}
 }
 
-// expr = func | not | list | any | name | STRING
+// expr = func | not | list | any | name | STRING | NUMBER
 func (p *Parser) parseExpr() Expr {
 	switch p.scan() {
 	case LPAREN:
@@ -437,6 +434,10 @@ func (p *Parser) parseExpr() Expr {
 	case STRING:
 		p.unscan()
 		return p.parseString()
+
+	case NUMBER:
+		p.unscan()
+		return p.parseNumber()
 
 	default:
 		p.addExpectedTokenErr("expression")
@@ -543,6 +544,22 @@ func (p *Parser) parseString() *StringExpr {
 	s = s[1 : len(s)-1]
 
 	e := StringExpr(s)
+	return &e
+}
+
+func (p *Parser) parseNumber() *NumberExpr {
+	if p.scan() != NUMBER {
+		panic("caller should have checked for numeric literal")
+	}
+
+	// Convert token literal to int64 value.
+	i, err := strconv.ParseInt(p.s.Literal(), 10, 64)
+	if err != nil {
+		p.addErr(err.Error())
+		return nil
+	}
+
+	e := NumberExpr(i)
 	return &e
 }
 

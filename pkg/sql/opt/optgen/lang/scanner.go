@@ -43,6 +43,9 @@ const (
 	// STRING is a literal string delimited by double quotes that cannot extend
 	// past the end of a line: " [^"\n]* "
 	STRING
+	// NUMBER is an numeric literal composed of Unicode numeric digits:
+	// UnicodeDigit+
+	NUMBER
 	// WHITESPACE is any sequence of Unicode whitespace characters.
 	WHITESPACE
 	// COMMENT is a code comment that extends to end of line: # .* EOL
@@ -146,6 +149,12 @@ func (s *Scanner) Scan() Token {
 	if unicode.IsLetter(ch) {
 		s.unread()
 		return s.scanIdentifier()
+	}
+
+	// If we see a digit then consume as a numeric literal.
+	if unicode.IsDigit(ch) {
+		s.unread()
+		return s.scanNumericLiteral()
 	}
 
 	// Otherwise read the individual character.
@@ -385,6 +394,32 @@ func (s *Scanner) scanStringLiteral() Token {
 		}
 	}
 
+	s.lit = buf.String()
+	return s.tok
+}
+
+func (s *Scanner) scanNumericLiteral() Token {
+	// Create a buffer and read the current character into it.
+	var buf bytes.Buffer
+	buf.WriteRune(s.read())
+
+	// Read every subsequent Unicode digit character into the buffer.
+	// Non-digit characters and EOF will cause the loop to exit.
+	for {
+		ch := s.read()
+		if ch == eofRune {
+			break
+		}
+
+		if !unicode.IsDigit(ch) {
+			s.unread()
+			break
+		}
+
+		buf.WriteRune(ch)
+	}
+
+	s.tok = NUMBER
 	s.lit = buf.String()
 	return s.tok
 }

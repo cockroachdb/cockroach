@@ -4,57 +4,27 @@
 
 # FoldPlusZero folds $left + 0 for numeric types.
 [FoldPlusZero, Normalize]
-(Plus
-    $left:*
-    $right:(Const) & (IsZero $right)
-)
-=>
-$left
+(Plus $left:* (Const 0)) => $left
 
 # FoldZeroPlus folds 0 + $right for numeric types.
 [FoldZeroPlus, Normalize]
-(Plus
-    $left:(Const) & (IsZero $left)
-    $right:*
-)
-=>
-$right
+(Plus (Const 0) $right:*) => $right
 
 # FoldMinusZero folds $left - 0 for numeric types.
 [FoldMinusZero, Normalize]
-(Minus
-    $left:*
-    $right:(Const) & (IsZero $right)
-)
-=>
-$left
+(Minus $left:* (Const 0)) => $left
 
 # FoldMultOne folds $left * 1 for numeric types.
 [FoldMultOne, Normalize]
-(Mult
-    $left:*
-    $right:(Const) & (IsOne $right)
-)
-=>
-$left
+(Mult $left:* (Const 1)) => $left
 
 # FoldOneMult folds 1 * $right for numeric types.
 [FoldOneMult, Normalize]
-(Mult
-    $left:(Const) & (IsOne $left)
-    $right:*
-)
-=>
-$right
+(Mult (Const 1) $right:*) => $right
 
 # FoldDivOne folds $left / 1 for numeric types.
 [FoldDivOne, Normalize]
-(Div | FloorDiv
-    $left:*
-    $right:(Const) & (IsOne $right)
-)
-=>
-$left
+(Div | FloorDiv $left:* (Const 1)) => $left
 
 # InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
 [InvertMinus, Normalize]
