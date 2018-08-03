@@ -69,27 +69,19 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	// Verify that there are no leases held.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	lm := s.LeaseManager().(*LeaseManager)
-	// Looking for a table state validates that there used to be a lease on the
-	// table.
-	ts := lm.findTableState(tableDesc.ID, false /* create */)
-	if ts == nil {
-		t.Fatal("table state not found")
-	}
-	ts.mu.Lock()
-	leases := ts.mu.active.data
-	ts.mu.Unlock()
-	if len(leases) != 1 {
-		t.Fatalf("expected one lease, found: %d", len(leases))
+	// There is one lease on this table.
+	if numLeases := lm.getNumVersions(tableDesc.ID); numLeases != 1 {
+		t.Fatalf("expected one lease, found: %d", numLeases)
 	}
 	// Wait for the lease to be released.
 	testutils.SucceedsSoon(t, func() error {
-		ts.mu.Lock()
-		defer ts.mu.Unlock()
-		tv := ts.mu.active.data[0]
+		lm.mu.Lock()
+		defer lm.mu.Unlock()
+		ts := lm.findTableStateLocked(tableDesc.ID, false /*created*/)
+		tv := ts.active.data[0]
 		tv.mu.Lock()
 		defer tv.mu.Unlock()
-		refcount := tv.mu.refcount
-		if refcount != 0 {
+		if refcount := tv.mu.refcount; refcount != 0 {
 			return errors.Errorf(
 				"expected lease to be unused, found refcount: %d", refcount)
 		}

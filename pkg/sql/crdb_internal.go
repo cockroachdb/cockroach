@@ -344,12 +344,9 @@ CREATE TABLE crdb_internal.leases (
 			tableID := tree.NewDInt(tree.DInt(int64(tid)))
 
 			adder := func() error {
-				ts.mu.Lock()
-				defer ts.mu.Unlock()
+				dropped := tree.MakeDBool(tree.DBool(ts.dropped))
 
-				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
-
-				for _, state := range ts.mu.active.data {
+				for _, state := range ts.active.data {
 					if p.CheckAnyPrivilege(ctx, &state.TableDescriptor) != nil {
 						continue
 					}

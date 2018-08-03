@@ -113,12 +113,6 @@ func TestTableSet(t *testing.T) {
 	}
 }
 
-func getNumVersions(ts *tableState) int {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return len(ts.mu.active.data)
-}
-
 func TestPurgeOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// We're going to block gossip so it doesn't come randomly and clear up the
@@ -172,8 +166,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	}
 	getLeases()
-	ts := leaseManager.findTableState(tableDesc.ID, false)
-	if numLeases := getNumVersions(ts); numLeases != 1 {
+	if numLeases := leaseManager.getNumVersions(tableDesc.ID); numLeases != 1 {
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
@@ -192,8 +185,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	getLeases()
-	ts = leaseManager.findTableState(tableDesc.ID, false)
-	if numLeases := getNumVersions(ts); numLeases != 2 {
+	if numLeases := leaseManager.getNumVersions(tableDesc.ID); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
@@ -201,14 +193,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if numLeases := getNumVersions(ts); numLeases != 1 {
+	if numLeases := leaseManager.getNumVersions(tableDesc.ID); numLeases != 1 {
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
-	ts.mu.Lock()
-	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
-		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
-	correctExpiration := ts.mu.active.data[0].expiration == expiration
-	ts.mu.Unlock()
+	leaseManager.mu.Lock()
+	ts := leaseManager.findTableStateLocked(tableDesc.ID, false /*created*/)
+	correctLease := ts.active.data[0].TableDescriptor.ID == tables[5].ID &&
+		ts.active.data[0].TableDescriptor.Version == tables[5].Version
+	correctExpiration := ts.active.data[0].expiration == expiration
+	leaseManager.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
 	}
@@ -218,21 +211,21 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Test that purgeOldVersions correctly removes a table version
 	// without a lease.
-	ts.mu.Lock()
+	leaseManager.mu.Lock()
 	tableVersion := &tableVersionState{
 		TableDescriptor: tables[0],
 		expiration:      tables[5].ModificationTime,
 	}
-	ts.mu.active.insert(tableVersion)
-	ts.mu.Unlock()
-	if numLeases := getNumVersions(ts); numLeases != 2 {
+	ts.active.insert(tableVersion)
+	leaseManager.mu.Unlock()
+	if numLeases := leaseManager.getNumVersions(tableDesc.ID); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
 		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
-	if numLeases := getNumVersions(ts); numLeases != 1 {
+	if numLeases := leaseManager.getNumVersions(tableDesc.ID); numLeases != 1 {
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 }
