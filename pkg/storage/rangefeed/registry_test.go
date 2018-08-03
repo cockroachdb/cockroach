@@ -96,10 +96,9 @@ func newTestRegistration(span roachpb.Span) *testRegistration {
 	errC := make(chan *roachpb.Error, 1)
 	return &testRegistration{
 		registration: registration{
-			span:     span,
-			caughtUp: true,
-			stream:   s,
-			errC:     errC,
+			span:   span,
+			stream: s,
+			errC:   errC,
 		},
 		stream: s,
 		errC:   errC,

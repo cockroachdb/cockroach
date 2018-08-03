@@ -106,3 +106,79 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 func (s *initResolvedTSScan) Cancel() {
 	s.snap.Close()
 }
+
+// catchUpScan scans over the provided Snapshot and publishes committed values
+// to the registration's stream. This backfill allows a registration to request
+// a starting timestamp in the past and observe events for writes that have
+// already happened.
+//
+// Snapshot Contract:
+//   The Snapshot must expose all values in the registration's key range, not
+//   just the most recent value for a given key. It does not make any guarantees
+//   about the order that it publishes multiple versions of a single key.
+//   Committed values beneath the registration's starting timestamp will be
+//   ignored, but all values above the registration's starting timestamp must be
+//   present. An important implication of this is that if the Snapshot uses a
+//   TimeBoundIterator, its MinTimestamp cannot be above the registration's
+//   starting timestamp.
+//
+type catchUpScan struct {
+	p    *Processor
+	r    *registration
+	snap Snapshot
+}
+
+func makeCatchUpScan(p *Processor, r *registration) runnable {
+	s := catchUpScan{p: p, r: r, snap: r.catchUpSnap}
+	r.catchUpSnap = nil // detach
+	return &s
+}
+
+func (s *catchUpScan) Run(ctx context.Context) {
+	defer s.snap.Close()
+
+	var meta enginepb.MVCCMetadata
+	sp := s.r.span
+	err := s.snap.Iterate(sp.Key, sp.EndKey, func(kv engine.MVCCKeyValue) (bool, error) {
+		if !kv.Key.IsValue() {
+			// Found a metadata key.
+			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+				return false, errors.Wrapf(err, "unmarshaling mvcc meta: %v", kv)
+			}
+			if !meta.IsInline() {
+				// Not an inline value. Ignore.
+				return false, nil
+			}
+
+			// If write is inline, it doesn't have a timestamp so we don't
+			// filter on the registration's starting timestamp. Instead, we
+			// return all inline writes.
+			kv.Value = meta.RawBytes
+		} else if kv.Key.Timestamp.Less(s.r.startTS) {
+			// Before the registration's starting timestamp. Ignore.
+			return false, nil
+		}
+
+		var event roachpb.RangeFeedEvent
+		event.SetValue(&roachpb.RangeFeedValue{
+			Key: kv.Key.Key,
+			Value: roachpb.Value{
+				RawBytes:  kv.Value,
+				Timestamp: kv.Key.Timestamp,
+			},
+		})
+		return false, s.r.stream.Send(&event)
+	})
+
+	if err != nil {
+		err = errors.Wrap(err, "catch-up scan failed")
+		log.Error(ctx, err)
+		s.p.deliverCatchUpScanRes(s.r, roachpb.NewError(err))
+	} else {
+		s.p.deliverCatchUpScanRes(s.r, nil)
+	}
+}
+
+func (s *catchUpScan) Cancel() {
+	s.snap.Close()
+}

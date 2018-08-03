@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -162,10 +163,18 @@ func TestProcessor(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
+		nil, /* catchUpSnap */
 		r1Stream,
 		r1ErrC,
 	)
 	require.Equal(t, 1, p.Len())
+	require.Equal(t,
+		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			hlc.Timestamp{WallTime: 1},
+		)},
+		r1Stream.Events(),
+	)
 
 	// Test checkpoint with one registration.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
@@ -267,10 +276,18 @@ func TestProcessor(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
+		nil, /* catchUpSnap */
 		r2Stream,
 		r2ErrC,
 	)
 	require.Equal(t, 2, p.Len())
+	require.Equal(t,
+		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			hlc.Timestamp{WallTime: 15},
+		)},
+		r2Stream.Events(),
+	)
 
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
@@ -338,7 +355,7 @@ func TestNilProcessor(t *testing.T) {
 	// The following should panic because they are not safe
 	// to call on a nil Processor.
 	require.Panics(t, func() { p.Start(stop.NewStopper(), nil) })
-	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil) })
+	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil, nil) })
 }
 
 // TestProcessorInitializeResolvedTimestamp tests that when a Processor is given
@@ -381,6 +398,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
+		nil, /* catchUpSnap */
 		r1Stream,
 		make(chan *roachpb.Error, 1),
 	)
@@ -418,6 +436,148 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	require.Equal(t, chEvent, r1Stream.Events())
 }
 
+func TestProcessorCatchUpScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	p, stopper := newTestProcessor(nil /* rtsSnap */)
+	defer stopper.Stop(context.Background())
+
+	// The resolved timestamp should be initialized.
+	p.syncEventC()
+	require.True(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
+
+	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
+	catchUpSnap := newTestSnapshot([]engine.MVCCKeyValue{
+		makeKV("a", "val1", 10),
+		makeInline("b", "val2"),
+		makeIntent("c", txn1, "txnKey1", 15),
+		makeKV("c", "val3", 11),
+		makeKV("c", "val4", 9),
+		makeIntent("d", txn2, "txnKey2", 21),
+		makeKV("d", "val5", 20),
+		makeKV("d", "val6", 19),
+		makeInline("g", "val7"),
+		makeKV("m", "val8", 1),
+		makeIntent("n", txn1, "txnKey1", 12),
+		makeIntent("r", txn1, "txnKey1", 19),
+		makeKV("r", "val9", 4),
+		makeIntent("w", txn1, "txnKey1", 3),
+		makeInline("x", "val10"),
+		makeIntent("z", txn2, "txnKey2", 21),
+		makeKV("z", "val11", 4),
+	})
+	catchUpSnap.block = make(chan struct{})
+
+	// Add a registration with the catch-up snapshot.
+	r1Stream := newTestStream()
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("w")},
+		hlc.Timestamp{WallTime: 2}, // too large to see key @ m
+		catchUpSnap,
+		r1Stream,
+		make(chan *roachpb.Error, 1),
+	)
+	require.Equal(t, 1, p.Len())
+
+	// The registration should not have gotten an initial checkpoint.
+	require.Nil(t, r1Stream.Events())
+
+	// Forward the closed timestamp. The resolved timestamp should be
+	// initialized and should move forward, but the registration should
+	// still not get a checkpoint.
+	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
+	p.syncEventC()
+	require.True(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, p.rts.Get())
+	require.Nil(t, r1Stream.Events())
+
+	// Let the scan proceed.
+	close(catchUpSnap.block)
+	<-catchUpSnap.done
+	require.True(t, catchUpSnap.closed)
+
+	// Synchronize the event channel then verify that the registration's stream
+	// was sent all values in its range and the resolved timestamp once the
+	// catch-up scan was complete.
+	p.syncEventC()
+	expEvents := []*roachpb.RangeFeedEvent{
+		rangeFeedValue(
+			roachpb.Key("a"),
+			roachpb.Value{RawBytes: []byte("val1"), Timestamp: hlc.Timestamp{WallTime: 10}},
+		),
+		rangeFeedValue(
+			roachpb.Key("b"),
+			roachpb.Value{RawBytes: []byte("val2"), Timestamp: hlc.Timestamp{WallTime: 0}},
+		),
+		rangeFeedValue(
+			roachpb.Key("c"),
+			roachpb.Value{RawBytes: []byte("val3"), Timestamp: hlc.Timestamp{WallTime: 11}},
+		),
+		rangeFeedValue(
+			roachpb.Key("c"),
+			roachpb.Value{RawBytes: []byte("val4"), Timestamp: hlc.Timestamp{WallTime: 9}},
+		),
+		rangeFeedValue(
+			roachpb.Key("d"),
+			roachpb.Value{RawBytes: []byte("val5"), Timestamp: hlc.Timestamp{WallTime: 20}},
+		),
+		rangeFeedValue(
+			roachpb.Key("d"),
+			roachpb.Value{RawBytes: []byte("val6"), Timestamp: hlc.Timestamp{WallTime: 19}},
+		),
+		rangeFeedValue(
+			roachpb.Key("g"),
+			roachpb.Value{RawBytes: []byte("val7"), Timestamp: hlc.Timestamp{WallTime: 0}},
+		),
+		rangeFeedValue(
+			roachpb.Key("r"),
+			roachpb.Value{RawBytes: []byte("val9"), Timestamp: hlc.Timestamp{WallTime: 4}},
+		),
+		rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			hlc.Timestamp{WallTime: 20},
+		),
+	}
+	require.Equal(t, expEvents, r1Stream.Events())
+
+	// Forward the closed timestamp. The registration should get a checkpoint
+	// this time.
+	p.ForwardClosedTS(hlc.Timestamp{WallTime: 25})
+	p.syncEventC()
+	require.True(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{WallTime: 25}, p.rts.Get())
+	require.Equal(t,
+		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			hlc.Timestamp{WallTime: 25},
+		)},
+		r1Stream.Events(),
+	)
+
+	// Add a second registration, this time with a snapshot that will throw an
+	// error.
+	r2Stream := newTestStream()
+	r2ErrC := make(chan *roachpb.Error, 1)
+	errCatchUpSnap := newErrorSnapshot(errors.New("iteration error"))
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		errCatchUpSnap,
+		r2Stream,
+		r2ErrC,
+	)
+	require.Equal(t, 2, p.Len())
+
+	// Wait for the scan to hit the error and finish.
+	<-errCatchUpSnap.done
+	require.True(t, errCatchUpSnap.closed)
+
+	// The registration should throw an error and be unregistered.
+	require.NotNil(t, <-r2ErrC)
+	p.syncEventC()
+	require.Equal(t, 1, p.Len())
+}
+
 // TestProcessorConcurrentStop tests that all methods in Processor's API
 // correctly handle the processor concurrently shutting down. If they did
 // not then it would be possible for them to deadlock.
@@ -434,7 +594,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			runtime.Gosched()
 			s := newTestStream()
 			errC := make(chan<- *roachpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, nil, s, errC)
 		}()
 		go func() {
 			defer wg.Done()
@@ -502,7 +662,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			// operation is should see is firstIdx.
 			s := newTestStream()
 			regs[s] = firstIdx
-			p.Register(p.Span, hlc.Timestamp{}, s, make(chan *roachpb.Error, 1))
+			errC := make(chan *roachpb.Error, 1)
+			p.Register(p.Span, hlc.Timestamp{}, nil, s, errC)
 			regDone <- struct{}{}
 		}
 	}()
@@ -512,8 +673,11 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	// from before they registered.
 	for s, expFirstIdx := range regs {
 		events := s.Events()
-		firstEvent := events[0].GetValue().(*roachpb.RangeFeedValue)
-		firstIdx := firstEvent.Value.Timestamp.WallTime
+		require.IsType(t, &roachpb.RangeFeedCheckpoint{}, events[0].GetValue())
+		require.IsType(t, &roachpb.RangeFeedValue{}, events[1].GetValue())
+
+		firstVal := events[1].GetValue().(*roachpb.RangeFeedValue)
+		firstIdx := firstVal.Value.Timestamp.WallTime
 		require.Equal(t, expFirstIdx, firstIdx)
 	}
 }
