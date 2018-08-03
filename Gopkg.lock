@@ -723,8 +723,8 @@
     "unix",
     "unix/sigtramp",
   ]
-  revision = "69b759d6ff84df6bbd39846dae3670625cc0361b"
-  version = "v1.7"
+  revision = "09c6428c201e801ad003ca2bea6daa95ebfc2237"
+  version = "v1.7.1"
 
 [[projects]]
   branch = "master"
@@ -1324,6 +1324,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "24f1631a158f62585d7805d142405d71312f2609b00cb7a3d268b18b9f5f7f32"
+  inputs-digest = "c2d233664857e819b8ff29b49491bd8ecebb24377fb2f152274e86401c220b56"
   solver-name = "gps-cdcl"
   solver-version = 1
