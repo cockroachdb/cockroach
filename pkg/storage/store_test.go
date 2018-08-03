@@ -861,6 +861,68 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 }
 
+func TestLookupPrecedingReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(t, stopper)
+
+	// Clobber the existing range so we can test ranges that aren't KeyMin or
+	// KeyMax.
+	repl1, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	repl2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
+	if err := store.AddReplica(repl2); err != nil {
+		t.Fatal(err)
+	}
+	repl3 := createReplica(store, 3, roachpb.RKey("b"), roachpb.RKey("c"))
+	if err := store.AddReplica(repl3); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.addPlaceholder(&ReplicaPlaceholder{rangeDesc: roachpb.RangeDescriptor{
+		RangeID: 4, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("d"),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	repl5 := createReplica(store, 5, roachpb.RKey("e"), roachpb.RKey("f"))
+	if err := store.AddReplica(repl5); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, tc := range []struct {
+		key     roachpb.RKey
+		expRepl *Replica
+	}{
+		{roachpb.RKeyMin, nil},
+		{roachpb.RKey("a"), nil},
+		{roachpb.RKey("aa"), nil},
+		{roachpb.RKey("b"), repl2},
+		{roachpb.RKey("bb"), repl2},
+		{roachpb.RKey("c"), repl3},
+		{roachpb.RKey("cc"), repl3},
+		{roachpb.RKey("d"), repl3},
+		{roachpb.RKey("dd"), repl3},
+		{roachpb.RKey("e"), repl3},
+		{roachpb.RKey("ee"), repl3},
+		{roachpb.RKey("f"), repl5},
+		{roachpb.RKeyMax, repl5},
+	} {
+		if repl := store.lookupPrecedingReplica(tc.key); repl != tc.expRepl {
+			t.Errorf("%d: expected replica %v; got %v", i, tc.expRepl, repl)
+		}
+	}
+}
+
 func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
