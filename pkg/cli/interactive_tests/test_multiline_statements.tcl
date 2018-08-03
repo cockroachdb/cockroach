@@ -4,6 +4,10 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
+# we force TERM to xterm, otherwise we can't
+# test bracketed paste below.
+set env(TERM) xterm
+
 spawn $argv sql
 eexpect root@
 
@@ -134,6 +138,19 @@ send "commit;\r"
 eexpect COMMIT
 eexpect root@
 end_test
+
+start_test "Test that a multi-line bracketed paste is handled properly."
+send "\033\[200~"
+send "\\set display_format csv\r\n"
+send "values (1,'a'), (2,'b'), (3,'c');\r\n"
+send "\033\[201~\r\n"
+eexpect "1,a"
+eexpect "2,b"
+eexpect "3,c"
+eexpect root@
+end_test
+
+
 
 interrupt
 eexpect eof
