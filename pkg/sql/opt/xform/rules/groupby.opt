@@ -17,7 +17,7 @@
             $input
             (Filters [(IsNot $variable (Null (AnyType)))])
         )
-        (MakeOne)
+        (Const 1)
         (MakeOrderingChoiceFromColumn Min $col)
     )
     (Aggregations [(ConstAgg $variable)] $cols)
@@ -41,7 +41,7 @@
             $input
             (Filters [(IsNot $variable (Null (AnyType)))])
         )
-        (MakeOne)
+        (Const 1)
         (MakeOrderingChoiceFromColumn Max $col)
     )
     (Aggregations [(ConstAgg $variable)] $cols)

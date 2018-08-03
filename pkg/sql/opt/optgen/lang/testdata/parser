@@ -92,7 +92,7 @@ test.opt:11:1: expected define statement, found 'def'
 test.opt:14:8: expected define name, found '{'
 test.opt:18:12: expected '{', found 'Unknown'
 test.opt:22:5: expected define field name, found '('
-test.opt:27:11: expected define field type, found '1'
+test.opt:27:11: expected define field type, found '123'
 
 #
 # Multiple rules with comments.
@@ -183,6 +183,7 @@ parse
 (Op
     (SubOp *)     # Nested match
     "hello"       # String
+    10            # Number
     ^(SubOp)      # Negation
     *             # Any
     [ ... * ... ] # List
@@ -210,39 +211,40 @@ parse
 						Src=<test.opt:3:5>
 					)
 					"hello"
+					10
 					(Not
 						Input=(Func
 							Name=(Names SubOp)
 							Args=(Slice)
-							Src=<test.opt:5:6>
+							Src=<test.opt:6:6>
 						)
-						Src=<test.opt:5:5>
+						Src=<test.opt:6:5>
 					)
 					(Any)
 					(List
 						Items=(Slice (ListAny) (Any) (ListAny))
-						Src=<test.opt:7:5>
-					)
-					(List
-						Items=(Slice (Any) (ListAny))
 						Src=<test.opt:8:5>
 					)
 					(List
-						Items=(Slice (ListAny) (Any))
+						Items=(Slice (Any) (ListAny))
 						Src=<test.opt:9:5>
 					)
 					(List
-						Items=(Slice (Any))
+						Items=(Slice (ListAny) (Any))
 						Src=<test.opt:10:5>
 					)
-					(List Items=(Slice) Src=<test.opt:11:5>)
+					(List
+						Items=(Slice (Any))
+						Src=<test.opt:11:5>
+					)
+					(List Items=(Slice) Src=<test.opt:12:5>)
 				)
 				Src=<test.opt:2:1>
 			)
 			Replace=(Func
 				Name=(Names Op)
 				Args=(Slice)
-				Src=<test.opt:14:1>
+				Src=<test.opt:15:1>
 			)
 			Src=<test.opt:1:1>
 		)
@@ -565,31 +567,6 @@ parse
 )
 
 #
-# Replace with string expression.
-#
-parse
-[ConstructString]
-(Op) => "foo"
-----
-(Root
-	Defines=(DefineSet)
-	Rules=(RuleSet
-		(Rule
-			Comments=(Comments)
-			Name="ConstructString"
-			Tags=(Tags)
-			Match=(Func
-				Name=(Names Op)
-				Args=(Slice)
-				Src=<test.opt:2:1>
-			)
-			Replace="foo"
-			Src=<test.opt:1:1>
-		)
-	)
-)
-
-#
 # Replace with bound expression.
 #
 parse
@@ -766,7 +743,7 @@ parse
 
 # Expected match pattern
 [Tag]
-(Op 1) => (Op)
+(Op 1.1) => (Op)
 
 # Expected match pattern
 [Tag]
@@ -778,7 +755,7 @@ parse
 
 # Expected match pattern in list
 [Tag]
-(Op [ ... 123 ... ]) => (Op)
+(Op [ ... 10.1 ... ]) => (Op)
 
 # Expected list end bracket (any case)
 [Tag]
@@ -791,17 +768,22 @@ parse
 # Expected list end bracket (empty case)
 [Tag]
 (Op [ ) => (Op)
+
+# Numeric value out of range
+[Tag]
+(Op 1000000000000000000000000000) => (Op)
 ----
 test.opt:2:1: expected define statement or rule, found '('
 test.opt:6:7: expected name, found '*'
 test.opt:10:6: expected label, found '*'
-test.opt:14:5: expected expression, found '1'
+test.opt:14:6: expected expression, found '.'
 test.opt:18:9: expected expression, found '$'
 test.opt:22:11: expected name, found '*'
-test.opt:26:11: expected expression, found '1'
+test.opt:26:13: expected expression, found '.'
 test.opt:30:16: expected expression, found ')'
 test.opt:34:13: expected expression, found ')'
 test.opt:38:7: expected expression, found ')'
+test.opt:42:5: strconv.ParseInt: parsing "1000000000000000000000000000": value out of range
 
 #
 # Replace error cases + recovery cases.
@@ -817,7 +799,7 @@ parse
 
 # Expected replace expression (nested)
 [Tag]
-(Op) => (Op 123)
+(Op) => (Op .123)
 
 # Expected construct name (nested)
 [Tag]
@@ -826,12 +808,17 @@ parse
 # Expected replace pattern, found name
 [Tag]
 (Op) => Op
+
+# Replace with string expression.
+[Tag]
+(Op) => "foo"
 ----
-test.opt:3:9: expected replace pattern, found '1'
+test.opt:3:9: expected replace pattern, found '123'
 test.opt:7:10: expected name, found '*'
-test.opt:11:13: expected expression, found '1'
-test.opt:15:11: expected name, found '1'
+test.opt:11:13: expected expression, found '.'
+test.opt:15:11: expected name, found '123'
 test.opt:19:9: expected replace pattern, found 'Op'
+test.opt:23:9: expected replace pattern, found '"foo"'
 
 #
 # Replace EOF error case

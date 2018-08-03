@@ -684,13 +684,6 @@ func (c *CustomFuncs) HoistIndexJoinDef(
 //
 // ----------------------------------------------------------------------
 
-// MakeOne returns a memo.GroupID pointing
-// to a Constant Datum Int with value 1. This is required
-// because optgen cannot create constants inline.
-func (c *CustomFuncs) MakeOne() memo.GroupID {
-	return c.e.f.ConstructConst(c.e.f.InternDatum(tree.NewDInt(1)))
-}
-
 // MakeOrderingChoiceFromColumn constructs a new OrderingChoice with
 // one element in the sequence: the columnID in the order defined by
 // (MIN/MAX) operator. This function was originally created to be used
