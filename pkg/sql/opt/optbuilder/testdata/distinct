@@ -369,7 +369,6 @@ sort
  └── distinct-on
       ├── columns: a:1(int) b:2(int!null) c:3(int!null) d:4(int)
       ├── grouping columns: b:2(int!null) c:3(int!null)
-      ├── ordering: +2,+3
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
       │    ├── ordering: +2,+3
@@ -390,7 +389,6 @@ sort
  └── distinct-on
       ├── columns: a:1(int!null) c:3(int)
       ├── grouping columns: a:1(int!null)
-      ├── ordering: +1,-3,+2
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    ├── ordering: +1,-3,+2
