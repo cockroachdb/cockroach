@@ -23,12 +23,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
+	// Context returns the context for this stream.
 	Context() context.Context
+	// Send blocks until it sends m, the stream is done or the stream breaks.
+	// It is not safe to call Send on the same stream in different goroutines.
 	Send(*roachpb.RangeFeedEvent) error
+}
+
+type lockedStream struct {
+	Stream
+	sendMu syncutil.Mutex
+}
+
+func (s *lockedStream) Send(e *roachpb.RangeFeedEvent) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.Stream.Send(e)
 }
 
 // registration is an instance of a rangefeed subscriber who has
@@ -52,7 +67,8 @@ type registration struct {
 	startTS hlc.Timestamp
 
 	// Catch-up state.
-	caughtUp bool
+	catchUpSnap Snapshot
+	caughtUp    bool
 
 	// Output.
 	stream Stream
