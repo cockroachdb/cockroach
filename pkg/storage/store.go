@@ -2019,6 +2019,25 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	return repl
 }
 
+// lookupPrecedingReplica finds the replica in this store that immediately
+// precedes the specified key without containing it. It returns nil if no such
+// replica exists. It ignores replica placeholders.
+//
+// Concretely, when key represents a key within replica R,
+// lookupPrecedingReplica returns the replica that immediately precedes R in
+// replicasByKey.
+func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var repl *Replica
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
+		var ok bool
+		repl, ok = item.(*Replica)
+		return !ok // keep iterating if not a *Replica
+	})
+	return repl
+}
+
 // getOverlappingKeyRangeLocked returns a KeyRange from the Store overlapping the given
 // descriptor (or nil if no such KeyRange exists).
 func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) KeyRange {
