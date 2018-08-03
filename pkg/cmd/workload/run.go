@@ -111,8 +111,10 @@ func cmdHelper(
 
 	return handleErrs(func(cmd *cobra.Command, args []string) error {
 		if h, ok := gen.(workload.Hookser); ok {
-			if err := h.Hooks().Validate(); err != nil {
-				return err
+			if h.Hooks().Validate != nil {
+				if err := h.Hooks().Validate(); err != nil {
+					return errors.Wrapf(err, "could not validate")
+				}
 			}
 		}
 
@@ -394,6 +396,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
 			printTotalHist := func(t workload.HistogramTick) {
+				if t.Cumulative == nil {
+					return
+				}
 				if t.Cumulative.TotalCount() == 0 {
 					return
 				}
