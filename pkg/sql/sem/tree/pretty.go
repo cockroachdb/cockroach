@@ -689,11 +689,11 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	switch node.BoundType {
 	case UnboundedPreceding:
 		return pretty.Text("UNBOUNDED PRECEDING")
-	case ValuePreceding:
+	case OffsetPreceding:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Text("PRECEDING"))
 	case CurrentRow:
 		return pretty.Text("CURRENT ROW")
-	case ValueFollowing:
+	case OffsetFollowing:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Text("FOLLOWING"))
 	case UnboundedFollowing:
 		return pretty.Text("UNBOUNDED FOLLOWING")
