@@ -3068,6 +3068,10 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			s = d.String()
 		case *DTimestamp, *DTimestampTZ, *DDate, *DTime, *DTimeTZ:
 			s = AsStringWithFlags(d, FmtBareStrings)
+		case *DTuple:
+			s = AsStringWithFlags(d, FmtPgwireText)
+		case *DArray:
+			s = AsStringWithFlags(d, FmtPgwireText)
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
 			// of the duration (e.g. "5s") and not of the interval itself (e.g.
