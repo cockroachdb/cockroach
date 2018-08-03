@@ -104,6 +104,12 @@ type cliState struct {
 	// query to the server updates it.
 	lastKnownTxnStatus string
 
+	// forwardLines is the array of lookahead lines. This gets
+	// populated when there is more than one line of input
+	// in the data read by ReadLine(), which can happen
+	// when copy-pasting.
+	forwardLines []string
+
 	// partialLines is the array of lines accumulated so far in a
 	// multi-line entry.
 	partialLines []string
@@ -812,6 +818,14 @@ func (c *cliState) doContinueLine(nextState cliStateEnum) cliStateEnum {
 // input was successful it populates c.lastInputLine.  Otherwise
 // c.exitErr is set in some cases and an error/retry state is returned.
 func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
+	if len(c.forwardLines) > 0 {
+		// Are there some lines accumulated from a previous multi-line
+		// readline input? If so, consume one.
+		c.lastInputLine = c.forwardLines[0]
+		c.forwardLines = c.forwardLines[1:]
+		return nextState
+	}
+
 	var l string
 	var err error
 	if c.buf == nil {
@@ -844,7 +858,15 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 
 	switch err {
 	case nil:
-		// Good to go.
+		// Do we have multiple lines of input?
+		lines := strings.Split(l, "\n")
+		if len(lines) > 1 {
+			// Yes: only keep the first one for now, queue the remainder for
+			// next time the shell needs a line.
+			l = lines[0]
+			c.forwardLines = lines[1:]
+		}
+		// In any case, process one line.
 
 	case readline.ErrInterrupted:
 		if !cliCtx.isInteractive {
