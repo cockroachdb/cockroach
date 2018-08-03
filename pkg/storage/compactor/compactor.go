@@ -492,6 +492,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 	// Check whether a suggested compaction already exists for this key span.
 	key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 	var existing storagebase.Compaction
+	//lint:ignore SA1019 historical usage of deprecated c.eng.GetProto is OK
 	ok, _, _, err := c.eng.GetProto(engine.MVCCKey{Key: key}, &existing)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "unable to record suggested compaction: %s", err)
@@ -508,6 +509,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 	}
 
 	// Store the new compaction.
+	//lint:ignore SA1019 historical usage of deprecated engine.PutProto is OK
 	if _, _, err = engine.PutProto(c.eng, engine.MVCCKey{Key: key}, &sc.Compaction); err != nil {
 		log.Warningf(ctx, "unable to record suggested compaction: %s", err)
 	}

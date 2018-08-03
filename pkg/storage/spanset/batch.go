@@ -217,6 +217,7 @@ func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return nil, err
 	}
+	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
 	return s.r.Get(key)
 }
 
@@ -226,6 +227,7 @@ func (s spanSetReader) GetProto(
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, 0, 0, err
 	}
+	//lint:ignore SA1019 implementing deprecated interface function (GetProto) is OK
 	return s.r.GetProto(key, msg)
 }
 
