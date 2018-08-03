@@ -1275,6 +1275,22 @@ scalar-group-by
       └── sum [type=decimal, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]
 
+opt
+SELECT f FROM (SELECT DISTINCT ON (i) f, s FROM a)
+----
+project
+ ├── columns: f:3(float)
+ └── distinct-on
+      ├── columns: i:2(int) f:3(float)
+      ├── grouping columns: i:2(int)
+      ├── key: (2)
+      ├── fd: (2)-->(3)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── aggregations [outer=(3)]
+           └── first-agg [type=float, outer=(3)]
+                └── variable: a.f [type=float, outer=(3)]
+
 # --------------------------------------------------
 # PruneGroupByCols
 # --------------------------------------------------
