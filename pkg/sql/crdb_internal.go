@@ -354,7 +354,10 @@ CREATE TABLE crdb_internal.leases (
 						continue
 					}
 
-					if !state.leased {
+					state.mu.Lock()
+					leased := state.mu.leased
+					state.mu.Unlock()
+					if !leased {
 						continue
 					}
 					expCopy := state.leaseExpiration()
