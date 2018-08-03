@@ -194,26 +194,44 @@ func runStatusNodeInner(
 	}
 
 	if !showDecommissioned {
-		for _, status := range decommissionStatusResp.Status {
-			if !status.Decommissioning || status.IsLive {
-				// Show this entry.
-				continue
-			}
-			for i := 0; i < len(nodeStatuses); i++ {
-				if nodeStatuses[i].Desc.NodeID == status.NodeID {
-					// Hide this entry (by swapping it out with the last one).
-					last := len(nodeStatuses) - 1
-					nodeStatuses[i] = nodeStatuses[last]
-					nodeStatuses = nodeStatuses[:last]
-				}
-			}
-		}
-		// Sort the surviving entries (again) by NodeID.
-		sort.Slice(nodeStatuses, func(i, j int) bool {
-			return nodeStatuses[i].Desc.NodeID < nodeStatuses[j].Desc.NodeID
-		})
+		nodeStatuses = hideDecommissioned(nodeStatuses, decommissionStatusResp)
 	}
 	return nodeStatuses, decommissionStatusResp, nil
+}
+
+func hideDecommissioned(
+	nodeStatuses []status.NodeStatus, decommissionStatusResp *serverpb.DecommissionStatusResponse,
+) []status.NodeStatus {
+	var decommissionStatuses []serverpb.DecommissionStatusResponse_Status
+	for _, status := range decommissionStatusResp.Status {
+		if !status.Decommissioning || status.IsLive {
+			// Show this entry.
+			for _, ns := range nodeStatuses {
+				if ns.Desc.NodeID == status.NodeID {
+					decommissionStatuses = append(decommissionStatuses, status)
+					break
+				}
+			}
+			continue
+		}
+		for i := 0; i < len(nodeStatuses); i++ {
+			if nodeStatuses[i].Desc.NodeID == status.NodeID {
+				// Hide this entry (by swapping it out with the last one).
+				last := len(nodeStatuses) - 1
+				nodeStatuses[i] = nodeStatuses[last]
+				nodeStatuses = nodeStatuses[:last]
+			}
+		}
+	}
+	// Sort the surviving entries (again) by NodeID.
+	sort.Slice(nodeStatuses, func(i, j int) bool {
+		return nodeStatuses[i].Desc.NodeID < nodeStatuses[j].Desc.NodeID
+	})
+	sort.Slice(decommissionStatuses, func(i, j int) bool {
+		return decommissionStatuses[i].NodeID < decommissionStatuses[j].NodeID
+	})
+	decommissionStatusResp.Status = decommissionStatuses
+	return nodeStatuses
 }
 
 func getStatusNodeHeaders() []string {
