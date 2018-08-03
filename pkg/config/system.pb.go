@@ -23,7 +23,7 @@ package config
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import io "io"
 
@@ -39,7 +39,7 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type SystemConfig struct {
-	Values []cockroach_roachpb1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
+	Values []cockroach_roachpb2.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
 }
 
 func (m *SystemConfig) Reset()                    { *m = SystemConfig{} }
@@ -169,7 +169,7 @@ func (m *SystemConfig) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Values = append(m.Values, cockroach_roachpb1.KeyValue{})
+			m.Values = append(m.Values, cockroach_roachpb2.KeyValue{})
 			if err := m.Values[len(m.Values)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}

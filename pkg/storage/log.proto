@@ -17,6 +17,7 @@ package cockroach.storage;
 option go_package = "storage";
 
 import "roachpb/metadata.proto";
+import "roachpb/metadata3.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 

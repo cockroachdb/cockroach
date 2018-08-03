@@ -6,7 +6,7 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_storage_storagebase "github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
@@ -205,7 +205,7 @@ func (*RaftMessageRequestBatch) ProtoMessage()               {}
 func (*RaftMessageRequestBatch) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{2} }
 
 type RaftMessageResponseUnion struct {
-	Error *cockroach_roachpb3.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+	Error *cockroach_roachpb4.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
 }
 
 func (m *RaftMessageResponseUnion) Reset()                    { *m = RaftMessageResponseUnion{} }
@@ -1029,7 +1029,7 @@ func (this *RaftMessageResponseUnion) GetValue() interface{} {
 
 func (this *RaftMessageResponseUnion) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
-	case *cockroach_roachpb3.Error:
+	case *cockroach_roachpb4.Error:
 		this.Error = vt
 	default:
 		return false
@@ -1579,7 +1579,7 @@ func (m *RaftMessageResponseUnion) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Error == nil {
-				m.Error = &cockroach_roachpb3.Error{}
+				m.Error = &cockroach_roachpb4.Error{}
 			}
 			if err := m.Error.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

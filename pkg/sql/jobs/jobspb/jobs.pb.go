@@ -28,8 +28,8 @@ package jobspb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
@@ -151,7 +151,7 @@ func (*RestoreProgress) Descriptor() ([]byte, []int) { return fileDescriptorJobs
 type ImportDetails struct {
 	Tables     []ImportDetails_Table                               `protobuf:"bytes,1,rep,name=tables" json:"tables"`
 	URIs       []string                                            `protobuf:"bytes,2,rep,name=uris" json:"uris,omitempty"`
-	Format     cockroach_roachpb2.IOFileFormat                     `protobuf:"bytes,3,opt,name=format" json:"format"`
+	Format     cockroach_roachpb3.IOFileFormat                     `protobuf:"bytes,3,opt,name=format" json:"format"`
 	SSTSize    int64                                               `protobuf:"varint,4,opt,name=sst_size,json=sstSize,proto3" json:"sst_size,omitempty"`
 	Oversample int64                                               `protobuf:"varint,9,opt,name=oversample,proto3" json:"oversample,omitempty"`
 	SkipFKs    bool                                                `protobuf:"varint,10,opt,name=skip_fks,json=skipFks,proto3" json:"skip_fks,omitempty"`
@@ -187,7 +187,7 @@ type ImportProgress struct {
 	// The spans of split keys which have had their SSTable's generated.
 	// This allows us to skip the shuffle stage for already-completed
 	// spans when resuming an import job.
-	SpanProgress []cockroach_roachpb1.Span `protobuf:"bytes,4,rep,name=span_progress,json=spanProgress" json:"span_progress"`
+	SpanProgress []cockroach_roachpb2.Span `protobuf:"bytes,4,rep,name=span_progress,json=spanProgress" json:"span_progress"`
 }
 
 func (m *ImportProgress) Reset()                    { *m = ImportProgress{} }
@@ -196,7 +196,7 @@ func (*ImportProgress) ProtoMessage()               {}
 func (*ImportProgress) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{6} }
 
 type ResumeSpanList struct {
-	ResumeSpans []cockroach_roachpb1.Span `protobuf:"bytes,1,rep,name=resume_spans,json=resumeSpans" json:"resume_spans"`
+	ResumeSpans []cockroach_roachpb2.Span `protobuf:"bytes,1,rep,name=resume_spans,json=resumeSpans" json:"resume_spans"`
 }
 
 func (m *ResumeSpanList) Reset()                    { *m = ResumeSpanList{} }
@@ -3491,7 +3491,7 @@ func (m *ImportProgress) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SpanProgress = append(m.SpanProgress, cockroach_roachpb1.Span{})
+			m.SpanProgress = append(m.SpanProgress, cockroach_roachpb2.Span{})
 			if err := m.SpanProgress[len(m.SpanProgress)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3572,7 +3572,7 @@ func (m *ResumeSpanList) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ResumeSpans = append(m.ResumeSpans, cockroach_roachpb1.Span{})
+			m.ResumeSpans = append(m.ResumeSpans, cockroach_roachpb2.Span{})
 			if err := m.ResumeSpans[len(m.ResumeSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}

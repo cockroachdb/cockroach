@@ -6,9 +6,9 @@ package distsqlrun
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_pgerror "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_sql_sqlbase2 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -211,7 +211,7 @@ type Error_PGError struct {
 	PGError *cockroach_pgerror.Error `protobuf:"bytes,1,opt,name=pg_error,json=pgError,oneof"`
 }
 type Error_RetryableTxnError struct {
-	RetryableTxnError *cockroach_roachpb2.UnhandledRetryableError `protobuf:"bytes,2,opt,name=retryableTxnError,oneof"`
+	RetryableTxnError *cockroach_roachpb3.UnhandledRetryableError `protobuf:"bytes,2,opt,name=retryableTxnError,oneof"`
 }
 
 func (*Error_PGError) isError_Detail()           {}
@@ -231,7 +231,7 @@ func (m *Error) GetPGError() *cockroach_pgerror.Error {
 	return nil
 }
 
-func (m *Error) GetRetryableTxnError() *cockroach_roachpb2.UnhandledRetryableError {
+func (m *Error) GetRetryableTxnError() *cockroach_roachpb3.UnhandledRetryableError {
 	if x, ok := m.GetDetail().(*Error_RetryableTxnError); ok {
 		return x.RetryableTxnError
 	}
@@ -282,7 +282,7 @@ func _Error_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) 
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(cockroach_roachpb2.UnhandledRetryableError)
+		msg := new(cockroach_roachpb3.UnhandledRetryableError)
 		err := b.DecodeMessage(msg)
 		m.Detail = &Error_RetryableTxnError{msg}
 		return true, err
@@ -555,7 +555,7 @@ type RemoteProducerMetadata_TraceData_ struct {
 	TraceData *RemoteProducerMetadata_TraceData `protobuf:"bytes,3,opt,name=trace_data,json=traceData,oneof"`
 }
 type RemoteProducerMetadata_TxnCoordMeta struct {
-	TxnCoordMeta *cockroach_roachpb1.TxnCoordMeta `protobuf:"bytes,4,opt,name=txn_coord_meta,json=txnCoordMeta,oneof"`
+	TxnCoordMeta *cockroach_roachpb2.TxnCoordMeta `protobuf:"bytes,4,opt,name=txn_coord_meta,json=txnCoordMeta,oneof"`
 }
 type RemoteProducerMetadata_RowNum_ struct {
 	RowNum *RemoteProducerMetadata_RowNum `protobuf:"bytes,5,opt,name=row_num,json=rowNum,oneof"`
@@ -595,7 +595,7 @@ func (m *RemoteProducerMetadata) GetTraceData() *RemoteProducerMetadata_TraceDat
 	return nil
 }
 
-func (m *RemoteProducerMetadata) GetTxnCoordMeta() *cockroach_roachpb1.TxnCoordMeta {
+func (m *RemoteProducerMetadata) GetTxnCoordMeta() *cockroach_roachpb2.TxnCoordMeta {
 	if x, ok := m.GetValue().(*RemoteProducerMetadata_TxnCoordMeta); ok {
 		return x.TxnCoordMeta
 	}
@@ -687,7 +687,7 @@ func _RemoteProducerMetadata_OneofUnmarshaler(msg proto.Message, tag, wire int, 
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(cockroach_roachpb1.TxnCoordMeta)
+		msg := new(cockroach_roachpb2.TxnCoordMeta)
 		err := b.DecodeMessage(msg)
 		m.Value = &RemoteProducerMetadata_TxnCoordMeta{msg}
 		return true, err
@@ -741,7 +741,7 @@ func _RemoteProducerMetadata_OneofSizer(msg proto.Message) (n int) {
 }
 
 type RemoteProducerMetadata_RangeInfos struct {
-	RangeInfo []cockroach_roachpb3.RangeInfo `protobuf:"bytes,1,rep,name=range_info,json=rangeInfo" json:"range_info"`
+	RangeInfo []cockroach_roachpb4.RangeInfo `protobuf:"bytes,1,rep,name=range_info,json=rangeInfo" json:"range_info"`
 }
 
 func (m *RemoteProducerMetadata_RangeInfos) Reset()         { *m = RemoteProducerMetadata_RangeInfos{} }
@@ -2070,7 +2070,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &cockroach_roachpb2.UnhandledRetryableError{}
+			v := &cockroach_roachpb3.UnhandledRetryableError{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3858,7 +3858,7 @@ func (m *RemoteProducerMetadata) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &cockroach_roachpb1.TxnCoordMeta{}
+			v := &cockroach_roachpb2.TxnCoordMeta{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3972,7 +3972,7 @@ func (m *RemoteProducerMetadata_RangeInfos) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RangeInfo = append(m.RangeInfo, cockroach_roachpb3.RangeInfo{})
+			m.RangeInfo = append(m.RangeInfo, cockroach_roachpb4.RangeInfo{})
 			if err := m.RangeInfo[len(m.RangeInfo)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}

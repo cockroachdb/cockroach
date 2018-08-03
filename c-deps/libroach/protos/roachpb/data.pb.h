@@ -31,6 +31,7 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
 #include "roachpb/metadata.pb.h"
+#include "roachpb/metadata3.pb.h"
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)

@@ -17,6 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
+import "roachpb/metadata3.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -487,7 +488,7 @@ message TxnCoordMeta {
   repeated Span refresh_writes = 5 [(gogoproto.nullable) = false];
   // refresh_invalid indicates that spans were discarded or not collected
   // (i.e. because of a dist SQL processor running a version before refreshing
-  // was introduced). This is false if all spans encountered during the 
+  // was introduced). This is false if all spans encountered during the
   // transaction which need refreshing have been collected to the refresh_reads
   // and refresh_writes span slices.
   bool refresh_invalid = 7;

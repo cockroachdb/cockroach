@@ -6,8 +6,8 @@ package distsqlrun
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb5 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_sql_sqlbase3 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -399,7 +399,7 @@ type TableReaderSpan struct {
 	// TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
 	// KVs. The span should be described as starting and ending lists of values
 	// for a prefix of the index columns, along with inclusive/exclusive flags.
-	Span cockroach_roachpb1.Span `protobuf:"bytes,1,opt,name=span" json:"span"`
+	Span cockroach_roachpb2.Span `protobuf:"bytes,1,opt,name=span" json:"span"`
 }
 
 func (m *TableReaderSpan) Reset()                    { *m = TableReaderSpan{} }
@@ -786,7 +786,7 @@ func (*JobProgress) ProtoMessage()               {}
 func (*JobProgress) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{19} }
 
 type ReadImportDataSpec struct {
-	Format cockroach_roachpb4.IOFileFormat `protobuf:"bytes,8,opt,name=format" json:"format"`
+	Format cockroach_roachpb5.IOFileFormat `protobuf:"bytes,8,opt,name=format" json:"format"`
 	// sample_size is the rate at which to output rows, based on an input row's size.
 	SampleSize int32 `protobuf:"varint,2,opt,name=sample_size,json=sampleSize" json:"sample_size"`
 	// tables is an alternative to table_desc for input formats that can read
@@ -856,7 +856,7 @@ type CSVWriterSpec struct {
 	// location (directory).
 	Destination string                        `protobuf:"bytes,1,opt,name=destination" json:"destination"`
 	NamePattern string                        `protobuf:"bytes,2,opt,name=name_pattern,json=namePattern" json:"name_pattern"`
-	Options     cockroach_roachpb4.CSVOptions `protobuf:"bytes,3,opt,name=options" json:"options"`
+	Options     cockroach_roachpb5.CSVOptions `protobuf:"bytes,3,opt,name=options" json:"options"`
 	// chunk_rows is num rows to write per file. 0 = no limit.
 	ChunkRows int64 `protobuf:"varint,4,opt,name=chunk_rows,json=chunkRows" json:"chunk_rows"`
 }

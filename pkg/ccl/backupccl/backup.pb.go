@@ -16,8 +16,8 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
@@ -77,20 +77,20 @@ type BackupDescriptor struct {
 	// the last backup. For all tables in the backup descriptor, these spans must
 	// completely cover each table's span. For example, if a table with ID 51 were
 	// being backed up, then the span `/Table/5{1-2}` must be completely covered.
-	Spans []cockroach_roachpb1.Span `protobuf:"bytes,3,rep,name=spans" json:"spans"`
+	Spans []cockroach_roachpb2.Span `protobuf:"bytes,3,rep,name=spans" json:"spans"`
 	// IntroducedSpans are a subset of spans, set only when creating incremental
 	// backups that cover spans not included in a previous backup. Spans contained
 	// here are covered in the interval (0, startTime], which, in conjunction with
 	// the coverage from (startTime, endTime] implied for all spans in Spans,
 	// results in coverage from [0, endTime] for these spans.
-	IntroducedSpans   []cockroach_roachpb1.Span             `protobuf:"bytes,15,rep,name=introduced_spans,json=introducedSpans" json:"introduced_spans"`
+	IntroducedSpans   []cockroach_roachpb2.Span             `protobuf:"bytes,15,rep,name=introduced_spans,json=introducedSpans" json:"introduced_spans"`
 	DescriptorChanges []BackupDescriptor_DescriptorRevision `protobuf:"bytes,16,rep,name=descriptor_changes,json=descriptorChanges" json:"descriptor_changes"`
 	Files             []BackupDescriptor_File               `protobuf:"bytes,4,rep,name=files" json:"files"`
 	Descriptors       []cockroach_sql_sqlbase1.Descriptor   `protobuf:"bytes,5,rep,name=descriptors" json:"descriptors"`
 	// databases in descriptors that have all tables also in descriptors.
 	CompleteDbs   []github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ID `protobuf:"varint,14,rep,packed,name=complete_dbs,json=completeDbs,casttype=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID" json:"complete_dbs,omitempty"`
-	EntryCounts   cockroach_roachpb3.BulkOpSummary                      `protobuf:"bytes,12,opt,name=entry_counts,json=entryCounts" json:"entry_counts"`
-	Dir           cockroach_roachpb3.ExportStorage                      `protobuf:"bytes,7,opt,name=dir" json:"dir"`
+	EntryCounts   cockroach_roachpb4.BulkOpSummary                      `protobuf:"bytes,12,opt,name=entry_counts,json=entryCounts" json:"entry_counts"`
+	Dir           cockroach_roachpb4.ExportStorage                      `protobuf:"bytes,7,opt,name=dir" json:"dir"`
 	FormatVersion uint32                                                `protobuf:"varint,8,opt,name=format_version,json=formatVersion,proto3" json:"format_version,omitempty"`
 	ClusterID     github_com_cockroachdb_cockroach_pkg_util_uuid.UUID   `protobuf:"bytes,9,opt,name=cluster_id,json=clusterId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"cluster_id"`
 	// node_id and build_info of the gateway node (which writes the descriptor).
@@ -106,10 +106,10 @@ func (*BackupDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorBac
 // BackupDescriptor_File represents a file that contains the diff for a key
 // range between two timestamps.
 type BackupDescriptor_File struct {
-	Span        cockroach_roachpb1.Span          `protobuf:"bytes,1,opt,name=span" json:"span"`
+	Span        cockroach_roachpb2.Span          `protobuf:"bytes,1,opt,name=span" json:"span"`
 	Path        string                           `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	Sha512      []byte                           `protobuf:"bytes,4,opt,name=sha512,proto3" json:"sha512,omitempty"`
-	EntryCounts cockroach_roachpb3.BulkOpSummary `protobuf:"bytes,6,opt,name=entry_counts,json=entryCounts" json:"entry_counts"`
+	EntryCounts cockroach_roachpb4.BulkOpSummary `protobuf:"bytes,6,opt,name=entry_counts,json=entryCounts" json:"entry_counts"`
 	// StartTime 0 is sometimes legitimately used, so it is only meaningful if
 	// EndTime is non-zero, otherwise both just inherit from containing backup.
 	StartTime cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=start_time,json=startTime" json:"start_time"`
@@ -653,7 +653,7 @@ func (m *BackupDescriptor) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Spans = append(m.Spans, cockroach_roachpb1.Span{})
+			m.Spans = append(m.Spans, cockroach_roachpb2.Span{})
 			if err := m.Spans[len(m.Spans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -985,7 +985,7 @@ func (m *BackupDescriptor) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntroducedSpans = append(m.IntroducedSpans, cockroach_roachpb1.Span{})
+			m.IntroducedSpans = append(m.IntroducedSpans, cockroach_roachpb2.Span{})
 			if err := m.IntroducedSpans[len(m.IntroducedSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}

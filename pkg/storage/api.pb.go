@@ -32,7 +32,7 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -87,7 +87,7 @@ type CollectChecksumResponse struct {
 	//
 	// TODO(tschottdorf): with larger ranges, this is no longer tenable.
 	// See https://github.com/cockroachdb/cockroach/issues/21128.
-	Snapshot *cockroach_roachpb1.RaftSnapshotData `protobuf:"bytes,2,opt,name=snapshot" json:"snapshot,omitempty"`
+	Snapshot *cockroach_roachpb2.RaftSnapshotData `protobuf:"bytes,2,opt,name=snapshot" json:"snapshot,omitempty"`
 	// delta carries the stats of the range minus the recomputed stats.
 	Delta cockroach_storage_engine_enginepb.MVCCStatsDelta `protobuf:"bytes,3,opt,name=delta" json:"delta"`
 }
@@ -692,7 +692,7 @@ func (m *CollectChecksumResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Snapshot == nil {
-				m.Snapshot = &cockroach_roachpb1.RaftSnapshotData{}
+				m.Snapshot = &cockroach_roachpb2.RaftSnapshotData{}
 			}
 			if err := m.Snapshot.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

@@ -27,9 +27,11 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
+namespace protobuf_roachpb_2fmetadata3_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeDescriptor;
+}  // namespace protobuf_roachpb_2fmetadata3_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
@@ -193,7 +195,7 @@ static void InitDefaultsSplitTrigger() {
 
 ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsSplitTrigger}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+      &protobuf_roachpb_2fmetadata3_2eproto::scc_info_RangeDescriptor.base,}};
 
 static void InitDefaultsMergeTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -208,7 +210,7 @@ static void InitDefaultsMergeTrigger() {
 
 ::google::protobuf::internal::SCCInfo<1> scc_info_MergeTrigger =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsMergeTrigger}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+      &protobuf_roachpb_2fmetadata3_2eproto::scc_info_RangeDescriptor.base,}};
 
 static void InitDefaultsChangeReplicasTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;

@@ -6,7 +6,7 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
@@ -57,7 +57,7 @@ func (LeaseState) EnumDescriptor() ([]byte, []int) { return fileDescriptorLeaseS
 // epoch-based.
 type LeaseStatus struct {
 	// Lease which this status describes.
-	Lease cockroach_roachpb2.Lease `protobuf:"bytes,1,opt,name=lease" json:"lease"`
+	Lease cockroach_roachpb3.Lease `protobuf:"bytes,1,opt,name=lease" json:"lease"`
 	// Timestamp that the lease was evaluated at.
 	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// State of the lease at timestamp.

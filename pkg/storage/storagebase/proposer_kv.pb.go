@@ -26,8 +26,8 @@ package storagebase
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -55,7 +55,7 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // sides of the split, and that the left hand side Replica should be updated as
 // well as the right hand side created.
 type Split struct {
-	cockroach_roachpb1.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	cockroach_roachpb2.SplitTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
 	// RHSDelta holds the statistics for what was written to what is now the
 	// right-hand side of the split during the batch which executed it.
 	// The on-disk state of the right-hand side is already correct, but the
@@ -71,7 +71,7 @@ func (*Split) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []
 // Merge is emitted by a Replica which commits a transaction with
 // a MergeTrigger (i.e. absorbs its right neighbor).
 type Merge struct {
-	cockroach_roachpb1.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	cockroach_roachpb2.MergeTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
 }
 
 func (m *Merge) Reset()                    { *m = Merge{} }
@@ -82,7 +82,7 @@ func (*Merge) Descriptor() ([]byte, []int) { return fileDescriptorProposerKv, []
 // ChangeReplicas is emitted by a Replica which commits a transaction with
 // a ChangeReplicasTrigger.
 type ChangeReplicas struct {
-	cockroach_roachpb1.ChangeReplicasTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
+	cockroach_roachpb2.ChangeReplicasTrigger `protobuf:"bytes,1,opt,name=trigger,embedded=trigger" json:"trigger"`
 }
 
 func (m *ChangeReplicas) Reset()                    { *m = ChangeReplicas{} }
@@ -136,7 +136,7 @@ type ReplicatedEvalResult struct {
 	State           *ReplicaState                              `protobuf:"bytes,2,opt,name=state" json:"state,omitempty"`
 	Split           *Split                                     `protobuf:"bytes,3,opt,name=split" json:"split,omitempty"`
 	Merge           *Merge                                     `protobuf:"bytes,4,opt,name=merge" json:"merge,omitempty"`
-	ComputeChecksum *cockroach_roachpb3.ComputeChecksumRequest `protobuf:"bytes,5,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
+	ComputeChecksum *cockroach_roachpb4.ComputeChecksumRequest `protobuf:"bytes,5,opt,name=compute_checksum,json=computeChecksum" json:"compute_checksum,omitempty"`
 	IsLeaseRequest  bool                                       `protobuf:"varint,6,opt,name=is_lease_request,json=isLeaseRequest,proto3" json:"is_lease_request,omitempty"`
 	// Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
 	// to verify the validity of the command (for lease coverage and GC
@@ -228,7 +228,7 @@ type RaftCommand struct {
 	// However, unless we add a check that all existing Raft logs on all nodes
 	// in the cluster contain only "new" leases, we won't be able to remove the
 	// legacy code.
-	DeprecatedProposerLease *cockroach_roachpb1.Lease `protobuf:"bytes,5,opt,name=deprecated_proposer_lease,json=deprecatedProposerLease" json:"deprecated_proposer_lease,omitempty"`
+	DeprecatedProposerLease *cockroach_roachpb2.Lease `protobuf:"bytes,5,opt,name=deprecated_proposer_lease,json=deprecatedProposerLease" json:"deprecated_proposer_lease,omitempty"`
 	// When the command is applied, its result is an error if the lease log
 	// counter has already reached (or exceeded) max_lease_index.
 	//
@@ -267,7 +267,7 @@ type RaftCommand struct {
 	// TODO(bdarnell): This used to be a pre-proposer-evaluated-kv field; we're
 	// now exclusively proposer-evaluated, but it is still needed by certain tests
 	// that use TestingEvalFilter. See #10493.
-	TestingBatchRequest  *cockroach_roachpb3.BatchRequest `protobuf:"bytes,3,opt,name=testing_batch_request,json=testingBatchRequest" json:"testing_batch_request,omitempty"`
+	TestingBatchRequest  *cockroach_roachpb4.BatchRequest `protobuf:"bytes,3,opt,name=testing_batch_request,json=testingBatchRequest" json:"testing_batch_request,omitempty"`
 	ReplicatedEvalResult ReplicatedEvalResult             `protobuf:"bytes,13,opt,name=replicated_eval_result,json=replicatedEvalResult" json:"replicated_eval_result"`
 	WriteBatch           *WriteBatch                      `protobuf:"bytes,14,opt,name=write_batch,json=writeBatch" json:"write_batch,omitempty"`
 }
@@ -1854,7 +1854,7 @@ func (m *ReplicatedEvalResult) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ComputeChecksum == nil {
-				m.ComputeChecksum = &cockroach_roachpb3.ComputeChecksumRequest{}
+				m.ComputeChecksum = &cockroach_roachpb4.ComputeChecksumRequest{}
 			}
 			if err := m.ComputeChecksum.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2492,7 +2492,7 @@ func (m *RaftCommand) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TestingBatchRequest == nil {
-				m.TestingBatchRequest = &cockroach_roachpb3.BatchRequest{}
+				m.TestingBatchRequest = &cockroach_roachpb4.BatchRequest{}
 			}
 			if err := m.TestingBatchRequest.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2544,7 +2544,7 @@ func (m *RaftCommand) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DeprecatedProposerLease == nil {
-				m.DeprecatedProposerLease = &cockroach_roachpb1.Lease{}
+				m.DeprecatedProposerLease = &cockroach_roachpb2.Lease{}
 			}
 			if err := m.DeprecatedProposerLease.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

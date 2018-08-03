@@ -75,7 +75,7 @@ package distsqlrun
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import time "time"
 
@@ -142,10 +142,10 @@ type SetupFlowRequest struct {
 	// transaction (i.e. it is responsible for managing its own transactions,
 	// if any). Most flows expect to run in a txn, but some, like backfills,
 	// don't.
-	TxnCoordMeta *cockroach_roachpb1.TxnCoordMeta `protobuf:"bytes,7,opt,name=txn_coord_meta,json=txnCoordMeta" json:"txn_coord_meta,omitempty"`
+	TxnCoordMeta *cockroach_roachpb2.TxnCoordMeta `protobuf:"bytes,7,opt,name=txn_coord_meta,json=txnCoordMeta" json:"txn_coord_meta,omitempty"`
 	// deprecated_txn used to play the role that TxnCoordMeta now plays. It
 	// can be removed in v2.2.
-	DeprecatedTxn *cockroach_roachpb1.Transaction `protobuf:"bytes,1,opt,name=deprecated_txn,json=deprecatedTxn" json:"deprecated_txn,omitempty"`
+	DeprecatedTxn *cockroach_roachpb2.Transaction `protobuf:"bytes,1,opt,name=deprecated_txn,json=deprecatedTxn" json:"deprecated_txn,omitempty"`
 	// Version of distsqlrun protocol; a server accepts a certain range of
 	// versions, up to its own version. See server.go for more details.
 	Version     DistSQLVersion `protobuf:"varint,5,opt,name=version,casttype=DistSQLVersion" json:"version"`
@@ -1061,7 +1061,7 @@ func (m *SetupFlowRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DeprecatedTxn == nil {
-				m.DeprecatedTxn = &cockroach_roachpb1.Transaction{}
+				m.DeprecatedTxn = &cockroach_roachpb2.Transaction{}
 			}
 			if err := m.DeprecatedTxn.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1173,7 +1173,7 @@ func (m *SetupFlowRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TxnCoordMeta == nil {
-				m.TxnCoordMeta = &cockroach_roachpb1.TxnCoordMeta{}
+				m.TxnCoordMeta = &cockroach_roachpb2.TxnCoordMeta{}
 			}
 			if err := m.TxnCoordMeta.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

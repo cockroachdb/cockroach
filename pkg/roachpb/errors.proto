@@ -18,6 +18,7 @@ option go_package = "roachpb";
 
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
+import "roachpb/metadata3.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";

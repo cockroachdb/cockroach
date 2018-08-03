@@ -182,7 +182,7 @@ func (r RangeDescriptor) String() string {
 	} else {
 		buf.WriteString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+	fmt.Fprintf(&buf, ", next=%d, gen=%d]", r.NextReplicaID, r.Generation)
 
 	return buf.String()
 }

@@ -65,35 +65,6 @@ message ReplicaIdent {
   optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
 }
 
-// RangeDescriptor is the value stored in a range metadata key.
-// A range is described using an inclusive start key, a non-inclusive end key,
-// and a list of replicas where the range is stored.
-//
-// NOTE: Care must be taken when changing the encoding of this proto
-// because it is used as part of conditional put operations.
-message RangeDescriptor {
-  option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
-  option (gogoproto.populate) = true;
-
-  optional int64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  // start_key is the first key which may be contained by this range.
-  optional bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
-  // end_key marks the end of the range's possible keys.  EndKey itself is not
-  // contained in this range - it will be contained in the immediately
-  // subsequent range.
-  optional bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
-  // replicas is the set of nodes/stores on which replicas of this
-  // range are stored, the ordering being arbitrary and subject to
-  // permutation.
-  repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
-
-  // next_replica_id is a counter used to generate replica IDs.
-  optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
-}
-
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
 // a distribution.
 message Percentiles {

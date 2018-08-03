@@ -16,7 +16,7 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
+import "roachpb/metadata3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 

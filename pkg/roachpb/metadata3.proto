@@ -1,0 +1,55 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
+// RangeDescriptor is the value stored in a range metadata key.
+// A range is described using an inclusive start key, a non-inclusive end key,
+// and a list of replicas where the range is stored.
+//
+// NOTE: Care must be taken when changing the encoding of this proto
+// because it is used as part of conditional put operations.
+message RangeDescriptor {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // start_key is the first key which may be contained by this range.
+  bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
+  // end_key marks the end of the range's possible keys.  EndKey itself is not
+  // contained in this range - it will be contained in the immediately
+  // subsequent range.
+  bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
+  // replicas is the set of nodes/stores on which replicas of this
+  // range are stored, the ordering being arbitrary and subject to
+  // permutation.
+  repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
+
+  // next_replica_id is a counter used to generate replica IDs.
+  int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
+
+  // generation is incremented on every split and every merge, i.e., whenever
+  // the end_key of this range changes. It is initialized to zero when the
+  // range is first created.
+  //
+  // Note that the generation counter is not incremented by versions of
+  // Cockroach prior to v2.1.
+  int64 generation = 6;
+}
