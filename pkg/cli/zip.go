@@ -99,15 +99,16 @@ func (z *zipper) createError(name string, e error) error {
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
-		base         = "debug"
-		eventsName   = base + "/events"
-		gossipLName  = base + "/gossip/liveness"
-		gossipNName  = base + "/gossip/nodes"
-		metricsName  = base + "/metrics"
-		livenessName = base + "/liveness"
-		nodesPrefix  = base + "/nodes"
-		schemaPrefix = base + "/schema"
-		settingsName = base + "/settings"
+		base          = "debug"
+		eventsName    = base + "/events"
+		gossipLName   = base + "/gossip/liveness"
+		gossipNName   = base + "/gossip/nodes"
+		metricsName   = base + "/metrics"
+		livenessName  = base + "/liveness"
+		nodesPrefix   = base + "/nodes"
+		reportsPrefix = base + "/reports"
+		schemaPrefix  = base + "/schema"
+		settingsName  = base + "/settings"
 	)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -313,6 +314,18 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					}
 				}
 			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if problems, err := status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{}); err != nil {
+			if err := z.createError(reportsPrefix+"/problemranges", err); err != nil {
+				return err
+			}
+		} else if err := z.createJSON(reportsPrefix+"/problemranges", problems); err != nil {
+			return err
 		}
 	}
 
