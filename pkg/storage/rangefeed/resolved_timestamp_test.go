@@ -155,6 +155,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 func TestResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rts := makeResolvedTimestamp()
+	rts.Init()
 
 	// Test empty resolved timestamp.
 	require.Equal(t, hlc.Timestamp{}, rts.Get())
@@ -283,6 +284,7 @@ func TestResolvedTimestamp(t *testing.T) {
 func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rts := makeResolvedTimestamp()
+	rts.Init()
 
 	// Add a value. No closed timestamp so no resolved timestamp.
 	fwd := rts.ConsumeLogicalOp(writeValueOp(hlc.Timestamp{WallTime: 1}))
@@ -320,6 +322,7 @@ func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
 func TestResolvedTimestampNoIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rts := makeResolvedTimestamp()
+	rts.Init()
 
 	// Set a closed timestamp. Resolved timestamp advances.
 	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 1})
@@ -345,4 +348,37 @@ func TestResolvedTimestampNoIntents(t *testing.T) {
 	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 4})
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 4}, rts.Get())
+}
+
+func TestResolvedTimestampInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rts := makeResolvedTimestamp()
+
+	// Set a closed timestamp. Not initialized so no resolved timestamp.
+	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+	// Init. Resolved timestamp moves to closed timestamp.
+	fwd = rts.Init()
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+
+	rts2 := makeResolvedTimestamp()
+
+	// Add an intent. Not initialized so no resolved timestamp.
+	txn1 := uuid.MakeV4()
+	fwd = rts2.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{}, rts2.Get())
+
+	// Set a closed timestamp. Not initialized so no resolved timestamp.
+	fwd = rts2.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{}, rts2.Get())
+
+	// Init. Resolved timestamp moves below first unresolved intent.
+	fwd = rts2.Init()
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 2}, rts2.Get())
 }
