@@ -131,8 +131,10 @@ func (p *Processor) Start(stopper *stop.Stopper) {
 					log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 				}
 
+				p.reg.Register(&r)
+
 				// TODO(nvanbenschoten): catch up scan.
-				p.reg.Register(r)
+				r.SetCaughtUp()
 
 			// Respond to answers about the processor goroutine state.
 			case <-p.lenReqC:

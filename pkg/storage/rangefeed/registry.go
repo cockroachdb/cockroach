@@ -43,13 +43,20 @@ type Stream interface {
 // channel is sent an error to inform it that the registration
 // has finished.
 type registration struct {
+	// Internal.
 	id   int64
 	keys interval.Range
 
+	// Footprint.
 	span    roachpb.Span
 	startTS hlc.Timestamp
-	stream  Stream
-	errC    chan<- *roachpb.Error
+
+	// Catch-up state.
+	caughtUp bool
+
+	// Output.
+	stream Stream
+	errC   chan<- *roachpb.Error
 }
 
 // ID implements interval.Interface.
@@ -60,6 +67,10 @@ func (r *registration) ID() uintptr {
 // Range implements interval.Interface.
 func (r *registration) Range() interval.Range {
 	return r.keys
+}
+
+func (r *registration) SetCaughtUp() {
+	r.caughtUp = true
 }
 
 func (r registration) String() string {
@@ -84,10 +95,10 @@ func (reg *registry) Len() int {
 }
 
 // Register adds the provided registration to the registry.
-func (reg *registry) Register(r registration) {
+func (reg *registry) Register(r *registration) {
 	r.id = reg.nextID()
 	r.keys = r.span.AsRange()
-	if err := reg.tree.Insert(&r, false /* fast */); err != nil {
+	if err := reg.tree.Insert(r, false /* fast */); err != nil {
 		panic(err)
 	}
 }
@@ -100,7 +111,36 @@ func (reg *registry) nextID() int64 {
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
 func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
+	// Determine the earliest starting timestamp that a registration
+	// can have while still needing to hear about this event.
+	var minTS hlc.Timestamp
+	var requireCaughtUp bool
+	switch t := event.GetValue().(type) {
+	case *roachpb.RangeFeedValue:
+		// Only publish values to registrations with starting
+		// timestamps equal to or greater than the value's timestamp.
+		minTS = t.Value.Timestamp
+	case *roachpb.RangeFeedCheckpoint:
+		// Always publish checkpoint notifications, regardless
+		// of a registration's starting timestamp.
+		minTS = hlc.MaxTimestamp
+		requireCaughtUp = true
+	default:
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", event))
+	}
+
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {
+		if minTS.Less(r.startTS) {
+			// Don't publish events if they are from before
+			// the registration's starting timestamp.
+			return false, nil
+		}
+		if requireCaughtUp && !r.caughtUp {
+			// Don't publish event if it requires the registration
+			// to be caught up and this one is not.
+			return false, nil
+		}
+
 		err := r.stream.Send(event)
 		return err != nil, roachpb.NewError(err)
 	})
