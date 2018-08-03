@@ -75,9 +75,10 @@ type Processor struct {
 // to be informed of. It is used so that all events can be sent over the same
 // channel, which is necessary to prevent reordering.
 type event struct {
-	ops   []enginepb.MVCCLogicalOp
-	ct    hlc.Timestamp
-	syncC chan struct{}
+	ops     []enginepb.MVCCLogicalOp
+	ct      hlc.Timestamp
+	initRTS bool
+	syncC   chan struct{}
 }
 
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
@@ -100,11 +101,30 @@ func NewProcessor(cfg Config) *Processor {
 }
 
 // Start launches a goroutine to process rangefeed events and send them to
-// registrations. The provided stopper is used to finish processing.
-func (p *Processor) Start(stopper *stop.Stopper) {
+// registrations.
+//
+// The provided Snapshot is used to initialize the rangefeed's resolved
+// timestamp. It must obey the contract of a Snapshot used for an
+// initResolvedTSScan. The Processor promises to clean up the Snapshot by
+// calling its Close method when it is finished. If the Snapshot is nil then
+// no initialization scan will be performed and the resolved timestamp will
+// immediately be considered initialized.
+func (p *Processor) Start(stopper *stop.Stopper, rtsSnap Snapshot) {
 	ctx := p.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(p.stoppedC)
+
+		// Launch an async task to scan over the resolved timestamp snapshot and
+		// initialize the unresolvedIntentQueue. Ignore error if quiescing.
+		if rtsSnap != nil {
+			initScan := makeInitResolvedTSScan(p, rtsSnap)
+			err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
+			if err != nil {
+				initScan.Cancel() // clean up
+			}
+		} else {
+			p.initResolvedTS(ctx)
+		}
 
 		// intentPushTicker periodically pushes all unresolved intents that are
 		// above a certain age, helping to ensure that the resolved timestamp
@@ -301,6 +321,16 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) {
 	}
 }
 
+// setResolvedTSInitialized informs the Processor that its resolved timestamp has
+// all the information it needs to be considered initialized.
+func (p *Processor) setResolvedTSInitialized() {
+	select {
+	case p.eventC <- event{initRTS: true}:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
+	}
+}
+
 // syncEventC synchronizes access to the Processor goroutine, allowing events
 // on its goroutine to establish causality with events on the caller of this
 // method's goroutine.
@@ -325,6 +355,8 @@ func (p *Processor) consumeEvent(ctx context.Context, e event) {
 		p.consumeLogicalOps(ctx, e.ops)
 	case e.ct != hlc.Timestamp{}:
 		p.forwardClosedTS(ctx, e.ct)
+	case e.initRTS:
+		p.initResolvedTS(ctx)
 	case e.syncC != nil:
 		close(e.syncC)
 	default:
@@ -338,8 +370,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			val := roachpb.Value{RawBytes: t.Value, Timestamp: t.Timestamp}
-			p.publishValue(ctx, t.Key, val)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value)
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
@@ -349,8 +380,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			val := roachpb.Value{RawBytes: t.Value, Timestamp: t.Timestamp}
-			p.publishValue(ctx, t.Key, val)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -373,7 +403,15 @@ func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timesta
 	}
 }
 
-func (p *Processor) publishValue(ctx context.Context, key roachpb.Key, value roachpb.Value) {
+func (p *Processor) initResolvedTS(ctx context.Context) {
+	if p.rts.Init() {
+		p.publishCheckpoint(ctx)
+	}
+}
+
+func (p *Processor) publishValue(
+	ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp, value []byte,
+) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
@@ -381,8 +419,11 @@ func (p *Processor) publishValue(ctx context.Context, key roachpb.Key, value roa
 	span := roachpb.Span{Key: key}
 	var event roachpb.RangeFeedEvent
 	event.SetValue(&roachpb.RangeFeedValue{
-		Key:   key,
-		Value: value,
+		Key: key,
+		Value: roachpb.Value{
+			RawBytes:  value,
+			Timestamp: timestamp,
+		},
 	})
 	p.reg.PublishToOverlapping(span, &event)
 }

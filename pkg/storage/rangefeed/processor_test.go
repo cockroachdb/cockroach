@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,11 +55,16 @@ func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 	return writeValueOpWithKV(nil /* key */, ts, nil /* val */)
 }
 
-func writeIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
+func writeIntentOpWithKey(txnID uuid.UUID, key []byte, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 	return makeLogicalOp(&enginepb.MVCCWriteIntentOp{
 		TxnID:     txnID,
+		TxnKey:    key,
 		Timestamp: ts,
 	})
+}
+
+func writeIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
+	return writeIntentOpWithKey(txnID, nil /* key */, ts)
 }
 
 func updateIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
@@ -111,7 +117,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 	})
 }
 
-func newTestProcessor() (*Processor, *stop.Stopper) {
+func newTestProcessor(rtsSnap Snapshot) (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	p := NewProcessor(Config{
 		AmbientContext:       log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -121,13 +127,13 @@ func newTestProcessor() (*Processor, *stop.Stopper) {
 		PushIntentsInterval:  0, // disable
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
-	p.Start(stopper)
+	p.Start(stopper, rtsSnap)
 	return p, stopper
 }
 
 func TestProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor()
+	p, stopper := newTestProcessor(nil /* rtsSnap */)
 	defer stopper.Stop(context.Background())
 
 	// Test processor without registrations.
@@ -331,8 +337,85 @@ func TestNilProcessor(t *testing.T) {
 
 	// The following should panic because they are not safe
 	// to call on a nil Processor.
-	require.Panics(t, func() { p.Start(stop.NewStopper()) })
+	require.Panics(t, func() { p.Start(stop.NewStopper(), nil) })
 	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil) })
+}
+
+// TestProcessorInitializeResolvedTimestamp tests that when a Processor is given
+// a resolved timestamp snapshot, it doesn't initialize its resolved timestamp
+// until it has consumed all intents in the snapshot.
+func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
+	rtsSnap := newTestSnapshot([]engine.MVCCKeyValue{
+		makeKV("a", "val1", 10),
+		makeInline("b", "val2"),
+		makeIntent("c", txn1, "txnKey1", 15),
+		makeKV("c", "val3", 11),
+		makeKV("c", "val4", 9),
+		makeIntent("d", txn2, "txnKey2", 21),
+		makeKV("d", "val5", 20),
+		makeKV("d", "val6", 19),
+		makeInline("g", "val7"),
+		makeKV("m", "val8", 1),
+		makeIntent("n", txn1, "txnKey1", 12),
+		makeIntent("r", txn1, "txnKey1", 19),
+		makeKV("r", "val9", 4),
+		makeIntent("w", txn1, "txnKey1", 3),
+		makeInline("x", "val10"),
+		makeIntent("z", txn2, "txnKey2", 21),
+		makeKV("z", "val11", 4),
+	})
+	rtsSnap.block = make(chan struct{})
+
+	p, stopper := newTestProcessor(rtsSnap)
+	defer stopper.Stop(context.Background())
+
+	// The resolved timestamp should not be initialized.
+	require.False(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
+
+	// Add a registration.
+	r1Stream := newTestStream()
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		r1Stream,
+		make(chan *roachpb.Error, 1),
+	)
+	require.Equal(t, 1, p.Len())
+
+	// The resolved timestamp should still not be initialized.
+	require.False(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
+
+	// Forward the closed timestamp. The resolved timestamp should still
+	// not be initialized.
+	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
+	require.False(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
+
+	// Let the scan proceed.
+	close(rtsSnap.block)
+	<-rtsSnap.done
+	require.True(t, rtsSnap.closed)
+
+	// Synchronize the event channel then verify that the resolved timestamp is
+	// initialized and that it's blocked on the oldest unresolved intent's txn
+	// timestamp. Txn1 has intents at many times but the unresolvedIntentQueue
+	// tracks its latest, which is 19, so the resolved timestamp is
+	// 19.FloorPrev() = 18.
+	p.syncEventC()
+	require.True(t, p.rts.IsInit())
+	require.Equal(t, hlc.Timestamp{WallTime: 18}, p.rts.Get())
+
+	// The registration should have been informed of the new resolved timestamp.
+	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+		hlc.Timestamp{WallTime: 18},
+	)}
+	require.Equal(t, chEvent, r1Stream.Events())
 }
 
 // TestProcessorConcurrentStop tests that all methods in Processor's API
@@ -342,7 +425,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const trials = 10
 	for i := 0; i < trials; i++ {
-		p, stopper := newTestProcessor()
+		p, stopper := newTestProcessor(nil /* rtsSnap */)
 
 		var wg sync.WaitGroup
 		wg.Add(6)
@@ -388,7 +471,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 // observes only operations that are consumed after it has registered.
 func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p, stopper := newTestProcessor()
+	p, stopper := newTestProcessor(nil /* rtsSnap */)
 	defer stopper.Stop(context.Background())
 
 	firstC := make(chan int64)
