@@ -43,12 +43,15 @@ func TestChangefeedBasics(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+	sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 
 	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
 	defer closeFeedRowsHack(t, sqlDB, rows)
 
+	// 'initial' is skipped because only the latest value ('updated') is emitted
+	// by the initial scan.
 	assertPayloads(t, rows, []string{
-		`foo: [0]->{"a": 0, "b": "initial"}`,
+		`foo: [0]->{"a": 0, "b": "updated"}`,
 	})
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
