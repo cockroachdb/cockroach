@@ -108,6 +108,15 @@ func (reg *registry) nextID() int64 {
 	return reg.idAlloc
 }
 
+// PublishToReg publishes the provided event to the given registration. No
+// validation of whether the registration state is compatible with the event
+// is performed.
+func (reg *registry) PublishToReg(r *registration, event *roachpb.RangeFeedEvent) {
+	if err := r.stream.Send(event); err != nil {
+		reg.DisconnectRegWithError(r, roachpb.NewError(err))
+	}
+}
+
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
 func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
@@ -144,6 +153,14 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		err := r.stream.Send(event)
 		return err != nil, roachpb.NewError(err)
 	})
+}
+
+// DisconnectRegWithError disconnects a specific registration with a provided error.
+func (reg *registry) DisconnectRegWithError(r *registration, pErr *roachpb.Error) {
+	r.errC <- pErr
+	if err := reg.tree.Delete(r, false /* fast */); err != nil {
+		panic(err)
+	}
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with

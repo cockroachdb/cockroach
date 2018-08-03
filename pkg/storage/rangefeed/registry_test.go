@@ -224,6 +224,25 @@ func TestRegistry(t *testing.T) {
 	reg.Disconnect(spAC)
 	require.Equal(t, 0, reg.Len())
 	require.Nil(t, rAB.Err())
+
+	// Register first 2 registrations again.
+	reg.Register(&rAB.registration)
+	require.Equal(t, 1, reg.Len())
+	reg.Register(&rBC.registration)
+	require.Equal(t, 2, reg.Len())
+
+	// Publish event to only rAB.
+	reg.PublishToReg(&rAB.registration, ev1)
+	require.Equal(t, []*roachpb.RangeFeedEvent{ev1}, rAB.Events())
+	require.Nil(t, rAB.Err())
+	require.Nil(t, rBC.Events())
+	require.Nil(t, rBC.Err())
+
+	// Disconnect only rBC.
+	reg.DisconnectRegWithError(&rBC.registration, err1)
+	require.Equal(t, 1, reg.Len())
+	require.Nil(t, rAB.Err())
+	require.Equal(t, err1, rBC.Err())
 }
 
 func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
