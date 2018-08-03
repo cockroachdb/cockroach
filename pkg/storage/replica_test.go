@@ -7503,8 +7503,18 @@ func TestReplicaTryAbandon(t *testing.T) {
 	proposalErrCh := make(chan error)
 
 	// Cancel the request before it is proposed to Raft.
+	var proposed int32
 	tc.repl.mu.Lock()
 	tc.repl.mu.submitProposalFn = func(result *ProposalData) error {
+		if atomic.AddInt32(&proposed, 1) != 1 {
+			// We only need to propose the command once for this test. Worse, a
+			// second proposal will cause the test to deadlock. How do we get a
+			// second proposal? reasonNewLeaderOrConfigChange ->
+			// refreshProposalsLocked(). Note that this form of refresh cannot
+			// currently be disabled via a testing knob.
+			return nil
+		}
+
 		cancel()
 		go func() {
 			<-proposalCh
