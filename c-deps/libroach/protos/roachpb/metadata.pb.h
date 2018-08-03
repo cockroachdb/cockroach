@@ -1233,6 +1233,20 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
 
   // accessors -------------------------------------------------------
 
+  bool has_build_tag() const;
+  void clear_build_tag();
+  static const int kBuildTagFieldNumber = 6;
+  const ::std::string& build_tag() const;
+  void set_build_tag(const ::std::string& value);
+  #if LANG_CXX11
+  void set_build_tag(::std::string&& value);
+  #endif
+  void set_build_tag(const char* value);
+  void set_build_tag(const char* value, size_t size);
+  ::std::string* mutable_build_tag();
+  ::std::string* release_build_tag();
+  void set_allocated_build_tag(::std::string* build_tag);
+
   bool has_address() const;
   void clear_address();
   static const int kAddressFieldNumber = 2;
@@ -1277,6 +1291,12 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Version* mutable_serverversion();
   void set_allocated_serverversion(::cockroach::roachpb::Version* serverversion);
 
+  bool has_started_at() const;
+  void clear_started_at();
+  static const int kStartedAtFieldNumber = 7;
+  ::google::protobuf::int64 started_at() const;
+  void set_started_at(::google::protobuf::int64 value);
+
   bool has_node_id() const;
   void clear_node_id();
   static const int kNodeIdFieldNumber = 1;
@@ -1295,14 +1315,20 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   void clear_has_locality();
   void set_has_serverversion();
   void clear_has_serverversion();
+  void set_has_build_tag();
+  void clear_has_build_tag();
+  void set_has_started_at();
+  void clear_has_started_at();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr build_tag_;
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::Locality* locality_;
   ::cockroach::roachpb::Version* serverversion_;
+  ::google::protobuf::int64 started_at_;
   ::google::protobuf::int32 node_id_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
@@ -2938,13 +2964,13 @@ inline void StoreCapacity::set_allocated_writes_per_replica(::cockroach::roachpb
 // NodeDescriptor
 
 inline bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000040u) != 0;
 }
 inline void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000040u;
 }
 inline void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000040u;
 }
 inline void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -2961,13 +2987,13 @@ inline void NodeDescriptor::set_node_id(::google::protobuf::int32 value) {
 }
 
 inline bool NodeDescriptor::has_address() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void NodeDescriptor::set_has_address() {
-  _has_bits_[0] |= 0x00000001u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void NodeDescriptor::clear_has_address() {
-  _has_bits_[0] &= ~0x00000001u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::_internal_address() const {
   return *address_;
@@ -3014,13 +3040,13 @@ inline void NodeDescriptor::set_allocated_address(::cockroach::util::UnresolvedA
 }
 
 inline bool NodeDescriptor::has_attrs() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void NodeDescriptor::set_has_attrs() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void NodeDescriptor::clear_has_attrs() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void NodeDescriptor::clear_attrs() {
   if (attrs_ != NULL) attrs_->Clear();
@@ -3071,13 +3097,13 @@ inline void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes
 }
 
 inline bool NodeDescriptor::has_locality() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void NodeDescriptor::set_has_locality() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void NodeDescriptor::clear_has_locality() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void NodeDescriptor::clear_locality() {
   if (locality_ != NULL) locality_->Clear();
@@ -3128,13 +3154,13 @@ inline void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Localit
 }
 
 inline bool NodeDescriptor::has_serverversion() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void NodeDescriptor::set_has_serverversion() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void NodeDescriptor::clear_has_serverversion() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void NodeDescriptor::clear_serverversion() {
   if (serverversion_ != NULL) serverversion_->Clear();
@@ -3182,6 +3208,94 @@ inline void NodeDescriptor::set_allocated_serverversion(::cockroach::roachpb::Ve
   }
   serverversion_ = serverversion;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.ServerVersion)
+}
+
+inline bool NodeDescriptor::has_build_tag() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void NodeDescriptor::set_has_build_tag() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void NodeDescriptor::clear_has_build_tag() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void NodeDescriptor::clear_build_tag() {
+  build_tag_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_build_tag();
+}
+inline const ::std::string& NodeDescriptor::build_tag() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.build_tag)
+  return build_tag_.GetNoArena();
+}
+inline void NodeDescriptor::set_build_tag(const ::std::string& value) {
+  set_has_build_tag();
+  build_tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeDescriptor.build_tag)
+}
+#if LANG_CXX11
+inline void NodeDescriptor::set_build_tag(::std::string&& value) {
+  set_has_build_tag();
+  build_tag_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.NodeDescriptor.build_tag)
+}
+#endif
+inline void NodeDescriptor::set_build_tag(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_build_tag();
+  build_tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.NodeDescriptor.build_tag)
+}
+inline void NodeDescriptor::set_build_tag(const char* value, size_t size) {
+  set_has_build_tag();
+  build_tag_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.NodeDescriptor.build_tag)
+}
+inline ::std::string* NodeDescriptor::mutable_build_tag() {
+  set_has_build_tag();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.build_tag)
+  return build_tag_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* NodeDescriptor::release_build_tag() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.build_tag)
+  if (!has_build_tag()) {
+    return NULL;
+  }
+  clear_has_build_tag();
+  return build_tag_.ReleaseNonDefaultNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void NodeDescriptor::set_allocated_build_tag(::std::string* build_tag) {
+  if (build_tag != NULL) {
+    set_has_build_tag();
+  } else {
+    clear_has_build_tag();
+  }
+  build_tag_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), build_tag);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.build_tag)
+}
+
+inline bool NodeDescriptor::has_started_at() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void NodeDescriptor::set_has_started_at() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void NodeDescriptor::clear_has_started_at() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void NodeDescriptor::clear_started_at() {
+  started_at_ = GOOGLE_LONGLONG(0);
+  clear_has_started_at();
+}
+inline ::google::protobuf::int64 NodeDescriptor::started_at() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.started_at)
+  return started_at_;
+}
+inline void NodeDescriptor::set_started_at(::google::protobuf::int64 value) {
+  set_has_started_at();
+  started_at_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeDescriptor.started_at)
 }
 
 // -------------------------------------------------------------------

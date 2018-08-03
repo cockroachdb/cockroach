@@ -1861,14 +1861,15 @@ func TestCLITimeout(t *testing.T) {
 
 	// Wrap the meat of the test in a retry loop. Setting a timeout like this is
 	// racy as the operation may have succeeded by the time the scheduler gives
-	// the timeout a chance to have an effect.
+	// the timeout a chance to have an effect. We specify --all to include some
+	// slower to access virtual tables in the query.
 	testutils.SucceedsSoon(t, func() error {
-		out, err := c.RunWithCapture("node status 1 --timeout 1ns")
+		out, err := c.RunWithCapture("node status 1 --all --timeout 1ns")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		const exp = `node status 1 --timeout 1ns
+		const exp = `node status 1 --all --timeout 1ns
 pq: query execution canceled due to statement timeout
 `
 		if out != exp {

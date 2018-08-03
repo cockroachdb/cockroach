@@ -161,6 +161,8 @@ message NodeDescriptor {
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
   optional Locality locality = 4 [(gogoproto.nullable) = false];
   optional Version ServerVersion = 5 [(gogoproto.nullable) = false];
+  optional string build_tag = 6 [(gogoproto.nullable) = false];
+  optional int64 started_at = 7 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node

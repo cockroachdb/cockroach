@@ -439,7 +439,7 @@ func compareNodeStatus(
 
 	// Descriptor values should be exactly equal to expected.
 	if a, e := nodeStatus.Desc, expectedNodeStatus.Desc; !reflect.DeepEqual(a, e) {
-		t.Errorf("%d: Descriptor does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
+		t.Errorf("%d: Descriptor does not match expected.\nexpected: %s\nactual: %s", testNumber, &e, &a)
 	}
 
 	// ========================================
