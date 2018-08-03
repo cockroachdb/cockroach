@@ -1113,11 +1113,11 @@ func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundTy
 	switch bt {
 	case tree.UnboundedPreceding:
 		*spec = WindowerSpec_Frame_UNBOUNDED_PRECEDING
-	case tree.ValuePreceding:
+	case tree.OffsetPreceding:
 		*spec = WindowerSpec_Frame_OFFSET_PRECEDING
 	case tree.CurrentRow:
 		*spec = WindowerSpec_Frame_CURRENT_ROW
-	case tree.ValueFollowing:
+	case tree.OffsetFollowing:
 		*spec = WindowerSpec_Frame_OFFSET_FOLLOWING
 	case tree.UnboundedFollowing:
 		*spec = WindowerSpec_Frame_UNBOUNDED_FOLLOWING
@@ -1198,11 +1198,11 @@ func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundTyp
 	case WindowerSpec_Frame_UNBOUNDED_PRECEDING:
 		return tree.UnboundedPreceding
 	case WindowerSpec_Frame_OFFSET_PRECEDING:
-		return tree.ValuePreceding
+		return tree.OffsetPreceding
 	case WindowerSpec_Frame_CURRENT_ROW:
 		return tree.CurrentRow
 	case WindowerSpec_Frame_OFFSET_FOLLOWING:
-		return tree.ValueFollowing
+		return tree.OffsetFollowing
 	case WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
 		return tree.UnboundedFollowing
 	default:

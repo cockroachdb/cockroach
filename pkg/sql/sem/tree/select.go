@@ -655,12 +655,12 @@ type WindowFrameBoundType int
 const (
 	// UnboundedPreceding represents UNBOUNDED PRECEDING type of boundary.
 	UnboundedPreceding WindowFrameBoundType = iota
-	// ValuePreceding represents 'value' PRECEDING type of boundary.
-	ValuePreceding
+	// OffsetPreceding represents 'value' PRECEDING type of boundary.
+	OffsetPreceding
 	// CurrentRow represents CURRENT ROW type of boundary.
 	CurrentRow
-	// ValueFollowing represents 'value' FOLLOWING type of boundary.
-	ValueFollowing
+	// OffsetFollowing represents 'value' FOLLOWING type of boundary.
+	OffsetFollowing
 	// UnboundedFollowing represents UNBOUNDED FOLLOWING type of boundary.
 	UnboundedFollowing
 )
@@ -689,12 +689,12 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	switch node.BoundType {
 	case UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
-	case ValuePreceding:
+	case OffsetPreceding:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" PRECEDING")
 	case CurrentRow:
 		ctx.WriteString("CURRENT ROW")
-	case ValueFollowing:
+	case OffsetFollowing:
 		ctx.FormatNode(node.OffsetExpr)
 		ctx.WriteString(" FOLLOWING")
 	case UnboundedFollowing:

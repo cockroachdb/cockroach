@@ -59,13 +59,13 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		switch wfr.Frame.Bounds.StartBound.BoundType {
 		case UnboundedPreceding:
 			return 0
-		case ValuePreceding:
+		case OffsetPreceding:
 			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
 			panic("unsupported WindowFrameBoundType in RANGE mode")
 		case CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.FirstPeerIdx
-		case ValueFollowing:
+		case OffsetFollowing:
 			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
 			panic("unsupported WindowFrameBoundType in RANGE mode")
 		default:
@@ -75,7 +75,7 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 		switch wfr.Frame.Bounds.StartBound.BoundType {
 		case UnboundedPreceding:
 			return 0
-		case ValuePreceding:
+		case OffsetPreceding:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx - int(offset)
 			if idx < 0 {
@@ -84,7 +84,7 @@ func (wfr WindowFrameRun) FrameStartIdx() int {
 			return idx
 		case CurrentRow:
 			return wfr.RowIdx
-		case ValueFollowing:
+		case OffsetFollowing:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx + int(offset)
 			if idx >= wfr.PartitionSize() {
@@ -124,12 +124,12 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 			return wfr.DefaultFrameSize()
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
-		case ValuePreceding:
+		case OffsetPreceding:
 			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
 			panic("unsupported WindowFrameBoundType in RANGE mode")
 		case CurrentRow:
 			return wfr.DefaultFrameSize()
-		case ValueFollowing:
+		case OffsetFollowing:
 			// TODO(yuzefovich): Currently, it is not supported, and this case should not be reached.
 			panic("unsupported WindowFrameBoundType in RANGE mode")
 		case UnboundedFollowing:
@@ -143,7 +143,7 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 			return wfr.RowIdx + 1
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
-		case ValuePreceding:
+		case OffsetPreceding:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx - int(offset) + 1
 			if idx < 0 {
@@ -152,7 +152,7 @@ func (wfr WindowFrameRun) FrameEndIdx() int {
 			return idx
 		case CurrentRow:
 			return wfr.RowIdx + 1
-		case ValueFollowing:
+		case OffsetFollowing:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx + int(offset) + 1
 			if idx >= wfr.PartitionSize() {
