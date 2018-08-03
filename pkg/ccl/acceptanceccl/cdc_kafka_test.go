@@ -64,10 +64,35 @@ func TestCDC(t *testing.T) {
 		}
 		defer k.Close(ctx)
 
+		t.Run(`Description`, func(t *testing.T) { testDescription(ctx, t, c, k) })
 		t.Run(`PauseUnpause`, func(t *testing.T) { testPauseUnpause(ctx, t, c, k) })
 		t.Run(`Bank`, func(t *testing.T) { testBank(ctx, t, c, k) })
 		t.Run(`Errors`, func(t *testing.T) { testErrors(ctx, t) })
 	})
+}
+
+func testDescription(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=Description_`
+	var jobID int
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH timestamps, envelope=$2`, into, `row`,
+	).Scan(&jobID)
+	var description string
+	sqlDB.QueryRow(t,
+		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+	).Scan(&description)
+	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + into + `' WITH envelope = 'row', timestamps`
+	if description != expected {
+		t.Errorf(`got "%s" expected "%s"`, description, expected)
+	}
 }
 
 func testPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {

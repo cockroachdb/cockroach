@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -134,9 +135,27 @@ func changefeedPlanHook(
 			}
 		}
 
-		// TODO(dan): This grabs table descriptors once, but uses them to
-		// interpret kvs written later. This both doesn't handle any schema
-		// changes and breaks the table leasing.
+		// For now, disallow targeting a database or wildcard table selection.
+		// Getting it right as tables enter and leave the set over time is
+		// tricky.
+		if len(changefeedStmt.Targets.Databases) > 0 {
+			return errors.Errorf(`CHANGEFEED cannot target %s`,
+				tree.AsString(&changefeedStmt.Targets))
+		}
+		for _, t := range changefeedStmt.Targets.Tables {
+			p, err := t.NormalizeTablePattern()
+			if err != nil {
+				return err
+			}
+			if _, ok := p.(*tree.TableName); !ok {
+				return errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
+			}
+		}
+
+		// This grabs table descriptors once to get their ids.
+		//
+		// TODO(dan): Prevent or detect if/when the id for a table changes, such
+		// as with TRUNCATE.
 		descriptorTime := now
 		if highWater != (hlc.Timestamp{}) {
 			descriptorTime = highWater
@@ -146,17 +165,20 @@ func changefeedPlanHook(
 		if err != nil {
 			return err
 		}
-		var tableDescs []sqlbase.TableDescriptor
+		targets := make(map[sqlbase.ID]string, len(targetDescs))
 		for _, desc := range targetDescs {
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				tableDescs = append(tableDescs, *tableDesc)
+				if err := validateChangefeedTable(tableDesc); err != nil {
+					return err
+				}
+				targets[tableDesc.ID] = tableDesc.Name
 			}
 		}
 
 		details := jobspb.ChangefeedDetails{
-			TableDescs: tableDescs,
-			Opts:       opts,
-			SinkURI:    sinkURI,
+			Targets: targets,
+			Opts:    opts,
+			SinkURI: sinkURI,
 		}
 		progress := jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{HighWater: &highWater},
@@ -182,7 +204,7 @@ func changefeedPlanHook(
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
 		startedCh := make(chan tree.Datums)
 		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
-			Description: changefeedJobDescription(changefeedStmt),
+			Description: changefeedJobDescription(changefeedStmt, sinkURI, opts),
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
 				for _, desc := range targetDescs {
@@ -213,11 +235,27 @@ func changefeedPlanHook(
 	return fn, header, nil, nil
 }
 
-func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
-	return tree.AsStringWithFlags(changefeed, tree.FmtAlwaysQualifyTableNames)
+func changefeedJobDescription(
+	changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
+) string {
+	c := &tree.CreateChangefeed{
+		Targets: changefeed.Targets,
+		// If/when we start accepting export storage uris (or ones with
+		// secrets), we'll need to sanitize sinkURI.
+		SinkURI: tree.NewDString(sinkURI),
+	}
+	for k, v := range opts {
+		opt := tree.KVOption{Key: tree.Name(k)}
+		if changefeedOptionExpectValues[k] {
+			opt.Value = tree.NewDString(v)
+		}
+		c.Options = append(c.Options, opt)
+	}
+	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
+	return tree.AsStringWithFlags(c, tree.FmtAlwaysQualifyTableNames)
 }
 
-func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
+func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
 	if details.Opts == nil {
 		// The proto MarshalTo method omits the Opts field if the map is empty.
 		// So, if no options were specified by the user, Opts will be nil when
@@ -235,12 +273,6 @@ func validateChangefeed(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDeta
 			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])
 	}
 
-	for _, tableDesc := range details.TableDescs {
-		if err := validateChangefeedTable(&tableDesc); err != nil {
-			return jobspb.ChangefeedDetails{}, err
-		}
-	}
-
 	return details, nil
 }
 
@@ -252,6 +284,15 @@ func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
 	// dictates.
 	if tableDesc.ID < keys.MinUserDescID {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	}
+	if tableDesc.IsView() {
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.Name)
+	}
+	if tableDesc.IsVirtualTable() {
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.Name)
+	}
+	if tableDesc.IsSequence() {
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
 	}
 	if len(tableDesc.Families) != 1 {
 		return errors.Errorf(

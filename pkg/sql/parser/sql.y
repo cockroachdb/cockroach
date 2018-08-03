@@ -800,7 +800,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list rowsfrom_list
-%type <tree.TablePatterns> table_pattern_list
+%type <tree.TablePatterns> table_pattern_list single_table_pattern_list
 %type <tree.NormalizableTableNames> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
@@ -945,7 +945,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList> targets targets_roles
+%type <tree.TargetList> targets targets_roles changefeed_targets
 %type <*tree.TargetList> opt_on_targets_roles
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
@@ -1935,7 +1935,7 @@ create_stats_stmt:
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 create_changefeed_stmt:
-  CREATE CHANGEFEED FOR targets opt_changefeed_sink opt_with_options
+  CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       Targets: $4.targetList(),
@@ -1943,6 +1943,27 @@ create_changefeed_stmt:
       Options: $6.kvOptions(),
     }
   }
+
+changefeed_targets:
+  single_table_pattern_list
+  {
+    $$.val = tree.TargetList{Tables: $1.tablePatterns()}
+  }
+| TABLE single_table_pattern_list
+  {
+    $$.val = tree.TargetList{Tables: $2.tablePatterns()}
+  }
+
+single_table_pattern_list:
+  table_name
+  {
+    $$.val = tree.TablePatterns{$1.unresolvedName()}
+  }
+| single_table_pattern_list ',' table_name
+  {
+    $$.val = append($1.tablePatterns(), $3.unresolvedName())
+  }
+
 
 opt_changefeed_sink:
   INTO string_or_placeholder

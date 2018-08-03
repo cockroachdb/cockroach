@@ -96,7 +96,11 @@ func registerCDC(r *registry) {
 			c.l.printf("starting cursor at %s\n", cursor)
 
 			var jobID int
-			createStmt := `CREATE CHANGEFEED FOR DATABASE tpcc INTO $1 WITH timestamps`
+			createStmt := `CREATE CHANGEFEED FOR
+				tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
+				tpcc.order, tpcc.new_order, tpcc.item, tpcc.stock,
+				tpcc.order_line
+			INTO $1 WITH timestamps`
 			extraArgs := []interface{}{`kafka://` + c.InternalIP(ctx, kafkaNode)[0] + `:9092`}
 			if !initialScan {
 				createStmt += `, cursor=$2`
