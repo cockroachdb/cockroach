@@ -121,7 +121,7 @@
 # preferable to synthesizing a new "col IS NOT NULL" filter.
 [RejectNullsGroupBy, Normalize, LowPriority]
 (Select
-    $input:(GroupBy | DistinctOn
+    $input:(GroupBy
         $innerInput:*
         $aggregations:*
         $def:*
