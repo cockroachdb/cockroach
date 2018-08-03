@@ -2339,6 +2339,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	}
 
 	copyDesc := *origDesc
+	copyDesc.IncrementGeneration()
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
@@ -2435,6 +2436,7 @@ func (s *Store) MergeRange(
 
 	// Update the end key of the subsuming range.
 	copy := *leftDesc
+	copy.IncrementGeneration()
 	copy.EndKey = updatedEndKey
 	return leftRepl.setDesc(&copy)
 }
