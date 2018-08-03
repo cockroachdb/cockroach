@@ -1535,7 +1535,6 @@ project
       │    ├── fd: ()-->(10)
       │    ├── scalar-group-by
       │    │    ├── columns: max:10(string)
-      │    │    ├── ordering: +8 opt(9)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
