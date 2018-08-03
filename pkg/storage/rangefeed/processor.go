@@ -64,11 +64,19 @@ type Processor struct {
 	rts resolvedTimestamp
 
 	regC     chan registration
+	catchUpC chan catchUpResult
 	lenReqC  chan struct{}
 	lenResC  chan int
 	eventC   chan event
 	stopC    chan *roachpb.Error
 	stoppedC chan struct{}
+}
+
+// catchUpResult is delivered to the Processor goroutine when a catch up scan
+// for a new registration has completed.
+type catchUpResult struct {
+	r    *registration
+	pErr *roachpb.Error
 }
 
 // event is a union of different event types that the Processor goroutine needs
@@ -92,6 +100,7 @@ func NewProcessor(cfg Config) *Processor {
 		rts:    makeResolvedTimestamp(),
 
 		regC:     make(chan registration),
+		catchUpC: make(chan catchUpResult),
 		lenReqC:  make(chan struct{}),
 		lenResC:  make(chan int),
 		eventC:   make(chan event, cfg.EventChanCap),
@@ -151,10 +160,24 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsSnap Snapshot) {
 					log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 				}
 
+				// Add the new registration to the registry.
 				p.reg.Register(&r)
 
-				// TODO(nvanbenschoten): catch up scan.
-				r.SetCaughtUp()
+				// Launch an async catch-up scan for the new registration.
+				// Ignore error if quiescing.
+				if r.catchUpSnap != nil {
+					catchUp := makeCatchUpScan(p, &r)
+					err := stopper.RunAsyncTask(ctx, "rangefeed: catch-up scan", catchUp.Run)
+					if err != nil {
+						catchUp.Cancel()
+					}
+				} else {
+					p.handleCatchUpScanRes(ctx, catchUpResult{r: &r})
+				}
+
+			// React to registrations finishing their catch up scan.
+			case res := <-p.catchUpC:
+				p.handleCatchUpScanRes(ctx, res)
 
 			// Respond to answers about the processor goroutine state.
 			case <-p.lenReqC:
@@ -244,14 +267,26 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	}
 }
 
-// Register registers the stream over the specified span of keys. The
-// registration will not observe any events that were consumed before this
+// Register registers the stream over the specified span of keys.
+//
+// The registration will not observe any events that were consumed before this
 // method was called. It is undefined whether the registration will observe
 // events that are consumed concurrently with this call. The channel will be
-// provided an error when the registration closes. NOT safe to call on nil
-// Processor.
+// provided an error when the registration closes.
+//
+// The provided Snapshot is used to catch the registration up from its starting
+// timestamp with value events for all committed values. It must obey the
+// contract of a Snapshot used for a catchUpScan. The Processor promises to
+// clean up the Snapshot by calling its Close method when it is finished. If the
+// Snapshot is nil then no catch-up scan will be performed.
+//
+// NOT safe to call on nil Processor.
 func (p *Processor) Register(
-	span roachpb.RSpan, startTS hlc.Timestamp, stream Stream, errC chan<- *roachpb.Error,
+	span roachpb.RSpan,
+	startTS hlc.Timestamp,
+	catchUpSnap Snapshot,
+	stream Stream,
+	errC chan<- *roachpb.Error,
 ) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -259,14 +294,18 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := registration{
-		span:    span.AsRawSpanWithNoLocals(),
-		startTS: startTS,
-		stream:  stream,
-		errC:    errC,
+		span:        span.AsRawSpanWithNoLocals(),
+		startTS:     startTS,
+		catchUpSnap: catchUpSnap,
+		stream:      stream,
+		errC:        errC,
 	}
 	select {
 	case p.regC <- r:
 	case <-p.stoppedC:
+		if catchUpSnap != nil {
+			catchUpSnap.Close() // clean up
+		}
 		errC <- roachpb.NewErrorf("rangefeed processor closed")
 	}
 }
@@ -284,6 +323,16 @@ func (p *Processor) Len() int {
 		return <-p.lenResC
 	case <-p.stoppedC:
 		return 0
+	}
+}
+
+// deliverCatchUpScanRes informs the Processor of the results of a catch-up scan
+// for a given registration.
+func (p *Processor) deliverCatchUpScanRes(r *registration, pErr *roachpb.Error) {
+	select {
+	case p.catchUpC <- catchUpResult{r: r, pErr: pErr}:
+	case <-p.stoppedC:
+		// Already stopped. Do nothing.
 	}
 }
 
@@ -346,6 +395,21 @@ func (p *Processor) syncEventC() {
 		}
 	case <-p.stoppedC:
 		// Already stopped. Do nothing.
+	}
+}
+
+//
+// Methods called from Processor goroutine.
+//
+
+func (p *Processor) handleCatchUpScanRes(ctx context.Context, res catchUpResult) {
+	if res.pErr == nil {
+		res.r.SetCaughtUp()
+		if p.rts.IsInit() {
+			p.reg.PublishToReg(res.r, p.newCheckpointEvent())
+		}
+	} else {
+		p.reg.DisconnectRegWithError(res.r, res.pErr)
 	}
 }
 
@@ -432,11 +496,15 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
-	span := p.Span.AsRawSpanWithNoLocals()
+	event := p.newCheckpointEvent()
+	p.reg.PublishToOverlapping(all, event)
+}
+
+func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
 	var event roachpb.RangeFeedEvent
 	event.SetValue(&roachpb.RangeFeedCheckpoint{
-		Span:       span,
+		Span:       p.Span.AsRawSpanWithNoLocals(),
 		ResolvedTS: p.rts.Get(),
 	})
-	p.reg.PublishToOverlapping(span, &event)
+	return &event
 }
