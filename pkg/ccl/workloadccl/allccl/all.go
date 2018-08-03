@@ -16,6 +16,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/roachmartccl"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/interleavedpartitioned"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/jsonload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/querybench"

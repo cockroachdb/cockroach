@@ -34,6 +34,7 @@ func registerTests(r *registry) {
 	registerElectionAfterRestart(r)
 	registerEncryption(r)
 	registerHotSpotSplits(r)
+	registerInterleaved(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
 	registerJepsen(r)
