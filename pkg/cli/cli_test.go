@@ -2308,6 +2308,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/20
   debug/nodes/1/ranges/21
   debug/nodes/1/ranges/22
+  debug/reports/problemranges
   debug/schema/defaultdb@details
   debug/schema/postgres@details
   debug/schema/system@details
