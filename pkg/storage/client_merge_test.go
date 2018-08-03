@@ -108,6 +108,12 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	if !reflect.DeepEqual(lhsRepl, rhsRepl) {
 		t.Fatalf("ranges were not merged: %s != %s", lhsRepl, rhsRepl)
 	}
+
+	// The LHS has been split once and merged once, so it should have received
+	// two generation bumps.
+	if e, a := int64(2), lhsRepl.Desc().GetGeneration(); e != a {
+		t.Fatalf("expected LHS to have generation %d, but got %d", e, a)
+	}
 }
 
 // TestStoreRangeMergeMetadataCleanup tests that all metadata of a
@@ -1128,6 +1134,80 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	}
 	if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone1.NextReplicaID; e != a {
 		t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
+	}
+}
+
+// TestStoreRangeMergeAddReplicaRace verifies that an add replica request that
+// occurs concurrently with a merge is aborted.
+//
+// To see why aborting the add replica request is necessary, consider two
+// adjacent and collocated ranges, Q and R. Say the replicate queue decides to
+// rebalance Q onto store S4. It will initiate a ChangeReplicas command that
+// will send S4 a preemptive snapshot, then launch a replica-change transaction
+// to update R's range descriptor with the new replica. Now say the merge queue
+// decides to merge Q and R after the preemptive snapshot of Q has been sent to
+// S4 but before the replica-change transaction has started. The merge can
+// succeed because the ranges are still collocated. (The new replica of Q is
+// only considered added once the replica-change transaction commits.) If the
+// replica-change transaction were to commit, the new replica of Q on S4 would
+// have a snapshot of Q that predated the merge. In order to catch up, it would
+// need to apply the merge trigger, but the merge trigger will explode because
+// S4 does not have a replica of R.
+//
+// To avoid this scenario, ChangeReplicas commands will abort if they discover
+// the range descriptor has changed between when the snapshot is sent and when
+// the replica-change transaction starts.
+//
+// There is a particularly diabolical edge case here. Consider the same
+// situation as above, except that Q and R merge together and then split at
+// exactly the same key, all before the replica-change transaction starts. Q's
+// range descriptor will have the same start key, end key, and next replica ID
+// that it did when the preemptive snapshot started. That is, it will look
+// unchanged! To protect against this, range descriptors contain a generation
+// counter, which is incremented on every split or merge. The presence of this
+// counter means that ChangeReplicas commands can detect and abort if any merges
+// have occurred since the preemptive snapshot, even if the sequence of splits
+// or merges left the keyspan of the range unchanged. This diabolical edge case
+// is tested here.
+func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store0, store1 := mtc.Store(0), mtc.Store(1)
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.transport.Listen(store1.StoreID(), RaftMessageHandlerInterceptor{
+		RaftMessageHandler: store1,
+		handleSnapshotFilter: func(header *storage.SnapshotRequest_Header) {
+			mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+			if _, pErr := client.SendWrapped(ctx, store0.TestSender(), mergeArgs); pErr != nil {
+				// The filter is invoked by a different goroutine, so can't use t.Fatal.
+				t.Error(pErr)
+				return
+			}
+			splitArgs := adminSplitArgs(rhsDesc.StartKey.AsRawKey())
+			if _, pErr := client.SendWrapped(ctx, store0.TestSender(), splitArgs); pErr != nil {
+				// The filter is invoked by a different goroutine, so can't use t.Fatal.
+				t.Error(pErr)
+				return
+			}
+		},
+	})
+
+	err = mtc.replicateRangeNonFatal(lhsDesc.RangeID, 1)
+	if exp := "change replicas of r1 failed: descriptor changed"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected error %q, got %v", exp, err)
 	}
 }
 

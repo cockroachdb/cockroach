@@ -274,6 +274,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
+	leftDesc.IncrementGeneration()
 	leftDesc.EndKey = splitKey
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
@@ -402,6 +403,7 @@ func (r *Replica) AdminMerge(
 			return reply, roachpb.NewError(err)
 		}
 
+		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range", rightDesc)
 	}
