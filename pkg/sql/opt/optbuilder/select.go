@@ -302,8 +302,11 @@ func (b *Builder) buildSelectClause(
 	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.
-	if sel.Distinct || len(sel.DistinctOn) > 0 {
-		outScope = b.buildDistinct(sel.DistinctOn, outScope)
+	if sel.Distinct {
+		if len(sel.DistinctOn) > 0 {
+			panic(unimplementedf("DISTINCT ON is not supported"))
+		}
+		outScope.group = b.constructDistinct(outScope)
 	}
 	return outScope
 }
