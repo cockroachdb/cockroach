@@ -22,10 +22,8 @@ run build/builder.sh make bin/workload bin/roachtest
 tc_end_block "Compile workload/roachtest"
 
 tc_start_block "Run local roachtests"
-# TODO(dan): Run kv/splits as a proof of concept of running roachtest on every
-# PR. After we're sure this is stable, curate a suite of the tests that work
-# locally.
-run build/builder.sh ./bin/roachtest run kv/splits \
+# TODO(peter,dan): curate a suite of the tests that works locally.
+run build/builder.sh ./bin/roachtest run '(cli|kv/splits)' \
   --local \
   --cockroach "cockroach" \
   --workload "bin/workload" \

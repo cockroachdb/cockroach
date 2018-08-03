@@ -1745,7 +1745,11 @@ CREATE TABLE crdb_internal.gossip_nodes (
   address         STRING NOT NULL,
   attrs           JSON NOT NULL,
   locality        JSON NOT NULL,
-  server_version  STRING NOT NULL
+  server_version  STRING NOT NULL,
+  build_tag       STRING NOT NULL,
+  started_at      TIMESTAMP NOT NULL,
+  ranges          INT NOT NULL,
+  leases          INT NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1775,6 +1779,32 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return descriptors[i].NodeID < descriptors[j].NodeID
 		})
 
+		type nodeStats struct {
+			ranges int32
+			leases int32
+		}
+
+		stats := make(map[roachpb.NodeID]nodeStats)
+		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var desc roachpb.StoreDescriptor
+			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+
+			s := stats[desc.Node.NodeID]
+			s.ranges += desc.Capacity.RangeCount
+			s.leases += desc.Capacity.LeaseCount
+			stats[desc.Node.NodeID] = s
+			return nil
+		}); err != nil {
+			return err
+		}
+
 		for _, d := range descriptors {
 			attrs := json.NewArrayBuilder(len(d.Attrs.Attrs))
 			for _, a := range d.Attrs.Attrs {
@@ -1793,6 +1823,10 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDJSON(attrs.Build()),
 				tree.NewDJSON(locality.Build()),
 				tree.NewDString(d.ServerVersion.String()),
+				tree.NewDString(d.BuildTag),
+				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
+				tree.NewDInt(tree.DInt(stats[d.NodeID].ranges)),
+				tree.NewDInt(tree.DInt(stats[d.NodeID].leases)),
 			); err != nil {
 				return err
 			}
@@ -1801,7 +1835,9 @@ CREATE TABLE crdb_internal.gossip_nodes (
 	},
 }
 
-// crdbInternalGossipLivenessTable exposes local information about the nodes' liveness.
+// crdbInternalGossipLivenessTable exposes local information about the nodes'
+// liveness. The data exposed in this table can be stale/incomplete because
+// gossip doesn't provide guarantees around freshness or consistency.
 var crdbInternalGossipLivenessTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.gossip_liveness (
@@ -1809,16 +1845,27 @@ CREATE TABLE crdb_internal.gossip_liveness (
   epoch           INT NOT NULL,
   expiration      STRING NOT NULL,
   draining        BOOL NOT NULL,
-  decommissioning BOOL NOT NULL
+  decommissioning BOOL NOT NULL,
+  updated_at      TIMESTAMP
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// ATTENTION: This contents of this table should only access gossip data
+		// which is highly available. DO NOT CALL functions which require the
+		// cluster to be healthy, such as StatusServer.Nodes().
+
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_liveness"); err != nil {
 			return err
 		}
 
 		g := p.ExecCfg().Gossip
-		var livenesses []storage.Liveness
+
+		type nodeInfo struct {
+			liveness  storage.Liveness
+			updatedAt int64
+		}
+
+		var nodes []nodeInfo
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
@@ -1829,23 +1876,29 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
-			livenesses = append(livenesses, l)
+			nodes = append(nodes, nodeInfo{
+				liveness:  l,
+				updatedAt: i.OrigStamp,
+			})
 			return nil
 		}); err != nil {
 			return err
 		}
 
-		sort.Slice(livenesses, func(i, j int) bool {
-			return livenesses[i].NodeID < livenesses[j].NodeID
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].liveness.NodeID < nodes[j].liveness.NodeID
 		})
 
-		for _, l := range livenesses {
+		for i := range nodes {
+			n := &nodes[i]
+			l := &n.liveness
 			if err := addRow(
 				tree.NewDInt(tree.DInt(l.NodeID)),
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
 				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.updatedAt), time.Microsecond),
 			); err != nil {
 				return err
 			}
