@@ -167,11 +167,15 @@ type Reader interface {
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
 	// Get returns the value for the given key, nil otherwise.
+	//
+	// Deprecated: use MVCCGet instead.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
+	//
+	// Deprecated: use Iterator.ValueProto instead.
 	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
@@ -379,6 +383,8 @@ type EnvStats struct {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
+//
+// Deprecated: use MVCCPutProto instead.
 func PutProto(
 	engine Writer, key MVCCKey, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {

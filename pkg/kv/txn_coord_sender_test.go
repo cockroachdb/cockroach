@@ -436,6 +436,7 @@ func verifyCleanup(key roachpb.Key, eng engine.Engine, t *testing.T, coords ...*
 			}
 		}
 		meta := &enginepb.MVCCMetadata{}
+		//lint:ignore SA1019 historical usage of deprecated eng.GetProto is OK
 		ok, _, _, err := eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
 		if err != nil {
 			return fmt.Errorf("error getting MVCC metadata: %s", err)

@@ -93,6 +93,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 
 	// Reads inside the range work.
+	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
 	if value, err := batch.Get(insideKey); err != nil {
 		t.Errorf("failed to read inside the range: %s", err)
 	} else if !bytes.Equal(value, []byte("value")) {
@@ -103,9 +104,11 @@ func TestSpanSetBatch(t *testing.T) {
 	isReadSpanErr := func(err error) bool {
 		return testutils.IsError(err, "cannot read undeclared span")
 	}
+	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
 	if _, err := batch.Get(outsideKey); !isReadSpanErr(err) {
 		t.Errorf("Get: unexpected error %v", err)
 	}
+	//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
 	if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
 		t.Errorf("GetProto: unexpected error %v", err)
 	}

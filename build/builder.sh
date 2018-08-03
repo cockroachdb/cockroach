@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20180715-164923
+version=20180731-225910
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
@@ -50,14 +50,6 @@ if [ -t 0 ]; then
   tty=--tty
 fi
 
-ccache=
-if [ -n "${COCKROACH_BUILDER_CCACHE-}" ]; then
-  ccache+="--env=CC=/usr/lib/ccache/clang "
-  ccache+="--env=CXX=/usr/lib/ccache/clang++ "
-  ccache+="--env=CCACHE_DIR=/go/native/ccache "
-  ccache+="--env=CCACHE_MAXSIZE=${COCKROACH_BUILDER_CCACHE_MAXSIZE-10G} "
-fi
-
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel=$(dirname "$(cd "$(dirname "${0}")"; pwd)")
 
@@ -67,21 +59,12 @@ cockroach_toplevel=$(dirname "$(cd "$(dirname "${0}")"; pwd)")
 mkdir -p "${cockroach_toplevel}"/artifacts
 export TMPDIR=$cockroach_toplevel/artifacts
 
-# Make a fake passwd file for the invoking user.
-#
-# This setup is so that files created from inside the container in a mounted
-# volume end up being owned by the invoking user and not by root.
-# We'll mount a fresh directory owned by the invoking user as /root inside the
-# container because the container needs a $HOME (without one the default is /)
-# and because various utilities (e.g. bash writing to .bash_history) need to be
-# able to write to there.
-container_home=/root
+# We'll mount a fresh directory owned by the invoking user as the container
+# user's home directory because various utilities (e.g. bash writing to
+# .bash_history) need to be able to write to there.
+container_home=/home/roach
 host_home=${cockroach_toplevel}/build/builder_home
-passwd_file=${host_home}/passwd
-username=$(id -un)
-uid_gid=$(id -u):$(id -g)
 mkdir -p "${host_home}"
-echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 
 # Since we're mounting both /root and its subdirectories in our container,
 # Docker will create the subdirectories on the host side under the directory
@@ -130,7 +113,6 @@ vols=
 # build static binaries in the container and then run them on the host).
 #
 # vols="${vols} --volume=/var/run/docker.sock:/var/run/docker.sock"
-vols="${vols} --volume=${passwd_file}:/etc/passwd${cached_volume_mode}"
 vols="${vols} --volume=${host_home}:${container_home}${cached_volume_mode}"
 
 mkdir -p "${HOME}"/.yarn-cache
@@ -173,11 +155,13 @@ vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg${delegated_volume_mode}"
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
-docker run --privileged -i ${tty-} ${ccache} --rm \
-  -u "${uid_gid}" \
+docker run --privileged -i ${tty-} --rm \
+  -u "$(id -u):$(id -g)" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
-  "${image}:${version}" "${@-bash}"
+  --env=COCKROACH_BUILDER_CCACHE \
+  --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
+  "${image}:${version}" "$@"

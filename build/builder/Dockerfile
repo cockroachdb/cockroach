@@ -61,6 +61,16 @@ RUN mkdir src \
  && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
+RUN mkdir -p /usr/local/lib/ccache \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-gnu-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-unknown-linux-musl-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++
+
 ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-unknown-linux-musl/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
 
 # Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86 and arm).
@@ -138,6 +148,9 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
 
+RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-cc \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-c++
+
 ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
 
 # Compile Go from source so that CC defaults to clang instead of gcc. This
@@ -194,11 +207,6 @@ RUN apt-get install -y --no-install-recommends \
     yarn \
     google-chrome-stable
 
-# Without CCACHE_CPP2=1, ccache can generate spurious warnings. See the manpage
-# for details. This option is enabled by default in ccache v3.3+, but our
-# version of Ubuntu ships v3.2.4.
-ENV CCACHE_CPP2=1
-
 ENV PATH /opt/backtrace/bin:$PATH
 
 RUN apt-get purge -y \
@@ -218,3 +226,10 @@ RUN apt-get purge -y \
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /go/src/github.com/cockroachdb/cockroach/build/builder/mkrelease.sh /usr/local/bin/mkrelease
+
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.1.0/autouseradd-1.1.0-amd64.tar.gz \
+    | tar xz -C /usr --strip-components 1
+
+COPY entrypoint.sh /usr/local/bin
+
+ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home", "--", "entrypoint.sh"]
