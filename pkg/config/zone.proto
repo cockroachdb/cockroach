@@ -109,10 +109,8 @@ message ZoneConfig {
   // More than one lease preference is allowed, but they should be ordered from
   // most preferred to lease preferred. The first preference that an existing
   // replica of a range matches will take priority.
-  //
-  // TODO(a-robinson,v2.1): Remove the word "experimental" from the yaml field.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false,
-           (gogoproto.moretags) = "yaml:\"experimental_lease_preferences,flow,omitempty\""];
+           (gogoproto.moretags) = "yaml:\"lease_preferences,flow,omitempty\""];
 
   // Subzones stores config overrides for "subzones", each of which represents
   // either a SQL table index or a partition of a SQL table index. Subzones are

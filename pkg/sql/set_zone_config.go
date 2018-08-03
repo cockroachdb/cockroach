@@ -314,10 +314,8 @@ func writeZoneConfig(
 		}
 	}
 	if len(zone.LeasePreferences) > 0 {
-		st := execCfg.Settings
-		if !st.Version.IsMinSupported(cluster.VersionLeasePreferences) {
-			return 0, errors.New(
-				"cluster version does not support zone configs with lease placement preferences")
+		if err := ValidateLeasePreferences(execCfg.Settings, execCfg.ClusterID(), zone); err != nil {
+			return 0, err
 		}
 	}
 

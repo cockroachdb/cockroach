@@ -372,18 +372,6 @@ func (z *ZoneConfig) Validate() error {
 		}
 	}
 
-	for _, leasePref := range z.LeasePreferences {
-		if len(leasePref.Constraints) == 0 {
-			return fmt.Errorf("every lease preference must include at least one constraint")
-		}
-		for _, constraint := range leasePref.Constraints {
-			if constraint.Type == Constraint_DEPRECATED_POSITIVE {
-				return fmt.Errorf("lease preference constraints must either be required " +
-					"(prefixed with a '+') or prohibited (prefixed with a '-')")
-			}
-		}
-	}
-
 	return nil
 }
 

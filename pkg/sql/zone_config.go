@@ -154,6 +154,15 @@ var GenerateSubzoneSpans = func(
 		"setting zone configs on indexes or partitions requires a CCL binary"))
 }
 
+// ValidateLeasePreferences validates whether lease placement preferences will
+// work properly in the cluster and whether they are well-formed.
+var ValidateLeasePreferences = func(
+	st *cluster.Settings, clusterID uuid.UUID, zone config.ZoneConfig,
+) error {
+	return sqlbase.NewCCLRequiredError(errors.New(
+		"setting lease placement preferences in zone configs requires a CCL binary"))
+}
+
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
 		return pgerror.NewErrorf(
