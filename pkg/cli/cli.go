@@ -16,6 +16,7 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -40,6 +42,12 @@ func Main() {
 
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
+	}
+
+	// Change the logging defaults for the main cockroach binary.
+	// The value is overridden after command-line parsing.
+	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("NONE"); err != nil {
+		panic(err)
 	}
 
 	cmdName := commandName(os.Args[1:])
