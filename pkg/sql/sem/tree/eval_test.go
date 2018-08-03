@@ -959,6 +959,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY['a', 'b', 'c']`, `ARRAY['a','b','c']`},
 		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `ARRAY[ARRAY[1,2],ARRAY[2,3]]`},
 		{`ARRAY[1, NULL]`, `ARRAY[1,NULL]`},
+		{`ARRAY(1, 2)`, `ARRAY[1,2]`},
 		// Array sizes.
 		{`array_length(ARRAY[1, 2, 3], 1)`, `3`},
 		{`array_length(ARRAY[1, 2, 3], 2)`, `NULL`},

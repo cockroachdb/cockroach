@@ -1303,9 +1303,10 @@ d_expr ::=
 	| '(' a_expr ')'
 	| func_expr
 	| select_with_parens
-	| 'ARRAY' select_with_parens
-	| 'ARRAY' array_expr
 	| labeled_row
+	| 'ARRAY' select_with_parens
+	| 'ARRAY' row
+	| 'ARRAY' array_expr
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -1611,13 +1612,17 @@ func_expr ::=
 	func_application filter_clause over_clause
 	| func_expr_common_subexpr
 
-array_expr ::=
-	'[' opt_expr_list ']'
-	| '[' array_expr_list ']'
-
 labeled_row ::=
 	row
 	| '(' row 'AS' name_list ')'
+
+row ::=
+	'ROW' '(' opt_expr_list ')'
+	| expr_tuple_unambiguous
+
+array_expr ::=
+	'[' opt_expr_list ']'
+	| '[' array_expr_list ']'
 
 array_subscript ::=
 	'[' a_expr ']'
@@ -1870,12 +1875,12 @@ opt_expr_list ::=
 	expr_list
 	| 
 
+expr_tuple_unambiguous ::=
+	'(' ')'
+	| '(' tuple1_unambiguous_values ')'
+
 array_expr_list ::=
 	( array_expr ) ( ( ',' array_expr ) )*
-
-row ::=
-	'ROW' '(' opt_expr_list ')'
-	| expr_tuple_unambiguous
 
 opt_slice_bound ::=
 	a_expr
@@ -2039,9 +2044,9 @@ special_function ::=
 	| 'GREATEST' '(' expr_list ')'
 	| 'LEAST' '(' expr_list ')'
 
-expr_tuple_unambiguous ::=
-	'(' ')'
-	| '(' tuple1_unambiguous_values ')'
+tuple1_unambiguous_values ::=
+	a_expr ','
+	| a_expr ',' expr_list
 
 window_definition ::=
 	window_name 'AS' window_specification
@@ -2122,10 +2127,6 @@ trim_list ::=
 	a_expr 'FROM' expr_list
 	| 'FROM' expr_list
 	| expr_list
-
-tuple1_unambiguous_values ::=
-	a_expr ','
-	| a_expr ',' expr_list
 
 index_hints_param ::=
 	'FORCE_INDEX' '=' index_name

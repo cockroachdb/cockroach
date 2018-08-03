@@ -6891,17 +6891,21 @@ d_expr:
   {
     $$.val = &tree.Subquery{Select: $1.selectStmt()}
   }
-| ARRAY select_with_parens
+| labeled_row
+  {
+    $$.val = $1.tuple()
+  }
+| ARRAY select_with_parens %prec UMINUS
   {
     $$.val = &tree.ArrayFlatten{Subquery: &tree.Subquery{Select: $2.selectStmt()}}
+  }
+| ARRAY row
+  {
+    $$.val = &tree.Array{Exprs: $2.tuple().Exprs}
   }
 | ARRAY array_expr
   {
     $$.val = $2.expr()
-  }
-| labeled_row
-  {
-    $$.val = $1.tuple()
   }
 
 // TODO(pmattis): Support this notation?
