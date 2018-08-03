@@ -119,7 +119,7 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	table, err := t.find(ctx, timestamp, m)
+	table, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
