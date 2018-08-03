@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -424,12 +425,16 @@ func (n *Node) start(
 		span.Finish()
 		nodeID = newID
 	}
+
+	n.startedAt = n.storeCfg.Clock.Now().WallTime
 	n.Descriptor = roachpb.NodeDescriptor{
 		NodeID:        nodeID,
 		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		Attrs:         attrs,
 		Locality:      locality,
 		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
+		BuildTag:      build.GetInfo().Tag,
+		StartedAt:     n.startedAt,
 	}
 
 	// Gossip the node descriptor to make this node addressable by node ID.
@@ -519,8 +524,6 @@ func (n *Node) start(
 			return err
 		}
 	}
-
-	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
 	// Be careful about moving this line above `startStores`; store migrations rely
