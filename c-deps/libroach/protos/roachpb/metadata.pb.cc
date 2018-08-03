@@ -2394,6 +2394,8 @@ const int NodeDescriptor::kAddressFieldNumber;
 const int NodeDescriptor::kAttrsFieldNumber;
 const int NodeDescriptor::kLocalityFieldNumber;
 const int NodeDescriptor::kServerVersionFieldNumber;
+const int NodeDescriptor::kBuildTagFieldNumber;
+const int NodeDescriptor::kStartedAtFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
@@ -2408,6 +2410,10 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
       _internal_metadata_(NULL),
       _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  build_tag_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_build_tag()) {
+    build_tag_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.build_tag_);
+  }
   if (from.has_address()) {
     address_ = new ::cockroach::util::UnresolvedAddr(*from.address_);
   } else {
@@ -2428,11 +2434,14 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
   } else {
     serverversion_ = NULL;
   }
-  node_id_ = from.node_id_;
+  ::memcpy(&started_at_, &from.started_at_,
+    static_cast<size_t>(reinterpret_cast<char*>(&node_id_) -
+    reinterpret_cast<char*>(&started_at_)) + sizeof(node_id_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.NodeDescriptor)
 }
 
 void NodeDescriptor::SharedCtor() {
+  build_tag_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&address_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&node_id_) -
       reinterpret_cast<char*>(&address_)) + sizeof(node_id_));
@@ -2444,6 +2453,7 @@ NodeDescriptor::~NodeDescriptor() {
 }
 
 void NodeDescriptor::SharedDtor() {
+  build_tag_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete address_;
   if (this != internal_default_instance()) delete attrs_;
   if (this != internal_default_instance()) delete locality_;
@@ -2466,25 +2476,32 @@ void NodeDescriptor::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 15u) {
+  if (cached_has_bits & 31u) {
     if (cached_has_bits & 0x00000001u) {
+      build_tag_.ClearNonDefaultToEmptyNoArena();
+    }
+    if (cached_has_bits & 0x00000002u) {
       GOOGLE_DCHECK(address_ != NULL);
       address_->Clear();
     }
-    if (cached_has_bits & 0x00000002u) {
+    if (cached_has_bits & 0x00000004u) {
       GOOGLE_DCHECK(attrs_ != NULL);
       attrs_->Clear();
     }
-    if (cached_has_bits & 0x00000004u) {
+    if (cached_has_bits & 0x00000008u) {
       GOOGLE_DCHECK(locality_ != NULL);
       locality_->Clear();
     }
-    if (cached_has_bits & 0x00000008u) {
+    if (cached_has_bits & 0x00000010u) {
       GOOGLE_DCHECK(serverversion_ != NULL);
       serverversion_->Clear();
     }
   }
-  node_id_ = 0;
+  if (cached_has_bits & 96u) {
+    ::memset(&started_at_, 0, static_cast<size_t>(
+        reinterpret_cast<char*>(&node_id_) -
+        reinterpret_cast<char*>(&started_at_)) + sizeof(node_id_));
+  }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
 }
@@ -2562,6 +2579,30 @@ bool NodeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_build_tag()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+          set_has_started_at();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &started_at_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2589,28 +2630,37 @@ void NodeDescriptor::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000010u) {
+  if (cached_has_bits & 0x00000040u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
-  }
-
-  if (cached_has_bits & 0x00000001u) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, this->_internal_address(), output);
   }
 
   if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3, this->_internal_attrs(), output);
+      2, this->_internal_address(), output);
   }
 
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      4, this->_internal_locality(), output);
+      3, this->_internal_attrs(), output);
   }
 
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4, this->_internal_locality(), output);
+  }
+
+  if (cached_has_bits & 0x00000010u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
       5, this->_internal_serverversion(), output);
+  }
+
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      6, this->build_tag(), output);
+  }
+
+  if (cached_has_bits & 0x00000020u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->started_at(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -2624,7 +2674,13 @@ size_t NodeDescriptor::ByteSizeLong() const {
 
   total_size += _internal_metadata_.unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 31u) {
+  if (_has_bits_[0 / 32] & 127u) {
+    if (has_build_tag()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->build_tag());
+    }
+
     if (has_address()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -2647,6 +2703,12 @@ size_t NodeDescriptor::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           *serverversion_);
+    }
+
+    if (has_started_at()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->started_at());
     }
 
     if (has_node_id()) {
@@ -2674,20 +2736,27 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 31u) {
+  if (cached_has_bits & 127u) {
     if (cached_has_bits & 0x00000001u) {
-      mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
+      set_has_build_tag();
+      build_tag_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.build_tag_);
     }
     if (cached_has_bits & 0x00000002u) {
-      mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
+      mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
     }
     if (cached_has_bits & 0x00000004u) {
-      mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
+      mutable_attrs()->::cockroach::roachpb::Attributes::MergeFrom(from.attrs());
     }
     if (cached_has_bits & 0x00000008u) {
-      mutable_serverversion()->::cockroach::roachpb::Version::MergeFrom(from.serverversion());
+      mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
     }
     if (cached_has_bits & 0x00000010u) {
+      mutable_serverversion()->::cockroach::roachpb::Version::MergeFrom(from.serverversion());
+    }
+    if (cached_has_bits & 0x00000020u) {
+      started_at_ = from.started_at_;
+    }
+    if (cached_has_bits & 0x00000040u) {
       node_id_ = from.node_id_;
     }
     _has_bits_[0] |= cached_has_bits;
@@ -2711,10 +2780,13 @@ void NodeDescriptor::Swap(NodeDescriptor* other) {
 }
 void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
   using std::swap;
+  build_tag_.Swap(&other->build_tag_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(address_, other->address_);
   swap(attrs_, other->attrs_);
   swap(locality_, other->locality_);
   swap(serverversion_, other->serverversion_);
+  swap(started_at_, other->started_at_);
   swap(node_id_, other->node_id_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);

@@ -18,13 +18,14 @@ package main
 func registerTests(r *registry) {
 	// Helpful shell pipeline to generate the list below:
 	//
-	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep -v '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
+	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
 
 	registerAllocator(r)
 	registerBackup(r)
 	registerCancel(r)
 	registerCDC(r)
 	registerClearRange(r)
+	registerCLI(r)
 	registerClock(r)
 	registerCopy(r)
 	registerDebug(r)
@@ -34,14 +35,14 @@ func registerTests(r *registry) {
 	registerElectionAfterRestart(r)
 	registerEncryption(r)
 	registerHotSpotSplits(r)
-	registerInterleaved(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
+	registerInterleaved(r)
 	registerJepsen(r)
 	registerKV(r)
+	registerKVQuiescenceDead(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
-	registerKVQuiescenceDead(r)
 	registerLargeRange(r)
 	registerQueue(r)
 	registerRestore(r)
