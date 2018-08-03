@@ -1497,12 +1497,13 @@ func typeCheckComparisonOpWithSubOperator(
 				// Literal tuple contains no elements (subquery tuples always contain
 				// one and only one element since subqueries are asserted to return
 				// one column of results in analyzeExpr in analyze.go).
-				return nil, nil, CmpOp{}, false, subOpCompError(cmpTypeLeft, rightReturn, subOp, op)
+				cmpTypeRight = cmpTypeLeft
+			} else {
+				// Literal tuples were type checked such that all elements have equivalent types.
+				// Subqueries only contain one element from analyzeExpr in analyze.go.
+				// Therefore, we can take the first element's type as the right type.
+				cmpTypeRight = rightUnwrapped.Types[0]
 			}
-			// Literal tuples were type checked such that all elements have equivalent types.
-			// Subqueries only contain one element from analyzeExpr in analyze.go.
-			// Therefore, we can take the first element's type as the right type.
-			cmpTypeRight = rightUnwrapped.Types[0]
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))

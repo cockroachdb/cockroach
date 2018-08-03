@@ -134,18 +134,22 @@ SELECT 1 < ANY(SELECT * FROM generate_series(0,1))
 ----
 false
 
+# TODO(jordan): this should fail in local sql, but it doesn't
+# query error incompatible tuple element type: decimal
+# SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+
 query B
-SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+SELECT 1.0 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 ----
 true
 
 query B
-SELECT 1 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+SELECT 1.0 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
 ----
 true
 
 query B
-SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
+SELECT 1.0 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
 ----
 false
 
@@ -404,5 +408,7 @@ true
 query error could not parse \"hello\" as type int
 SELECT 1 = ANY (1, 'hello', 3)
 
-query error unsupported comparison operator: <int> = ANY <tuple{}>
+query B
 SELECT 1 = ANY ROW()
+----
+false
