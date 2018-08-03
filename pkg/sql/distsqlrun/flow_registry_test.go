@@ -573,3 +573,33 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	}
 	flow.Cleanup(ctx)
 }
+
+// TestInboundStreamTimeoutIsRetryable verifies that a failure from an inbound
+// stream to connect in a timeout is considered retryable by
+// testutils.IsSQLRetryableError.
+// TODO(asubiotto): This error should also be considered retryable by clients.
+func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	fr := makeFlowRegistry(0)
+	wg := sync.WaitGroup{}
+	rb := &RowBuffer{}
+	inboundStreams := map[StreamID]*inboundStreamInfo{
+		0: {
+			receiver:  rb,
+			waitGroup: &wg,
+		},
+	}
+	wg.Add(1)
+	if err := fr.RegisterFlow(
+		context.Background(), FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	if _, meta := rb.Next(); meta == nil {
+		t.Fatal("expected error but got no meta")
+	} else if !testutils.IsSQLRetryableError(meta.Err) {
+		t.Fatalf("unexpected error: %v", meta.Err)
+	}
+}
