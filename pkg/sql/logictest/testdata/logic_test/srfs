@@ -2,6 +2,10 @@
 
 subtest generate_series
 
+query I
+SELECT * FROM generate_series(1, NULL)
+----
+
 query I colnames
 SELECT * FROM generate_series(1, 3)
 ----
@@ -178,6 +182,11 @@ x  generate_series
 1  3
 
 subtest unnest
+
+query I
+SELECT * FROM unnest(NULL)
+----
+
 
 query I colnames
 SELECT * from unnest(ARRAY[1,2])

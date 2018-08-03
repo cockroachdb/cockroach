@@ -285,6 +285,29 @@ func TestFormatExpr2(t *testing.T) {
 			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
 		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegNamespace, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
+
+		// Ensure that nulls get properly type annotated when printed in an
+		// enclosing tuple that has a type for their position within the tuple.
+		{tree.NewDTuple(
+			types.TTuple{
+				Types: []types.T{
+					types.Int,
+					types.String,
+				},
+			}, tree.DNull, tree.NewDString("foo")),
+			tree.FmtParsable,
+			`(NULL::INT, 'foo':::STRING)`,
+		},
+		{tree.NewDTuple(
+			types.TTuple{
+				Types: []types.T{
+					types.Unknown,
+					types.String,
+				},
+			}, tree.DNull, tree.NewDString("foo")),
+			tree.FmtParsable,
+			`(NULL, 'foo':::STRING)`,
+		},
 	}
 
 	for i, test := range testData {
