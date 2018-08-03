@@ -76,11 +76,11 @@ select
  └── filters [type=bool]
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column5:5(tuple{int AS k, int AS v})
+           │    ├── columns: column5:5(tuple{int, int})
            │    ├── scan kv
            │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
            │    └── projections
-           │         └── tuple [type=tuple{int AS k, int AS v}]
+           │         └── tuple [type=tuple{int, int}]
            │              ├── variable: kv.k [type=int]
            │              └── variable: kv.v [type=int]
            └── tuple [type=tuple{int, int}]
