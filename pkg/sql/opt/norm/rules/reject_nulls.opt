@@ -116,12 +116,16 @@
 # up in the right side of a LeftJoin operator, thus enabling it to be mapped to
 # an InnerJoin operator.
 #
+# This rule is not useful for DistinctOn: it can only fire if there are no
+# FIrstAgg aggregates, but in that case the filter would have gotten pushed
+# through DistinctOn.
+#
 # This rule is marked as low priority so that it runs after Select filter
 # pushdown rules. If a filter can be pushed down in its entirety, that's
 # preferable to synthesizing a new "col IS NOT NULL" filter.
 [RejectNullsGroupBy, Normalize, LowPriority]
 (Select
-    $input:(GroupBy | DistinctOn
+    $input:(GroupBy
         $innerInput:*
         $aggregations:*
         $def:*
