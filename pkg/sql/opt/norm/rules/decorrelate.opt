@@ -215,6 +215,36 @@
     (ConcatFilters $on $innerOn)
 )
 
+# TryDecorrelateInnerLeftJoin tries to decorrelate a LeftJoin operator nested
+# beneath an InnerJoin operator by using the associative identity to pull up the
+# left join to become the outer join. This may be enough to decorrelate the
+# outer join, or it may allow any outer column references to continue to journey
+# upwards.
+#
+# Citations: [1] (see identity #6)
+[TryDecorrelateInnerLeftJoin, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (LeftJoin
+            $innerLeft:*
+            $innerRight:*
+            $innerOn:*
+        )
+    $on:* & (IsBoundBy $on (OutputCols2 $left $innerLeft))
+)
+=>
+(LeftJoinApply
+    ((OpName)
+        $left
+        $innerLeft
+        $on
+    )
+    $innerRight
+    $innerOn
+)
+
 # TryDecorrelateGroupBy "pushes down" a Join into a GroupBy operator, in an
 # attempt to keep "digging" down to find and eliminate unnecessary correlation.
 # The eventual hope is to trigger the DecorrelateJoin rule to turn a JoinApply
@@ -373,6 +403,40 @@
     (GroupByKey $newLeft)
 )
 
+# TryDecorrelateZip "pushes down" an outer InnerJoinApply operator into an inner
+# InnerJoinApply operator, in hopes of eliminating any correlation between the
+# Zip operator and the outer InnerJoinApply operator. Eventually, the hope is to
+# trigger the DecorrelateJoin pattern to turn JoinApply operators into non-apply
+# Join operators.
+#
+# This rule only matches Zip as $innerRight because other relational operators
+# can decorrelate by pushing parent joins down into an input operand. But Zip
+# does not have an input operand of its own, and so it uses InnerJoinApply as a
+# proxy for that, and pushes other operators down through that instead.
+#
+# TODO(andyk): Consider creating a single ProjectSet relational operator, rather
+#              than using InnerJoinApply + Zip, which seems fragile.
+[TryDecorrelateZip, Normalize]
+(InnerJoinApply
+    $left:*
+    (InnerJoinApply
+        $innerLeft:*
+        $innerRight:(Zip)
+        $innerOn:*
+    )
+    $on:*
+)
+=>
+(InnerJoinApply
+    (InnerJoinApply
+        $left
+        $innerLeft
+        (True)
+    )
+    $innerRight
+    (ConcatFilters $on $innerOn)
+)
+
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
@@ -484,6 +548,19 @@
 )
 =>
 (HoistValuesSubquery $rows $cols)
+
+# HoistZipSubquery extracts subqueries from zipped functions and joins them with
+# the Zip operator using an Apply join. This and other subquery hoisting
+# patterns create a single, top-level relational query with no nesting.
+#
+# This rule is marked as low priority for the same reason as HoistSelectExists.
+[HoistZipSubquery, Normalize, LowPriority]
+(Zip
+    $funcs:[ ... $item:* & (HasHoistableSubquery $item) ... ]
+    $cols:*
+)
+=>
+(HoistZipSubquery $funcs $cols)
 
 # NormalizeAnyFilter rewrites Any into Exists when it's a top-level conjunct in
 # a Select or Join filter. Any can be rewritten as Exists in this context

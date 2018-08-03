@@ -1021,6 +1021,132 @@ semi-join-apply
  └── true [type=bool]
 
 # --------------------------------------------------
+# TryDecorrelateInnerLeftJoin
+# --------------------------------------------------
+opt
+SELECT *
+FROM (VALUES (1), (2)) AS v(v1)
+WHERE EXISTS(
+    SELECT k
+    FROM a
+    WHERE
+    (
+        SELECT y FROM xy LEFT JOIN (SELECT v1 FROM uv LIMIT 1) ON x=v1 WHERE x=k
+    )=i
+)
+----
+semi-join-apply
+ ├── columns: v1:1(int)
+ ├── cardinality: [0 - 2]
+ ├── values
+ │    ├── columns: column1:1(int)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ ├── left-join
+ │    ├── columns: k:2(int!null) i:3(int!null) x:7(int!null) y:8(int!null) v1:11(int)
+ │    ├── outer: (1)
+ │    ├── key: (7)
+ │    ├── fd: (2)-->(3), (7)-->(8,11), (2)==(7), (7)==(2), (3)==(8), (8)==(3), ()~~>(11)
+ │    ├── inner-join
+ │    │    ├── columns: k:2(int!null) i:3(int!null) x:7(int!null) y:8(int!null)
+ │    │    ├── key: (7)
+ │    │    ├── fd: (2)-->(3), (7)-->(8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:2(int!null) i:3(int)
+ │    │    │    ├── key: (2)
+ │    │    │    └── fd: (2)-->(3)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:7(int!null) y:8(int)
+ │    │    │    ├── key: (7)
+ │    │    │    └── fd: (7)-->(8)
+ │    │    └── filters [type=bool, outer=(2,3,7,8), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(7), (7)==(2), (3)==(8), (8)==(3)]
+ │    │         ├── xy.x = a.k [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── a.i = xy.y [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
+ │    ├── project
+ │    │    ├── columns: v1:11(int)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(11)
+ │    │    ├── scan uv
+ │    │    │    ├── limit: 1
+ │    │    │    └── key: ()
+ │    │    └── projections [outer=(1)]
+ │    │         └── variable: column1 [type=int, outer=(1)]
+ │    └── filters [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
+ │         └── xy.x = v1 [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ])]
+ └── true [type=bool]
+
+opt
+SELECT *
+FROM xy, uv
+WHERE (SELECT i FROM a WHERE k=x) IS DISTINCT FROM u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── fd: (1)-->(2), (3)-->(4)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
+      ├── key: (1,3,5)
+      ├── fd: (1)-->(2), (3)-->(4), (5)-->(6)
+      ├── left-join
+      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
+      │    ├── key: (1,3,5)
+      │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6)
+      │    ├── inner-join
+      │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+      │    │    ├── key: (1,3)
+      │    │    ├── fd: (1)-->(2), (3)-->(4)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    │    ├── key: (3)
+      │    │    │    └── fd: (3)-->(4)
+      │    │    └── true [type=bool]
+      │    ├── scan a
+      │    │    ├── columns: k:5(int!null) i:6(int)
+      │    │    ├── key: (5)
+      │    │    └── fd: (5)-->(6)
+      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── filters [type=bool, outer=(3,6)]
+           └── uv.u IS DISTINCT FROM a.i [type=bool, outer=(3,6)]
+
+opt
+SELECT generate_series(1, (SELECT u FROM uv WHERE u=x))
+FROM xy
+----
+project
+ ├── columns: generate_series:5(int)
+ └── inner-join-apply
+      ├── columns: x:1(int!null) u:3(int) column5:5(int)
+      ├── left-join (merge)
+      │    ├── columns: x:1(int!null) u:3(int)
+      │    ├── key: (1,3)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── key: (1)
+      │    │    └── ordering: +1
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null)
+      │    │    ├── key: (3)
+      │    │    └── ordering: +3
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +3
+      │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      │              └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      ├── zip
+      │    ├── columns: column5:5(int)
+      │    ├── outer: (3)
+      │    └── generate_series(1, uv.u) [type=int, outer=(3)]
+      └── true [type=bool]
+
+# --------------------------------------------------
 # TryDecorrelateGroupBy
 # --------------------------------------------------
 opt
@@ -1108,36 +1234,51 @@ project
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
-      │    ├── inner-join
+      │    ├── inner-join (merge)
       │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) k:5(int!null) i:6(int!null)
       │    │    ├── key: (3)
-      │    │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6), (1)==(4,5), (4)==(1,5), (5)==(1,4)
-      │    │    ├── inner-join
-      │    │    │    ├── columns: u:3(int!null) v:4(int) k:5(int!null) i:6(int!null)
-      │    │    │    ├── key: (3,5)
-      │    │    │    ├── fd: (3)-->(4), (5)-->(6)
-      │    │    │    ├── scan uv
+      │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4,5), (4)==(1,5), (5)-->(6), (5)==(1,4)
+      │    │    ├── inner-join (merge)
+      │    │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
+      │    │    │    ├── key: (3)
+      │    │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1)
+      │    │    │    ├── ordering: +(1|4)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    ├── fd: (1)-->(2)
+      │    │    │    │    └── ordering: +1
+      │    │    │    ├── sort
       │    │    │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    │    │    ├── key: (3)
-      │    │    │    │    └── fd: (3)-->(4)
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │    │    │    ├── fd: (3)-->(4)
+      │    │    │    │    ├── ordering: +4
+      │    │    │    │    └── scan uv
+      │    │    │    │         ├── columns: u:3(int!null) v:4(int)
+      │    │    │    │         ├── key: (3)
+      │    │    │    │         └── fd: (3)-->(4)
+      │    │    │    └── merge-on
+      │    │    │         ├── left ordering: +1
+      │    │    │         ├── right ordering: +4
+      │    │    │         └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │    │              └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    │    ├── select
+      │    │    │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: (5)-->(6)
+      │    │    │    ├── ordering: +5
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:5(int!null) i:6(int)
       │    │    │    │    ├── key: (5)
       │    │    │    │    ├── fd: (5)-->(6)
-      │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:5(int!null) i:6(int)
-      │    │    │    │    │    ├── key: (5)
-      │    │    │    │    │    └── fd: (5)-->(6)
-      │    │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │    │    │    │         └── a.i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │    │    │    └── true [type=bool]
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2)
-      │    │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4,5), (4)==(1,5), (5)==(1,4)]
-      │    │         ├── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-      │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    │    │    └── ordering: +5
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── a.i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── merge-on
+      │    │         ├── left ordering: +1
+      │    │         ├── right ordering: +5
+      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │              └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: a.i [type=int, outer=(6)]
@@ -1158,50 +1299,65 @@ FROM xy, uv
 WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
 ----
 project
- ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
- ├── key: (1,3)
- ├── fd: (1)-->(2), (1,3)-->(2,4), (1)==(4), (4)==(1)
+ ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
-      ├── key: (1,3)
-      ├── fd: (1)-->(2), (1,3)-->(2,4,10), (1)==(4), (4)==(1)
+      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
       ├── group-by
-      │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) max:10(int)
-      │    ├── grouping columns: x:1(int!null) u:3(int!null)
-      │    ├── key: (1,3)
-      │    ├── fd: (1)-->(2), (1,3)-->(2,4,10), (1)==(4), (4)==(1)
-      │    ├── inner-join-apply
-      │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
-      │    │    ├── key: (1,3,5)
-      │    │    ├── fd: (1)-->(2), (1,3)-->(4), (1,5)-->(6), (1)==(4), (4)==(1)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:1(int!null) y:2(int)
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2)
-      │    │    ├── left-join
-      │    │    │    ├── columns: u:3(int!null) v:4(int) k:5(int) i:6(int)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── key: (3,5)
-      │    │    │    ├── fd: (3)-->(4), (5)-->(6)
-      │    │    │    ├── scan uv
+      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── grouping columns: u:3(int!null)
+      │    ├── key: (3)
+      │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
+      │    ├── left-join (merge)
+      │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) k:5(int) i:6(int)
+      │    │    ├── key: (3,5)
+      │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1), (5)-->(6)
+      │    │    ├── inner-join (merge)
+      │    │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
+      │    │    │    ├── key: (3)
+      │    │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1)
+      │    │    │    ├── ordering: +(1|4)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    ├── fd: (1)-->(2)
+      │    │    │    │    └── ordering: +1
+      │    │    │    ├── sort
       │    │    │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    │    │    ├── key: (3)
-      │    │    │    │    └── fd: (3)-->(4)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:5(int!null) i:6(int)
-      │    │    │    │    ├── key: (5)
-      │    │    │    │    └── fd: (5)-->(6)
-      │    │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      │    │         └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-      │    └── aggregations [outer=(2,4,6)]
+      │    │    │    │    ├── fd: (3)-->(4)
+      │    │    │    │    ├── ordering: +4
+      │    │    │    │    └── scan uv
+      │    │    │    │         ├── columns: u:3(int!null) v:4(int)
+      │    │    │    │         ├── key: (3)
+      │    │    │    │         └── fd: (3)-->(4)
+      │    │    │    └── merge-on
+      │    │    │         ├── left ordering: +1
+      │    │    │         ├── right ordering: +4
+      │    │    │         └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │    │              └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:5(int!null) i:6(int)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: (5)-->(6)
+      │    │    │    └── ordering: +5
+      │    │    └── merge-on
+      │    │         ├── left ordering: +1
+      │    │         ├── right ordering: +5
+      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │              └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: a.i [type=int, outer=(6)]
       │         ├── const-agg [type=int, outer=(4)]
       │         │    └── variable: uv.v [type=int, outer=(4)]
-      │         └── const-agg [type=int, outer=(2)]
-      │              └── variable: xy.y [type=int, outer=(2)]
+      │         ├── const-agg [type=int, outer=(2)]
+      │         │    └── variable: xy.y [type=int, outer=(2)]
+      │         └── const-agg [type=int, outer=(1)]
+      │              └── variable: xy.x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10)]
            └── uv.u IS DISTINCT FROM max [type=bool, outer=(3,10)]
 
@@ -1278,29 +1434,29 @@ group-by
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11)
- │    │    ├── inner-join-apply
+ │    │    ├── left-join
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) notnull:12(bool)
- │    │    │    ├── fd: (1)-->(2-5)
- │    │    │    ├── scan a
- │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    ├── key: (1)
- │    │    │    │    └── fd: (1)-->(2-5)
- │    │    │    ├── left-join
- │    │    │    │    ├── columns: x:6(int!null) notnull:12(bool)
- │    │    │    │    ├── outer: (2)
- │    │    │    │    ├── fd: ()~~>(12)
+ │    │    │    ├── fd: (1)-->(2-5), ()~~>(12)
+ │    │    │    ├── inner-join
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
+ │    │    │    │    ├── key: (1,6)
+ │    │    │    │    ├── fd: (1)-->(2-5)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null)
  │    │    │    │    │    └── key: (6)
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: notnull:12(bool!null)
- │    │    │    │    │    ├── fd: ()-->(12)
- │    │    │    │    │    ├── scan uv
- │    │    │    │    │    └── projections
- │    │    │    │    │         └── true [type=bool]
- │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
- │    │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
- │    │    │    └── true [type=bool]
+ │    │    │    │    └── true [type=bool]
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: notnull:12(bool!null)
+ │    │    │    │    ├── fd: ()-->(12)
+ │    │    │    │    ├── scan uv
+ │    │    │    │    └── projections
+ │    │    │    │         └── true [type=bool]
+ │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+ │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    └── aggregations [outer=(2-5,12)]
  │    │         ├── count [type=int, outer=(12)]
  │    │         │    └── variable: notnull [type=bool, outer=(12)]
@@ -2897,6 +3053,186 @@ project
  │    └── true [type=bool]
  └── projections [outer=(8)]
       └── variable: column1 [type=bool, outer=(8)]
+
+# --------------------------------------------------
+# HoistZipSubquery and TryDecorrelateZip
+# --------------------------------------------------
+opt
+SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
+----
+project
+ ├── columns: generate_series:5(int)
+ └── inner-join-apply
+      ├── columns: v:4(int) column5:5(int)
+      ├── project
+      │    ├── columns: v:4(int)
+      │    └── left-join (merge)
+      │         ├── columns: x:1(int!null) u:3(int) v:4(int)
+      │         ├── key: (1,3)
+      │         ├── fd: (3)-->(4)
+      │         ├── scan xy
+      │         │    ├── columns: x:1(int!null)
+      │         │    ├── key: (1)
+      │         │    └── ordering: +1
+      │         ├── scan uv
+      │         │    ├── columns: u:3(int!null) v:4(int)
+      │         │    ├── key: (3)
+      │         │    ├── fd: (3)-->(4)
+      │         │    └── ordering: +3
+      │         └── merge-on
+      │              ├── left ordering: +1
+      │              ├── right ordering: +3
+      │              └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      │                   └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      ├── zip
+      │    ├── columns: column5:5(int)
+      │    ├── outer: (4)
+      │    └── generate_series(1, uv.v) [type=int, outer=(4)]
+      └── true [type=bool]
+
+# Zip correlation within EXISTS.
+opt
+SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
+----
+semi-join-apply
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── inner-join-apply
+ │    ├── columns: v:4(int) generate_series:5(int)
+ │    ├── outer: (1)
+ │    ├── project
+ │    │    ├── columns: v:4(int)
+ │    │    ├── outer: (1)
+ │    │    └── right-join
+ │    │         ├── columns: u:3(int) v:4(int)
+ │    │         ├── outer: (1)
+ │    │         ├── key: (3)
+ │    │         ├── fd: (3)-->(4)
+ │    │         ├── scan uv
+ │    │         │    ├── columns: u:3(int!null) v:4(int)
+ │    │         │    ├── key: (3)
+ │    │         │    └── fd: (3)-->(4)
+ │    │         ├── values
+ │    │         │    ├── cardinality: [1 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    └── tuple [type=tuple]
+ │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │    │              └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    ├── zip
+ │    │    ├── columns: generate_series:5(int)
+ │    │    ├── outer: (4)
+ │    │    └── generate_series(1, uv.v) [type=int, outer=(4)]
+ │    └── true [type=bool]
+ └── true [type=bool]
+
+# Function contains multiple subqueries in arguments.
+opt
+SELECT generate_series((select y FROM xy WHERE x=k), (SELECT v FROM uv WHERE u=k)) FROM a
+----
+project
+ ├── columns: generate_series:10(int)
+ └── inner-join-apply
+      ├── columns: y:7(int) v:9(int) column10:10(int)
+      ├── project
+      │    ├── columns: y:7(int) v:9(int)
+      │    └── left-join (merge)
+      │         ├── columns: k:1(int!null) y:7(int) u:8(int) v:9(int)
+      │         ├── fd: (8)-->(9)
+      │         ├── project
+      │         │    ├── columns: k:1(int!null) y:7(int)
+      │         │    ├── ordering: +1
+      │         │    └── left-join (merge)
+      │         │         ├── columns: k:1(int!null) x:6(int) y:7(int)
+      │         │         ├── key: (1,6)
+      │         │         ├── fd: (6)-->(7)
+      │         │         ├── ordering: +1
+      │         │         ├── scan a
+      │         │         │    ├── columns: k:1(int!null)
+      │         │         │    ├── key: (1)
+      │         │         │    └── ordering: +1
+      │         │         ├── scan xy
+      │         │         │    ├── columns: x:6(int!null) y:7(int)
+      │         │         │    ├── key: (6)
+      │         │         │    ├── fd: (6)-->(7)
+      │         │         │    └── ordering: +6
+      │         │         └── merge-on
+      │         │              ├── left ordering: +1
+      │         │              ├── right ordering: +6
+      │         │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         │                   └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │         ├── scan uv
+      │         │    ├── columns: u:8(int!null) v:9(int)
+      │         │    ├── key: (8)
+      │         │    ├── fd: (8)-->(9)
+      │         │    └── ordering: +8
+      │         └── merge-on
+      │              ├── left ordering: +1
+      │              ├── right ordering: +8
+      │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │                   └── uv.u = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      ├── zip
+      │    ├── columns: column10:10(int)
+      │    ├── outer: (7,9)
+      │    └── generate_series(xy.y, uv.v) [type=int, outer=(7,9)]
+      └── true [type=bool]
+
+# Multiple functions.
+opt
+SELECT
+    generate_series(1, (SELECT v FROM uv WHERE u=k)),
+    information_schema._pg_expandarray(ARRAY[(SELECT x FROM xy WHERE x=k)])
+FROM a
+----
+project
+ ├── columns: generate_series:8(int) _pg_expandarray:13(tuple{int AS x, int AS n})
+ ├── inner-join-apply
+ │    ├── columns: k:1(int!null) v:7(int) column8:8(int) xy.x:9(int) x:11(int) n:12(int)
+ │    ├── left-join (merge)
+ │    │    ├── columns: k:1(int!null) v:7(int) xy.x:9(int)
+ │    │    ├── project
+ │    │    │    ├── columns: k:1(int!null) v:7(int)
+ │    │    │    ├── ordering: +1
+ │    │    │    └── left-join (merge)
+ │    │    │         ├── columns: k:1(int!null) u:6(int) v:7(int)
+ │    │    │         ├── key: (1,6)
+ │    │    │         ├── fd: (6)-->(7)
+ │    │    │         ├── ordering: +1
+ │    │    │         ├── scan a
+ │    │    │         │    ├── columns: k:1(int!null)
+ │    │    │         │    ├── key: (1)
+ │    │    │         │    └── ordering: +1
+ │    │    │         ├── scan uv
+ │    │    │         │    ├── columns: u:6(int!null) v:7(int)
+ │    │    │         │    ├── key: (6)
+ │    │    │         │    ├── fd: (6)-->(7)
+ │    │    │         │    └── ordering: +6
+ │    │    │         └── merge-on
+ │    │    │              ├── left ordering: +1
+ │    │    │              ├── right ordering: +6
+ │    │    │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │    │                   └── uv.u = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:9(int!null)
+ │    │    │    ├── key: (9)
+ │    │    │    └── ordering: +9
+ │    │    └── merge-on
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +9
+ │    │         └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │              └── xy.x = a.k [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
+ │    ├── zip
+ │    │    ├── columns: column8:8(int) x:11(int) n:12(int)
+ │    │    ├── outer: (7,9)
+ │    │    ├── generate_series(1, uv.v) [type=int, outer=(7)]
+ │    │    └── information_schema._pg_expandarray(ARRAY[xy.x]) [type=tuple{int AS x, int AS n}, outer=(9)]
+ │    └── true [type=bool]
+ └── projections [outer=(8,11,12)]
+      └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
 
 # --------------------------------------------------
 # NormalizeAnyFilter
