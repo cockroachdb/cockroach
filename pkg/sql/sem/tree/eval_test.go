@@ -1411,6 +1411,16 @@ func TestEval(t *testing.T) {
 		{`convert_to('abå', 'latin1')`, `'\x6162e5'`},
 		{`convert_to('abå', 'utf8')`, `'\x6162c3a5'`},
 		{`convert_to('ab漢', 'utf8')`, `'\x6162e6bca2'`},
+		{`(1,2,3)::string`, `'(1,2,3)'`},
+		{`(1,NULL,3)::string`, `'(1,,3)'`},
+		{`(1,'a"b',3)::string`, `'(1,"a""b",3)'`},
+		{`(1,(2,3))::string`, `'(1,"(2,3)")'`},
+		{`(1,(2,'a"b'))::string`, `'(1,"(2,""a""""b"")")'`},
+		{`(1,array['a','b"c'])::string`, `e'(1,"{""a"",""b\\\\""c""}")'`},
+		{`ARRAY[1,2,3]::string`, `'{1,2,3}'`},
+		{`ARRAY[1,NULL,3]::string`, `'{1,NULL,3}'`},
+		{`ARRAY['a b','c"d']::string`, `e'{"a b","c\\"d"}'`},
+		{`ARRAY[(1,'a b'),(2,'c"d')]::string`, `e'{"(1,\\"a b\\")","(2,\\"c\\"\\"d\\")"}'`},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	// We have to manually close this account because we're doing the evaluations
