@@ -304,6 +304,9 @@ func (g *exprsGen) translateType(typ string) string {
 
 	case "string":
 		return typ
+
+	case "int64":
+		return typ
 	}
 
 	if g.isValueOrSliceType(typ) {

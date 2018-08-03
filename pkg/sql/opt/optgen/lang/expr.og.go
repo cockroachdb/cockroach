@@ -1192,6 +1192,46 @@ func (e *StringExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
+type NumberExpr int64
+
+func (e *NumberExpr) Op() Operator {
+	return NumberOp
+}
+
+func (e *NumberExpr) ChildCount() int {
+	return 0
+}
+
+func (e *NumberExpr) Child(nth int) Expr {
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *NumberExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *NumberExpr) Value() interface{} {
+	return int64(*e)
+}
+
+func (e *NumberExpr) Visit(visit VisitFunc) Expr {
+	return e
+}
+
+func (e *NumberExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *NumberExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *NumberExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
 type CustomFuncExpr struct {
 	Name NameExpr
 	Args SliceExpr

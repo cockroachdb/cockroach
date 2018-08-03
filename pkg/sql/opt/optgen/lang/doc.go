@@ -200,16 +200,19 @@ This pattern matches "Eq", "Ne", "Lt", or "Gt" nodes.
 
 Matching Primitive Types
 
-Often, there are leaf nodes in the target expression tree that can be matched
-against primitive types, like simple strings. A literal string in a match
-pattern is interpreted as a "string matcher" and is tested for equality with
-the child node. For example:
+String and numeric constant nodes in the tree can be matched against literals.
+A literal string or number in a match pattern is interpreted as a matcher of
+that type, and will be tested for equality with the child node. For example:
 
   [EliminateConcat]
-  (Concat $left:* "") => $left
+  (Concat $left:* (Const "")) => $left
 
-If Concat's right operand is a literal string expression that's equal to the
-empty string, then the pattern matches.
+If Concat's right operand is a constant expression with the empty string as its
+value, then the pattern matches. Similarly, a constant numeric expression can be
+matched like this:
+
+  [LimitScan]
+  (Limit (Scan $def:*) (Const 1)) => (ScanOneRow $def)
 
 Matching Lists
 
@@ -337,11 +340,6 @@ case where the substitution node was already present in the match pattern:
 
   [EliminateAnd]
   (And $left:* (True)) => $left
-
-Literal strings can be part of a replace pattern, or even all of it, if the
-intent is to construct a constant string node:
-
-  (Concat "" "") => ""
 
 Custom Construction
 
@@ -475,13 +473,13 @@ grammar.
 
   rule         = func '=>' replace
   match        = func
-  replace      = func | ref | STRING
+  replace      = func | ref
   func         = '(' func-name arg* ')'
   func-name    = names | func
   names        = name ('|' name)*
   arg          = bind and | ref | and
   and          = expr ('&' and)
-  expr         = func | not | list | any | name | STRING
+  expr         = func | not | list | any | name | STRING | NUMBER
   not          = '^' expr
   list         = '[' list-child* ']'
   list-child   = list-any | arg
@@ -496,6 +494,7 @@ Here are the pseudo-regex definitions for the lexical tokens that aren't
 represented as single-quoted strings above:
 
   STRING     = " [^"\n]* "
+  NUMBER     = UnicodeDigit+
   IDENT      = UnicodeLetter (UnicodeLetter | UnicodeNumber)*
   COMMENT    = '#' .* \n
   WHITESPACE = UnicodeSpace+

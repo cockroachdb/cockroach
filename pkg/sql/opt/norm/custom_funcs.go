@@ -19,6 +19,7 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -730,32 +731,26 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 //
 // ----------------------------------------------------------------------
 
-// IsZero returns true if the input expression is a numeric constant with a
-// value of zero.
-func (c *CustomFuncs) IsZero(input memo.GroupID) bool {
-	d := c.f.mem.LookupPrivate(c.f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
+// EqualsNumber returns true if the given private numeric value (decimal, float,
+// or integer) is equal to the given integer value.
+func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
+	d := c.f.mem.LookupPrivate(private).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:
-		return t.Decimal.Sign() == 0
-	case *tree.DFloat:
-		return *t == 0
-	case *tree.DInt:
-		return *t == 0
-	}
-	return false
-}
+		if value == 0 {
+			return t.Decimal.IsZero()
+		} else if value == 1 {
+			return t.Decimal.Cmp(&tree.DecimalOne.Decimal) == 0
+		}
+		var dec apd.Decimal
+		dec.SetInt64(value)
+		return t.Decimal.Cmp(&dec) == 0
 
-// IsOne returns true if the input expression is a numeric constant with a
-// value of one.
-func (c *CustomFuncs) IsOne(input memo.GroupID) bool {
-	d := c.f.mem.LookupPrivate(c.f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
-	switch t := d.(type) {
-	case *tree.DDecimal:
-		return t.Decimal.Cmp(&tree.DecimalOne.Decimal) == 0
 	case *tree.DFloat:
-		return *t == 1.0
+		return *t == tree.DFloat(value)
+
 	case *tree.DInt:
-		return *t == 1
+		return *t == tree.DInt(value)
 	}
 	return false
 }
