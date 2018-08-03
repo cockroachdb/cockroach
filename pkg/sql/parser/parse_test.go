@@ -1251,6 +1251,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT '\abc\' NOT SIMILAR TO '-\___-\' ESCAPE '-'`, `SELECT not_similar_to_escape(e'\\abc\\', e'-\\___-\\', '-')`},
 		{`SELECT 'a' NOT SIMILAR TO '\a' ESCAPE ''`, `SELECT not_similar_to_escape('a', e'\\a', '')`},
 
+		{`SELECT (ARRAY (1, 2))[1]`, `SELECT (ARRAY[1, 2])[1]`},
+
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.
 		{`SELECT FAMILY(x)`, // lint: uppercase function OK
