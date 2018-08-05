@@ -102,7 +102,7 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 
 	res := DeriveInterestingOrderings(ev.Child(0)).Copy()
 	if !def.Ordering.Any() {
-		ordering := def.Ordering.Ordering()
+		ordering := def.Ordering.ToOrdering()
 		res.RestrictToPrefix(ordering)
 		if len(res) == 0 {
 			res.Add(ordering)
@@ -116,7 +116,7 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 
 func interestingOrderingsForLimit(ev memo.ExprView) opt.OrderingSet {
 	res := DeriveInterestingOrderings(ev.Child(0))
-	ord := ev.Private().(*props.OrderingChoice).Ordering()
+	ord := ev.Private().(*props.OrderingChoice).ToOrdering()
 	if ord.Empty() {
 		return res
 	}
