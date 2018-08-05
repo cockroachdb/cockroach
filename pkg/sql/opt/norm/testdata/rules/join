@@ -1610,3 +1610,69 @@ select
  │    └── columns: s:4(string)
  └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
       └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+
+# --------------------------------------------------
+# HoistJoinProject
+#   InnerJoinApply and LeftJoinApply tested by TryDecorrelateLimitOne tests.
+# --------------------------------------------------
+
+# Inner-join case.
+opt
+SELECT * FROM a INNER JOIN (SELECT x FROM b WHERE y=10) ON x=k
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null)
+ ├── key: (6)
+ ├── fd: (1)-->(2-5), (1)==(6), (6)==(1)
+ └── inner-join (lookup a)
+      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
+      ├── key columns: [6] = [1]
+      ├── key: (6)
+      ├── fd: ()-->(7), (1)-->(2-5), (1)==(6), (6)==(1)
+      ├── select
+      │    ├── columns: x:6(int!null) y:7(int!null)
+      │    ├── key: (6)
+      │    ├── fd: ()-->(7)
+      │    ├── scan b
+      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+      │         └── b.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── b.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+# Left-join case.
+opt
+SELECT * FROM a LEFT JOIN (SELECT x FROM b WHERE y=10) ON x=k
+----
+project
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5)
+ └── left-join (merge)
+      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+      ├── key: (1,6)
+      ├── fd: (1)-->(2-5), ()~~>(7), (1,6)-->(7)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    └── ordering: +1
+      ├── select
+      │    ├── columns: x:6(int!null) y:7(int!null)
+      │    ├── key: (6)
+      │    ├── fd: ()-->(7)
+      │    ├── ordering: +6 opt(7)
+      │    ├── scan b
+      │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7)
+      │    │    └── ordering: +6 opt(7)
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+      │         └── b.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +6
+           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+                └── b.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
