@@ -90,11 +90,10 @@ type SnapshotResponseStream interface {
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each incoming Raft message. If it returns
-	// an error it will be streamed back to the sender of the message as a
-	// RaftMessageResponse. If the stream parameter is nil the request should be
-	// processed synchronously. If the stream is non-nil the request can be
-	// processed asynchronously and any error should be sent on the stream.
+	// HandleRaftRequest is called for each incoming Raft message. The request is
+	// always processed asynchronously and the response is sent over respStream.
+	// If an error is encountered during asynchronous processing, it will be
+	// streamed back to the sender of the message as a RaftMessageResponse.
 	HandleRaftRequest(ctx context.Context, req *RaftMessageRequest,
 		respStream RaftMessageResponseStream) *roachpb.Error
 

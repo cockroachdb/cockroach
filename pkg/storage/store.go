@@ -3257,10 +3257,6 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// count them.
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
-	if respStream == nil {
-		return s.processRaftRequestAndReady(ctx, req)
-	}
-
 	value, ok := s.replicaQueues.Load(int64(req.RangeID))
 	if !ok {
 		value, _ = s.replicaQueues.LoadOrStore(int64(req.RangeID), unsafe.Pointer(&raftRequestQueue{}))
@@ -3304,23 +3300,6 @@ func (s *Store) withReplicaForRequest(
 	ctx = r.AnnotateCtx(ctx)
 	r.setLastReplicaDescriptors(req)
 	return f(ctx, r)
-}
-
-// processRaftRequestAndReady processes the (non-snapshot) Raft request on the
-// request's specified replica. It then handles any updated Raft Ready state.
-func (s *Store) processRaftRequestAndReady(
-	ctx context.Context, req *RaftMessageRequest,
-) *roachpb.Error {
-	return s.withReplicaForRequest(ctx, req, func(ctx context.Context, r *Replica) *roachpb.Error {
-		if pErr := s.processRaftRequestWithReplica(ctx, r, req); pErr != nil {
-			return pErr
-		}
-
-		if _, expl, err := r.handleRaftReadyRaftMuLocked(noSnap); err != nil {
-			fatalOnRaftReadyErr(ctx, expl, err)
-		}
-		return nil
-	})
 }
 
 // processRaftRequestWithReplica processes the (non-snapshot) Raft request on
