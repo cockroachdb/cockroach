@@ -22,7 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-func TestOrderingChoice_Ordering(t *testing.T) {
+func TestOrderingChoice_FromOrdering(t *testing.T) {
+	var oc props.OrderingChoice
+	oc.FromOrdering(opt.Ordering{1, -2, 3})
+	if exp, actual := "+1,-2,+3", oc.String(); exp != actual {
+		t.Errorf("expected %s, got %s", exp, actual)
+	}
+}
+
+func TestOrderingChoice_ToOrdering(t *testing.T) {
 	testcases := []struct {
 		s string
 		o opt.Ordering
@@ -35,7 +43,7 @@ func TestOrderingChoice_Ordering(t *testing.T) {
 
 	for _, tc := range testcases {
 		choice := props.ParseOrderingChoice(tc.s)
-		ordering := choice.Ordering()
+		ordering := choice.ToOrdering()
 		if len(ordering) != len(tc.o) {
 			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.o, ordering)
 		} else {

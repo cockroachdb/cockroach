@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -121,10 +120,7 @@ func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy)
 }
 
 func (b *Builder) constructGroupBy(
-	input memo.GroupID,
-	groupingColSet opt.ColSet,
-	aggCols []scopeColumn,
-	ordering props.OrderingChoice,
+	input memo.GroupID, groupingColSet opt.ColSet, aggCols []scopeColumn, ordering opt.Ordering,
 ) memo.GroupID {
 	colList := make(opt.ColList, 0, len(aggCols))
 	groupList := make([]memo.GroupID, 0, len(aggCols))
@@ -149,15 +145,13 @@ func (b *Builder) constructGroupBy(
 		b.factory.InternList(groupList),
 		b.factory.InternColList(colList),
 	)
-	def := b.factory.InternGroupByDef(&memo.GroupByDef{
-		GroupingCols: groupingColSet,
-		// The ordering of the GROUP BY is inherited from the input.
-		Ordering: ordering,
-	})
+	def := memo.GroupByDef{GroupingCols: groupingColSet}
+	// The ordering of the GROUP BY is inherited from the input.
+	def.Ordering.FromOrdering(ordering)
 	if groupingColSet.Empty() {
-		return b.factory.ConstructScalarGroupBy(input, aggs, def)
+		return b.factory.ConstructScalarGroupBy(input, aggs, b.factory.InternGroupByDef(&def))
 	}
-	return b.factory.ConstructGroupBy(input, aggs, def)
+	return b.factory.ConstructGroupBy(input, aggs, b.factory.InternGroupByDef(&def))
 }
 
 // buildAggregation builds the pre-projection and the aggregation operators.
@@ -262,7 +256,7 @@ func (b *Builder) buildAggregation(
 		aggInScope.group,
 		groupingColSet,
 		aggCols,
-		aggInScope.physicalProps.Ordering,
+		aggInScope.ordering,
 	)
 
 	// Wrap with having filter if it exists.
