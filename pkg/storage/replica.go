@@ -3187,11 +3187,6 @@ func (r *Replica) requestToProposal(
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
 		}
-		if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
-			// For backwards compatibility, tests that use TestingEvalFilter
-			// need the original request to be preserved. See #10493
-			proposal.command.TestingBatchRequest = &ba
-		}
 	}
 
 	return proposal, pErr
