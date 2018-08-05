@@ -134,12 +134,6 @@ func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 func init() {
 	initCLIDefaults()
 
-	// Change the logging defaults for the main cockroach binary.
-	// The value is overridden after command-line parsing.
-	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
-		panic(err)
-	}
-
 	// Every command but start will inherit the following setting.
 	cockroachCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		extraClientFlagInit()
@@ -164,6 +158,13 @@ func init() {
 			flag.Hidden = true
 		} else if flag.Name == logflags.ShowLogsName {
 			flag.Hidden = true
+		} else if flag.Name == logflags.LogToStderrName {
+			// The actual default value for --logtostderr is overridden in
+			// cli.Main. We don't override it here as doing so would affect all of
+			// the cli tests and any package which depends on cli. The following line
+			// is only overriding the default value for the pflag package (and what
+			// is visible in help text), not the stdlib flag value.
+			flag.DefValue = "NONE"
 		}
 		pf.AddFlag(flag)
 	})
