@@ -99,14 +99,13 @@ type ProposalData struct {
 // finishApplication is called when a command application has finished. The
 // method will be called downstream of Raft if the command required consensus,
 // but can be called upstream of Raft if the command did not and was never
-// proposed. proposal.doneCh is signaled with pr so that the proposer is
-// unblocked.
+// proposed.
 //
 // It first invokes the endCmds function and then sends the specified
 // proposalResult on the proposal's done channel. endCmds is invoked here in
-// order to allow the original client to be canceled and possibly no longer
-// listening to this done channel, and so can't be counted on to invoke endCmds
-// itself.
+// order to allow the original client to be canceled. (When the original client
+// is canceled, it won't be listening to this done channel, and so it can't be
+// counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
