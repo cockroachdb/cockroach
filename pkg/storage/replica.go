@@ -4008,8 +4008,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// > Other state variables are safe to lose on a restart, as they can all be
 	// > recreated. The most interesting example is the commit index, which can
 	// > safely be reinitialized to zero on a restart.
-	mgsApps, otherMsgs := splitMsgApps(rd.Messages)
-	r.sendRaftMessages(ctx, mgsApps)
+	msgApps, otherMsgs := splitMsgApps(rd.Messages)
+	r.sendRaftMessages(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed via the "distinct" batch
@@ -4233,7 +4233,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // splitMsgApps splits the Raft message slice into two slices, one containing
 // MsgApps and one containing all other message types. Each slice retains the
 // relative ordering between messages in the original slice.
-func splitMsgApps(msgs []raftpb.Message) (mgsApps, otherMsgs []raftpb.Message) {
+func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 	splitIdx := 0
 	for i, msg := range msgs {
 		if msg.Type == raftpb.MsgApp {
