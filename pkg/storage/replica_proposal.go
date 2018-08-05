@@ -107,13 +107,6 @@ type ProposalData struct {
 // order to allow the original client to be canceled and possibly no longer
 // listening to this done channel, and so can't be counted on to invoke endCmds
 // itself.
-//
-// Note: this should not be called upstream of Raft because, in case pr.Err is
-// set, it clears the intents from pr before sending it on the channel. This
-// clearing should not be done upstream of Raft because, in cases of errors
-// encountered upstream of Raft, we might still want to resolve intents:
-// upstream of Raft, pr.intents represent intents encountered by a request, not
-// the current txn's intents.
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
