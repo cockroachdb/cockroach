@@ -309,6 +309,65 @@ func (c *CustomFuncs) EnsureKey(in memo.GroupID) memo.GroupID {
 	return c.f.ConstructRowNumber(in, c.f.InternRowNumberDef(def))
 }
 
+// KeyCols returns a column set consisting of the columns that make up the
+// candidate key for the given group (a key must be present).
+func (c *CustomFuncs) KeyCols(group memo.GroupID) opt.ColSet {
+	keyCols, ok := c.CandidateKey(group)
+	if !ok {
+		panic("expected group to have key")
+	}
+	return keyCols
+}
+
+// NonKeyCols returns a column set consisting of the output columns of the given
+// group, minus the columns that make up its candidate key (which it must have).
+func (c *CustomFuncs) NonKeyCols(group memo.GroupID) opt.ColSet {
+	keyCols, ok := c.CandidateKey(group)
+	if !ok {
+		panic("expected group to have key")
+	}
+	return c.OutputCols(group).Difference(keyCols)
+}
+
+// MakeAggCols constructs a new Aggregations operator containing an aggregate
+// function of the given operator type for each of column in the given set. For
+// example, for ConstAggOp and columns (1,2), this expression is returned:
+//
+//   (Aggregations
+//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
+//     [1,2]
+//   )
+//
+func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.GroupID {
+	colsLen := cols.Len()
+	outElems := make([]memo.GroupID, colsLen)
+	outColList := make(opt.ColList, colsLen)
+	c.makeAggCols(aggOp, cols, outElems, outColList)
+	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+}
+
+// MakeAggCols2 is similar to MakeAggCols, except that it allows two different
+// sets of aggregate functions to be added to the resulting Aggregations
+// operator, with one set appended to the other, like this:
+//
+//   (Aggregations
+//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2)) (FirstAgg (Variable 3))]
+//     [1,2,3]
+//   )
+//
+func (c *CustomFuncs) MakeAggCols2(
+	aggOp opt.Operator, cols opt.ColSet, aggOp2 opt.Operator, cols2 opt.ColSet,
+) memo.GroupID {
+	colsLen := cols.Len()
+	outElems := make([]memo.GroupID, colsLen+cols2.Len())
+	outColList := make(opt.ColList, len(outElems))
+
+	c.makeAggCols(aggOp, cols, outElems, outColList)
+	c.makeAggCols(aggOp2, cols2, outElems[colsLen:], outColList[colsLen:])
+
+	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+}
+
 // EnsureNotNullIfCountRows searches for a not-null output column in the given
 // group. If such a column does not exist, it checks whether a CountRows
 // aggregate function exists. If so, it synthesizes a new True constant column
@@ -383,76 +442,35 @@ func (c *CustomFuncs) EnsureAggsIgnoreNulls(in, aggs memo.GroupID) memo.GroupID 
 	return c.f.ConstructAggregations(c.f.InternList(outElems), aggsExpr.Cols())
 }
 
-// AggregateNonKeyCols constructs a new Aggregations operator containing an
-// ConstAgg aggregate function for each non-key column in the given group.
-// For example, if the group has output columns (1,2,3), with a key of (1),
-// then the following operator is returned:
-//
-//   (Aggregations
-//     [(ConstAgg (Variable 2)) (ConstAgg (Variable 3))]
-//     [2,3]
-//   )
-//
-// This is used when grouping by key columns. Non-key columns are functionally
-// dependent on the key columns, and so are constant within each group (and
-// therefore can be aggregated using ConstAgg). See the TryDecorrelateSemiJoin
-// rule.
-func (c *CustomFuncs) AggregateNonKeyCols(group memo.GroupID) memo.GroupID {
-	keyCols, ok := c.CandidateKey(group)
-	if !ok {
-		panic("expected input expression to have key")
-	}
-	nonKeyCols := c.OutputCols(group).Difference(keyCols)
-	return c.appendConstAggCols(0, nonKeyCols)
-}
-
-// AppendAggregatedNonKeyCols constructs a new Aggregations operator containing
-// aggregate functions from the given Aggregations operator, plus a ConstAgg
-// aggregate function for each non-key column in the given input group. For
-// example, if the group has output columns (1,2,3), with a key of (1), and an
-// existing SUM aggregate, then the following operator is returned:
-//
-//   (Aggregations
-//     [(Sum (Variable 4)) (ConstAgg (Variable 2)) (ConstAgg (Variable 3))]
-//     [4,2,3]
-//   )
-//
-// This is used when grouping by key columns. Non-key columns are functionally
-// dependent on the key columns, and so are constant within each group (and
-// therefore can be aggregated using ConstAgg). See the
-// TryDecorrelateScalarGroupBy rule.
-func (c *CustomFuncs) AppendAggregatedNonKeyCols(aggs, in memo.GroupID) memo.GroupID {
-	keyCols, ok := c.CandidateKey(in)
-	if !ok {
-		panic("expected input expression to have key")
-	}
-	nonKeyCols := c.OutputCols(in).Difference(keyCols)
-	return c.appendConstAggCols(aggs, nonKeyCols)
-}
-
-// GroupByKey constructs a new unordered GroupByDef using the candidate key
-// columns from the given input group as the grouping columns.
-func (c *CustomFuncs) GroupByKey(in memo.GroupID) memo.PrivateID {
-	keyCols, ok := c.CandidateKey(in)
-	if !ok {
-		panic("expected input expression to have key")
-	}
+// MakeGroupByDef constructs a new unordered GroupByDef using the given grouping
+// columns.
+func (c *CustomFuncs) MakeGroupByDef(groupingCols opt.ColSet) memo.PrivateID {
 	return c.f.InternGroupByDef(&memo.GroupByDef{
-		GroupingCols: keyCols,
+		GroupingCols: groupingCols,
 	})
 }
 
-// GroupByUnionKey constructs a new unordered GroupByDef using the candidate key
-// columns from the given input group union'ed with the grouping columns from
-// the given GroupByDef.
-func (c *CustomFuncs) GroupByUnionKey(in memo.GroupID, def memo.PrivateID) memo.PrivateID {
-	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
-	keyCols, ok := c.CandidateKey(in)
-	if !ok {
-		panic("expected input expression to have key")
-	}
+// MakeOrderedGroupByDef constructs a new GroupByDef using the given grouping
+// columns and OrderingChoice private.
+func (c *CustomFuncs) MakeOrderedGroupByDef(
+	groupingCols opt.ColSet, ordering *props.OrderingChoice,
+) memo.PrivateID {
 	return c.f.InternGroupByDef(&memo.GroupByDef{
-		GroupingCols: groupingCols.Union(keyCols),
+		GroupingCols: groupingCols,
+		Ordering:     *ordering,
+	})
+}
+
+// AddColsToGroupByDef returns a new GroupByDef that is a copy of the given
+// GroupByDef, except with the given set of grouping columns union'ed with the
+// existing grouping columns.
+func (c *CustomFuncs) AddColsToGroupByDef(
+	groupByDef memo.PrivateID, groupingCols opt.ColSet,
+) memo.PrivateID {
+	def := c.f.mem.LookupPrivate(groupByDef).(*memo.GroupByDef)
+	return c.f.InternGroupByDef(&memo.GroupByDef{
+		GroupingCols: def.GroupingCols.Union(groupingCols),
+		Ordering:     def.Ordering,
 	})
 }
 

@@ -345,6 +345,28 @@ SELECT c_id, generate_series(1, (SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FR
 4  2
 6  1
 
+# Customers that have no orders with a NULL ship state.
+query IT rowsort
+SELECT *
+FROM c
+WHERE (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+----
+1  CA
+6  FL
+
+# Customers that have first order shipping to 'CA' or 'WY' (no NULL ship).
+query IT
+SELECT *
+FROM c
+WHERE
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+ORDER BY c_id
+----
+1  CA
+2  TX
+4  TX
+
 # Max1Row prevents decorrelation.
 statement error could not decorrelate subquery
 SELECT *
@@ -752,6 +774,39 @@ ORDER BY c.c_id, o.o_id
 4  80    WY
 5  NULL  NULL
 6  90    WA
+
+# Customers, with boolean indicating whether they have at least one order with a
+# NULL ship state.
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+FROM c
+ORDER BY c.c_id
+----
+1  true
+2  false
+3  false
+4  false
+5  false
+6  true
+
+# Customers, with boolean indicating whether their first order shipped to 'CA'
+# or 'WY' (no NULL ship).
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+FROM c
+ORDER BY c_id
+----
+1  true
+2  true
+3  NULL
+4  true
+5  NULL
+6  false
 
 # ConcatAgg prevents decorrelation.
 statement error could not decorrelate subquery
