@@ -5067,16 +5067,12 @@ func (r *Replica) checkForcedErrLocked(
 //
 // This method returns true if the command successfully applied a
 // replica change.
-//
-// TODO(tschottdorf): once we properly check leases and lease requests etc,
-// make sure that the error returned from this method is always populated in
-// those cases, as one of the callers uses it to abort replica changes.
 func (r *Replica) processRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	term, raftIndex uint64,
 	raftCmd storagebase.RaftCommand,
-) bool {
+) (changedRepl bool) {
 	if raftIndex == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
 	}
