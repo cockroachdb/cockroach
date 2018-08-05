@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // OrderingChoice defines the set of possible row orderings that are provided or
@@ -184,10 +185,20 @@ func (oc *OrderingChoice) Any() bool {
 	return len(oc.Columns) == 0
 }
 
-// Ordering returns an opt.Ordering instance composed of the shortest possible
+// FromOrdering sets this OrderingChoice to the given opt.Ordering.
+func (oc *OrderingChoice) FromOrdering(ord opt.Ordering) {
+	oc.Optional = util.FastIntSet{}
+	oc.Columns = make([]OrderingColumnChoice, len(ord))
+	for i := range ord {
+		oc.Columns[i].Group.Add(int(ord[i].ID()))
+		oc.Columns[i].Descending = ord[i].Descending()
+	}
+}
+
+// ToOrdering returns an opt.Ordering instance composed of the shortest possible
 // orderings that this instance allows. If there are several, then one is chosen
 // arbitrarily.
-func (oc *OrderingChoice) Ordering() opt.Ordering {
+func (oc *OrderingChoice) ToOrdering() opt.Ordering {
 	ordering := make(opt.Ordering, len(oc.Columns))
 	for i := range oc.Columns {
 		col := &oc.Columns[i]

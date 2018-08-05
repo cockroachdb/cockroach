@@ -36,8 +36,8 @@ func (b *Builder) constructDistinct(inScope *scope) memo.GroupID {
 	// This will cause an error for queries like:
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
-	for _, col := range inScope.physicalProps.Ordering.Columns {
-		if !col.Group.Intersects(def.GroupingCols) {
+	for _, col := range inScope.ordering {
+		if !def.GroupingCols.Contains(int(col.ID())) {
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
@@ -81,15 +81,15 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// Check that the DISTINCT ON expressions match the initial ORDER BY
 	// expressions.
 	var seen opt.ColSet
-	for _, col := range inScope.physicalProps.Ordering.Columns {
-		if !distinctOnCols.Intersects(col.Group) {
+	for _, col := range inScope.ordering {
+		if !distinctOnCols.Contains(int(col.ID())) {
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			)})
 		}
-		seen.UnionWith(col.Group)
-		if distinctOnCols.SubsetOf(seen) {
+		seen.Add(int(col))
+		if seen.Equals(distinctOnCols) {
 			// All DISTINCT ON columns showed up; other columns are allowed in the
 			// rest of the ORDER BY (case 2 above).
 			break
@@ -98,7 +98,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 
 	def := memo.GroupByDef{
 		GroupingCols: distinctOnCols.Copy(),
-		Ordering:     inScope.physicalProps.Ordering,
+		Ordering:     inScope.makeOrderingChoice(),
 	}
 
 	// Set up a new scope for the output of DISTINCT ON. This scope differs from
@@ -129,12 +129,11 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 		}
 	}
 
-	outScope.physicalProps.Presentation = inScope.physicalProps.Presentation
 	// Retain the prefix of the ordering that refers to the ON columns.
-	outScope.physicalProps.Ordering = inScope.physicalProps.Ordering.Copy()
-	for i, col := range inScope.physicalProps.Ordering.Columns {
-		if !distinctOnCols.Intersects(col.Group) {
-			outScope.physicalProps.Ordering.Truncate(i)
+	outScope.ordering = inScope.ordering
+	for i, col := range inScope.ordering {
+		if !distinctOnCols.Contains(int(col.ID())) {
+			outScope.ordering = outScope.ordering[:i]
 			break
 		}
 	}
