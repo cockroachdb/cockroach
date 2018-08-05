@@ -231,12 +231,7 @@ message RaftCommand {
   // well as that uproots whatever ordering was originally envisioned.
   uint64 max_lease_index = 4;
 
-  // testing_batch_request is the KV request that generated this Raft command.
-  //
-  // TODO(bdarnell): This used to be a pre-proposer-evaluated-kv field; we're
-  // now exclusively proposer-evaluated, but it is still needed by certain tests
-  // that use TestingEvalFilter. See #10493.
-  roachpb.BatchRequest testing_batch_request = 3;
+  reserved 3;
 
   // Proposer-evaluated KV mode.
 
