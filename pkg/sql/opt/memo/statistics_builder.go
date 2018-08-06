@@ -523,10 +523,130 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *props.ColumnStat
 func (sb *statisticsBuilder) buildJoin(
 	op opt.Operator, leftStats, rightStats *props.Statistics, on ExprView,
 ) {
-	// TODO: Need better estimate based on actual on conditions.
-	sb.s.RowCount = leftStats.RowCount * rightStats.RowCount
-	if on.Operator() != opt.TrueOp {
-		sb.s.RowCount /= 10
+	// Estimating selectivity for semi-join and anti-join is error-prone.
+	// For now, just propagate stats from the left side.
+	switch sb.ev.Operator() {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		sb.s.RowCount = leftStats.RowCount
+		sb.s.Selectivity = 1
+		return
+	}
+
+	// Shortcut if there are no ON conditions.
+	if on.Operator() == opt.TrueOp {
+		sb.s.RowCount = leftStats.RowCount * rightStats.RowCount
+		sb.s.Selectivity = 1
+		return
+	}
+
+	// Shortcut if the ON condition is false or there is a contradiction.
+	constraintSet := on.Logical().Scalar.Constraints
+	if on.Operator() == opt.FalseOp || constraintSet == constraint.Contradiction {
+		switch sb.ev.Operator() {
+		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+			sb.s.RowCount = 0
+
+		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+			// All rows from left side should be in the result.
+			sb.s.RowCount = leftStats.RowCount
+
+		case opt.RightJoinOp, opt.RightJoinApplyOp:
+			// All rows from right side should be in the result.
+			sb.s.RowCount = rightStats.RowCount
+
+		case opt.FullJoinOp, opt.FullJoinApplyOp:
+			// All rows from both sides should be in the result.
+			sb.s.RowCount = leftStats.RowCount + rightStats.RowCount
+		}
+		sb.s.Selectivity = 0
+		return
+	}
+
+	// Update stats based on ON conditions.
+
+	leftBuilder := sb.makeStatisticsBuilder(leftStats, sb.ev.Child(0))
+	rightBuilder := sb.makeStatisticsBuilder(rightStats, sb.ev.Child(1))
+	equivGroups := sb.getEquivalencyGroups(&on.Logical().Scalar.FuncDeps)
+
+	// Calculate distinct counts for constrained columns in the ON conditions
+	// ----------------------------------------------------------------------
+	getBuilder := func(col opt.ColumnID) *statisticsBuilder {
+		if leftBuilder.props.OutputCols.Contains(int(col)) {
+			return &leftBuilder
+		} else if rightBuilder.props.OutputCols.Contains(int(col)) {
+			return &rightBuilder
+		}
+		return nil
+	}
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, equivGroups, getBuilder)
+
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies.
+	leftCols := constrainedCols.Intersection(leftBuilder.props.OutputCols)
+	rightCols := constrainedCols.Intersection(rightBuilder.props.OutputCols)
+	leftCols = sb.tryReduceCols(&leftBuilder, leftCols)
+	rightCols = sb.tryReduceCols(&rightBuilder, rightCols)
+	constrainedCols = leftCols.Union(rightCols)
+
+	// Calculate selectivity
+	// ---------------------
+	sb.s.Selectivity = sb.selectivityFromDistinctCounts(constrainedCols, getBuilder)
+	sb.s.Selectivity *= sb.selectivityFromEquivalencies(equivGroups, getBuilder)
+	sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
+
+	// Calculate row count
+	// -------------------
+	inputRowCount := leftStats.RowCount * rightStats.RowCount
+	sb.applySelectivity(inputRowCount)
+
+	// The above calculation is for inner joins. Tweak the row count and
+	// distinct counts for other types of joins.
+	var colsToRemove opt.ColSet
+	for col := range sb.s.ColStats {
+		colsToRemove.Add(int(col))
+	}
+
+	// Remove invalid distinct counts.
+	switch sb.ev.Operator() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		// Keep only column stats from the right side. The stats from the left side
+		// are not valid.
+		colsToRemove.DifferenceWith(rightBuilder.props.OutputCols)
+
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		// Keep only column stats from the left side. The stats from the right side
+		// are not valid.
+		colsToRemove.DifferenceWith(leftBuilder.props.OutputCols)
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		// Do not keep any column stats.
+
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		// Keep all column stats.
+		colsToRemove = opt.ColSet{}
+	}
+
+	colsToRemove.ForEach(func(i int) {
+		delete(sb.s.ColStats, opt.ColumnID(i))
+	})
+
+	// Tweak the row count.
+	innerJoinRowCount := sb.s.RowCount
+	switch sb.ev.Operator() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		// All rows from left side should be in the result.
+		sb.s.RowCount = max(innerJoinRowCount, leftStats.RowCount)
+
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		// All rows from right side should be in the result.
+		sb.s.RowCount = max(innerJoinRowCount, rightStats.RowCount)
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		// All rows from both sides should be in the result.
+		// T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
+		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
+		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
+		sb.s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
 	}
 }
 
@@ -536,13 +656,12 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet) *props.ColumnStatist
 	leftBuilder := sb.makeStatisticsBuilder(leftStats, sb.ev.Child(0))
 	rightBuilder := sb.makeStatisticsBuilder(rightStats, sb.ev.Child(1))
 
-	// The number of distinct values for the column subsets doesn't change
-	// significantly unless the column subsets are part of the ON conditions.
-	// For now, add them all unchanged.
 	switch sb.ev.Operator() {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
-		return sb.copyColStat(&leftBuilder, colSet)
+		colStat := sb.copyColStat(&leftBuilder, colSet)
+		sb.applySelectivityToColStat(colStat, leftStats.RowCount)
+		return colStat
 
 	default:
 		// Column stats come from both sides of join.
@@ -551,21 +670,54 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet) *props.ColumnStatist
 		rightCols := sb.ev.Child(1).Logical().Relational.OutputCols.Copy()
 		rightCols.IntersectionWith(colSet)
 
-		// TODO(rytaft): Apply selectivity to the distinct counts based on the join
-		// condition.
-
+		// Join selectivity affects the distinct counts for different columns
+		// in different ways depending on the type of join.
+		//
+		// - For FULL OUTER joins, the selectivity has no impact on distinct count;
+		//   all rows from the input are included at least once in the output.
+		// - For LEFT OUTER joins, the selectivity only impacts the distinct count
+		//   of columns from the right side of the join; all rows from the left
+		//   side are included at least once in the output.
+		// - For RIGHT OUTER joins, the selectivity only impacts the distinct count
+		//   of columns from the left side of the join; all rows from the right
+		//   side are included at least once in the output.
+		// - For INNER joins, the selectivity impacts the distinct count of all
+		//   columns.
+		var colStat *props.ColumnStatistic
+		inputRowCount := leftStats.RowCount * rightStats.RowCount
 		if rightCols.Len() == 0 {
-			return sb.copyColStat(&leftBuilder, leftCols)
+			colStat = sb.copyColStat(&leftBuilder, leftCols)
+			switch sb.ev.Operator() {
+			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
+				sb.applySelectivityToColStat(colStat, inputRowCount)
+			}
+		} else if leftCols.Len() == 0 {
+			colStat = sb.copyColStat(&rightBuilder, rightCols)
+			switch sb.ev.Operator() {
+			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
+				sb.applySelectivityToColStat(colStat, inputRowCount)
+			}
+		} else {
+			// Make a copy of the input column stats so we don't modify the originals.
+			leftColStat := *leftBuilder.colStat(leftCols)
+			rightColStat := *rightBuilder.colStat(rightCols)
+			switch sb.ev.Operator() {
+			case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+				sb.applySelectivityToColStat(&leftColStat, inputRowCount)
+				sb.applySelectivityToColStat(&rightColStat, inputRowCount)
+			case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+				sb.applySelectivityToColStat(&rightColStat, inputRowCount)
+			case opt.RightJoinOp, opt.RightJoinApplyOp:
+				sb.applySelectivityToColStat(&leftColStat, inputRowCount)
+			}
+			colStat = sb.makeColStat(colSet)
+			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
 		}
 
-		if leftCols.Len() == 0 {
-			return sb.copyColStat(&rightBuilder, rightCols)
+		// The distinct count should be no larger than the row count.
+		if colStat.DistinctCount > sb.s.RowCount {
+			colStat.DistinctCount = sb.s.RowCount
 		}
-
-		leftColStat := leftBuilder.colStat(leftCols)
-		rightColStat := rightBuilder.colStat(rightCols)
-		colStat := sb.makeColStat(colSet)
-		colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
 		return colStat
 	}
 }
