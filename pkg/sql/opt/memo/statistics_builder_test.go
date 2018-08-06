@@ -69,12 +69,10 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-               sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
-		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
-		if isContradiction {
-			sb.s.Selectivity = 0
-		}
-		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
+		getBuilder := func(opt.ColumnID) *statisticsBuilder { return &inputStatsBuilder }
+		numUnappliedConstraints := sb.applyConstraintSet(cs, getBuilder)
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(cols, getBuilder)
 		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
@@ -103,12 +101,10 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-               sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
-		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
-		if isContradiction {
-			sb.s.Selectivity = 0
-		}
-		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
+		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
+		getBuilder := func(opt.ColumnID) *statisticsBuilder { return &inputStatsBuilder }
+		numUnappliedConstraints := sb.applyConstraintSet(cs, getBuilder)
+		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(cols, getBuilder)
 		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
