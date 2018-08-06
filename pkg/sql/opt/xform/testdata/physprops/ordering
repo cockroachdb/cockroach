@@ -251,7 +251,6 @@ SELECT array_agg(z) FROM (SELECT * FROM a ORDER BY y)
 ----
 scalar-group-by
  ├── columns: array_agg:5(decimal[])
- ├── ordering: +2
  ├── sort
  │    ├── columns: y:2(float!null) z:3(decimal)
  │    ├── ordering: +2
@@ -266,7 +265,6 @@ SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY x, y DESC)
 ----
 scalar-group-by
  ├── columns: array_agg:5(int[])
- ├── ordering: +1,-2
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null)
  │    └── ordering: +1,-2
@@ -800,3 +798,127 @@ offset
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    └── ordering: +1,+2,+3
  └── const: 10 [type=int]
+
+# --------------------------------------------------
+# DistinctOn
+# --------------------------------------------------
+
+# DISTINCT doesn't require any particular ordering of its input. It could pass
+# through the requirement, but that doesn't improve the estimated cost in this
+# case.
+opt
+SELECT DISTINCT b, c FROM abc ORDER BY b
+----
+sort
+ ├── columns: b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ └── distinct-on
+      ├── columns: b:2(int!null) c:3(int!null)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      └── scan abc
+           └── columns: b:2(int!null) c:3(int!null)
+
+# In this case the ordeirng is passed through.
+opt
+SELECT DISTINCT a, b, c FROM abc ORDER BY a, b
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── ordering: +1,+2
+
+# DISTINCT ON requires the ordering of its input, as it affects the results
+# (values of a in this case).
+opt
+SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b
+----
+distinct-on
+ ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +2
+ │    └── scan abc
+ │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.a [type=int]
+
+opt
+SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
+----
+distinct-on
+ ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── ordering: +2,+3,+1
+ │    └── scan abc
+ │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.a [type=int]
+
+# Pass through a stronger ordering from above.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.c [type=int]
+
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a) ORDER BY a, b
+----
+distinct-on
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.c [type=int]
+
+# Pass down the internal ordering if it is stronger.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.c [type=int]
+
+# Can't pass down incompatible ordering.
+opt
+SELECT * FROM (SELECT DISTINCT ON(b, c) a, b, c FROM abc ORDER BY b, c) ORDER BY c
+----
+sort
+ ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── ordering: +3
+ └── distinct-on
+      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── sort
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    ├── ordering: +2,+3
+      │    └── scan abc
+      │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── aggregations
+           └── first-agg [type=int]
+                └── variable: abc.a [type=int]

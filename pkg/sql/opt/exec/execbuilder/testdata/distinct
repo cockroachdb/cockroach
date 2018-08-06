@@ -21,13 +21,12 @@ distinct   ·            ·
 query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
-sort            ·            ·
- │              order        +z
- └── distinct   ·            ·
-      │         distinct on  y, z
-      └── scan  ·            ·
-·               table        xyz@primary
-·               spans        ALL
+distinct   ·            ·
+ │         distinct on  y, z
+ │         order key    z
+ └── scan  ·            ·
+·          table        xyz@foo
+·          spans        ALL
 
 query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
@@ -66,13 +65,12 @@ sort                 ·            ·
 query TTT
 EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
-sort            ·            ·
- │              order        +z
- └── distinct   ·            ·
-      │         distinct on  w, z
-      └── scan  ·            ·
-·               table        xyz@primary
-·               spans        ALL
+distinct   ·            ·
+ │         distinct on  w, z
+ │         order key    z
+ └── scan  ·            ·
+·          table        xyz@foo
+·          spans        ALL
 
 query TTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y

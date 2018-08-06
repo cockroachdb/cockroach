@@ -136,6 +136,7 @@ func init() {
 		opt.MinOp:             typeAsFirstArg,
 		opt.ConstAggOp:        typeAsFirstArg,
 		opt.ConstNotNullAggOp: typeAsFirstArg,
+		opt.FirstAggOp:        typeAsFirstArg,
 	}
 
 	for _, op := range opt.BooleanOperators {

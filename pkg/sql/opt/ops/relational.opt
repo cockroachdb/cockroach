@@ -254,6 +254,19 @@ define ScalarGroupBy {
 # we are grouping on these two columns, the values output can be either (1, 2.0)
 # or (1.0, 2), but not (1.0, 2.0).
 #
+# The execution of DistinctOn resembles that of Select more than that of
+# GroupBy: each row is tested against a map of what groups we have seen already,
+# and is either passed through or discarded. In particular, note that this
+# preserves the input ordering.
+#
+# The ordering in the private will be required of the input; it determines which
+# row can get "chosen" for each group of values on the grouping columns.
+# There is no restriction on the ordering; but note that grouping columns are
+# inconsequential - they can appear anywhere in the ordering and they won't
+# change the results (other than the result ordering).
+#
+# TODO(radu): actually set grouping columns as optional cols in Ordering.
+#
 # DistinctOn uses an Aggregations child and the GroupByDef private so that it's
 # polymorphic with GroupBy and can be used in the same rules (when appropriate).
 # In the DistinctOn case, the aggregations can be only FirstAgg or ConstAgg.

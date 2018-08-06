@@ -25,20 +25,19 @@ limit                 ·       ·            (k, v, w)  ·
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
-tree                           field        description  columns  ordering
-limit                          ·            ·            (w)      weak-key(w); +w
- │                             count        25           ·        ·
- └── sort                      ·            ·            (w)      weak-key(w); +w
-      │                        order        +w           ·        ·
-      └── distinct             ·            ·            (w)      weak-key(w); +w
-           │                   distinct on  w            ·        ·
-           └── limit           ·            ·            (w)      +w
-                │              count        100          ·        ·
-                └── sort       ·            ·            (w)      +w
-                     │         order        +w           ·        ·
-                     └── scan  ·            ·            (w)      ·
-·                              table        t@primary    ·        ·
-·                              spans        ALL          ·        ·
+tree                      field        description  columns  ordering
+limit                     ·            ·            (w)      weak-key(w); +w
+ │                        count        25           ·        ·
+ └── distinct             ·            ·            (w)      weak-key(w); +w
+      │                   distinct on  w            ·        ·
+      │                   order key    w            ·        ·
+      └── limit           ·            ·            (w)      +w
+           │              count        100          ·        ·
+           └── sort       ·            ·            (w)      +w
+                │         order        +w           ·        ·
+                └── scan  ·            ·            (w)      ·
+·                         table        t@primary    ·        ·
+·                         spans        ALL          ·        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5

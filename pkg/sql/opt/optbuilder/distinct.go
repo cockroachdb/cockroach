@@ -15,8 +15,10 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // constructDistinct wraps inScope.group in a DistinctOn operator corresponding
@@ -52,4 +54,138 @@ func (b *Builder) constructDistinct(inScope *scope) memo.GroupID {
 		b.factory.ConstructAggregations(memo.EmptyList, b.factory.InternColList(nil)),
 		b.factory.InternGroupByDef(&def),
 	)
+}
+
+// buildDistinctOn builds a set of memo groups that represent a DISTINCT ON
+// expression.
+func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (outScope *scope) {
+	// When there is a DISTINCT ON clause, the ORDER BY clause is restricted to either:
+	//  1. Contain a subset of columns from the ON list, or
+	//  2. Start with a permutation of all columns from the ON list.
+	//
+	// In case 1, the ORDER BY simply specifies an output ordering as usual.
+	// Example:
+	//   SELECT DISTINCT ON (a, b) c, d FROM t ORDER BY a, b
+	//
+	// In case 2, the ORDER BY columns serve two separate semantic purposes:
+	//  - the prefix that contains the ON columns specifies an output ordering;
+	//  - the rest of the columns affect the actual results of the query: for each
+	//    set of values, the chosen row is the first according to that ordering.
+	// Example:
+	//   SELECT DISTINCT ON (a) b, c FROM t ORDER BY a, e
+	//   This means: for each value of a, choose the (b, c) from the row with the
+	//   smallest e value, and order these results by a.
+	//
+	// Note: this behavior is consistent with PostgreSQL.
+
+	// Check that the DISTINCT ON expressions match the initial ORDER BY
+	// expressions.
+	var seen opt.ColSet
+	for _, col := range inScope.physicalProps.Ordering.Columns {
+		if !distinctOnCols.Intersects(col.Group) {
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeInvalidColumnReferenceError,
+				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
+			)})
+		}
+		seen.UnionWith(col.Group)
+		if distinctOnCols.SubsetOf(seen) {
+			// All DISTINCT ON columns showed up; other columns are allowed in the
+			// rest of the ORDER BY (case 2 above).
+			break
+		}
+	}
+
+	def := memo.GroupByDef{
+		GroupingCols: distinctOnCols.Copy(),
+		Ordering:     inScope.physicalProps.Ordering,
+	}
+
+	// Set up a new scope for the output of DISTINCT ON. This scope differs from
+	// the input scope in that it doesn't have "extra" ORDER BY columns, e.g.
+	// column e in case 2 example:
+	//   SELECT DISTINCT ON (a) b, c FROM t ORDER BY a, e
+	//
+	//             +-------------------------+
+	//             |   inScope  |  outScope  |
+	// +-----------+------------+------------+
+	// |   cols    |    b, c    |    b, c    |
+	// | extraCols |    a, e    |     a      |
+	// | ordering  |   a+, e+   |     a+     |
+	// +-----------+------------+------------+
+	outScope = inScope.replace()
+	outScope.cols = make([]scopeColumn, 0, len(inScope.cols))
+	// Add the output columns.
+	for i := range inScope.cols {
+		if !inScope.cols[i].hidden {
+			outScope.cols = append(outScope.cols, inScope.cols[i])
+		}
+	}
+	// Add any extra ON columns.
+	outScope.extraCols = make([]scopeColumn, 0, len(inScope.extraCols))
+	for i := range inScope.extraCols {
+		if distinctOnCols.Contains(int(inScope.extraCols[i].id)) {
+			outScope.extraCols = append(outScope.extraCols, inScope.extraCols[i])
+		}
+	}
+
+	outScope.physicalProps.Presentation = inScope.physicalProps.Presentation
+	// Retain the prefix of the ordering that refers to the ON columns.
+	outScope.physicalProps.Ordering = inScope.physicalProps.Ordering.Copy()
+	for i, col := range inScope.physicalProps.Ordering.Columns {
+		if !distinctOnCols.Intersects(col.Group) {
+			outScope.physicalProps.Ordering.Truncate(i)
+			break
+		}
+	}
+
+	aggCols := make(opt.ColList, 0, len(inScope.cols))
+	aggGroups := make([]memo.GroupID, 0, len(inScope.cols))
+	// Build FirstAgg for all visible columns except the DistinctOnCols
+	// (and eliminate duplicates).
+	excluded := distinctOnCols.Copy()
+	for i := range outScope.cols {
+		if id := outScope.cols[i].id; !excluded.Contains(int(id)) {
+			excluded.Add(int(id))
+			aggCols = append(aggCols, id)
+			aggGroups = append(aggGroups, b.factory.ConstructFirstAgg(
+				b.factory.ConstructVariable(b.factory.InternColumnID(id)),
+			))
+		}
+	}
+
+	outScope.group = b.factory.ConstructDistinctOn(
+		inScope.group,
+		b.factory.ConstructAggregations(
+			b.factory.InternList(aggGroups),
+			b.factory.InternColList(aggCols),
+		),
+		b.factory.InternGroupByDef(&def),
+	)
+	return outScope
+}
+
+// buildDistinctOnArgs builds the DISTINCT ON columns, adding to
+// projectionsScope.extraCols as necessary.
+// The set of DISTINCT ON columns is stored in projectionsScope.distinctOnCols.
+func (b *Builder) buildDistinctOnArgs(
+	distinctOn tree.DistinctOn, inScope, projectionsScope *scope,
+) {
+	if len(distinctOn) == 0 {
+		return
+	}
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("DISTINCT ON", tree.RejectGenerators)
+
+	distinctOnScope := inScope.push()
+
+	for i := range distinctOn {
+		b.buildExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope, "DISTINCT ON")
+	}
+	projectionsScope.addExtraColumns(distinctOnScope.cols)
+	projectionsScope.distinctOnCols = distinctOnScope.colSet()
 }

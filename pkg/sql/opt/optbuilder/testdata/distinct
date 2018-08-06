@@ -357,8 +357,3 @@ sort
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
            └── projections
                 └── const: 1 [type=int]
-
-build
-SELECT DISTINCT ON (b, c) a, b, d FROM abcd ORDER BY b, c
-----
-error (0A000): DISTINCT ON is not supported
