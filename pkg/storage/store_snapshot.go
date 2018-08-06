@@ -240,6 +240,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				// reasonable threshold. (Empirically, this is good enough:
 				// the situations that result in large raft logs have not been
 				// observed to result in raft-initiated snapshots).
+				//
+				// By aborting preemptive snapshots here, we disallow replica
+				// changes until the current replicas have caught up and
+				// truncated the log (either the range is available, in which
+				// case this will eventually happen, or it's not,in which case
+				// the preemptive snapshot would be wasted anyway because the
+				// change replicas transaction would be unable to commit).
 				return false, errors.Errorf(
 					"aborting snapshot because raft log is too large "+
 						"(%d bytes after processing %d of %d entries)",

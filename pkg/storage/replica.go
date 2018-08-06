@@ -794,7 +794,7 @@ func (r *Replica) destroyRaftMuLocked(
 	ms := r.GetMVCCStats()
 
 	desc := r.Desc()
-	err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch, destroyData)
+	err := clearRangeData(ctx, desc, r.store.Engine(), batch, destroyData)
 	if err != nil {
 		return err
 	}
