@@ -115,7 +115,6 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	_ = m.findTableState(tableID, true /*created*/)
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -126,22 +125,9 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	return &table.TableDescriptor, table.expiration, nil
 }
 
-func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(tableID, create)
-	if err != nil {
-		panic("impossible")
-	}
-	return t
-}
-
 func (m *LeaseManager) getNumVersions(tableID sqlbase.ID) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(tableID, false /*create*/)
-	if err != nil {
-		panic("impossible")
-	}
+	t := m.findTableStateLocked(tableID)
 	return len(t.active.data)
 }

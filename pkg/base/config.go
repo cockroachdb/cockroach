@@ -90,6 +90,14 @@ const (
 	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
+
+	// DefaultTableDescriptorLeaseDormantDuration value for
+	// TableDescriptorLeaseDormantDuration
+	DefaultTableDescriptorLeaseDormantDuration = time.Hour
+
+	// DefaultTableDescriptorLeaseDormantMax value for
+	// TableDescriptorLeaseDormantMax
+	DefaultTableDescriptorLeaseDormantMax = 100
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -544,16 +552,30 @@ type LeaseManagerConfig struct {
 	// the lease renewal timeout.
 	TableDescriptorLeaseJitterFraction float64
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// TableDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	TableDescriptorLeaseRenewalTimeout time.Duration
+
+	// TableDescriptorLeaseDormantDuration is the duration after which
+	// a table descriptor is considered to be dormant if it is not in
+	// use during the duration.
+	TableDescriptorLeaseDormantDuration time.Duration
+
+	// TableDescriptorLeaseDormantMax is the maximum number of descriptors
+	// that are dormant (see TableDescriptorLeaseDormantDuration) that can
+	// have valid outstanding leases on them, so that when they are needed
+	// by a SQL command and become active they are immediately available
+	// without adding the latency to acquire a lease.
+	TableDescriptorLeaseDormantMax int
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
 func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
-		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
-		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
-		TableDescriptorLeaseRenewalTimeout: DefaultTableDescriptorLeaseRenewalTimeout,
+		TableDescriptorLeaseDuration:        DefaultTableDescriptorLeaseDuration,
+		TableDescriptorLeaseJitterFraction:  DefaultTableDescriptorLeaseJitterFraction,
+		TableDescriptorLeaseRenewalTimeout:  DefaultTableDescriptorLeaseRenewalTimeout,
+		TableDescriptorLeaseDormantDuration: DefaultTableDescriptorLeaseDormantDuration,
+		TableDescriptorLeaseDormantMax:      DefaultTableDescriptorLeaseDormantMax,
 	}
 }

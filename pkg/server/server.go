@@ -654,6 +654,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetExecCfg(&execCfg)
+	s.leaseMgr.PeriodicallyPurgeDormantDescriptors()
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	s.node.InitLogger(&execCfg)

@@ -77,10 +77,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		lm.mu.Lock()
 		defer lm.mu.Unlock()
-		ts, err := lm.findTableStateLocked(tableDesc.ID, false /*created*/)
-		if err != nil {
-			t.Fatal(err)
-		}
+		ts := lm.findTableStateLocked(tableDesc.ID)
 		tv := ts.active.data[0]
 		tv.mu.Lock()
 		defer tv.mu.Unlock()

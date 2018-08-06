@@ -78,6 +78,8 @@ type tableVersionState struct {
 		// is always associated with a lease. The previous version known to
 		// a node might not necessarily be associated with a lease.
 		leased bool
+		// Was this tableVersionState ever used (refcount++).
+		used bool
 	}
 }
 
@@ -99,6 +101,7 @@ func (s *tableVersionState) incRefcount() {
 
 func (s *tableVersionState) incRefcountLocked() {
 	s.mu.refcount++
+	s.mu.used = true
 	log.VEventf(context.TODO(), 2, "tableVersionState.incRef: %s", s)
 }
 
@@ -132,6 +135,16 @@ type LeaseStore struct {
 	// leaseRenewalTimeout is the time before a lease expires when
 	// acquisition to renew the lease begins.
 	leaseRenewalTimeout time.Duration
+	// leaseDormantDuration is the duration after which
+	// a table descriptor is considered to be dormant if it is not in
+	// use during the duration.
+	leaseDormantDuration time.Duration
+	// leaseDormantMax is the maximum number of descriptors
+	// that are dormant (see leaseDormantDuration) that can
+	// have valid outstanding leases on them, so that when they are needed
+	// by a SQL command and become active they are immediately available
+	// without adding the latency to acquire a lease.
+	leaseDormantMax int
 
 	testingKnobs LeaseStoreTestingKnobs
 }
@@ -626,6 +639,11 @@ type tableState struct {
 	leaseDuration time.Duration
 	// Close this channel to close the lease reacquisition loop.
 	closer chan struct{}
+	// The lease expiration time of the last used table descriptor with
+	// a lease. This acts as a reasonably accurate measure of the last
+	// time this tableState was used without costing much for bookkeeping.
+	// It is initialized to the time the tableState was created.
+	lastUsedExpiration hlc.Timestamp
 }
 
 // ensureVersion ensures that the latest version >= minVersion. It will
@@ -662,10 +680,7 @@ func (m *LeaseManager) findForTimestamp(
 ) (*tableVersionState, time.Duration, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(tableID, true /*created*/)
-	if err != nil {
-		return nil, 0, err
-	}
+	t := m.findTableStateLocked(tableID)
 
 	// Acquire a lease if no lease exists or if the latest lease is about to
 	// expire. Looping is necessary because lease acquisition is done without
@@ -709,10 +724,7 @@ func (m *LeaseManager) readOlderVersionForTimestamp(
 	expiration, done := func() (hlc.Timestamp, bool) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		t, err := m.findTableStateLocked(tableID, false /* create */)
-		if err != nil {
-			panic("impossible")
-		}
+		t := m.findTableStateLocked(tableID)
 
 		afterIdx := 0
 		// Walk back the versions to find one that is valid for the timestamp.
@@ -770,10 +782,7 @@ func (m *LeaseManager) readOlderVersionForTimestamp(
 func (m *LeaseManager) insertTableVersions(tableID sqlbase.ID, versions []*tableVersionState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(tableID, false /* create */)
-	if err != nil {
-		panic("impossible")
-	}
+	t := m.findTableStateLocked(tableID)
 	for _, tableVersion := range versions {
 		// Since we gave up the lock while reading the versions from
 		// the store we have to ensure that no one else inserted the
@@ -792,11 +801,7 @@ func (m *LeaseManager) insertTableVersions(tableID sqlbase.ID, versions []*table
 func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
 	// Create tableState if needed.
 	m.mu.Lock()
-	t, err := m.findTableStateLocked(tableID, true /* create */)
-	if err != nil {
-		m.mu.Unlock()
-		return err
-	}
+	t := m.findTableStateLocked(tableID)
 	leaseDuration := t.leaseDuration
 	m.mu.Unlock()
 	// We need to acquire a lease on a "fresh" descriptor, meaning that joining
@@ -841,15 +846,10 @@ func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sql
 // upsertLocked inserts a lease for a particular table version.
 // If an existing lease exists for the table version it replaces
 // it and returns it.
-func (m *LeaseManager) upsert(
-	ctx context.Context, table *tableVersionState,
-) *tableVersionState {
+func (m *LeaseManager) upsert(ctx context.Context, table *tableVersionState) *tableVersionState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(table.ID, false /*created*/)
-	if err != nil {
-		panic("impossible")
-	}
+	t := m.findTableStateLocked(table.ID)
 	s := t.active.find(table.Version)
 	if s == nil {
 		if t.active.findNewest() != nil {
@@ -865,6 +865,9 @@ func (m *LeaseManager) upsert(
 	table.mu.refcount += s.mu.refcount
 	s.mu.refcount = 0
 	s.mu.leased = false
+	if s.mu.used {
+		t.lastUsedExpiration = s.expiration
+	}
 	table.mu.Unlock()
 	s.mu.Unlock()
 	log.VEventf(ctx, 2, "replaced lease: %s with %s", s, table)
@@ -884,6 +887,32 @@ func (t *tableState) removeInactiveVersionsLocked() []*tableVersionState {
 			table.mu.Lock()
 			defer table.mu.Unlock()
 			if table.mu.refcount == 0 {
+				t.active.remove(table)
+				if table.mu.leased {
+					table.mu.leased = false
+					leases = append(leases, table)
+				}
+			}
+		}()
+	}
+	return leases
+}
+
+// removeDormantVersionsLocked removes unused versions in t.mu.active.data.
+// t.mu must be locked. It returns table version state that need to be released.
+func (t *tableState) removeDormantVersionsLocked() []*tableVersionState {
+	var leases []*tableVersionState
+	// A copy of t.mu.active.data must be made since t.mu.active.data will be changed
+	// within the loop.
+	for _, table := range append([]*tableVersionState(nil), t.active.data...) {
+		func() {
+			table.mu.Lock()
+			defer table.mu.Unlock()
+			if table.mu.refcount == 0 {
+				// This leased table was used and thus not dormant.
+				if table.mu.leased && table.mu.used {
+					return
+				}
 				t.active.remove(table)
 				if table.mu.leased {
 					table.mu.leased = false
@@ -936,10 +965,7 @@ func (m *LeaseManager) releaseTable(
 ) (*tableVersionState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(table.ID, false /* create */)
-	if t == nil || err != nil {
-		return nil, errors.Errorf("table %d not found", table.ID)
-	}
+	t := m.findTableStateLocked(table.ID)
 	s := t.active.find(table.Version)
 	if s == nil {
 		return nil, errors.Errorf("table %d version %d not found", table.ID, table.Version)
@@ -1016,10 +1042,9 @@ func purgeOldVersions(
 	m *LeaseManager,
 ) error {
 	m.mu.Lock()
-	t, err := m.findTableStateLocked(id, false /*create*/)
-	empty := (t == nil || len(t.active.data) == 0 || err != nil)
+	_, ok := m.mu.tables[id]
 	m.mu.Unlock()
-	if empty {
+	if !ok {
 		// We don't currently have a version on this table, so no need to refresh
 		// anything.
 		return nil
@@ -1027,10 +1052,7 @@ func purgeOldVersions(
 
 	removeInactives := func(drop bool) {
 		m.mu.Lock()
-		t, err := m.findTableStateLocked(id, false /*create*/)
-		if err != nil {
-			panic("impossible")
-		}
+		t := m.findTableStateLocked(id)
 		t.dropped = drop
 		leases := t.removeInactiveVersionsLocked()
 		m.mu.Unlock()
@@ -1107,6 +1129,9 @@ type LeaseManagerTestingKnobs struct {
 	GossipUpdateEvent func(config.SystemConfig)
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
+	// A callback called every time a table state is purged after being
+	// dormant for a while.
+	TestingTableStatePurgeEvent func(sqlbase.ID)
 
 	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
@@ -1259,12 +1284,14 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			execCfg:             execCfg,
-			group:               &singleflight.Group{},
-			leaseDuration:       cfg.TableDescriptorLeaseDuration,
-			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
-			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
-			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			execCfg:              execCfg,
+			group:                &singleflight.Group{},
+			leaseDuration:        cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction:  cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout:  cfg.TableDescriptorLeaseRenewalTimeout,
+			leaseDormantDuration: cfg.TableDescriptorLeaseDormantDuration,
+			leaseDormantMax:      cfg.TableDescriptorLeaseDormantMax,
+			testingKnobs:         testingKnobs.LeaseStoreTestingKnobs,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
@@ -1280,6 +1307,71 @@ func NewLeaseManager(
 	return lm
 }
 
+// PeriodicallyPurgeDormantDescriptors periodically purges dormant descriptors.
+func (m *LeaseManager) PeriodicallyPurgeDormantDescriptors() {
+	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		ticker := time.NewTicker(m.leaseDormantDuration)
+		tickChan := ticker.C
+		defer ticker.Stop()
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+
+			case <-tickChan:
+				// Gather ids of dormant table state.
+				lastUsedThreshold := m.execCfg.Clock.Now().Add(-int64(m.leaseDormantDuration), 0)
+				// Only keep m.leaseDormantMax dormant tables.
+				keepThreshold := m.leaseDormantMax
+				var ids []sqlbase.ID
+				m.mu.Lock()
+				for id, ts := range m.mu.tables {
+					if ts.lastUsedExpiration.Less(lastUsedThreshold) {
+						keepThreshold--
+						if keepThreshold < 0 {
+							ids = append(ids, id)
+						}
+					}
+				}
+				m.mu.Unlock()
+
+				// Purge dormant ids.
+				for _, id := range ids {
+					var leases []*tableVersionState
+					func() {
+						m.mu.Lock()
+						defer m.mu.Unlock()
+						ts := m.findTableStateLocked(id)
+						leases = ts.removeDormantVersionsLocked()
+						// Double check to ensure that a table version was
+						// not active in the mean time and couldn't be
+						// removed. Even if a table version is not active
+						// it can still be on the cusp of becoming active
+						// by AcquireByName() holding on to a
+						// reference of a tableVersionState via tableNameCache.
+						// But then tableVersionState.mu.leased is set to false
+						// and it will not get used.
+						remove := ts.active.findNewest() == nil
+						if remove {
+							if ts.closer != nil {
+								close(ts.closer)
+								ts.closer = nil
+							}
+							delete(m.mu.tables, id)
+							if fn := m.testingKnobs.TestingTableStatePurgeEvent; fn != nil {
+								fn(id)
+							}
+						}
+					}()
+					for _, l := range leases {
+						releaseLease(l, m)
+					}
+				}
+			}
+		}
+	})
+}
+
 // SetExecCfg has to be called if a nil execCfg was passed to NewLeaseManager.
 func (m *LeaseManager) SetExecCfg(execCfg *ExecutorConfig) {
 	m.execCfg = execCfg
@@ -1293,10 +1385,7 @@ func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName
 func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t, err := m.findTableStateLocked(tableID, false /* create */)
-	if err != nil {
-		panic("impossible")
-	}
+	t := m.findTableStateLocked(tableID)
 	return t.active.findNewest()
 }
 
@@ -1503,8 +1592,10 @@ func (m *LeaseManager) SetDraining(drain bool) {
 	m.mu.Lock()
 	for _, t := range m.mu.tables {
 		// Notify lease reacquire loop to stop.
-		close(t.closer)
-		t.closer = nil
+		if t.closer != nil {
+			close(t.closer)
+			t.closer = nil
+		}
 		l := t.removeInactiveVersionsLocked()
 		leases = append(leases, l...)
 	}
@@ -1514,22 +1605,27 @@ func (m *LeaseManager) SetDraining(drain bool) {
 	}
 }
 
-func (m *LeaseManager) findTableStateLocked(tableID sqlbase.ID, create bool) (*tableState, error) {
-	t := m.mu.tables[tableID]
-	if t == nil && create {
+func (m *LeaseManager) findTableStateLocked(tableID sqlbase.ID) *tableState {
+	t, ok := m.mu.tables[tableID]
+	if !ok {
 		leaseDuration := m.LeaseStore.jitteredLeaseDuration()
 		closer := make(chan struct{})
-		t = &tableState{leaseDuration: leaseDuration, closer: closer}
+		t = &tableState{
+			leaseDuration:      leaseDuration,
+			closer:             closer,
+			lastUsedExpiration: m.execCfg.Clock.Now(),
+		}
 		// Start lease acquisition loop.
 		if err := m.stopper.RunAsyncTask(context.Background(),
 			"periodic lease renewal", func(ctx context.Context) {
 				m.leaseAcquisitionLoop(ctx, leaseDuration, closer, tableID)
 			}); err != nil {
-			return nil, err
+			t.closer = nil
+			log.Errorf(context.TODO(), "unexpected error: %s", err)
 		}
 		m.mu.tables[tableID] = t
 	}
-	return t, nil
+	return t
 }
 
 // Run a loop to periodically require a lease on a table descriptor.

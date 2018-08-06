@@ -197,10 +197,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 	leaseManager.mu.Lock()
-	ts, err := leaseManager.findTableStateLocked(tableDesc.ID, false /*created*/)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ts := leaseManager.findTableStateLocked(tableDesc.ID)
 	correctLease := ts.active.data[0].TableDescriptor.ID == tables[5].ID &&
 		ts.active.data[0].TableDescriptor.Version == tables[5].Version
 	correctExpiration := ts.active.data[0].expiration == expiration
