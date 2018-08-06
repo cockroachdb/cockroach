@@ -53,7 +53,7 @@ func writeValueOpWithKV(key roachpb.Key, ts hlc.Timestamp, val []byte) enginepb.
 }
 
 func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return writeValueOpWithKV(nil /* key */, ts, nil /* val */)
+	return writeValueOpWithKV(roachpb.Key("a"), ts, nil /* val */)
 }
 
 func writeIntentOpWithKey(txnID uuid.UUID, key []byte, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
@@ -87,7 +87,7 @@ func commitIntentOpWithKV(
 }
 
 func commitIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return commitIntentOpWithKV(txnID, nil /* key */, ts, nil /* val */)
+	return commitIntentOpWithKV(txnID, roachpb.Key("a"), ts, nil /* val */)
 }
 
 func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
@@ -123,7 +123,7 @@ func newTestProcessor(rtsSnap Snapshot) (*Processor, *stop.Stopper) {
 	p := NewProcessor(Config{
 		AmbientContext:       log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Span:                 roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax},
+		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		EventChanCap:         16,
 		PushIntentsInterval:  0, // disable
 		CheckStreamsInterval: 10 * time.Millisecond,
@@ -170,7 +170,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t, 1, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 1},
 		)},
 		r1Stream.Events(),
@@ -181,7 +181,7 @@ func TestProcessor(t *testing.T) {
 	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 5},
 		)},
 		r1Stream.Events(),
@@ -233,7 +233,7 @@ func TestProcessor(t *testing.T) {
 	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 9},
 		)},
 		r1Stream.Events(),
@@ -243,7 +243,7 @@ func TestProcessor(t *testing.T) {
 	p.syncEventC()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 11},
 		)},
 		r1Stream.Events(),
@@ -263,7 +263,7 @@ func TestProcessor(t *testing.T) {
 				},
 			),
 			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 				hlc.Timestamp{WallTime: 15},
 			),
 		},
@@ -283,7 +283,7 @@ func TestProcessor(t *testing.T) {
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 15},
 		)},
 		r2Stream.Events(),
@@ -293,7 +293,7 @@ func TestProcessor(t *testing.T) {
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
 	p.syncEventC()
 	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 		hlc.Timestamp{WallTime: 20},
 	)}
 	require.Equal(t, chEvent, r1Stream.Events())
@@ -430,7 +430,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 	// The registration should have been informed of the new resolved timestamp.
 	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 		hlc.Timestamp{WallTime: 18},
 	)}
 	require.Equal(t, chEvent, r1Stream.Events())
@@ -534,7 +534,7 @@ func TestProcessorCatchUpScan(t *testing.T) {
 			roachpb.Value{RawBytes: []byte("val9"), Timestamp: hlc.Timestamp{WallTime: 4}},
 		),
 		rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 20},
 		),
 	}
@@ -548,7 +548,7 @@ func TestProcessorCatchUpScan(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 25}, p.rts.Get())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 25},
 		)},
 		r1Stream.Events(),
