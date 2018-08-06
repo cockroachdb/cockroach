@@ -103,20 +103,20 @@ select
            └── project
                 ├── columns: u:3(int!null) v:4(int!null)
                 ├── outer: (1)
-                ├── stats: [rows=111.111111]
+                ├── stats: [rows=1.42857143]
                 ├── fd: ()-->(3)
                 ├── prune: (3,4)
                 └── select
                      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                      ├── outer: (1)
-                     ├── stats: [rows=111.111111]
+                     ├── stats: [rows=1.42857143, distinct(3)=1.42857143]
                      ├── key: (5)
                      ├── fd: ()-->(3), (5)-->(4)
                      ├── prune: (4,5)
                      ├── interesting orderings: (+5)
                      ├── scan uv
                      │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-                     │    ├── stats: [rows=1000]
+                     │    ├── stats: [rows=1000, distinct(3)=700]
                      │    ├── key: (5)
                      │    ├── fd: (5)-->(3,4)
                      │    ├── prune: (3-5)
@@ -147,19 +147,19 @@ select
            ├── project
            │    ├── columns: v:4(int!null)
            │    ├── outer: (1)
-           │    ├── stats: [rows=111.111111]
+           │    ├── stats: [rows=1.42857143]
            │    ├── prune: (4)
            │    └── select
            │         ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            │         ├── outer: (1)
-           │         ├── stats: [rows=111.111111]
+           │         ├── stats: [rows=1.42857143, distinct(3)=1.42857143]
            │         ├── key: (5)
            │         ├── fd: ()-->(3), (5)-->(4)
            │         ├── prune: (4,5)
            │         ├── interesting orderings: (+5)
            │         ├── scan uv
            │         │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │         │    ├── stats: [rows=1000]
+           │         │    ├── stats: [rows=1000, distinct(3)=700]
            │         │    ├── key: (5)
            │         │    ├── fd: (5)-->(3,4)
            │         │    ├── prune: (3-5)

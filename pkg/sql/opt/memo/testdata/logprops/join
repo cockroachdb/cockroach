@@ -166,7 +166,7 @@ project
       │              │    └── select
       │              │         ├── columns: n:9(int!null)
       │              │         ├── outer: (6)
-      │              │         ├── stats: [rows=111.111111]
+      │              │         ├── stats: [rows=1, distinct(9)=1]
       │              │         ├── fd: ()-->(9)
       │              │         ├── interesting orderings: (+9)
       │              │         ├── scan mn@secondary
@@ -241,7 +241,7 @@ project
       │              │    └── interesting orderings: ()
       │              ├── scan mn
       │              │    ├── columns: m:8(int!null)
-      │              │    ├── stats: [rows=1000]
+      │              │    ├── stats: [rows=1000, distinct(8)=1000]
       │              │    ├── key: (8)
       │              │    ├── prune: (8)
       │              │    └── interesting orderings: (+8)
@@ -331,12 +331,12 @@ project
       │    │    └── select
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=111.111111]
+      │    │         ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
       │    │         ├── fd: ()-->(5)
       │    │         ├── interesting orderings: ()
       │    │         ├── scan uv
       │    │         │    ├── columns: u:5(int)
-      │    │         │    ├── stats: [rows=1000]
+      │    │         │    ├── stats: [rows=1000, distinct(5)=700]
       │    │         │    ├── prune: (5)
       │    │         │    └── interesting orderings: ()
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -430,18 +430,18 @@ right-join
  │         │    │    └── offset
  │         │    │         ├── columns: uv.u:8(int!null)
  │         │    │         ├── outer: (1)
- │         │    │         ├── stats: [rows=110.111111]
+ │         │    │         ├── stats: [rows=0.428571429]
  │         │    │         ├── fd: ()-->(8)
  │         │    │         ├── interesting orderings: ()
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── stats: [rows=111.111111]
+ │         │    │         │    ├── stats: [rows=1.42857143, distinct(8)=1.42857143]
  │         │    │         │    ├── fd: ()-->(8)
  │         │    │         │    ├── interesting orderings: ()
  │         │    │         │    ├── scan uv
  │         │    │         │    │    ├── columns: uv.u:8(int)
- │         │    │         │    │    ├── stats: [rows=1000]
+ │         │    │         │    │    ├── stats: [rows=1000, distinct(8)=700]
  │         │    │         │    │    ├── prune: (8)
  │         │    │         │    │    └── interesting orderings: ()
  │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
@@ -539,18 +539,18 @@ project
       │    │    └── offset
       │    │         ├── columns: uv.u:8(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=110.111111]
+      │    │         ├── stats: [rows=0.428571429]
       │    │         ├── fd: ()-->(8)
       │    │         ├── interesting orderings: ()
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=111.111111]
+      │    │         │    ├── stats: [rows=1.42857143, distinct(8)=1.42857143]
       │    │         │    ├── fd: ()-->(8)
       │    │         │    ├── interesting orderings: ()
       │    │         │    ├── scan uv
       │    │         │    │    ├── columns: uv.u:8(int)
-      │    │         │    │    ├── stats: [rows=1000]
+      │    │         │    │    ├── stats: [rows=1000, distinct(8)=700]
       │    │         │    │    ├── prune: (8)
       │    │         │    │    └── interesting orderings: ()
       │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
@@ -584,7 +584,7 @@ semi-join
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── prune: (5,6)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -598,7 +598,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111.111]
+ ├── stats: [rows=428.571429]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -613,20 +613,20 @@ semi-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110.111111]
+ │    ├── stats: [rows=0.428571429]
  │    ├── fd: ()-->(6)
  │    ├── prune: (5)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(6)=1.42857143]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(6)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -668,7 +668,7 @@ semi-join-apply
  │    │    └── interesting orderings: ()
  │    ├── scan mn
  │    │    ├── columns: m:8(int!null) n:9(int)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(8)=1000]
  │    │    ├── key: (8)
  │    │    ├── fd: (8)-->(9), (9)~~>(8)
  │    │    ├── prune: (8,9)
@@ -702,7 +702,7 @@ anti-join
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── prune: (5,6)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -716,7 +716,7 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111.111]
+ ├── stats: [rows=428.571429]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -731,20 +731,20 @@ anti-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110.111111]
+ │    ├── stats: [rows=0.428571429]
  │    ├── fd: ()-->(6)
  │    ├── prune: (5)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(6)=1.42857143]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(6)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -924,7 +924,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE EXISTS(SELECT * FROM uv WHERE 
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
- ├── stats: [rows=50]
+ ├── stats: [rows=14.2857143]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -941,20 +941,20 @@ semi-join-apply
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5]
+ │    ├── stats: [rows=1.42857143]
  │    ├── fd: ()-->(5)
  │    ├── prune: (6)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(5)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -985,7 +985,7 @@ anti-join
  │         └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:2(int) v:3(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(2)=700]
  │    ├── prune: (2,3)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
@@ -1000,7 +1000,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE NOT EXISTS(SELECT * FROM uv WH
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
- ├── stats: [rows=50]
+ ├── stats: [rows=14.2857143]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -1017,20 +1017,20 @@ anti-join-apply
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5]
+ │    ├── stats: [rows=1.42857143]
  │    ├── fd: ()-->(5)
  │    ├── prune: (6)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(5)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
