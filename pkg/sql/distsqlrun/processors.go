@@ -16,19 +16,19 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
 
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -1052,6 +1052,12 @@ func newProcessor(
 		}
 		return newProjectSetProcessor(flowCtx, processorID, core.ProjectSet, inputs[0], post, outputs[0])
 	}
+	if core.Windower != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
@@ -1090,4 +1096,134 @@ func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
 		}
 	}
 	return true
+}
+
+func (spec *WindowerSpec_Frame_Mode) initFromAST(w tree.WindowFrameMode) {
+	switch w {
+	case tree.RANGE:
+		*spec = WindowerSpec_Frame_RANGE
+	case tree.ROWS:
+		*spec = WindowerSpec_Frame_ROWS
+	default:
+		panic("unexpected WindowFrameMode")
+	}
+}
+
+func (spec *WindowerSpec_Frame_BoundType) initFromAST(bt tree.WindowFrameBoundType) {
+	switch bt {
+	case tree.UnboundedPreceding:
+		*spec = WindowerSpec_Frame_UNBOUNDED_PRECEDING
+	case tree.ValuePreceding:
+		*spec = WindowerSpec_Frame_OFFSET_PRECEDING
+	case tree.CurrentRow:
+		*spec = WindowerSpec_Frame_CURRENT_ROW
+	case tree.ValueFollowing:
+		*spec = WindowerSpec_Frame_OFFSET_FOLLOWING
+	case tree.UnboundedFollowing:
+		*spec = WindowerSpec_Frame_UNBOUNDED_FOLLOWING
+	default:
+		panic("unexpected WindowFrameBoundType")
+	}
+}
+
+// If offset exprs are present, we evaluate them and save the encoded results
+// in the spec.
+func (spec *WindowerSpec_Frame_Bounds) initFromAST(
+	b tree.WindowFrameBounds, evalCtx *tree.EvalContext,
+) error {
+	if b.StartBound == nil {
+		return errors.Errorf("unexpected: Start Bound is nil")
+	}
+	spec.Start = WindowerSpec_Frame_Bound{}
+	spec.Start.BoundType.initFromAST(b.StartBound.BoundType)
+	if b.StartBound.OffsetExpr != nil {
+		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
+		dStartOffset, err := typedStartOffset.Eval(evalCtx)
+		if err != nil {
+			return err
+		}
+		if dStartOffset == tree.DNull {
+			return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
+		}
+		startOffset := int(tree.MustBeDInt(dStartOffset))
+		if startOffset < 0 {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
+		}
+		spec.Start.IntOffset = uint32(startOffset)
+	}
+
+	if b.EndBound != nil {
+		spec.End = &WindowerSpec_Frame_Bound{}
+		spec.End.BoundType.initFromAST(b.EndBound.BoundType)
+		if b.EndBound.OffsetExpr != nil {
+			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
+			dEndOffset, err := typedEndOffset.Eval(evalCtx)
+			if err != nil {
+				return err
+			}
+			if dEndOffset == tree.DNull {
+				return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
+			}
+			endOffset := int(tree.MustBeDInt(dEndOffset))
+			if endOffset < 0 {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
+			}
+			spec.End.IntOffset = uint32(endOffset)
+		}
+	}
+
+	return nil
+}
+
+// InitFromAST initializes the spec based on tree.WindowFrame. It will evaluate
+// offset expressions if present in the frame.
+func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *tree.EvalContext) error {
+	spec.Mode.initFromAST(f.Mode)
+	return spec.Bounds.initFromAST(f.Bounds, evalCtx)
+}
+
+func (spec WindowerSpec_Frame_Mode) convertToAST() tree.WindowFrameMode {
+	switch spec {
+	case WindowerSpec_Frame_RANGE:
+		return tree.RANGE
+	case WindowerSpec_Frame_ROWS:
+		return tree.ROWS
+	default:
+		panic("unexpected WindowerSpec_Frame_Mode")
+	}
+}
+
+func (spec WindowerSpec_Frame_BoundType) convertToAST() tree.WindowFrameBoundType {
+	switch spec {
+	case WindowerSpec_Frame_UNBOUNDED_PRECEDING:
+		return tree.UnboundedPreceding
+	case WindowerSpec_Frame_OFFSET_PRECEDING:
+		return tree.ValuePreceding
+	case WindowerSpec_Frame_CURRENT_ROW:
+		return tree.CurrentRow
+	case WindowerSpec_Frame_OFFSET_FOLLOWING:
+		return tree.ValueFollowing
+	case WindowerSpec_Frame_UNBOUNDED_FOLLOWING:
+		return tree.UnboundedFollowing
+	default:
+		panic("unexpected WindowerSpec_Frame_BoundType")
+	}
+}
+
+// convertToAST produces tree.WindowFrameBounds based on
+// WindowerSpec_Frame_Bounds. Note that it might not be fully equivalent to
+// original - if offsetExprs were present in original tree.WindowFrameBounds,
+// they are not included.
+func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
+	bounds := tree.WindowFrameBounds{StartBound: &tree.WindowFrameBound{
+		BoundType: spec.Start.BoundType.convertToAST(),
+	}}
+	if spec.End != nil {
+		bounds.EndBound = &tree.WindowFrameBound{BoundType: spec.End.BoundType.convertToAST()}
+	}
+	return bounds
+}
+
+func (spec *WindowerSpec_Frame) convertToAST() *tree.WindowFrame {
+	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
 }

@@ -137,6 +137,7 @@ message ProcessorCoreUnion {
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
+  optional WindowerSpec windower = 23;
 
   reserved 6, 12;
 }
@@ -820,4 +821,98 @@ message ProjectSetSpec {
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;
+}
+
+// WindowerSpec is the specification of a processor that performs computations
+// of window functions that have the same PARTITION BY clause. For a particular
+// windowFn, the processor puts result at windowFn.ArgIdxStart and "consumes"
+// all arguments to windowFn (windowFn.ArgCount of them). So if windowFn takes
+// no arguments, an extra column is added; if windowFn takes more than one
+// argument, (windowFn.ArgCount - 1) columns are removed.
+message WindowerSpec {
+  enum WindowFunc {
+    // These mirror window functions from window_builtins.go.
+    ROW_NUMBER = 0;
+    RANK = 1;
+    DENSE_RANK = 2;
+    PERCENT_RANK = 3;
+    CUME_DIST = 4;
+    NTILE = 5;
+    LAG = 6;
+    LEAD = 7;
+    FIRST_VALUE = 8;
+    LAST_VALUE = 9;
+    NTH_VALUE = 10;
+  }
+
+  // Func specifies which function to compute. It can either be built-in
+  // aggregate or built-in window function.
+  message Func {
+    option (gogoproto.onlyone) = true;
+
+    optional AggregatorSpec.Func aggregateFunc = 1;
+    optional WindowFunc windowFunc = 2;
+  }
+
+  // Frame is the specification of a single window frame for a window function.
+  message Frame {
+    // Mode indicates which mode of framing is used.
+    enum Mode {
+      // RANGE specifies frame in terms of logical range (e.g. 1 unit cheaper).
+      RANGE = 0;
+      // ROWS specifies frame in terms of physical offsets (e.g. 1 row before).
+      ROWS = 1;
+    }
+
+    // BoundType indicates which type of boundary is used.
+    enum BoundType {
+      UNBOUNDED_PRECEDING = 0;
+      UNBOUNDED_FOLLOWING = 1;
+      // Offsets are stored within Bound.
+      OFFSET_PRECEDING = 2;     // currently supported only in ROWS mode
+      OFFSET_FOLLOWING = 3;     // currently supported only in ROWS mode
+      CURRENT_ROW = 4;
+    }
+
+    // Bound specifies the type of boundary and the offset (if present).
+    message Bound {
+      optional BoundType boundType = 1 [(gogoproto.nullable) = false];
+      // For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
+      // is ignored. Integer offset for ROWS mode is stored in int_offset while
+      // an encoded datum and the type information are stored for RANGE mode
+      // (the support for the latter will be added soon).
+      optional uint32 int_offset = 2 [(gogoproto.nullable) = false];
+      optional bytes typed_offset = 3;
+      optional DatumInfo offset_type = 4 [(gogoproto.nullable) = false];
+    }
+    // Bounds specifies boundaries of the window frame.
+    message Bounds {
+      // Start bound must always be present whereas end bound might be omitted.
+      optional Bound start = 1 [(gogoproto.nullable) = false];
+      optional Bound end = 2;
+    }
+    optional Mode mode = 1 [(gogoproto.nullable) = false];
+    optional Bounds bounds = 2 [(gogoproto.nullable) = false];
+  }
+
+  // WindowFn is the specification of a single window function.
+  message WindowFn {
+    // Func is which function to compute.
+    optional Func func = 1 [(gogoproto.nullable) = false];
+    // ArgIdxStart is which index arguments to this window function start at.
+    optional uint32 argIdxStart = 2 [(gogoproto.nullable) = false];
+    // ArgCount indicates how many arguments this window function takes in.
+    optional uint32 argCount = 3 [(gogoproto.nullable) = false];
+    // Ordering specifies in which order rows should be considered by this
+    // window function. Its contents come from ORDER BY clause of the window
+    // function.
+    optional Ordering ordering = 4 [(gogoproto.nullable) = false];
+    // Frame specifies over which frame this window function is computed.
+    optional Frame frame = 5;
+  }
+
+  // PartitionBy specifies how to partition rows for all window functions.
+  repeated uint32 partitionBy = 1;
+  // WindowFns is the specification of all window functions to be computed.
+  repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
 }
