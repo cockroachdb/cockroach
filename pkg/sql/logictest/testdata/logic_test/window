@@ -2781,3 +2781,33 @@ Sony VAIO        1h2m3s        700.00   620.00
 Samsung          1h2m3s        200.00   620.00
 iPhone           1m2s          900.00   620.00
 Dell             1m2s          800.00   620.00
+
+query TRTT
+SELECT group_name, price, product_name, array_agg(product_name) OVER (PARTITION BY group_name ORDER BY price, group_id) FROM products ORDER BY group_id
+----
+Smartphone  200.00   Microsoft Lumia  {"Microsoft Lumia"}
+Smartphone  400.00   HTC One          {"Microsoft Lumia","HTC One"}
+Smartphone  500.00   Nexus            {"Microsoft Lumia","HTC One","Nexus"}
+Smartphone  900.00   iPhone           {"Microsoft Lumia","HTC One","Nexus","iPhone"}
+Laptop      1200.00  HP Elite         {"Lenovo Thinkpad","Sony VAIO","Dell","HP Elite"}
+Laptop      700.00   Lenovo Thinkpad  {"Lenovo Thinkpad"}
+Laptop      700.00   Sony VAIO        {"Lenovo Thinkpad","Sony VAIO"}
+Laptop      800.00   Dell             {"Lenovo Thinkpad","Sony VAIO","Dell"}
+Tablet      700.00   iPad             {"Kindle Fire","Samsung","iPad"}
+Tablet      150.00   Kindle Fire      {"Kindle Fire"}
+Tablet      200.00   Samsung          {"Kindle Fire","Samsung"}
+
+query TT
+SELECT product_name, array_agg(product_name) OVER (ORDER BY group_id) FROM products ORDER BY group_id
+----
+Microsoft Lumia  {"Microsoft Lumia"}
+HTC One          {"Microsoft Lumia","HTC One"}
+Nexus            {"Microsoft Lumia","HTC One","Nexus"}
+iPhone           {"Microsoft Lumia","HTC One","Nexus","iPhone"}
+HP Elite         {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite"}
+Lenovo Thinkpad  {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad"}
+Sony VAIO        {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO"}
+Dell             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell"}
+iPad             {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad"}
+Kindle Fire      {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire"}
+Samsung          {"Microsoft Lumia","HTC One","Nexus","iPhone","HP Elite","Lenovo Thinkpad","Sony VAIO","Dell","iPad","Kindle Fire","Samsung"}

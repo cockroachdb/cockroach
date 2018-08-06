@@ -503,10 +503,11 @@ func (a *arrayAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Da
 	return a.arr.Append(datum)
 }
 
-// Result returns an array of all datums passed to Add.
+// Result returns a copy of the array of all datums passed to Add.
 func (a *arrayAggregate) Result() (tree.Datum, error) {
 	if len(a.arr.Array) > 0 {
-		return a.arr, nil
+		arrCopy := *a.arr
+		return &arrCopy, nil
 	}
 	return tree.DNull, nil
 }
