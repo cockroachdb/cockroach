@@ -345,6 +345,12 @@ func makeAggOverloadWithReturnType(
 			case *avgAggregate:
 				// w.agg is a sum aggregate.
 				return &avgWindowFunc{sum: slidingWindowSumFunc{agg: w.agg}}
+			case *arrayAggregate:
+				// Calls to arrayAggregate.Result() return pointers to the same
+				// underlying array which results in modification of already computed
+				// results with later calls of Add(). Therefore, we use a different
+				// implementation if array_agg is used as a window function.
+				return newArrayAggForWindow(w)
 			}
 
 			return newFramableAggregateWindow(aggWindowFunc, func(evalCtx *tree.EvalContext) tree.AggregateFunc {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 func initWindowBuiltins() {
@@ -291,6 +292,44 @@ func (w *framableAggregateWindowFunc) Compute(
 
 func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
 	w.agg.Close(ctx, evalCtx)
+}
+
+// arrayAggForWindow is an alternative implementation of array_agg built-in
+// aggregate function to be used as a window function. It utilizes quadratic
+// approach to compute the result and produces a new DArray for every call
+// to Compute.
+type arrayAggForWindow struct {
+	paramType types.T
+	acc       mon.BoundAccount
+}
+
+func newArrayAggForWindow(a *arrayAggregate) tree.WindowFunc {
+	return &arrayAggForWindow{paramType: a.arr.ParamTyp, acc: a.acc}
+}
+
+func (w *arrayAggForWindow) Compute(
+	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
+) (tree.Datum, error) {
+	var err error
+	var datum tree.Datum
+	res := tree.NewDArray(w.paramType)
+	for idx := wfr.FrameStartIdx(); idx < wfr.FrameEndIdx(); idx++ {
+		datum = wfr.ArgsByRowIdx(idx)[0]
+		if err = w.acc.Grow(ctx, int64(datum.Size())); err != nil {
+			return nil, err
+		}
+		if err = res.Append(datum); err != nil {
+			return nil, err
+		}
+	}
+	if len(res.Array) > 0 {
+		return res, nil
+	}
+	return tree.DNull, nil
+}
+
+func (w *arrayAggForWindow) Close(ctx context.Context, _ *tree.EvalContext) {
+	w.acc.Close(ctx)
 }
 
 // rowNumberWindow computes the number of the current row within its partition,
