@@ -180,8 +180,9 @@ func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
 			// filter on the registration's starting timestamp. Instead, we
 			// return all inline writes.
 			unsafeVal = meta.RawBytes
-		} else if unsafeKey.Timestamp.Less(s.r.startTS) {
-			// Before the registration's starting timestamp. Ignore.
+		} else if !s.r.startTS.Less(unsafeKey.Timestamp) {
+			// At or before the registration's exclusive starting timestamp.
+			// Ignore.
 			continue
 		}
 

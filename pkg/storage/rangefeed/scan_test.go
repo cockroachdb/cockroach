@@ -288,10 +288,6 @@ func TestCatchUpScan(t *testing.T) {
 			roachpb.Key("g"),
 			roachpb.Value{RawBytes: []byte("val7"), Timestamp: hlc.Timestamp{WallTime: 0}},
 		),
-		rangeFeedValue(
-			roachpb.Key("r"),
-			roachpb.Value{RawBytes: []byte("val9"), Timestamp: hlc.Timestamp{WallTime: 4}},
-		),
 	}
 	require.Equal(t, expEvents, r.Events())
 	require.Equal(t, 1, len(p.catchUpC))
