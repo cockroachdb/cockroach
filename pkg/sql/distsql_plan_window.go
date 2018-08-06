@@ -231,10 +231,11 @@ func (s *windowPlanState) createWindowFnSpec(
 		})
 	}
 	funcInProgressSpec := distsqlrun.WindowerSpec_WindowFn{
-		Func:        funcSpec,
-		ArgIdxStart: uint32(funcInProgress.argIdxStart),
-		ArgCount:    uint32(funcInProgress.argCount),
-		Ordering:    distsqlrun.Ordering{Columns: ordCols},
+		Func:         funcSpec,
+		ArgIdxStart:  uint32(funcInProgress.argIdxStart),
+		ArgCount:     uint32(funcInProgress.argCount),
+		Ordering:     distsqlrun.Ordering{Columns: ordCols},
+		FilterColIdx: int32(funcInProgress.filterColIdx),
 	}
 	if s.n.run.windowFrames[funcInProgress.funcIdx] != nil {
 		// funcInProgress has a custom window frame.
@@ -244,6 +245,7 @@ func (s *windowPlanState) createWindowFnSpec(
 		}
 		funcInProgressSpec.Frame = &frameSpec
 	}
+
 	return funcInProgressSpec, outputType, nil
 }
 

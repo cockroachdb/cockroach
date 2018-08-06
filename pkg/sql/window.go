@@ -37,8 +37,6 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
-	sourceCols int
-
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
 	// can be propagated directly from the "wrapped" node.
@@ -122,7 +120,6 @@ func (p *planner) window(
 	if err := window.extractWindowFunctions(s); err != nil {
 		return nil, err
 	}
-	window.sourceCols = len(s.columns)
 
 	if err := p.constructWindowDefinitions(ctx, window, n, s); err != nil {
 		return nil, err
@@ -297,6 +294,32 @@ func (p *planner) constructWindowDefinitions(
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
 		if err != nil {
 			return err
+		}
+
+		// Validate FILTER clause.
+		if windowFn.expr.Filter != nil {
+			filterExpr := windowFn.expr.Filter.(tree.TypedExpr)
+
+			// We need to save and restore the previous value of the field in
+			// semaCtx in case we are recursively called within a subquery
+			// context.
+			scalarProps := &p.semaCtx.Properties
+			defer scalarProps.Restore(*scalarProps)
+			scalarProps.Require("FILTER", tree.RejectSpecial)
+
+			col, renderExpr, err := p.computeRender(ctx,
+				tree.SelectExpr{Expr: filterExpr}, types.Bool, s.sourceInfo, s.ivarHelper,
+				autoGenerateRenderOutputName,
+			)
+			if err != nil {
+				return err
+			}
+			if renderExpr.ResolvedType() != types.Bool {
+				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
+				)
+			}
+			windowFn.filterColIdx = s.addOrReuseRenderStartingFromIdx(col, renderExpr, true /* reuse */, n.numRendersNotToBeReused)
 		}
 
 		// Validate PARTITION BY clause.
@@ -641,7 +664,12 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 	var scratchBytes []byte
 	var scratchDatum []tree.Datum
 	for windowIdx, windowFn := range n.funcs {
-		frameRun := &tree.WindowFrameRun{}
+		frameRun := &tree.WindowFrameRun{
+			ArgIdxStart:  windowFn.argIdxStart,
+			ArgCount:     windowFn.argCount,
+			RowIdx:       0,
+			FilterColIdx: windowFn.filterColIdx,
+		}
 		if n.run.windowFrames[windowIdx] != nil {
 			frameRun.Frame = n.run.windowFrames[windowIdx]
 			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
@@ -707,8 +735,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.run.wrappedRenderVals.At(rowI)
-			sourceVals := row[:n.sourceCols]
-			entry := indexedRow{idx: rowI, row: sourceVals}
+			entry := indexedRow{idx: rowI, row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
@@ -780,8 +807,6 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			}
 
 			frameRun.Rows = partition
-			frameRun.ArgIdxStart = windowFn.argIdxStart
-			frameRun.ArgCount = windowFn.argCount
 			frameRun.RowIdx = 0
 
 			if !frameRun.IsDefaultFrame() {
@@ -939,10 +964,11 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			}
 
 			f := &windowFuncHolder{
-				expr:     t,
-				args:     t.Exprs,
-				argCount: len(t.Exprs),
-				window:   v.n,
+				expr:         t,
+				args:         t.Exprs,
+				argCount:     len(t.Exprs),
+				window:       v.n,
+				filterColIdx: noFilterIdx,
 			}
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
@@ -993,15 +1019,18 @@ func (v extractWindowFuncsVisitor) extract(typedExpr tree.TypedExpr) (tree.Typed
 var _ tree.TypedExpr = &windowFuncHolder{}
 var _ tree.VariableExpr = &windowFuncHolder{}
 
+const noFilterIdx = -1
+
 type windowFuncHolder struct {
 	window *windowNode
 
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx     int // index of the windowFuncHolder in window.funcs
-	argIdxStart int // index of the window function's first arguments in window.wrappedValues
-	argCount    int // number of arguments taken by the window function
+	funcIdx      int // index of the windowFuncHolder in window.funcs
+	argIdxStart  int // index of the window function's first arguments in window.wrappedValues
+	argCount     int // number of arguments taken by the window function
+	filterColIdx int // optinal index of filtering column, -1 if no filter
 
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
