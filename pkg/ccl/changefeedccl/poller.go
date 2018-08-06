@@ -45,46 +45,57 @@ type poller struct {
 	db       *client.DB
 	clock    *hlc.Clock
 	gossip   *gossip.Gossip
+	targets  map[sqlbase.ID]string
 	buf      *buffer
 
-	spans     []roachpb.Span
 	highWater hlc.Timestamp
 }
 
 func makePoller(
-	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
 	startTime hlc.Timestamp,
 	buf *buffer,
-) (*poller, error) {
-	p := &poller{
+) *poller {
+	return &poller{
 		settings:  execCfg.Settings,
 		db:        execCfg.DB,
 		clock:     execCfg.Clock,
 		gossip:    execCfg.Gossip,
 		highWater: startTime,
+		targets:   details.Targets,
 		buf:       buf,
 	}
+}
 
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p.spans = nil
-		if startTime != (hlc.Timestamp{}) {
-			txn.SetFixedTimestamp(ctx, startTime)
-		}
+func (p *poller) fetchSpans(ctx context.Context, ts hlc.Timestamp) ([]roachpb.Span, error) {
+	var spans []roachpb.Span
+	err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		spans = nil
+		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range details.Targets {
+		for tableID, origName := range p.targets {
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 			if err != nil {
+				if errors.Cause(err) == sqlbase.ErrDescriptorNotFound {
+					return errors.Errorf(`"%s" was dropped or truncated`, origName)
+				}
 				return err
 			}
-			p.spans = append(p.spans, tableDesc.PrimaryIndexSpan())
+			if tableDesc.State == sqlbase.TableDescriptor_DROP {
+				return errors.Errorf(`"%s" was dropped or truncated`, origName)
+			}
+			if tableDesc.Name != origName {
+				return errors.Errorf(`"%s" was renamed to "%s"`, origName, tableDesc.Name)
+			}
+			if err := validateChangefeedTable(tableDesc); err != nil {
+				return err
+			}
+			spans = append(spans, tableDesc.PrimaryIndexSpan())
 		}
 		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return p, nil
+	})
+	return spans, err
 }
 
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a
@@ -114,6 +125,11 @@ func (p *poller) Run(ctx context.Context) error {
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
+		spans, err := p.fetchSpans(ctx, nextHighWater)
+		if err != nil {
+			return err
+		}
+
 		var ranges []roachpb.RangeDescriptor
 		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
@@ -127,7 +143,7 @@ func (p *poller) Run(ctx context.Context) error {
 		type rangeMarker struct{}
 
 		var spanCovering intervalccl.Covering
-		for _, span := range p.spans {
+		for _, span := range spans {
 			spanCovering = append(spanCovering, intervalccl.Range{
 				Start:   []byte(span.Key),
 				End:     []byte(span.EndKey),
