@@ -192,14 +192,15 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
  ├── columns: i:2(int) div:6(decimal!null) f:3(float)
+ ├── side-effects
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: div:6(decimal) i:2(int) f:3(float)
- │    ├── fd: (2)-->(6)
+ │    ├── side-effects
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
- │    └── projections [outer=(2,3)]
- │         └── a.i / 2 [type=decimal, outer=(2)]
+ │    └── projections [outer=(2,3), side-effects]
+ │         └── a.i / 2 [type=decimal, outer=(2), side-effects]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
       └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
 
@@ -209,10 +210,12 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
  ├── columns: i:2(int!null) div:6(decimal!null) f:3(float!null)
+ ├── side-effects
  ├── fd: ()-->(2,3,6)
  ├── project
  │    ├── columns: div:6(decimal) i:2(int!null) f:3(float!null)
- │    ├── fd: ()-->(2,3,6)
+ │    ├── side-effects
+ │    ├── fd: ()-->(2,3)
  │    ├── select
  │    │    ├── columns: i:2(int!null) f:3(float!null)
  │    │    ├── fd: ()-->(2,3)
@@ -221,8 +224,8 @@ select
  │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight), fd=()-->(2,3)]
  │    │         ├── a.f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
  │    │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │    └── projections [outer=(2,3)]
- │         └── a.i / 2 [type=decimal, outer=(2)]
+ │    └── projections [outer=(2,3), side-effects]
+ │         └── a.i / 2 [type=decimal, outer=(2), side-effects]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
       └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
 

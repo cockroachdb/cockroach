@@ -1044,11 +1044,13 @@ ORDER BY
 ----
 sort
  ├── columns: o_year:61(int) mkt_share:66(float)
+ ├── side-effects
  ├── key: (61)
  ├── fd: (61)-->(66)
  ├── ordering: +61
  └── project
       ├── columns: mkt_share:66(float) o_year:61(int)
+      ├── side-effects
       ├── key: (61)
       ├── fd: (61)-->(66)
       ├── group-by
@@ -1155,8 +1157,8 @@ sort
       │         │    └── variable: column63 [type=float, outer=(63)]
       │         └── sum [type=float, outer=(62)]
       │              └── variable: volume [type=float, outer=(62)]
-      └── projections [outer=(61,64,65)]
-           └── column64 / column65 [type=float, outer=(64,65)]
+      └── projections [outer=(61,64,65), side-effects]
+           └── column64 / column65 [type=float, outer=(64,65), side-effects]
 
 # --------------------------------------------------
 # Q9
@@ -1738,6 +1740,7 @@ WHERE
 project
  ├── columns: promo_revenue:30(float)
  ├── cardinality: [1 - 1]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(30)
  ├── scalar-group-by
@@ -1771,8 +1774,8 @@ project
  │         │    └── variable: column26 [type=float, outer=(26)]
  │         └── sum [type=float, outer=(28)]
  │              └── variable: column28 [type=float, outer=(28)]
- └── projections [outer=(27,29)]
-      └── (column27 * 100.0) / column29 [type=float, outer=(27,29)]
+ └── projections [outer=(27,29), side-effects]
+      └── (column27 * 100.0) / column29 [type=float, outer=(27,29), side-effects]
 
 # --------------------------------------------------
 # Q15
@@ -2128,6 +2131,7 @@ WHERE
 project
  ├── columns: avg_yearly:45(float)
  ├── cardinality: [1 - 1]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(45)
  ├── scalar-group-by
@@ -2178,8 +2182,8 @@ project
  │    └── aggregations [outer=(6)]
  │         └── sum [type=float, outer=(6)]
  │              └── variable: lineitem.l_extendedprice [type=float, outer=(6)]
- └── projections [outer=(44)]
-      └── column44 / 7.0 [type=float, outer=(44)]
+ └── projections [outer=(44), side-effects]
+      └── column44 / 7.0 [type=float, outer=(44), side-effects]
 
 # --------------------------------------------------
 # Q18

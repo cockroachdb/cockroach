@@ -435,7 +435,7 @@ func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 		group.Group = fdset.ComputeEquivClosure(group.Group)
 
 		// Add this group's columns and find closure with the new columns.
-		closure.UnionWith(group.Group)
+		closure = closure.Union(group.Group)
 		closure = fdset.ComputeClosure(closure)
 
 		if n != i {

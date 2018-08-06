@@ -54,13 +54,6 @@ type Builder struct {
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
 
-	// AllowImpureFuncs is a control knob: if set, when building a scalar, the
-	// builder will not panic when it encounters an impure function. While the
-	// cost-based optimizer does not currently handle impure functions, the
-	// heuristic planner can handle them (and uses the builder code for index
-	// constraints).
-	AllowImpureFuncs bool
-
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
 	// the table name in all column labels before adding them to the metadata.
