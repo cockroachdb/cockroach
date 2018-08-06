@@ -440,6 +440,7 @@ type OutgoingSnapshot struct {
 	// sideloaded storage in the meantime.
 	WithSideloaded func(func(sideloadStorage) error) error
 	RaftEntryCache *raftEntryCache
+	snapType       string
 }
 
 // Close releases the resources associated with the snapshot.
@@ -534,6 +535,7 @@ func snapshot(
 				ConfState: cs,
 			},
 		},
+		snapType: snapType,
 	}, nil
 }
 
