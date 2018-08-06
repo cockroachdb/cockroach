@@ -40,6 +40,7 @@ type WindowFrameRun struct {
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
 	StartBoundOffset Datum
 	EndBoundOffset   Datum
+	FilterColIdx     int
 
 	// changes for each row (each call to WindowFunc.Add)
 	RowIdx int // the current row index
