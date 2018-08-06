@@ -158,6 +158,48 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ListID, cols memo.PrivateID)
 	return c.f.ConstructSimpleProject(join, projCols)
 }
 
+// HoistZipSubquery searches the Zip operator's functions for correlated
+// subqueries. Any found queries are hoisted into LeftJoinApply or
+// InnerJoinApply operators, depending on subquery cardinality:
+//
+//   SELECT generate_series
+//   FROM xy
+//   INNER JOIN LATERAL ROWS FROM
+//   (
+//     generate_series(1, (SELECT v FROM uv WHERE u=x))
+//   )
+//   =>
+//   SELECT generate_series
+//   FROM xy
+//   ROWS FROM
+//   (
+//     SELECT generate_series
+//     FROM (VALUES ())
+//     LEFT JOIN LATERAL (SELECT v FROM uv WHERE u=x)
+//     ON True
+//     INNER JOIN LATERAL ROWS FROM (generate_series(1, v))
+//     ON True
+//   )
+//
+// The dummy VALUES clause with a singleton empty row is added to the tree in
+// order to use the hoister, which requires an initial input query. While a
+// right join would be slightly better here, this is such a fringe case that
+// it's not worth the extra code complication.
+func (c *CustomFuncs) HoistZipSubquery(funcs memo.ListID, cols memo.PrivateID) memo.GroupID {
+	var hoister subqueryHoister
+	hoister.init(c, c.constructNoColsRow())
+
+	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	for _, item := range c.f.mem.LookupList(funcs) {
+		lb.AddItem(hoister.hoistAll(item))
+	}
+
+	zip := c.f.ConstructZip(lb.BuildList(), cols)
+	projCols := c.f.mem.GroupProperties(zip).Relational.OutputCols
+	join := c.f.ConstructInnerJoinApply(hoister.input(), zip, c.f.ConstructTrue())
+	return c.f.ConstructSimpleProject(join, projCols)
+}
+
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds
 // to the given join operator type.
 func (c *CustomFuncs) ConstructNonApplyJoin(
