@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
@@ -29,7 +30,9 @@ import (
 type Stream interface {
 	// Context returns the context for this stream.
 	Context() context.Context
-	// Send blocks until it sends m, the stream is done or the stream breaks.
+	// Send blocks until it sends m, the stream is done, or the stream breaks.
+	// The provided RangeFeedEvent is not guaranteed to be safe for use after
+	// Send returns, so a copy should be made before returning if necessary.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*roachpb.RangeFeedEvent) error
 }
@@ -55,7 +58,7 @@ type registration struct {
 	startTS hlc.Timestamp
 
 	// Catch-up state.
-	catchUpSnap Snapshot
+	catchUpIter engine.SimpleIterator
 	caughtUp    bool
 
 	// Output.
