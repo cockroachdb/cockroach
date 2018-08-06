@@ -1365,7 +1365,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// This would be the situation in which the lease holder gets removed when
 						// holding the lease, or in which a lease request erroneously gets accepted
 						// for a replica that is not in the replica set. Neither of the two can
-						// happen since appropriate mechanisms have been added:
+						// happen in normal usage since appropriate mechanisms have been added:
 						//
 						// 1. Only the lease holder (at the time) schedules removal of a replica,
 						// but the lease can change hands and so the situation in which a follower
@@ -1391,7 +1391,12 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// ProposerLease. Hence, an extra check is in order: processRaftCommand
 						// makes sure that lease requests for a replica not in the descriptor are
 						// bounced.
-						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
+						//
+						// However, this is possible if the `cockroach debug
+						// unsafe-remove-dead-replicas` command has been used, so
+						// this is just a logged error instead of a fatal
+						// assertion.
+						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
