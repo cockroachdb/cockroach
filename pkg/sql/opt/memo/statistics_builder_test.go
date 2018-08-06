@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -34,6 +35,14 @@ import (
 // by the optimizer.
 func TestGetStatsFromConstraint(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	// Create the columns.
+	mem := New()
+	mem.metadata.AddColumn("1", types.Int)
+	mem.metadata.AddColumn("2", types.Int)
+	mem.metadata.AddColumn("3", types.Int)
+	mem.metadata.AddColumn("4", types.String)
+	mem.metadata.AddColumn("5", types.String)
 
 	// Test that applyConstraintSet correctly updates the statistics for integer
 	// columns 1, 2, and 3 from constraint set cs.
@@ -60,7 +69,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
+               sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
 		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
 		if isContradiction {
 			sb.s.Selectivity = 0
@@ -94,7 +103,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
+               sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{mem: mem}, &keyBuffer{})
 		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
 		if isContradiction {
 			sb.s.Selectivity = 0
