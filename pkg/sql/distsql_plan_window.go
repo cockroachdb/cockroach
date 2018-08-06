@@ -244,6 +244,16 @@ func (s *windowPlanState) createWindowFnSpec(
 		}
 		funcInProgressSpec.Frame = &frameSpec
 	}
+	if funcInProgress.filterColIdx != nil {
+		filterColIdx := uint32(*funcInProgress.filterColIdx)
+		t := s.plan.ResultTypes[filterColIdx].SemanticType
+		if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
+			return distsqlrun.WindowerSpec_WindowFn{}, outputType, errors.Errorf(
+				"filter column %d must be of boolean type, not %s", filterColIdx, t,
+			)
+		}
+		funcInProgressSpec.FilterColIdx = &filterColIdx
+	}
 	return funcInProgressSpec, outputType, nil
 }
 

@@ -909,6 +909,8 @@ message WindowerSpec {
     optional Ordering ordering = 4 [(gogoproto.nullable) = false];
     // Frame specifies over which frame this window function is computed.
     optional Frame frame = 5;
+    // Optional index of a column over which filtering of rows will be done.
+    optional uint32 filterColIdx = 6;
   }
 
   // PartitionBy specifies how to partition rows for all window functions.

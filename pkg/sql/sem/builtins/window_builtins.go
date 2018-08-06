@@ -197,6 +197,9 @@ func (w *aggregateWindowFunc) Compute(
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wfr.PeerRowCount; i++ {
+		if wfr.FilterColIdx != nil && wfr.Rows.GetRow(wfr.RowIdx+i).GetDatum(*wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		args := wfr.ArgsWithRowOffset(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.
@@ -261,6 +264,9 @@ func (w *framableAggregateWindowFunc) Compute(
 
 	// Accumulate all values in the window frame.
 	for i := wfr.FrameStartIdx(); i < wfr.FrameEndIdx(); i++ {
+		if wfr.FilterColIdx != nil && wfr.Rows.GetRow(i).GetDatum(*wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		args := wfr.ArgsByRowIdx(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.

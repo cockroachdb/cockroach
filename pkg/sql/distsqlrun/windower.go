@@ -192,6 +192,10 @@ func newWindower(
 			argCount:    int(windowFn.ArgCount),
 			frame:       windowFn.Frame,
 		}
+		if windowFn.FilterColIdx != nil {
+			filterColIdx := int(*windowFn.FilterColIdx)
+			wf.filterColIdx = &filterColIdx
+		}
 
 		w.windowFns = append(w.windowFns, wf)
 	}
@@ -411,8 +415,9 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		w.windowValues[windowFnIdx] = make([][]tree.Datum, len(w.encodedPartitions))
 
 		frameRun := &tree.WindowFrameRun{
-			ArgCount:    windowFn.argCount,
-			ArgIdxStart: windowFn.argIdxStart,
+			ArgCount:     windowFn.argCount,
+			ArgIdxStart:  windowFn.argIdxStart,
+			FilterColIdx: windowFn.filterColIdx,
 		}
 
 		if windowFn.frame != nil {
@@ -547,11 +552,12 @@ func (w *windower) populateNextOutputRow() bool {
 }
 
 type windowFunc struct {
-	create      func(*tree.EvalContext) tree.WindowFunc
-	ordering    Ordering
-	argIdxStart int
-	argCount    int
-	frame       *WindowerSpec_Frame
+	create       func(*tree.EvalContext) tree.WindowFunc
+	ordering     Ordering
+	argIdxStart  int
+	argCount     int
+	frame        *WindowerSpec_Frame
+	filterColIdx *int
 }
 
 type partitionSorter struct {
