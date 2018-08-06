@@ -1170,20 +1170,6 @@ type SchemaChangerTestingKnobs struct {
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
 
-	// RunBeforeBackfillChunk is called before executing each chunk of a
-	// backfill during a schema change operation. It is called with the
-	// current span and returns an error which eventually is returned to the
-	// caller of SchemaChanger.exec(). It is called at the start of the
-	// backfill function passed into the transaction executing the chunk.
-	RunBeforeBackfillChunk func(sp roachpb.Span) error
-
-	// RunAfterBackfillChunk is called after executing each chunk of a
-	// backfill during a schema change operation. It is called just before
-	// returning from the backfill function passed into the transaction
-	// executing the chunk. It is always called even when the backfill
-	// function returns an error, or if the table has already been dropped.
-	RunAfterBackfillChunk func()
-
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
 	// names are gone, and just before the mapping of the old names to the
