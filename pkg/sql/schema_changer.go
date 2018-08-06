@@ -1012,12 +1012,25 @@ func (sc *SchemaChanger) createRollbackJob(
 	for i := range tableDesc.MutationJobs {
 		if tableDesc.MutationJobs[i].MutationID == sc.mutationID {
 			// Create a roll back job.
+			//
+			// Initialize refresh spans to scan the entire table.
+			span := tableDesc.PrimaryIndexSpan()
+			var spanList []jobspb.ResumeSpanList
+			for _, m := range tableDesc.Mutations {
+				if m.MutationID == sc.mutationID {
+					spanList = append(spanList,
+						jobspb.ResumeSpanList{
+							ResumeSpans: []roachpb.Span{span},
+						},
+					)
+				}
+			}
 			payload := job.Payload()
 			rollbackJob := sc.jobRegistry.NewJob(jobs.Record{
 				Description:   "ROLL BACK " + payload.Description,
 				Username:      payload.Username,
 				DescriptorIDs: payload.DescriptorIDs,
-				Details:       payload.UnwrapDetails(),
+				Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
 				Progress:      jobspb.SchemaChangeProgress{},
 			})
 			if err := rollbackJob.WithTxn(txn).Created(ctx); err != nil {
