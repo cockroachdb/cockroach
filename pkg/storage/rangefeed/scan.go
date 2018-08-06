@@ -187,7 +187,7 @@ func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
 		}
 
 		var event roachpb.RangeFeedEvent
-		event.SetValue(&roachpb.RangeFeedValue{
+		event.MustSetValue(&roachpb.RangeFeedValue{
 			Key: unsafeKey.Key,
 			Value: roachpb.Value{
 				RawBytes:  unsafeVal,

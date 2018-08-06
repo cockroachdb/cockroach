@@ -98,9 +98,7 @@ func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 
 func makeRangeFeedEvent(val interface{}) *roachpb.RangeFeedEvent {
 	var event roachpb.RangeFeedEvent
-	if !event.SetValue(val) {
-		panic(fmt.Sprintf("unknown rangefeed event: %v", val))
-	}
+	event.MustSetValue(val)
 	return &event
 }
 
