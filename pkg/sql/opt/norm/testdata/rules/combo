@@ -713,7 +713,7 @@ Initial expression
                        └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 ================================================================================
 HoistSelectExists
-  Cost: 4386.67
+  Cost: 2191.10
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
