@@ -55,7 +55,7 @@ type registration struct {
 
 	// Footprint.
 	span    roachpb.Span
-	startTS hlc.Timestamp
+	startTS hlc.Timestamp // exclusive
 
 	// Catch-up state.
 	catchUpIter engine.SimpleIterator
@@ -146,9 +146,9 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 	}
 
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {
-		if minTS.Less(r.startTS) {
-			// Don't publish events if they are from before
-			// the registration's starting timestamp.
+		if !r.startTS.Less(minTS) {
+			// Don't publish events if they are equal to or less
+			// than the registration's starting timestamp.
 			return false, nil
 		}
 		if requireCaughtUp && !r.caughtUp {
