@@ -562,7 +562,9 @@ func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
 		}
 	}
 
-	ordering := def.Ordering
+	// Use the ordering that we require on the child (this is the more restrictive
+	// between def.Ordering and the ordering required on the DistinctOn itself).
+	ordering := ev.Child(0).Physical().Ordering
 	var orderedColSet opt.ColSet
 	for i := range ordering.Columns {
 		g := ordering.Columns[i].Group

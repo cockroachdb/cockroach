@@ -118,13 +118,12 @@ sort
            └── const-agg [type=int, outer=(3)]
                 └── variable: abcde.c [type=int, outer=(3)]
 
-# Scalar GroupBy case.
+# ScalarGroupBy case.
 opt
 SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
 ----
 scalar-group-by
  ├── columns: array_agg:6(int[])
- ├── ordering: +1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
@@ -136,6 +135,25 @@ scalar-group-by
  └── aggregations [outer=(2)]
       └── array-agg [type=int[], outer=(2)]
            └── variable: abcde.b [type=int, outer=(2)]
+
+# DistinctOn case.
+opt
+SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
+----
+distinct-on
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── grouping columns: b:2(int) c:3(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)-->(1)
+ ├── ordering: +2,+3
+ ├── scan abcde@bc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── ordering: +2,+3,+1
+ └── aggregations [outer=(1)]
+      └── first-agg [type=int, outer=(1)]
+           └── variable: abcde.a [type=int, outer=(1)]
 
 # --------------------------------------------------
 # SimplifyRowNumberOrdering

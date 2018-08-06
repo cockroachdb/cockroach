@@ -91,18 +91,22 @@ func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy)
 	// We have an aggregation if:
 	//  - we have a GROUP BY, or
 	//  - we have a HAVING clause, or
-	//  - we have aggregate functions in the select and/or order by expressions.
-	return len(sel.GroupBy) > 0 || sel.Having != nil || b.hasAggregates(sel.Exprs, orderBy)
-}
+	//  - we have aggregate functions in the SELECT, DISTINCT ON and/or ORDER BY expressions.
+	if len(sel.GroupBy) > 0 || sel.Having != nil {
+		return true
+	}
 
-// hasAggregates determines if any of the given select expressions contain an
-// aggregate function.
-func (b *Builder) hasAggregates(selects tree.SelectExprs, orderBy tree.OrderBy) bool {
 	exprTransformCtx := transform.ExprTransformContext{}
-	for _, sel := range selects {
+	for _, sel := range sel.Exprs {
 		// TODO(rytaft): This function does not recurse into subqueries, so this
 		// will be incorrect for correlated subqueries.
 		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
+			return true
+		}
+	}
+
+	for _, on := range sel.DistinctOn {
+		if exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
@@ -218,9 +222,10 @@ func (b *Builder) buildAggregation(
 	// called which adds columns to the aggInScope and aggOutScope.
 	b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 
-	// Any additional columns or aggregates in the ORDER BY clause (if it exists)
-	// will be added here.
+	// Any additional columns or aggregates in the ORDER BY and DISTINCT ON
+	// clauses (if they exist) will be added here.
 	b.buildOrderBy(orderBy, fromScope, projectionsScope)
+	b.buildDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
 
 	aggInfos := aggOutScope.groupby.aggs
 
