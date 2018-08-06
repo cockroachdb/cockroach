@@ -93,7 +93,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ctx := context.TODO()
 
 	// Acquire a lease.
-	lease, err := changer.AcquireLease(ctx, nil)
+	lease, err := changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	if _, err := changer.AcquireLease(ctx, nil); !testutils.IsError(
+	if _, err := changer.AcquireLease(ctx); !testutils.IsError(
 		err, "an outstanding schema change lease exists",
 	) {
 		t.Fatal(err)
@@ -131,12 +131,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Releasing an old lease fails.
-	if err := changer.ReleaseLease(ctx, oldLease, nil); err == nil {
+	if err := changer.ReleaseLease(ctx, oldLease); err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
 
 	// Release lease.
-	if err := changer.ReleaseLease(ctx, lease, nil); err != nil {
+	if err := changer.ReleaseLease(ctx, lease); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,7 +146,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// acquiring the lease succeeds
-	lease, err = changer.AcquireLease(ctx, nil)
+	lease, err = changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func runSchemaChangeWithOperations(
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
 	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg)
-	if l, err := sc.AcquireLease(ctx, nil); err == nil {
+	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
 
