@@ -177,12 +177,12 @@ type Reader interface {
 	//
 	// Deprecated: use Iterator.ValueProto instead.
 	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from start to end keys, visiting at most max
-	// key/value pairs. On each key value pair, the function f is
-	// invoked. If f returns an error or if the scan itself encounters
-	// an error, the iteration will stop and return the error.
-	// If the first result of f is true, the iteration stops.
-	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
+	// Iterate scans from the start key to the end key (exclusive), invoking the
+	// function f on each key value pair. If f returns an error or if the scan
+	// itself encounters an error, the iteration will stop and return the error.
+	// If the first result of f is true, the iteration stops and returns a nil
+	// error.
+	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
