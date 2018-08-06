@@ -24,27 +24,27 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 project
  ├── columns: k:1(int!null) x:5(int!null)
- ├── stats: [rows=142.857143]
- ├── cost: 2125.38214
+ ├── stats: [rows=2.04081633]
+ ├── cost: 2122.56582
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
-      ├── stats: [rows=142.857143]
-      ├── cost: 2123.95357
+      ├── stats: [rows=2.04081633, distinct(1)=1.42857143, distinct(5)=1.42857143]
+      ├── cost: 2122.54541
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
       │    ├── columns: x:5(int)
-      │    ├── stats: [rows=1000]
+      │    ├── stats: [rows=1000, distinct(5)=700]
       │    └── cost: 1040
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)
-      │    ├── stats: [rows=1.42857143, distinct(4)=1]
+      │    ├── stats: [rows=1.42857143, distinct(1)=1.42857143, distinct(4)=1]
       │    ├── cost: 1070
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) d:4(decimal!null)
-      │    │    ├── stats: [rows=1000, distinct(4)=700]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, distinct(4)=700]
       │    │    ├── cost: 1060
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)

@@ -912,27 +912,27 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 575.083696
+ ├── cost: 0.0100267868
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
  ├── distinct-on
  │    ├── columns: stock.s_i_id:11(int!null)
  │    ├── grouping columns: stock.s_i_id:11(int!null)
- │    ├── stats: [rows=28752.8606, distinct(11)=28752.8606]
- │    ├── cost: 287.54509
+ │    ├── stats: [rows=4.0816376e-06, distinct(11)=4.0816376e-06]
+ │    ├── cost: 2.67459551e-05
  │    ├── key: (11)
  │    └── inner-join (lookup stock)
  │         ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null) stock.s_i_id:11(int!null) stock.s_w_id:12(int!null) stock.s_quantity:13(int!null)
  │         ├── key columns: [3 5] = [12 11]
- │         ├── stats: [rows=0.0136054422, distinct(11)=28752.8606]
- │         ├── cost: 0.0163475102
+ │         ├── stats: [rows=4.73185689e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06, distinct(11)=4.0816376e-06, distinct(12)=4.08163265e-06]
+ │         ├── cost: 2.66578201e-05
  │         ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │         ├── interesting orderings: (+3,+2,-1)
  │         ├── scan order_line
  │         │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null)
  │         │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
- │         │    ├── stats: [rows=4.08163265e-06, distinct(1)=4.08163265e-06, distinct(2)=4.08163265e-06, distinct(3)=4.08163265e-06]
+ │         │    ├── stats: [rows=4.08163265e-06, distinct(1)=4.08163265e-06, distinct(2)=4.08163265e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06]
  │         │    ├── cost: 4.65306122e-06
  │         │    ├── fd: ()-->(2,3)
  │         │    ├── prune: (5)
@@ -975,20 +975,20 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 126.71
+ ├── cost: 126.532222
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
  ├── inner-join
  │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int!null) sum_d_ytd:21(decimal!null)
- │    ├── stats: [rows=10]
- │    ├── cost: 126.6
+ │    ├── stats: [rows=1.11111111, distinct(1)=1.11111111, distinct(11)=1.11111111]
+ │    ├── cost: 126.511111
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── interesting orderings: (+1) (+11)
  │    ├── scan warehouse
  │    │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal)
- │    │    ├── stats: [rows=10]
+ │    │    ├── stats: [rows=10, distinct(1)=10]
  │    │    ├── cost: 11.1
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
@@ -1429,31 +1429,31 @@ scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1477000.09
+ ├── cost: 1477000.13
  ├── key: ()
  ├── fd: ()-->(19)
  ├── prune: (19)
  ├── select
  │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
- │    ├── stats: [rows=0.0680272109]
- │    ├── cost: 1477000.08
+ │    ├── stats: [rows=0.701984663]
+ │    ├── cost: 1477000.11
  │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    ├── full-join
  │    │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
- │    │    ├── stats: [rows=0.204081633]
- │    │    ├── cost: 1477000.07
+ │    │    ├── stats: [rows=2.10595399]
+ │    │    ├── cost: 1477000.09
  │    │    ├── reject-nulls: (1-3,9-11)
  │    │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    │    ├── project
  │    │    │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
- │    │    │    ├── stats: [rows=1.42857143]
+ │    │    │    ├── stats: [rows=1.42857143, distinct(1)=1.42856997, distinct(2)=1.42856997, distinct(3)=1.33122395]
  │    │    │    ├── cost: 327000.014
  │    │    │    ├── key: (1-3)
  │    │    │    ├── prune: (1-3)
  │    │    │    ├── interesting orderings: (+3,+2,-1)
  │    │    │    └── select
  │    │    │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
- │    │    │         ├── stats: [rows=1.42857143, distinct(6)=1]
+ │    │    │         ├── stats: [rows=1.42857143, distinct(1)=1.42856997, distinct(2)=1.42856997, distinct(3)=1.33122395, distinct(6)=1]
  │    │    │         ├── cost: 327000
  │    │    │         ├── key: (1-3)
  │    │    │         ├── fd: ()-->(6)
@@ -1461,7 +1461,7 @@ scalar-group-by
  │    │    │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
  │    │    │         ├── scan order@order_idx
  │    │    │         │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
- │    │    │         │    ├── stats: [rows=300000, distinct(6)=210000]
+ │    │    │         │    ├── stats: [rows=300000, distinct(1)=210000, distinct(2)=210000, distinct(3)=10, distinct(6)=210000]
  │    │    │         │    ├── cost: 324000
  │    │    │         │    ├── key: (1-3)
  │    │    │         │    ├── fd: (1-3)-->(6)
@@ -1473,20 +1473,20 @@ scalar-group-by
  │    │    │                   └── null [type=unknown]
  │    │    ├── project
  │    │    │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null)
- │    │    │    ├── stats: [rows=1.42857143]
+ │    │    │    ├── stats: [rows=1.42857143, distinct(9)=1.42857099, distinct(10)=1.42857099, distinct(11)=1.33122189]
  │    │    │    ├── cost: 1150000.01
  │    │    │    ├── prune: (9-11)
  │    │    │    ├── interesting orderings: (+11,+10,-9)
  │    │    │    └── select
  │    │    │         ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
- │    │    │         ├── stats: [rows=1.42857143, distinct(15)=1]
+ │    │    │         ├── stats: [rows=1.42857143, distinct(9)=1.42857099, distinct(10)=1.42857099, distinct(11)=1.33122189, distinct(15)=1]
  │    │    │         ├── cost: 1150000
  │    │    │         ├── fd: ()-->(15)
  │    │    │         ├── prune: (9-11)
  │    │    │         ├── interesting orderings: (+11,+10,-9)
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
- │    │    │         │    ├── stats: [rows=1000000, distinct(15)=700000]
+ │    │    │         │    ├── stats: [rows=1000000, distinct(9)=700000, distinct(10)=700000, distinct(11)=10, distinct(15)=700000]
  │    │    │         │    ├── cost: 1140000
  │    │    │         │    ├── prune: (9-11,15)
  │    │    │         │    └── interesting orderings: (+11,+10,-9)
