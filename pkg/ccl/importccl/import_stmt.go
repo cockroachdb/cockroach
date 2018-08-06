@@ -653,7 +653,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			sstSize = os
+			oversample = os
 		}
 
 		var skipFKs bool
