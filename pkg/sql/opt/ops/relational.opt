@@ -265,7 +265,12 @@ define ScalarGroupBy {
 # inconsequential - they can appear anywhere in the ordering and they won't
 # change the results (other than the result ordering).
 #
-# TODO(radu): actually set grouping columns as optional cols in Ordering.
+# Currently when we build DistinctOn, we set all grouping columns as optional
+# cols in Ordering (but this is not required by the operator).
+#
+# TODO(radu): in the future we may want an exploration transform to try out more
+# specific interesting orderings because execution is more efficient when we can
+# rely on an ordering on the grouping columns (or a subset of them).
 #
 # DistinctOn uses an Aggregations child and the GroupByDef private so that it's
 # polymorphic with GroupBy and can be used in the same rules (when appropriate).

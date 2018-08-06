@@ -106,8 +106,7 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 	case opt.LimitOp, opt.OffsetOp, opt.DistinctOnOp:
 		// These operators require a certain ordering of their input, but can also
 		// pass through a stronger ordering.
-		internal := o.internalOrdering(mexpr)
-		return internal.Implies(required) || required.Implies(internal)
+		return required.Intersects(o.internalOrdering(mexpr))
 	}
 
 	return false
@@ -182,12 +181,7 @@ func (o *Optimizer) buildChildPhysicalProps(
 			// DistinctOn is executed differently than GroupBy, in a way that retains
 			// the input ordering. Once we support "streaming" execution of GroupBy,
 			// that operator will belong here as well.
-			internalOrdering := o.internalOrdering(mexpr)
-			if parentProps.Ordering.Implies(internalOrdering) {
-				childProps.Ordering = parentProps.Ordering
-			} else {
-				childProps.Ordering = *internalOrdering
-			}
+			childProps.Ordering = parentProps.Ordering.Intersection(o.internalOrdering(mexpr))
 		}
 
 	case opt.ExplainOp:

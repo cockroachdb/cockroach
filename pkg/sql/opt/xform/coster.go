@@ -334,6 +334,10 @@ func (c *coster) computeGroupByCost(candidate *memo.BestExpr, logical *props.Log
 	def := candidate.Private(c.mem).(*memo.GroupByDef)
 	groupingColCount := def.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
+
+	// TODO(radu): take into account how many grouping columns we have an ordering
+	// on for DistinctOn.
+
 	return cost + c.computeChildrenCost(candidate)
 }
 

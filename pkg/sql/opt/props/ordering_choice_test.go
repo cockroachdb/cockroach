@@ -28,6 +28,11 @@ func TestOrderingChoice_FromOrdering(t *testing.T) {
 	if exp, actual := "+1,-2,+3", oc.String(); exp != actual {
 		t.Errorf("expected %s, got %s", exp, actual)
 	}
+
+	oc.FromOrderingWithOptCols(opt.Ordering{1, -2, 3, 4, -5}, util.MakeFastIntSet(1, 3, 5))
+	if exp, actual := "-2,+4 opt(1,3,5)", oc.String(); exp != actual {
+		t.Errorf("expected %s, got %s", exp, actual)
+	}
 }
 
 func TestOrderingChoice_ToOrdering(t *testing.T) {
@@ -105,6 +110,8 @@ func TestOrderingChoice_Implies(t *testing.T) {
 		{left: "+(1|2|3)", right: "+(1|2)", expected: false},
 		{left: "+(1|2)", right: "+1 opt(2)", expected: false},
 		{left: "+(1|2),-(3|4)", right: "+(1|2),-(3|4),+5", expected: false},
+		{left: "+1", right: "+3 opt(1,2)", expected: false},
+		{left: "+3 opt(1,2)", right: "+1", expected: false},
 	}
 
 	for _, tc := range testcases {
@@ -112,9 +119,110 @@ func TestOrderingChoice_Implies(t *testing.T) {
 		right := props.ParseOrderingChoice(tc.right)
 		if left.Implies(&right) != tc.expected {
 			if tc.expected {
-				t.Errorf("expected %s to be subset of %s", tc.left, tc.right)
+				t.Errorf("expected %s to imply %s", tc.left, tc.right)
 			} else {
-				t.Errorf("expected %s to not be subset of %s", tc.left, tc.right)
+				t.Errorf("expected %s to not imply %s", tc.left, tc.right)
+			}
+		}
+	}
+}
+
+// TestOrderingChoice_Intersection tests Intersects and Intersection.
+func TestOrderingChoice_Intersection(t *testing.T) {
+	testcases := []struct {
+		left           string
+		right          string
+		expected       string
+		nonCommutative bool
+	}{
+		{left: "", right: "", expected: ""},
+		{left: "+1", right: "", expected: "+1"},
+		{left: "+1 opt(2)", right: "", expected: "+1 opt(2)"},
+		{left: "+1", right: "+1", expected: "+1"},
+		{left: "+1,-2", right: "+1", expected: "+1,-2"},
+		{left: "+1,-2", right: "+1,-2", expected: "+1,-2"},
+		{left: "+1", right: "+1 opt(2)", expected: "+1"},
+		{left: "+1", right: "+2 opt(1)", expected: "+1,+2"},
+		{left: "-2,+1", right: "+1 opt(2)", expected: "-2,+1"},
+		{left: "+1", right: "+(1|2)", expected: "+1"},
+		{left: "+(1|2)", right: "+(1|2|3)", expected: "+(1|2)"},
+		{left: "+(1|2),-4", right: "+(1|2|3),-(4|5)", expected: "+(1|2),-4"},
+		{left: "+(1|2) opt(4)", right: "+(1|2|3) opt(4)", expected: "+(1|2) opt(4)"},
+
+		{left: "+1 opt(2,3,4)", right: "+1 opt(4,5)", expected: "+1 opt(4)"},
+		{left: "+1 opt(2,3,4)", right: "+1 opt(4,5)", expected: "+1 opt(4)"},
+		{left: "+1,+4,+5", right: "+4,+5 opt(1)", expected: "+1,+4,+5"},
+		{left: "+(1|2),+(3|4)", right: "+(2|3),+(4|5)", expected: "+2,+4"},
+		{left: "+(1|2|3),+(4|5)", right: "+(2|3),+(4|5|6)", expected: "+(2|3),+(4|5)"},
+
+		{left: "+1", right: "+2", expected: "NO"},
+		{left: "+1", right: "+2 opt(2)", expected: "NO"},
+		{left: "+1", right: "-1 opt(2)", expected: "NO"},
+		{left: "+(1|2),+(3|4)", right: "+(2|5),+(6|7)", expected: "NO"},
+
+		// Non-commutative cases.
+		{
+			left:           "+1 opt(2,5)",
+			right:          "+2 opt(1,5)",
+			expected:       "+1,+2 opt(5)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+2 opt(1,5)",
+			right:          "+1 opt(2,5)",
+			expected:       "+2,+1 opt(5)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(1|2),+(3|4) opt(6)",
+			right:          "+(2|3),+(5|6) opt(4)",
+			expected:       "+2,+4,+(5|6)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(2|3),+(5|6) opt(4)",
+			right:          "+(1|2),+(3|4) opt(6)",
+			expected:       "+2,+6,+(3|4)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(1|2|3),-(4|5|6) opt(7)",
+			right:          "-7 opt(2,3,5,6)",
+			expected:       "+(2|3),-(5|6),-7",
+			nonCommutative: true,
+		},
+		{
+			left:           "-7 opt(2,3,5,6)",
+			right:          "+(1|2|3),-(4|5|6) opt(7)",
+			expected:       "-7,+(1|2|3),-(4|5|6)",
+			nonCommutative: true,
+		},
+	}
+
+	getRes := func(left, right props.OrderingChoice) string {
+		if !left.Intersects(&right) {
+			return "NO"
+		}
+		return left.Intersection(&right).String()
+	}
+
+	for _, tc := range testcases {
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
+
+		res := getRes(left, right)
+		if res != tc.expected {
+			t.Errorf(
+				"intersection between '%s' and '%s': expected '%s', got '%s'",
+				left, right, tc.expected, res,
+			)
+		}
+		if !tc.nonCommutative {
+			if res2 := getRes(right, left); res2 != res {
+				t.Errorf(
+					"intersection not commutative: left='%s' right='%s': '%s' vs '%s'",
+					left, right, res, res2,
+				)
 			}
 		}
 	}
