@@ -1410,7 +1410,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 
 			for _, finalInfo := range info.FinalStage {
-				// The input of the final aggregators are
+				// The input of the final aggregators is
 				// specified as the relative indices of the
 				// local aggregation values. We need to map
 				// these to the corresponding absolute indices
@@ -1578,8 +1578,8 @@ func (dsp *DistSQLPlanner) addAggregators(
 					for j := range info.FinalStage {
 						mappedIdxs[j] = int(finalIdxMap[finalIdx+j])
 					}
-					// Map the final aggrgation values
-					// to their corresponding
+					// Map the final aggregation values
+					// to their corresponding indices.
 					expr, err := info.FinalRendering(&h, mappedIdxs)
 					if err != nil {
 						return err
