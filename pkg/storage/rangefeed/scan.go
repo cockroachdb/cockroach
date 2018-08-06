@@ -26,18 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// A Snapshot is an atomic view of all MVCCKeys within a key range.
-type Snapshot interface {
-	// Iterate scans from the start key to the end key, invoking the function f
-	// on each key value pair at or above the specified timestamp. If f returns
-	// an error or if the scan itself encounters an error, the iteration will
-	// stop and return the error. If the first result of f is true, the
-	// iteration stops and returns a nil error.
-	Iterate(start, end roachpb.Key, f func(engine.MVCCKeyValue) (bool, error)) error
-	// Close closes the snapshot, freeing up any outstanding resources.
-	Close()
-}
-
 // A runnable can be run as an async task.
 type runnable interface {
 	// Run executes the runnable. Cannot be called multiple times.
@@ -46,54 +34,32 @@ type runnable interface {
 	Cancel()
 }
 
-// initResolvedTSScan scans over all keys in the provided Snapshot and informs
-// the rangefeed Processor of any intents. This allows the Processor to backfill
-// its unresolvedIntentQueue with any intents that were written before the
-// Processor was started and hooked up to a stream of logical operations. The
-// Processor can initialize its resolvedTimestamp once the scan completes
+// initResolvedTSScan scans over all keys using the provided iterator and
+// informs the rangefeed Processor of any intents. This allows the Processor to
+// backfill its unresolvedIntentQueue with any intents that were written before
+// the Processor was started and hooked up to a stream of logical operations.
+// The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 //
-// Snapshot Contract:
-//   The provided Snapshot must observe all intents in the Processor's keyspan.
-//   An important implication of this is that if the Snapshot uses a
+// Iterator Contract:
+//   The provided Iterator must observe all intents in the Processor's keyspan.
+//   An important implication of this is that if the iterator is a
 //   TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
-//   known resolved timestamp, if one has ever been recorded.
+//   known resolved timestamp, if one has ever been recorded. If one has never
+//   been recorded, the TimeBoundIterator cannot have any lower bound.
 //
 type initResolvedTSScan struct {
-	p    *Processor
-	snap Snapshot
+	p  *Processor
+	it engine.SimpleIterator
 }
 
-func makeInitResolvedTSScan(p *Processor, snap Snapshot) runnable {
-	return &initResolvedTSScan{p: p, snap: snap}
+func makeInitResolvedTSScan(p *Processor, it engine.SimpleIterator) runnable {
+	return &initResolvedTSScan{p: p, it: it}
 }
 
 func (s *initResolvedTSScan) Run(ctx context.Context) {
-	defer s.snap.Close()
-
-	var meta enginepb.MVCCMetadata
-	sp := s.p.Span.AsRawSpanWithNoLocals()
-	err := s.snap.Iterate(sp.Key, sp.EndKey, func(kv engine.MVCCKeyValue) (bool, error) {
-		if !kv.Key.IsValue() {
-			// Found a metadata key. Inform the Processor if it's an intent.
-			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
-				return false, errors.Wrapf(err, "unmarshaling mvcc meta: %v", kv)
-			}
-
-			if meta.Txn != nil {
-				var op enginepb.MVCCLogicalOp
-				op.SetValue(&enginepb.MVCCWriteIntentOp{
-					TxnID:     meta.Txn.ID,
-					TxnKey:    meta.Txn.Key,
-					Timestamp: meta.Txn.Timestamp,
-				})
-				s.p.ConsumeLogicalOps(op)
-			}
-		}
-		return false, nil
-	})
-
-	if err != nil {
+	defer s.it.Close()
+	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		log.Error(ctx, err)
 		s.p.StopWithErr(roachpb.NewError(err))
@@ -103,74 +69,78 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	}
 }
 
-func (s *initResolvedTSScan) Cancel() {
-	s.snap.Close()
+func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
+	startKey := engine.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
+	endKey := engine.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
+
+	// Iterate through all keys using NextKey. This will look at the first MVCC
+	// version for each key. We're only looking for MVCCMetadata versions, which
+	// will always be the first version of a key if it exists, so its fine that
+	// we skip over all other versions of keys.
+	var meta enginepb.MVCCMetadata
+	for s.it.Seek(startKey); ; s.it.NextKey() {
+		if ok, err := s.it.Valid(); err != nil {
+			return err
+		} else if !ok || !s.it.UnsafeKey().Less(endKey) {
+			break
+		}
+
+		// If the key is not a metadata key, ignore it.
+		unsafeKey := s.it.UnsafeKey()
+		if unsafeKey.IsValue() {
+			continue
+		}
+
+		// Found a metadata key. Unmarshal.
+		if err := protoutil.Unmarshal(s.it.UnsafeValue(), &meta); err != nil {
+			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+		}
+
+		// If this is an intent, inform the Processor.
+		if meta.Txn != nil {
+			var op enginepb.MVCCLogicalOp
+			op.SetValue(&enginepb.MVCCWriteIntentOp{
+				TxnID:     meta.Txn.ID,
+				TxnKey:    meta.Txn.Key,
+				Timestamp: meta.Txn.Timestamp,
+			})
+			s.p.ConsumeLogicalOps(op)
+		}
+	}
+	return nil
 }
 
-// catchUpScan scans over the provided Snapshot and publishes committed values
+func (s *initResolvedTSScan) Cancel() {
+	s.it.Close()
+}
+
+// catchUpScan scans over the provided iterator and publishes committed values
 // to the registration's stream. This backfill allows a registration to request
 // a starting timestamp in the past and observe events for writes that have
 // already happened.
 //
-// Snapshot Contract:
-//   The Snapshot must expose all values in the registration's key range, not
-//   just the most recent value for a given key. It does not make any guarantees
-//   about the order that it publishes multiple versions of a single key.
+// Iterator Contract:
 //   Committed values beneath the registration's starting timestamp will be
 //   ignored, but all values above the registration's starting timestamp must be
-//   present. An important implication of this is that if the Snapshot uses a
+//   present. An important implication of this is that if the iterator is a
 //   TimeBoundIterator, its MinTimestamp cannot be above the registration's
 //   starting timestamp.
 //
 type catchUpScan struct {
-	p    *Processor
-	r    *registration
-	snap Snapshot
+	p  *Processor
+	r  *registration
+	it engine.SimpleIterator
 }
 
 func makeCatchUpScan(p *Processor, r *registration) runnable {
-	s := catchUpScan{p: p, r: r, snap: r.catchUpSnap}
-	r.catchUpSnap = nil // detach
+	s := catchUpScan{p: p, r: r, it: r.catchUpIter}
+	r.catchUpIter = nil // detach
 	return &s
 }
 
 func (s *catchUpScan) Run(ctx context.Context) {
-	defer s.snap.Close()
-
-	var meta enginepb.MVCCMetadata
-	sp := s.r.span
-	err := s.snap.Iterate(sp.Key, sp.EndKey, func(kv engine.MVCCKeyValue) (bool, error) {
-		if !kv.Key.IsValue() {
-			// Found a metadata key.
-			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
-				return false, errors.Wrapf(err, "unmarshaling mvcc meta: %v", kv)
-			}
-			if !meta.IsInline() {
-				// Not an inline value. Ignore.
-				return false, nil
-			}
-
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			kv.Value = meta.RawBytes
-		} else if kv.Key.Timestamp.Less(s.r.startTS) {
-			// Before the registration's starting timestamp. Ignore.
-			return false, nil
-		}
-
-		var event roachpb.RangeFeedEvent
-		event.SetValue(&roachpb.RangeFeedValue{
-			Key: kv.Key.Key,
-			Value: roachpb.Value{
-				RawBytes:  kv.Value,
-				Timestamp: kv.Key.Timestamp,
-			},
-		})
-		return false, s.r.stream.Send(&event)
-	})
-
-	if err != nil {
+	defer s.it.Close()
+	if err := s.iterateAndSend(ctx); err != nil {
 		err = errors.Wrap(err, "catch-up scan failed")
 		log.Error(ctx, err)
 		s.p.deliverCatchUpScanRes(s.r, roachpb.NewError(err))
@@ -179,6 +149,57 @@ func (s *catchUpScan) Run(ctx context.Context) {
 	}
 }
 
+func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
+	startKey := engine.MakeMVCCMetadataKey(s.r.span.Key)
+	endKey := engine.MakeMVCCMetadataKey(s.r.span.EndKey)
+
+	// Iterate though all keys using Next. We want to publish all committed
+	// versions of each key that are after the registration's startTS, so we
+	// can't use NextKey.
+	var meta enginepb.MVCCMetadata
+	for s.it.Seek(startKey); ; s.it.Next() {
+		if ok, err := s.it.Valid(); err != nil {
+			return err
+		} else if !ok || !s.it.UnsafeKey().Less(endKey) {
+			break
+		}
+
+		unsafeKey := s.it.UnsafeKey()
+		unsafeVal := s.it.UnsafeValue()
+		if !unsafeKey.IsValue() {
+			// Found a metadata key.
+			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
+				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+			}
+			if !meta.IsInline() {
+				// Not an inline value. Ignore.
+				continue
+			}
+
+			// If write is inline, it doesn't have a timestamp so we don't
+			// filter on the registration's starting timestamp. Instead, we
+			// return all inline writes.
+			unsafeVal = meta.RawBytes
+		} else if unsafeKey.Timestamp.Less(s.r.startTS) {
+			// Before the registration's starting timestamp. Ignore.
+			continue
+		}
+
+		var event roachpb.RangeFeedEvent
+		event.SetValue(&roachpb.RangeFeedValue{
+			Key: unsafeKey.Key,
+			Value: roachpb.Value{
+				RawBytes:  unsafeVal,
+				Timestamp: unsafeKey.Timestamp,
+			},
+		})
+		if err := s.r.stream.Send(&event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *catchUpScan) Cancel() {
-	s.snap.Close()
+	s.it.Close()
 }

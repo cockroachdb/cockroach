@@ -67,61 +67,113 @@ func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) engine.
 	}})
 }
 
-type testSnapshot struct {
-	kvs    []engine.MVCCKeyValue
+type testIterator struct {
+	kvs []engine.MVCCKeyValue
+	cur int
+
+	// Simulate unsafe buffers.
+	unsafeKeyBuf []byte
+	unsafeValBuf []byte
+
 	closed bool
 	err    error
 	block  chan struct{}
 	done   chan struct{}
 }
 
-func newTestSnapshot(kvs []engine.MVCCKeyValue) *testSnapshot {
+func newTestIterator(kvs []engine.MVCCKeyValue) *testIterator {
 	if !sort.SliceIsSorted(kvs, func(i, j int) bool {
 		return kvs[i].Key.Less(kvs[j].Key)
 	}) {
 		panic("unsorted kvs")
 	}
-	return &testSnapshot{
+	return &testIterator{
 		kvs:  kvs,
+		cur:  -1,
 		done: make(chan struct{}),
 	}
 }
 
-func newErrorSnapshot(err error) *testSnapshot {
-	return &testSnapshot{
+func newErrorIterator(err error) *testIterator {
+	return &testIterator{
 		err:  err,
 		done: make(chan struct{}),
 	}
 }
 
-func (s *testSnapshot) Iterate(
-	start, end roachpb.Key, f func(engine.MVCCKeyValue) (bool, error),
-) error {
+func (s *testIterator) Close() {
+	s.closed = true
+	close(s.done)
+}
+
+func (s *testIterator) Seek(key engine.MVCCKey) {
 	if s.closed {
-		panic("testSnapshot closed")
+		panic("testIterator closed")
 	}
 	if s.block != nil {
 		<-s.block
 	}
 	if s.err != nil {
-		return s.err
+		return
 	}
-	for _, kv := range s.kvs {
-		if kv.Key.Key.Compare(start) < 0 || kv.Key.Key.Compare(end) >= 0 {
-			continue
-		}
-		if stop, err := f(kv); err != nil {
-			return err
-		} else if stop {
+	if s.cur == -1 {
+		s.cur++
+	}
+	for ; s.cur < len(s.kvs); s.cur++ {
+		if !s.curKV().Key.Less(key) {
 			break
 		}
 	}
-	return nil
 }
 
-func (s *testSnapshot) Close() {
-	s.closed = true
-	close(s.done)
+func (s *testIterator) Valid() (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+	if s.cur == -1 || s.cur >= len(s.kvs) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (s *testIterator) Next() { s.cur++ }
+
+func (s *testIterator) NextKey() {
+	if s.cur == -1 {
+		s.cur = 0
+		return
+	}
+	origKey := s.curKV().Key.Key
+	for s.cur++; s.cur < len(s.kvs); s.cur++ {
+		if !s.curKV().Key.Key.Equal(origKey) {
+			break
+		}
+	}
+}
+
+func (s *testIterator) UnsafeKey() engine.MVCCKey {
+	curKey := s.curKV().Key
+	curKey.Key = copyToUnsafeBuf(&s.unsafeKeyBuf, curKey.Key)
+	return curKey
+}
+
+func (s *testIterator) UnsafeValue() []byte {
+	curVal := s.curKV().Value
+	return copyToUnsafeBuf(&s.unsafeValBuf, curVal)
+}
+
+func (s *testIterator) curKV() engine.MVCCKeyValue {
+	return s.kvs[s.cur]
+}
+
+func copyToUnsafeBuf(buf *[]byte, src []byte) []byte {
+	if cap(*buf) < len(src) {
+		*buf = append([]byte(nil), src...)
+	} else {
+		*buf = (*buf)[:len(src)]
+		copy(*buf, src)
+	}
+	return *buf
 }
 
 func TestInitResolvedTSScan(t *testing.T) {
@@ -138,9 +190,9 @@ func TestInitResolvedTSScan(t *testing.T) {
 		eventC: make(chan event, 100),
 	}
 
-	// Run an init rts scan over a test snapshot with the following keys.
+	// Run an init rts scan over a test iterator with the following keys.
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	snap := newTestSnapshot([]engine.MVCCKeyValue{
+	iter := newTestIterator([]engine.MVCCKeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),
@@ -160,9 +212,9 @@ func TestInitResolvedTSScan(t *testing.T) {
 		makeKV("z", "val11", 4),
 	})
 
-	initScan := makeInitResolvedTSScan(&p, snap)
+	initScan := makeInitResolvedTSScan(&p, iter)
 	initScan.Run(context.Background())
-	require.True(t, snap.closed)
+	require.True(t, iter.closed)
 
 	// Compare the event channel to the expected events.
 	expEvents := []event{
@@ -190,9 +242,9 @@ func TestCatchUpScan(t *testing.T) {
 	p := Processor{catchUpC: make(chan catchUpResult, 1)}
 
 	// Run a catch-up scan for a registration over a test
-	// snapshot with the following keys.
+	// iterator with the following keys.
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	snap := newTestSnapshot([]engine.MVCCKeyValue{
+	iter := newTestIterator([]engine.MVCCKeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),
@@ -215,12 +267,12 @@ func TestCatchUpScan(t *testing.T) {
 		Key:    roachpb.Key("d"),
 		EndKey: roachpb.Key("w"),
 	})
-	r.catchUpSnap = snap
+	r.catchUpIter = iter
 	r.startTS = hlc.Timestamp{WallTime: 4}
 
 	catchUpScan := makeCatchUpScan(&p, &r.registration)
 	catchUpScan.Run(context.Background())
-	require.True(t, snap.closed)
+	require.True(t, iter.closed)
 
 	// Compare the events sent on the registration's Stream to the expected events.
 	expEvents := []*roachpb.RangeFeedEvent{

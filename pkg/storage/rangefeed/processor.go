@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -112,21 +113,21 @@ func NewProcessor(cfg Config) *Processor {
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
 //
-// The provided Snapshot is used to initialize the rangefeed's resolved
-// timestamp. It must obey the contract of a Snapshot used for an
-// initResolvedTSScan. The Processor promises to clean up the Snapshot by
-// calling its Close method when it is finished. If the Snapshot is nil then
+// The provided iterator is used to initialize the rangefeed's resolved
+// timestamp. It must obey the contract of an iterator used for an
+// initResolvedTSScan. The Processor promises to clean up the iterator by
+// calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *Processor) Start(stopper *stop.Stopper, rtsSnap Snapshot) {
+func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) {
 	ctx := p.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(p.stoppedC)
 
-		// Launch an async task to scan over the resolved timestamp snapshot and
+		// Launch an async task to scan over the resolved timestamp iterator and
 		// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-		if rtsSnap != nil {
-			initScan := makeInitResolvedTSScan(p, rtsSnap)
+		if rtsIter != nil {
+			initScan := makeInitResolvedTSScan(p, rtsIter)
 			err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 			if err != nil {
 				initScan.Cancel() // clean up
@@ -165,7 +166,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsSnap Snapshot) {
 
 				// Launch an async catch-up scan for the new registration.
 				// Ignore error if quiescing.
-				if r.catchUpSnap != nil {
+				if r.catchUpIter != nil {
 					catchUp := makeCatchUpScan(p, &r)
 					err := stopper.RunAsyncTask(ctx, "rangefeed: catch-up scan", catchUp.Run)
 					if err != nil {
@@ -274,17 +275,17 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 // events that are consumed concurrently with this call. The channel will be
 // provided an error when the registration closes.
 //
-// The provided Snapshot is used to catch the registration up from its starting
+// The provided iterator is used to catch the registration up from its starting
 // timestamp with value events for all committed values. It must obey the
-// contract of a Snapshot used for a catchUpScan. The Processor promises to
-// clean up the Snapshot by calling its Close method when it is finished. If the
-// Snapshot is nil then no catch-up scan will be performed.
+// contract of an iterator used for a catchUpScan. The Processor promises to
+// clean up the iterator by calling its Close method when it is finished. If the
+// iterator is nil then no catch-up scan will be performed.
 //
 // NOT safe to call on nil Processor.
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpSnap Snapshot,
+	catchUpIter engine.SimpleIterator,
 	stream Stream,
 	errC chan<- *roachpb.Error,
 ) {
@@ -296,15 +297,15 @@ func (p *Processor) Register(
 	r := registration{
 		span:        span.AsRawSpanWithNoLocals(),
 		startTS:     startTS,
-		catchUpSnap: catchUpSnap,
+		catchUpIter: catchUpIter,
 		stream:      stream,
 		errC:        errC,
 	}
 	select {
 	case p.regC <- r:
 	case <-p.stoppedC:
-		if catchUpSnap != nil {
-			catchUpSnap.Close() // clean up
+		if catchUpIter != nil {
+			catchUpIter.Close() // clean up
 		}
 		errC <- roachpb.NewErrorf("rangefeed processor closed")
 	}
