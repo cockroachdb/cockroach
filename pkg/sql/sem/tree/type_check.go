@@ -1355,26 +1355,20 @@ func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { 
 // identity function for Datum.
 func (d dNull) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) { return d, nil }
 
-// typeCheckAndRequireTupleElems asserts that all elements in the Tuple
-// can be typed as required and are equivalent to required. Note that one would invoke
-// with the required element type and NOT types.TTuple (as opposed to how Tuple.TypeCheck operates).
-// For example, (1, 2.5) with required types.Decimal would raise a sane error whereas (1.0, 2.5)
-// with required types.Decimal would pass.
-//
-// It is only valid to pass in a Tuple expression
+// typeCheckAndRequireTupleElems asserts that all elements in the Tuple are
+// comparable to the input Expr given the input comparison operator.
 func typeCheckAndRequireTupleElems(
-	ctx *SemaContext, expr Expr, required types.T,
+	ctx *SemaContext, expr TypedExpr, tuple *Tuple, op ComparisonOperator,
 ) (TypedExpr, error) {
-	tuple := expr.(*Tuple)
 	tuple.typ = types.TTuple{Types: make([]types.T, len(tuple.Exprs))}
 	for i, subExpr := range tuple.Exprs {
-		// Require that the sub expression is equivalent (or may be inferred) to the required type.
-		typedExpr, err := typeCheckAndRequire(ctx, subExpr, required, "tuple element")
+		// Require that the sub expression is comparable to the required type.
+		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, op, expr, subExpr)
 		if err != nil {
 			return nil, err
 		}
-		tuple.Exprs[i] = typedExpr
-		tuple.typ.Types[i] = typedExpr.ResolvedType()
+		tuple.Exprs[i] = rightTyped
+		tuple.typ.Types[i] = rightTyped.ResolvedType()
 	}
 	return tuple, nil
 }
@@ -1470,7 +1464,7 @@ func typeCheckComparisonOpWithSubOperator(
 		if tuple, ok := right.(*Tuple); ok {
 			// If right expression is a tuple, we require that all elements' inferred
 			// type is equivalent to the left's type.
-			rightTyped, err = typeCheckAndRequireTupleElems(ctx, tuple, cmpTypeLeft)
+			rightTyped, err = typeCheckAndRequireTupleElems(ctx, leftTyped, tuple, subOp)
 			if err != nil {
 				return nil, nil, CmpOp{}, false, err
 			}
@@ -1495,15 +1489,17 @@ func typeCheckComparisonOpWithSubOperator(
 			cmpTypeRight = rightUnwrapped.Typ
 		case types.TTuple:
 			if len(rightUnwrapped.Types) == 0 {
-				// Literal tuple contains no elements (subquery tuples always contain
-				// one and only one element since subqueries are asserted to return
-				// one column of results in analyzeExpr in analyze.go).
-				return nil, nil, CmpOp{}, false, subOpCompError(cmpTypeLeft, rightReturn, subOp, op)
+				// Literal tuple contains no elements, or subquery tuple returns 0 rows.
+				cmpTypeRight = cmpTypeLeft
+			} else {
+				// Literal tuples and subqueries were type checked such that all
+				// elements have comparable types with the left. Once that's true, we
+				// can safely grab the first element's type as the right type for the
+				// purposes of computing the correct comparison function below, since
+				// if two datum types are comparable, it's legal to call .Compare on
+				// one with the other.
+				cmpTypeRight = rightUnwrapped.Types[0]
 			}
-			// Literal tuples were type checked such that all elements have equivalent types.
-			// Subqueries only contain one element from analyzeExpr in analyze.go.
-			// Therefore, we can take the first element's type as the right type.
-			cmpTypeRight = rightUnwrapped.Types[0]
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
