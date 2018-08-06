@@ -1583,6 +1583,87 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 }
 
+// Test schema change failure after a backfill checkpoint has been written
+// doesn't leave the DB in a bad state.
+func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	const chunkSize = 200
+	attempts := 0
+	// attempt 1: write two chunks of the column.
+	// attempt 2: writing the third chunk returns a permanent failure
+	// purge the schema change.
+	expectedAttempts := 3
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+			// Aggressively checkpoint, so that a schema change
+			// failure happens after a checkpoint has been written.
+			WriteCheckpointInterval: time.Nanosecond,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Return a deadline exceeded error during the third attempt
+				// which attempts to clean up the schema change.
+				if attempts == expectedAttempts {
+					return errors.New("permanent failure")
+				}
+				return nil
+			},
+		},
+		// Disable backfill migrations so it doesn't interfere with the
+		// backfill in this test.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	const maxValue = 4*chunkSize + 1
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// A schema change that fails.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column d INT DEFAULT 0 CREATE FAMILY F3`); !testutils.IsError(err, `permanent failure`) {
+		t.Fatalf("err = %s", err)
+	}
+
+	// No garbage left behind.
+	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// A schema change that fails after the first mutation has completed. The
+	// column is backfilled and the index backfill fails requiring the column
+	// backfill to be rolled back.
+	if _, err := sqlDB.Exec(
+		`ALTER TABLE t.test ADD column e INT DEFAULT 0 UNIQUE CREATE FAMILY F4`,
+	); !testutils.IsError(err, ` violates unique constraint`) {
+		t.Fatalf("err = %s", err)
+	}
+
+	// No garbage left behind.
+	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestSchemaChangeReverseMutations tests that schema changes get reversed
 // correctly when one of them violates a constraint.
 func TestSchemaChangeReverseMutations(t *testing.T) {
