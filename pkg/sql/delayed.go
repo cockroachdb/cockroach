@@ -52,3 +52,22 @@ func (d *delayedNode) enableAutoCommit() {
 		ac.enableAutoCommit()
 	}
 }
+
+// startExec constructs the wrapped planNode now that execution is underway.
+func (d *delayedNode) startExec(params runParams) error {
+	if d.plan != nil {
+		panic("wrapped plan should not yet exist")
+	}
+
+	plan, err := d.constructor(params.ctx, params.p)
+	if err != nil {
+		return err
+	}
+	d.plan = plan
+
+	// Recursively invoke startExec on new plan. Normally, startExec doesn't
+	// recurse - calling children is handled by the planNode walker. The reason
+	// this won't suffice here is that the the child of this node doesn't exist
+	// until after startExec is invoked.
+	return startExec(params, plan)
+}

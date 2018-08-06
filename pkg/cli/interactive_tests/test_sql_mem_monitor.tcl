@@ -90,7 +90,7 @@ end_test
 start_test "Ensure that memory monitoring prevents crashes"
 # Re-launch a server with relatively lower limit for SQL memory
 set spawn_id $shell_spawn_id
-send "$argv start --insecure --max-sql-memory=150K --no-redirect-stderr -s=path=logs/db \r"
+send "$argv start --insecure --max-sql-memory=1000K --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 2
 
