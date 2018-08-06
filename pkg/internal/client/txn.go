@@ -679,13 +679,6 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 	return txn.rollback(ctx).GoError()
 }
 
-// TODO(andrei): It's common for rollbacks to fail with TransactionStatusError:
-// txn record not found (REASON_TXN_NOT_FOUND), in case the txn record was never
-// written (e.g. if a 1PC failed). One would think that, depending on the error
-// received by a 1PC batch, we'd know if a txn record was written and, if it
-// wasn't, we could short-circuit the rollback. There's two tricky things about
-// that, though: a) we'd need to know whether the DistSender has split what
-// looked like a 1PC batch to the client and b) ambiguous errors.
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
@@ -792,22 +785,34 @@ func (txn *Txn) sendEndTxnReq(
 		return txn.finishReadonlyLocked(ctx, commit, deadline)
 	}
 
-	var swallowErr bool
 	if txn.mu.state == txnWriteInOldEpoch && commit {
 		// If there was a write in an old epoch (and no writes in the current
 		// epoch), we need to send a rollback. We'll ignore the error from it; the
 		// commit is successful at this point.
 		log.VEventf(ctx, 2, "old epoch write turning commit into rollback")
 		commit = false
-		swallowErr = true
 	}
 	txn.mu.Unlock()
 
 	var ba roachpb.BatchRequest
 	ba.Add(endTxnReq(commit, deadline, txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
-	if swallowErr {
+	if pErr == nil {
 		return nil
+	}
+	if !commit {
+		// Swallow some status errors. It's common for rollbacks to fail with
+		// TransactionStatusError: txn record not found (REASON_TXN_NOT_FOUND), in
+		// case the txn record was never written (i.e. if the BeginTransaction batch
+		// failed). One would think that, depending on the error received by that
+		// batch, we'd know if a txn record was written and, if it wasn't, we could
+		// short-circuit the rollback. There's two tricky things about that, though:
+		// a) we'd need to know whether the DistSender has split what looked like a
+		// 1PC batch to the client and b) ambiguous errors.
+		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
+			return nil
+		}
 	}
 	return pErr
 }
