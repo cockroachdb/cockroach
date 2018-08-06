@@ -912,7 +912,7 @@ semi-join
  │              └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:6(int) v:7(int!null)
- │    ├── stats: [rows=1000, distinct(5)=700]
+ │    ├── stats: [rows=1000]
  │    ├── prune: (6,7)
  │    └── interesting orderings: ()
  └── true [type=bool]
