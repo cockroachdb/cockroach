@@ -136,12 +136,13 @@ func (r *testRegistration) Err() *roachpb.Error {
 func TestRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.SetValue(&roachpb.RangeFeedValue{})
-	ev2.SetValue(&roachpb.RangeFeedValue{})
-	ev3.SetValue(&roachpb.RangeFeedValue{})
-	ev4.SetValue(&roachpb.RangeFeedValue{})
+	ev1.SetValue(&roachpb.RangeFeedValue{Value: val})
+	ev2.SetValue(&roachpb.RangeFeedValue{Value: val})
+	ev3.SetValue(&roachpb.RangeFeedValue{Value: val})
+	ev4.SetValue(&roachpb.RangeFeedValue{Value: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
@@ -264,6 +265,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	reg := makeRegistry()
 
 	r := newTestRegistration(spAB)
+	r.registration.caughtUp = true
 	r.registration.startTS = hlc.Timestamp{WallTime: 10}
 	reg.Register(&r.registration)
 
@@ -277,15 +279,16 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	require.Nil(t, r.Events())
 
 	// Publish a value with a timestamp equal to the registration's start
-	// timestamp. Should be delivered.
+	// timestamp. Should be ignored.
 	ev.SetValue(&roachpb.RangeFeedValue{
 		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 10}},
 	})
 	reg.PublishToOverlapping(spAB, ev)
-	require.Equal(t, []*roachpb.RangeFeedEvent{ev}, r.Events())
+	require.Nil(t, r.Events())
 
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
+	ev.Reset() // TODO(nvanbenschoten): Fix SetValue.
 	ev.SetValue(&roachpb.RangeFeedCheckpoint{
 		ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
