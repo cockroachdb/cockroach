@@ -189,6 +189,9 @@ func (w *slidingWindowFunc) Compute(
 
 	// We need to add all values that just entered the frame and have not been added yet.
 	for idx := max(w.prevEnd, start); idx < end; idx++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		w.sw.add(&indexedValue{wfr.ArgsByRowIdx(idx)[0], idx})
 	}
 	w.prevEnd = end
@@ -228,6 +231,9 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 ) error {
 	var err error
 	for idx := w.prevStart; idx < wfr.FrameStartIdx() && idx < w.prevEnd; idx++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		value := wfr.ArgsByRowIdx(idx)[0]
 		switch v := value.(type) {
 		case *tree.DInt:
@@ -267,6 +273,9 @@ func (w *slidingWindowSumFunc) Compute(
 
 	// We need to sum all values that just entered the frame and have not been added yet.
 	for idx := max(w.prevEnd, start); idx < end; idx++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		err = w.agg.Add(ctx, wfr.ArgsByRowIdx(idx)[0])
 		if err != nil {
 			return tree.DNull, err
@@ -307,19 +316,31 @@ func (w *avgWindowFunc) Compute(
 		return tree.DNull, nil
 	}
 
+	var frameSize int
+	if wfr.FilterColIdx != noFilterIdx {
+		for idx := wfr.FrameStartIdx(); idx < wfr.FrameEndIdx(); idx++ {
+			if wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+				continue
+			}
+			frameSize++
+		}
+	} else {
+		frameSize = wfr.FrameSize()
+	}
+
 	switch t := sum.(type) {
 	case *tree.DFloat:
-		return tree.NewDFloat(*t / tree.DFloat(wfr.FrameSize())), nil
+		return tree.NewDFloat(*t / tree.DFloat(frameSize)), nil
 	case *tree.DDecimal:
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &t.Decimal, count)
 		return &avg, err
 	case *tree.DInt:
 		dd := tree.DDecimal{}
 		dd.SetCoefficient(int64(*t))
 		var avg tree.DDecimal
-		count := apd.New(int64(wfr.FrameSize()), 0)
+		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
 	default:
