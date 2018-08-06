@@ -731,6 +731,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
 		// Fallback if the optimizer was not enabled or used.
 		err = planner.makePlan(ctx, stmt)
+
 		enhanceErrWithCorrelation(err, isCorrelated)
 	}
 
@@ -758,22 +759,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
 	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
-		ok, err := planner.prepareForDistSQLSupportCheck(
-			ctx, ex.sessionData.DistSQLMode == sessiondata.DistSQLAlways,
-		)
+		if !optimizerPlanned {
+			// Trigger limit propagation if we didn't use the optimizer. This is
+			// required before checking for distributability.
+			planner.setUnlimited(planner.curPlan.plan)
+		}
+		useDistSQL, err = shouldUseDistSQL(
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
 		if err != nil {
 			ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
 			res.SetError(err)
 			return nil
-		}
-		if ok {
-			useDistSQL, err = shouldUseDistSQL(
-				ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
-			if err != nil {
-				ex.sessionTracing.TracePlanCheckEnd(ctx, err, false)
-				res.SetError(err)
-				return nil
-			}
 		}
 	}
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, useDistSQL)

@@ -505,19 +505,6 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
 }
 
-// prepareForDistSQLSupportCheck prepares p.curPlan.plan for a distSQL support
-// check and does additional verification of the planner state. It returns
-// whether the caller should go ahead and check for plan support through
-// shouldUseDistSQL. If returnError is set and false is returned, an error
-// explaining the failure will be returned.
-func (p *planner) prepareForDistSQLSupportCheck(
-	ctx context.Context, returnError bool,
-) (bool, error) {
-	// Trigger limit propagation.
-	p.setUnlimited(p.curPlan.plan)
-	return true, nil
-}
-
 // optionallyUseOptimizer will attempt to make an optimizer plan based on the
 // optimizerMode setting. If it is run, it will return true. If it returns false
 // and no error is returned, it is safe to fallback to a non-optimizer plan.

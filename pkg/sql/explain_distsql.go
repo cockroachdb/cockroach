@@ -49,13 +49,6 @@ type explainDistSQLRun struct {
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
-	// Check for subqueries and trigger limit propagation.
-	if _, err := params.p.prepareForDistSQLSupportCheck(
-		params.ctx, true, /* returnError */
-	); err != nil {
-		return err
-	}
-
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	auto, err := distSQLPlanner.CheckSupport(n.plan)
 	if err != nil {
