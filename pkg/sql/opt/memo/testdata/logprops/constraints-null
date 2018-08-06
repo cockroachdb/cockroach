@@ -187,12 +187,12 @@ SELECT * FROM xy WHERE x = y
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=111.111111]
+ ├── stats: [rows=1.42857143, distinct(1)=1.42857143, distinct(2)=1.42857143]
  ├── fd: (1)==(2), (2)==(1)
  ├── interesting orderings: ()
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
  │    ├── prune: (1,2)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
