@@ -593,10 +593,6 @@ func TestRaceWithBackfill(t *testing.T) {
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				notifyBackfill()
-				return nil
-			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 			BackfillChunkSize:     chunkSize,
 		},
@@ -980,34 +976,6 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				switch atomic.LoadInt64(&backfillCount) {
-				case 0:
-					// Keep track of the span provided with the first backfill
-					// attempt.
-					retriedSpan = sp
-				case 1:
-					// Ensure that the second backfill attempt provides the
-					// same span as the first.
-					if sp.EqualValue(retriedSpan) {
-						atomic.AddInt64(&retriedBackfill, 1)
-					}
-				}
-				return nil
-			},
-			RunAfterBackfillChunk: func() {
-				atomic.AddInt64(&backfillCount, 1)
-				if atomic.SwapUint32(&dontAbortBackfill, 1) == 1 {
-					return
-				}
-				// Close channel to notify that the backfill has been
-				// completed but hasn't yet committed.
-				close(backfillNotification)
-				// Receive signal that the commands that push the backfill
-				// transaction have completed; The backfill will attempt
-				// to commit and will abort.
-				<-commandsDone
-			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 			BackfillChunkSize:     maxValue,
 		},
@@ -1334,7 +1302,6 @@ func TestSchemaChangeRetry(t *testing.T) {
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeBackfillChunk: checkSpan,
 			// Disable asynchronous schema change execution to allow
 			// synchronous path to run schema changes.
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
@@ -1391,21 +1358,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
 				atomic.AddUint32(&numBackfills, 1)
-				return nil
-			},
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				currChunk++
-				// Fail somewhere in the middle.
-				if currChunk == 3 {
-					// Publish a new version of the table.
-					upTableVersion()
-				}
-				if seenSpan.Key != nil {
-					if !seenSpan.EndKey.Equal(sp.EndKey) {
-						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
-					}
-				}
-				seenSpan = sp
 				return nil
 			},
 			// Disable asynchronous schema change execution to allow
@@ -1511,15 +1463,6 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	expectedAttempts := 3
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				attempts++
-				// Return a deadline exceeded error during the third attempt
-				// which attempts to clean up the schema change.
-				if attempts == expectedAttempts {
-					return context.DeadlineExceeded
-				}
-				return nil
-			},
 			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
@@ -2959,7 +2902,6 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
-
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
@@ -2979,7 +2921,11 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				return runGC(sp)
+				if fn := runGC; fn != nil {
+					runGC = nil
+					return fn(sp)
+				}
+				return nil
 			},
 		},
 	}

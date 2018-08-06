@@ -285,6 +285,7 @@ type ExecutorConfig struct {
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
+	DistSQLRunTestingKnobs    *distsqlrun.TestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration

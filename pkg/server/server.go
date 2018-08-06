@@ -603,6 +603,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
+	if distSQLRunTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLRunTestingKnobs != nil {
+		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*distsqlrun.TestingKnobs)
+	} else {
+		execCfg.DistSQLRunTestingKnobs = new(distsqlrun.TestingKnobs)
+	}
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
