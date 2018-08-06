@@ -181,6 +181,24 @@ d
 				`SELECT t from t`: {{"hello\r\nworld"}, {"friend\nfoe"}, {"mr\rmrs"}},
 			},
 		},
+		{
+			name:   "CR in int, 2 cols",
+			create: `a int, b int`,
+			typ:    "CSV",
+			data:   "1,2\r\n3,4\n5,6",
+			query: map[string][][]string{
+				`SELECT * FROM t ORDER BY a`: {{"1", "2"}, {"3", "4"}, {"5", "6"}},
+			},
+		},
+		{
+			name:   "CR in int, 1 col",
+			create: `a int`,
+			typ:    "CSV",
+			data:   "1\r\n3\n5",
+			query: map[string][][]string{
+				`SELECT * FROM t ORDER BY a`: {{"1"}, {"3"}, {"5"}},
+			},
+		},
 
 		// MySQL OUTFILE
 		{
