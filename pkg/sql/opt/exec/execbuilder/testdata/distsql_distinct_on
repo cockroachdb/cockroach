@@ -82,11 +82,10 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslE2LqzAUhvf3V1zedaAm2i
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-distinct        ·            ·            (x, y, z)  weak-key(x,y,z); +x
- │              distinct on  x, y, z      ·          ·
- │              order key    x            ·          ·
- └── sort       ·            ·            (x, y, z)  +x
-      │         order        +x           ·          ·
+sort            ·            ·            (x, y, z)  weak-key(x,y,z); +x
+ │              order        +x           ·          ·
+ └── distinct   ·            ·            (x, y, z)  weak-key(x,y,z)
+      │         distinct on  x, y, z      ·          ·
       └── scan  ·            ·            (x, y, z)  ·
 ·               table        xyz@primary  ·          ·
 ·               spans        ALL          ·          ·
@@ -94,7 +93,7 @@ distinct        ·            ·            (x, y, z)  weak-key(x,y,z); +x
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lb9u2zAQh_c-RXBrCdhH0o6tSUOXLE2Rdis8qOIhEOCIBkkBSQO_e6E_gCo3OsqyOkry777jdwf6HUpr6Gv2Qh6Sn4AgQIIABQI0CNjAQcDJ2Zy8t67-SRt4MK-QrAUU5akK9euDgNw6guQdQhGOBAn8yH4d6YkyQ261BgGGQlYcG8zJFS-Ze0tf336DgMcqJHepFKkSqYbDWYCtQl_Xh-yZIMGzmM7-bl0gt9oMsSl-Hi0vryn_pfChKPOwwvUlQTQHqU_lDDkyyV2Ko1A1Cu1Ztq3z0UnYzv45-1Wd6UFnOH3SuPSkI-xu0tu5k46U733igpOW033KpX1G2J3P-7k-I-V7n3JBn2q6T7W0zwi787mb6zNSvvepFvSpp_vUS_uMsDuf-7k-I-V7n_o_3ewfQJ_In2zpaUAcq7yur30yz9T-TXhbuZy-OZs3mPbxsck1Lwz50H7F9uGhbD_VDf4dRjYs-bBkw2oQxsuw4tve8mjNpjd8eMOGI-TtLYe-Z8M7nrxjw3s-vL-lbYzsWGzJ-C3DyJrhTXuGkUXTETi_aRhZNeR37bL3w_nTnwAAAP__eVbBtQ==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyslL-OozAQh_t7itO0N1KwDflDRXFNmsspu92KgsWjCCnByDZSshHvvgIkskSJIYLSNr_55sPWXCFXkv4lJzIQfgADBA4IAhB8QAggRii0SskYpetP2sBWniH0ELK8KG29HSOkShOEV7CZPRKE8J58HmlPiSS98ABBkk2yY4MpdHZK9CU6X74AYVfa8HfEMRIY-RBXCKq0t7rGJgeCkFU4nv03MzbLU7sI-uCIYQN6SuFPKbfiZa60JE2yVzuuXH0w78VGxCu6b0pb0gvG7iF_ntb3e_XZ-Ktkc1_lALv7hctJV8nHG_K5DQfYneFqkqEYbyjmNhxgd4brSYb-eEN_bsMBdme4mW3gPKDsyRQqN3Q3eB5X9uqBRPJA7fQyqtQp_dcqbTDtctfkmg1JxranrF1s8_aobvBnmDnDvBdm92HuDAs3Wbjb5u6070wH7nAwRXrpDK_c5NUU8toZ3rjJmylkNvDGhh7Za68srn59BwAA__88-9tq
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
