@@ -331,6 +331,20 @@ WHERE EXISTS
 2  TX
 4  TX
 
+# Customers with each of their orders numbered.
+query II rowsort
+SELECT c_id, generate_series(1, (SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+4  1
+4  2
+6  1
+
 # Max1Row prevents decorrelation.
 statement error could not decorrelate subquery
 SELECT *
