@@ -42,7 +42,7 @@ case "${cmd}" in
     # Retry while vm and sshd start up.
     retry gcloud compute ssh "${NAME}" --command=true
 
-    gcloud compute copy-files "build/bootstrap" "${NAME}:bootstrap"
+    gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
     if [[ "$COCKROACH_DEV_LICENSE" ]]; then
