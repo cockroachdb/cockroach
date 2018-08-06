@@ -33,14 +33,13 @@ import (
 )
 
 type execFactory struct {
-	ctx     context.Context
 	planner *planner
 }
 
 var _ exec.Factory = &execFactory{}
 
-func makeExecFactory(ctx context.Context, p *planner) execFactory {
-	return execFactory{ctx: ctx, planner: p}
+func makeExecFactory(p *planner) execFactory {
+	return execFactory{planner: p}
 }
 
 // ConstructValues is part of the exec.Factory interface.
@@ -109,8 +108,14 @@ func (ef *execFactory) ConstructVirtualScan(table opt.Table) (exec.Node, error) 
 	if err != nil {
 		return nil, err
 	}
-	_, constructor := virtual.getPlanInfo()
-	return constructor(ef.ctx, ef.planner, tn.Catalog())
+	columns, constructor := virtual.getPlanInfo()
+
+	return &delayedNode{
+		columns: columns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			return constructor(ctx, p, tn.Catalog())
+		},
+	}, nil
 }
 
 func asDataSource(n exec.Node) planDataSource {

@@ -149,6 +149,12 @@ define String {
     Value string
 }
 
+# type NumberExpr int
+[Value]
+define Number {
+    Value int64
+}
+
 #
 # The below operators are never created by the parser, but are created by the
 # compiler, in order to make further processing of the tree easier.

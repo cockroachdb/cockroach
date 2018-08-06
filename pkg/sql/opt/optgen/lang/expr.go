@@ -223,12 +223,17 @@ func visitChildren(e Expr, visit VisitFunc) []Expr {
 // expression to the given buffer, at the specified level of indentation.
 func formatExpr(e Expr, buf *bytes.Buffer, level int) {
 	if e.Value() != nil {
-		if e.Op() == StringOp {
+		switch e.Op() {
+		case StringOp:
 			buf.WriteByte('"')
 			buf.WriteString(e.Value().(string))
 			buf.WriteByte('"')
-		} else {
-			buf.WriteString(fmt.Sprintf("%v", e.Value()))
+
+		case NumberOp:
+			fmt.Fprintf(buf, "%d", e.Value().(int64))
+
+		default:
+			fmt.Fprintf(buf, "%v", e.Value())
 		}
 		return
 	}

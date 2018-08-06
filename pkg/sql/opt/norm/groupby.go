@@ -15,6 +15,8 @@
 package norm
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
@@ -52,45 +54,63 @@ func (c *CustomFuncs) AppendReducedGroupingCols(
 	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
 	fdset := c.LookupLogical(input).Relational.FuncDeps
 	appendCols := groupingCols.Difference(fdset.ReduceCols(groupingCols))
-	return c.appendConstAggCols(aggs, appendCols)
+	return c.AppendAggCols(aggs, opt.ConstAggOp, appendCols)
 }
 
-// appendConstAggCols constructs a new Aggregations operator containing the
-// given aggregate functions plus new ConstAgg aggregates that wrap the given
-// set of appendCols. If the aggregate group is 0, then the result contains only
-// the appended ConstAgg aggregates.
-//
-// This method is useful when the appendCols are known to have constant values
-// within any group; therefore, a value from any of the rows in the group can be
-// used.
-func (c *CustomFuncs) appendConstAggCols(aggs memo.GroupID, appendCols opt.ColSet) memo.GroupID {
-	var outElems []memo.GroupID
-	var outColList opt.ColList
+// AppendAggCols constructs a new Aggregations operator containing the aggregate
+// functions from an existing Aggregations operator plus an additional set of
+// aggregate functions, one for each column in the given set. The new functions
+// are of the given aggregate operator type.
+func (c *CustomFuncs) AppendAggCols(
+	aggs memo.GroupID, aggOp opt.Operator, cols opt.ColSet,
+) memo.GroupID {
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsColList := c.ExtractColList(aggsExpr.Cols())
 
-	if aggs == 0 {
-		outElems = make([]memo.GroupID, 0, appendCols.Len())
-		outColList = make(opt.ColList, 0, len(outElems))
-	} else {
-		aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-		aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-		aggsColList := c.ExtractColList(aggsExpr.Cols())
+	outElems := make([]memo.GroupID, len(aggsElems)+cols.Len())
+	copy(outElems, aggsElems)
+	outColList := make(opt.ColList, len(outElems))
+	copy(outColList, aggsColList)
 
-		outElems = make([]memo.GroupID, len(aggsElems), len(aggsElems)+appendCols.Len())
-		copy(outElems, aggsElems)
-		outColList = make(opt.ColList, len(outElems), cap(outElems))
-		copy(outColList, aggsColList)
-	}
-
-	// Append ConstAgg aggregate functions wrapping each appendCol.
-	for i, ok := appendCols.Next(0); ok; i, ok = appendCols.Next(i + 1) {
-		outAgg := c.f.ConstructConstAgg(
-			c.f.ConstructVariable(
-				c.f.mem.InternColumnID(opt.ColumnID(i)),
-			),
-		)
-		outElems = append(outElems, outAgg)
-		outColList = append(outColList, opt.ColumnID(i))
-	}
+	c.makeAggCols(aggOp, cols, outElems[len(aggsElems):], outColList[len(aggsElems):])
 
 	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+}
+
+// makeAggCols is a helper method that constructs a new aggregate function of
+// the given operator type for each column in the given set. The resulting
+// aggregates are written into outElems and outColList. As an example, for
+// columns (1,2) and operator ConstAggOp, makeAggCols will set the following:
+//
+//   outElems[0] = (ConstAggOp (Variable 1))
+//   outElems[1] = (ConstAggOp (Variable 2))
+//
+//   outColList[0] = 1
+//   outColList[1] = 2
+//
+func (c *CustomFuncs) makeAggCols(
+	aggOp opt.Operator, cols opt.ColSet, outElems []memo.GroupID, outColList opt.ColList,
+) {
+	// Append aggregate functions wrapping a Variable reference to each column.
+	i := 0
+	for id, ok := cols.Next(0); ok; id, ok = cols.Next(id + 1) {
+		varExpr := c.f.ConstructVariable(c.f.mem.InternColumnID(opt.ColumnID(id)))
+
+		var outAgg memo.GroupID
+		switch aggOp {
+		case opt.ConstAggOp:
+			outAgg = c.f.ConstructConstAgg(varExpr)
+
+		case opt.FirstAggOp:
+			outAgg = c.f.ConstructFirstAgg(varExpr)
+
+		default:
+			panic(fmt.Sprintf("unrecognized aggregate operator type: %v", aggOp))
+		}
+
+		outElems[i] = outAgg
+		outColList[i] = opt.ColumnID(id)
+		i++
+	}
 }
