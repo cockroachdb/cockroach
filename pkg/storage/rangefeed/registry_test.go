@@ -139,10 +139,10 @@ func TestRegistry(t *testing.T) {
 	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.SetValue(&roachpb.RangeFeedValue{Value: val})
-	ev2.SetValue(&roachpb.RangeFeedValue{Value: val})
-	ev3.SetValue(&roachpb.RangeFeedValue{Value: val})
-	ev4.SetValue(&roachpb.RangeFeedValue{Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev3.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev4.MustSetValue(&roachpb.RangeFeedValue{Value: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
@@ -272,7 +272,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	// Publish a value with a timestamp beneath the registration's start
 	// timestamp. Should be ignored.
 	ev := new(roachpb.RangeFeedEvent)
-	ev.SetValue(&roachpb.RangeFeedValue{
+	ev.MustSetValue(&roachpb.RangeFeedValue{
 		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 5}},
 	})
 	reg.PublishToOverlapping(spAB, ev)
@@ -280,7 +280,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 
 	// Publish a value with a timestamp equal to the registration's start
 	// timestamp. Should be ignored.
-	ev.SetValue(&roachpb.RangeFeedValue{
+	ev.MustSetValue(&roachpb.RangeFeedValue{
 		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 10}},
 	})
 	reg.PublishToOverlapping(spAB, ev)
@@ -288,8 +288,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
-	ev.Reset() // TODO(nvanbenschoten): Fix SetValue.
-	ev.SetValue(&roachpb.RangeFeedCheckpoint{
+	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
 		ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
 	reg.PublishToOverlapping(spAB, ev)
@@ -306,7 +305,7 @@ func TestRegistryPublishCheckpointNotCaughtUp(t *testing.T) {
 
 	// Publish a checkpoint before registration caught up. Should be ignored.
 	ev := new(roachpb.RangeFeedEvent)
-	ev.SetValue(&roachpb.RangeFeedCheckpoint{
+	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
 		ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
 	reg.PublishToOverlapping(spAB, ev)
