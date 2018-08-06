@@ -129,12 +129,19 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.findTableStateLocked(tableID, create)
+	t, err := m.findTableStateLocked(tableID, create)
+	if err != nil {
+		panic("impossible")
+	}
+	return t
 }
 
 func (m *LeaseManager) getNumVersions(tableID sqlbase.ID) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	t := m.findTableStateLocked(tableID, false /*create*/)
+	t, err := m.findTableStateLocked(tableID, false /*create*/)
+	if err != nil {
+		panic("impossible")
+	}
 	return len(t.active.data)
 }
