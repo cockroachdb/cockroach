@@ -138,30 +138,31 @@ var statsAnnID = opt.NewTableAnnID()
 // child operator. Assuming that no statistics are cached, this is the order of
 // function calls for the above example (somewhat simplified):
 //
-//        ---------------               ----------------
+//        +-------------+               +--------------+
 //  1.    | buildScan t |           2.  | buildGroupBy |
-//        ---------------               ----------------
+//        +-------------+               +--------------+
 //               |                             |
-//     -------------------------       ------------------
+//     +-----------------------+       +----------------+
 //     | makeTableStatistics t |       | colStat (x, y) |
-//     -------------------------       ------------------
+//     +-----------------------+       +----------------+
 //                                             |
-//                                   ----------------------
+//                                   +--------------------+
 //                                   | colStatScan (x, y) |
-//                                   ----------------------
+//                                   +--------------------+
 //                                             |
-//                                     ------------------
+//                                     +----------------+
 //                                     | colStat (x, y) |
-//                                     ------------------
+//                                     +----------------+
 //                                             |
-//                                 --------------------------
+//                                 +------------------------+
 //                                 | colStatMetadata (x, y) |
-//                                 --------------------------
+//                                 +------------------------+
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
 	s     *props.Statistics
 	props *props.Relational
+	md    *opt.Metadata
 
 	// ev is the ExprView for which these statistics are valid.
 	ev      ExprView
@@ -181,6 +182,7 @@ func (sb *statisticsBuilder) init(
 	sb.s = s
 	sb.props = relational
 	sb.ev = ev
+	sb.md = ev.Metadata()
 	sb.evalCtx = evalCtx
 	sb.keyBuf = keyBuf
 	sb.s.Selectivity = 1
@@ -275,8 +277,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *props.ColumnStatistic {
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", sb.ev.op))
 }
 
-// Metadata
-// --------
+// +----------+
+// | Metadata |
+// +----------+
 
 // colStatMetadata updates the statistics in the metadata to include an
 // estimated column statistic for the given column set.
@@ -298,7 +301,11 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 	}
 
 	if colSet.Len() == 1 {
+		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * sb.s.RowCount
+		if sb.md.ColumnType(opt.ColumnID(col)) == types.Bool {
+			colStat.DistinctCount = min(colStat.DistinctCount, 2)
+		}
 	} else {
 		distinctCount := 1.0
 		colSet.ForEach(func(i int) {
@@ -310,13 +317,15 @@ func (sb *statisticsBuilder) colStatMetadata(colSet opt.ColSet) *props.ColumnSta
 	return colStat
 }
 
-// Scan
-// ----
+// +------+
+// | Scan |
+// +------+
 
 func (sb *statisticsBuilder) buildScan(def *ScanOpDef) {
 	inputStatsBuilder := statisticsBuilder{
 		s:      sb.makeTableStatistics(def.Table),
 		props:  sb.props,
+		md:     sb.md,
 		keyBuf: sb.keyBuf,
 	}
 
@@ -344,6 +353,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	inputStatsBuilder := statisticsBuilder{
 		s:      sb.makeTableStatistics(def.Table),
 		props:  sb.props,
+		md:     sb.md,
 		keyBuf: sb.keyBuf,
 	}
 	colStat := sb.copyColStat(&inputStatsBuilder, colSet)
@@ -357,8 +367,9 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet) *props.ColumnStatist
 	return colStat
 }
 
-// VirtualScan
-// -----------
+// +-------------+
+// | VirtualScan |
+// +-------------+
 
 func (sb *statisticsBuilder) buildVirtualScan(def *VirtualScanOpDef) {
 	s := sb.makeTableStatistics(def.Table)
@@ -370,13 +381,15 @@ func (sb *statisticsBuilder) colStatVirtualScan(colSet opt.ColSet) *props.Column
 	inputStatsBuilder := statisticsBuilder{
 		s:      sb.makeTableStatistics(def.Table),
 		props:  sb.props,
+		md:     sb.md,
 		keyBuf: sb.keyBuf,
 	}
 	return sb.copyColStat(&inputStatsBuilder, colSet)
 }
 
-// Select
-// ------
+// +--------+
+// | Select |
+// +--------+
 
 func (sb *statisticsBuilder) buildSelect(filter ExprView, inputStats *props.Statistics) {
 	inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
@@ -456,8 +469,9 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet) *props.ColumnStati
 	return colStat
 }
 
-// Project
-// -------
+// +---------+
+// | Project |
+// +---------+
 
 func (sb *statisticsBuilder) buildProject(inputStats *props.Statistics) {
 	sb.s.RowCount = inputStats.RowCount
@@ -506,8 +520,9 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *props.ColumnStat
 	return colStat
 }
 
-// Join
-// ----
+// +------+
+// | Join |
+// +------+
 
 func (sb *statisticsBuilder) buildJoin(
 	op opt.Operator, leftStats, rightStats *props.Statistics, on ExprView,
@@ -559,8 +574,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet) *props.ColumnStatist
 	}
 }
 
-// Index Join
-// ----------
+// +------------+
+// | Index Join |
+// +------------+
 
 func (sb *statisticsBuilder) buildIndexJoin(inputStats *props.Statistics) {
 	sb.s.RowCount = inputStats.RowCount
@@ -588,6 +604,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(colSet opt.ColSet) *props.ColumnSt
 		joinedTableStatsBuilder := statisticsBuilder{
 			s:      sb.makeTableStatistics(def.Table),
 			props:  sb.props,
+			md:     sb.md,
 			keyBuf: sb.keyBuf,
 		}
 		joinedTableColStat := joinedTableStatsBuilder.colStat(reqJoinedCols)
@@ -613,8 +630,9 @@ func (sb *statisticsBuilder) colStatIndexJoin(colSet opt.ColSet) *props.ColumnSt
 	return colStat
 }
 
-// Group By
-// --------
+// +----------+
+// | Group By |
+// +----------+
 
 func (sb *statisticsBuilder) buildGroupBy(inputStats *props.Statistics, groupingColSet opt.ColSet) {
 	if groupingColSet.Empty() {
@@ -652,8 +670,9 @@ func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet) *props.ColumnStat
 	return sb.copyColStat(&inputStatsBuilder, colSet)
 }
 
-// Set Op
-// ------
+// +--------+
+// | Set Op |
+// +--------+
 
 func (sb *statisticsBuilder) buildSetOp(
 	op opt.Operator, leftStats, rightStats *props.Statistics, colMap *SetOpColMap,
@@ -721,8 +740,9 @@ func (sb *statisticsBuilder) colStatSetOpImpl(
 	return colStat
 }
 
-// Values
-// ------
+// +--------+
+// | Values |
+// +--------+
 
 // buildValues builds the statistics for a VALUES expression.
 func (sb *statisticsBuilder) buildValues() {
@@ -758,15 +778,16 @@ func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet) *props.ColumnStati
 	return colStat
 }
 
-// Limit
-// -----
+// +-------+
+// | Limit |
+// +-------+
 
 func (sb *statisticsBuilder) buildLimit(limit ExprView, inputStats *props.Statistics) {
 	// Copy row count from input.
 	sb.s.RowCount = inputStats.RowCount
 
-	// Update row count if limit is a constant.
-	if limit.Operator() == opt.ConstOp {
+	// Update row count if limit is a constant and row count is non-zero.
+	if limit.Operator() == opt.ConstOp && inputStats.RowCount > 0 {
 		hardLimit := *limit.Private().(*tree.DInt)
 		if hardLimit > 0 {
 			sb.s.RowCount = min(float64(hardLimit), inputStats.RowCount)
@@ -786,15 +807,16 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet) *props.ColumnStatis
 	return colStat
 }
 
-// Offset
-// ------
+// +--------+
+// | Offset |
+// +--------+
 
 func (sb *statisticsBuilder) buildOffset(offset ExprView, inputStats *props.Statistics) {
 	// Copy row count from input.
 	sb.s.RowCount = inputStats.RowCount
 
-	// Update row count if offset is a constant.
-	if offset.Operator() == opt.ConstOp {
+	// Update row count if offset is a constant and row count is non-zero.
+	if offset.Operator() == opt.ConstOp && inputStats.RowCount > 0 {
 		hardOffset := *offset.Private().(*tree.DInt)
 		if float64(hardOffset) >= inputStats.RowCount {
 			sb.s.RowCount = 0
@@ -816,8 +838,9 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet) *props.ColumnStati
 	return colStat
 }
 
-// Max1Row
-// -------
+// +---------+
+// | Max1Row |
+// +---------+
 
 func (sb *statisticsBuilder) buildMax1Row(inputStats *props.Statistics) {
 	// Update row count.
@@ -830,8 +853,9 @@ func (sb *statisticsBuilder) colStatMax1Row(colSet opt.ColSet) *props.ColumnStat
 	return colStat
 }
 
-// Row Number
-// ----------
+// +------------+
+// | Row Number |
+// +------------+
 
 func (sb *statisticsBuilder) buildRowNumber(inputStats *props.Statistics) {
 	sb.s.RowCount = inputStats.RowCount
@@ -855,8 +879,9 @@ func (sb *statisticsBuilder) colStatRowNumber(colSet opt.ColSet) *props.ColumnSt
 	return colStat
 }
 
-// Zip
-// ---
+// +-----+
+// | Zip |
+// +-----+
 
 func (sb *statisticsBuilder) buildZip() {
 	// The row count of a zip operation is equal to the maximum row count of its
@@ -946,6 +971,7 @@ func (sb *statisticsBuilder) makeStatisticsBuilder(
 	return statisticsBuilder{
 		s:      inputStats,
 		props:  inputEv.Logical().Relational,
+		md:     inputEv.Metadata(),
 		ev:     inputEv,
 		keyBuf: sb.keyBuf,
 	}
