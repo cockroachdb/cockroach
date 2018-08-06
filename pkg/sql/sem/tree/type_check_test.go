@@ -206,7 +206,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`lower(1, 2)`, `unknown signature: lower(int, int)`},
 		{`lower(1)`, `unknown signature: lower(int)`},
 		{`lower('FOO') OVER ()`, `OVER specified, but lower() is neither a window function nor an aggregate function`},
-		{`count(1) FILTER (WHERE true) OVER ()`, `FILTER within a window function call is not yet supported`},
+		{`count(1) FILTER (WHERE 1) OVER ()`, `incompatible FILTER expression type: int`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
