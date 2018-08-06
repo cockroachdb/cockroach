@@ -302,6 +302,28 @@ func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.E
 	w.agg.Close(ctx, evalCtx)
 }
 
+// arrayAggregateWrapper is a wrapper around arrayAggregate to be used for
+// array_agg built-in when it is used as a window function. It copies
+// underlying array before returning it as a result.
+type arrayAggregateWrapper struct {
+	arrayAggregate
+}
+
+// Result returns a copy of an array of all datums passed to Add.
+func (a *arrayAggregateWrapper) Result() (tree.Datum, error) {
+	if len(a.arr.Array) > 0 {
+		res := &tree.DArray{
+			ParamTyp: a.arr.ParamTyp,
+			HasNulls: a.arr.HasNulls,
+			// TODO: how can we track this memory?
+			Array: make(tree.Datums, len(a.arr.Array)),
+		}
+		copy(res.Array, a.arr.Array)
+		return res, nil
+	}
+	return tree.DNull, nil
+}
+
 // rowNumberWindow computes the number of the current row within its partition,
 // counting from 1.
 type rowNumberWindow struct{}
