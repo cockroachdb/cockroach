@@ -1,11 +1,12 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, b BOOL, UNIQUE (s DESC, d))
 ----
 TABLE a
  ├── x int not null
  ├── y int
  ├── s string
  ├── d decimal not null
+ ├── b bool
  ├── INDEX primary
  │    └── x int not null
  └── INDEX secondary
@@ -28,10 +29,28 @@ build
 SELECT * FROM a
 ----
 scan a
- ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
  ├── stats: [rows=2000]
  ├── key: (1)
- └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+
+# Check that boolean columns have distinct count 2 when there are no stats
+# available.
+build
+SELECT * FROM a WHERE b
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool!null)
+ ├── stats: [rows=1000, distinct(5)=1]
+ ├── key: (1)
+ ├── fd: ()-->(5), (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
+ │    ├── stats: [rows=2000, distinct(5)=2]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ └── filters [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+      └── variable: a.b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -72,10 +91,10 @@ build
 SELECT * FROM a
 ----
 scan a
- ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
  ├── stats: [rows=3000]
  ├── key: (1)
- └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
 
 # Test constrained scan.
 opt
@@ -104,11 +123,11 @@ opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
 group-by
- ├── columns: count:5(int) y:2(int) x:1(int!null)
+ ├── columns: count:6(int) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
  ├── stats: [rows=100, distinct(1)=100]
  ├── key: (1)
- ├── fd: (1)-->(2,5)
+ ├── fd: (1)-->(2,6)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
