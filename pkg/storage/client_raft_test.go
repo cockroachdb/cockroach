@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1122,6 +1123,144 @@ func TestRefreshPendingCommands(t *testing.T) {
 			mtc.waitForValues(roachpb.Key("a"), []int64{15, 15, 15})
 		})
 	}
+}
+
+// Test that when a Raft group is not able to establish a quorum, its Raft log
+// does not grow without bound. It tests two different scenerios where this used
+// to be possible (see #27772):
+// 1. The leader proposes a command and cannot establish a quorum. The leader
+//    continually re-proposes the command.
+// 2. The follower proposes a command and forwards it to the leader, who cannot
+//    establish a quorum. The follower continually re-proposes and forwards the
+//    command to the leader.
+func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	// Drop the raft tick interval so the Raft group is ticked more.
+	sc.RaftTickInterval = 10 * time.Millisecond
+	// Don't timeout raft leader. We don't want leadership moving.
+	sc.RaftElectionTimeoutTicks = 1000000
+	// Disable leader transfers during leaseholder changes so that we
+	// can easily create leader-not-leaseholder scenarios.
+	sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
+	// Refresh pending commands on every Raft group tick instead of
+	// every RaftElectionTimeoutTicks.
+	sc.TestingKnobs.RefreshReasonTicksPeriod = 1
+	// Disable periodic gossip tasks which can move the range 1 lease
+	// unexpectedly.
+	sc.TestingKnobs.DisablePeriodicGossips = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 5)
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2, 3, 4)
+
+	// Raft leadership is kept on node 0.
+	leaderRepl, err := mtc.Store(0).GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Put some data in the range so we'll have something to test for.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for all nodes to catch up.
+	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5, 5, 5})
+
+	// Test proposing on leader and proposing on follower. Neither should result
+	// in unbounded raft log growth.
+	testutils.RunTrueAndFalse(t, "proposeOnFollower", func(t *testing.T, proposeOnFollower bool) {
+		// Restart any nodes that are down.
+		for _, s := range []int{2, 3, 4} {
+			if mtc.Store(s) == nil {
+				mtc.restartStore(s)
+			}
+		}
+
+		// Determine which node to propose on. Transfer lease to that node.
+		var propIdx, otherIdx int
+		if !proposeOnFollower {
+			propIdx, otherIdx = 0, 1
+		} else {
+			propIdx, otherIdx = 1, 0
+		}
+		propNode := rg1(mtc.stores[propIdx])
+		mtc.transferLease(context.TODO(), rangeID, otherIdx, propIdx)
+		testutils.SucceedsSoon(t, func() error {
+			// Lease transfers may not be immediately observed by the new
+			// leaseholder. Wait until the new leaseholder is aware.
+			repl, err := mtc.Store(propIdx).GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			repDesc, err := repl.GetReplicaDescriptor()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lease, _ := repl.GetLease(); lease.Replica != repDesc {
+				return errors.Errorf("lease not transferred yet; found %v", lease)
+			}
+			return nil
+		})
+
+		// Stop enough nodes to prevent a quorum.
+		for _, s := range []int{2, 3, 4} {
+			mtc.stopStore(s)
+		}
+
+		// Determine the current raft log size.
+		initLogSize := leaderRepl.GetRaftLogSize()
+
+		// While a majority nodes are down, write some data.
+		putRes := make(chan *roachpb.Error)
+		go func() {
+			putArgs := putArgs([]byte("b"), make([]byte, 8<<10 /* 8 KB */))
+			_, err := client.SendWrapped(context.Background(), propNode, putArgs)
+			putRes <- err
+		}()
+
+		// Wait for a bit and watch for Raft log growth.
+		wait := time.After(500 * time.Millisecond)
+		ticker := time.Tick(50 * time.Millisecond)
+	Loop:
+		for {
+			select {
+			case <-wait:
+				break Loop
+			case <-ticker:
+				// Verify that the leader is node 0.
+				status := leaderRepl.RaftStatus()
+				if status == nil || status.RaftState != raft.StateLeader {
+					t.Fatalf("raft leader should be node 0, but got status %+v", status)
+				}
+
+				// Check raft log size.
+				const logSizeLimit = 64 << 10 // 64 KB
+				curlogSize := leaderRepl.GetRaftLogSize()
+				logSize := curlogSize - initLogSize
+				logSizeStr := humanizeutil.IBytes(logSize)
+				if logSize > logSizeLimit {
+					t.Fatalf("raft log size grew to %s", logSizeStr)
+				}
+				t.Logf("raft log size grew to %s", logSizeStr)
+			case err := <-putRes:
+				t.Fatalf("write finished with quorum unavailable; err=%v", err)
+			}
+		}
+
+		// Start enough nodes to establish a quorum.
+		mtc.restartStore(2)
+
+		// The write should now succeed.
+		if err := <-putRes; err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 // TestStoreRangeUpReplicate verifies that the replication queue will notice

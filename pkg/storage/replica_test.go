@@ -1909,7 +1909,7 @@ func TestLeaseConcurrent(t *testing.T) {
 					// When we complete the command, we have to remove it from the map;
 					// otherwise its context (and tracing span) may be used after the
 					// client cleaned up.
-					delete(tc.repl.mu.proposals, proposal.idKey)
+					delete(tc.repl.mu.localProposals, proposal.idKey)
 					proposal.finishRaftApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
 					return
 				}
@@ -7250,7 +7250,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if len(tc.repl.mu.proposals) == 0 {
+		if len(tc.repl.mu.localProposals) == 0 {
 			t.Fatal("expected non-empty proposals map")
 		}
 	}()
@@ -7695,7 +7695,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
 				log.Infof(context.Background(), "abandoning command %d", i)
-				delete(repl.mu.proposals, proposal.idKey)
+				delete(repl.mu.localProposals, proposal.idKey)
 			} else if err := repl.submitProposalLocked(proposal); err != nil {
 				t.Error(err)
 			} else {
@@ -7773,7 +7773,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 
 		tc.repl.mu.Lock()
-		for _, p := range tc.repl.mu.proposals {
+		for _, p := range tc.repl.mu.localProposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 			}
@@ -7805,13 +7805,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
-	nonePending := len(tc.repl.mu.proposals) == 0
+	nonePending := len(tc.repl.mu.localProposals) == 0
 	c := int(tc.repl.mu.lastAssignedLeaseIndex) - int(tc.repl.mu.state.LeaseAppliedIndex)
 	if nonePending && c > 0 {
 		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
 	if !nonePending {
-		t.Fatalf("still pending commands: %+v", tc.repl.mu.proposals)
+		t.Fatalf("still pending commands: %+v", tc.repl.mu.localProposals)
 	}
 }
 
@@ -7835,8 +7835,14 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
+	// Only followers refresh pending commands during tick events. Change the
+	// replica that the range thinks is the leader so that the replica thinks
+	// it's a follower.
+	r.mu.Lock()
+	r.mu.leaderID = 2
+	r.mu.Unlock()
 
+	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
 		// starting with a value of 0 (modulo electionTicks). Move the replica into
@@ -7894,7 +7900,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		}
 		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
-		for id, p := range r.mu.proposals {
+		for id, p := range r.mu.localProposals {
 			m[id] = p.proposedAtTicks
 		}
 		r.mu.Unlock()
