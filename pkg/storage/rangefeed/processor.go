@@ -483,7 +483,7 @@ func (p *Processor) publishValue(
 
 	span := roachpb.Span{Key: key}
 	var event roachpb.RangeFeedEvent
-	event.SetValue(&roachpb.RangeFeedValue{
+	event.MustSetValue(&roachpb.RangeFeedValue{
 		Key: key,
 		Value: roachpb.Value{
 			RawBytes:  value,
@@ -503,7 +503,7 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 
 func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
 	var event roachpb.RangeFeedEvent
-	event.SetValue(&roachpb.RangeFeedCheckpoint{
+	event.MustSetValue(&roachpb.RangeFeedCheckpoint{
 		Span:       p.Span.AsRawSpanWithNoLocals(),
 		ResolvedTS: p.rts.Get(),
 	})
