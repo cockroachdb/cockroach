@@ -138,9 +138,5 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
-	// If we analyzed the statement, we relinquished ownership of the plan to a
-	// distSQLWrapper.
-	if !n.analyze {
-		n.plan.Close(ctx)
-	}
+	n.plan.Close(ctx)
 }
