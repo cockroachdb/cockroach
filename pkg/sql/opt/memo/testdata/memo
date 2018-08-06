@@ -98,13 +98,13 @@ project
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │    ├── stats: [rows=33333.3333]
+ │    │    ├── stats: [rows=111111.111]
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2
  │    │    └── inner-join
  │    │         ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │         ├── stats: [rows=33333.3333]
+ │    │         ├── stats: [rows=111111.111]
  │    │         ├── key: (1,3)
  │    │         ├── fd: (1)-->(2)
  │    │         ├── scan b
@@ -147,25 +147,25 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 12781.75
+ │    │    └── cost: 41568.95
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 12781.75
+ │         └── cost: 41568.95
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 12781.55
+ │    │    └── cost: 41568.75
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 12781.55
+ │         └── cost: 41568.75
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 2431.67
+ │    │    └── cost: 3209.44
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 12781.45
+ │         └── cost: 41568.65
  ├── G5: (const 10)
  ├── G6: (plus G16 G17)
  ├── G7: (scan b,cols=(3)) (scan b,rev,cols=(3))

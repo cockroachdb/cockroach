@@ -1150,6 +1150,10 @@ project
       ├── columns: xy.x:1(int!null) xy.y:2(int!null) k:3(int!null) xy.x:7(int!null) xy.y:8(int!null)
       ├── key: (1,7)
       ├── fd: (1)-->(2), (7)-->(8), (3)==(7), (7)==(3)
+      ├── scan xy
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
       ├── inner-join (merge)
       │    ├── columns: k:3(int!null) xy.x:7(int!null) xy.y:8(int)
       │    ├── key: (7)
@@ -1168,10 +1172,6 @@ project
       │         ├── right ordering: +7
       │         └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
       │              └── a.k = xy.x [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
-      ├── scan xy
-      │    ├── columns: xy.x:1(int!null) xy.y:2(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
       └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
            └── xy.y < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
