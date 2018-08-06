@@ -1405,7 +1405,7 @@ $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
-	bin/prereqs -test $($*-package) > $@.d.tmp
+	bin/prereqs -bin-name=$* -test $($*-package) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
 	$(xgo) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
 
