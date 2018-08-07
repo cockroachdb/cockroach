@@ -3257,12 +3257,12 @@ statement ok
 DELETE FROM a WHERE a_id <= 2
 
 query I
-SELECT COUNT(*) from a
+SELECT count(*) from a
 ----
 8
 
 query I
-SELECT COUNT(*) from b
+SELECT count(*) from b
 ----
 8
 

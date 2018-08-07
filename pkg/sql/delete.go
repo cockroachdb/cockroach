@@ -364,8 +364,6 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 	interleavedQueue := make([]sqlbase.ID, 0)
 	interleavedQueue = append(interleavedQueue, table.ID)
 
-	log.Warningf(context.TODO(), "checking for fast path on table ID %s", table.ID)
-
 	// if the base table is interleaved in another table, fail
 	// TODO let this succeed if this is part of another table's fast path (???).
 	for _, idx := range fkTables[table.ID].Table.AllNonDropIndexes() {
@@ -426,7 +424,7 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 
 				// All of these references MUST be ON DELETE CASCADE
 				if idx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
-					log.Warningf(context.TODO(), "not fast path: Non cascade on ref %s, %s to %s, %s. action is %s", ref.Table, ref.Index, tableID, idx.ID, sqlbase.ForeignKeyReference_Action_name[int32(ref.OnDelete)])
+					log.Warningf(context.TODO(), "not fast path: Non cascade on ref %d, %d to %d, %d. action is %s", ref.Table, ref.Index, tableID, idx.ID, sqlbase.ForeignKeyReference_Action_name[int32(ref.OnDelete)])
 					return false
 				}
 			}
