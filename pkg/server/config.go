@@ -228,6 +228,10 @@ type Config struct {
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
 
+	// LocalityIPAddresses contains private IP addresses the can only be accessed
+	// in the corresponding locality.
+	LocalityIPAddresses []roachpb.LocalityAddress
+
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing
