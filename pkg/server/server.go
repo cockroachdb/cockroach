@@ -1967,6 +1967,7 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 		argsJSON, err := json.Marshal(tmplArgs)
 		if err != nil {
 			http.Error(writer, err.Error(), 500)
+			return
 		}
 
 		// Execute the template.
@@ -1977,7 +1978,6 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 			wrappedErr := errors.Wrap(err, "templating index.html")
 			http.Error(writer, wrappedErr.Error(), 500)
 			log.Error(request.Context(), wrappedErr)
-			return
 		}
 	})
 }
