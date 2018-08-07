@@ -264,6 +264,33 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 var mutationsNotSupportedError = newQueryNotSupportedError("mutations not supported")
 var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING should never distribute")
 
+// mustWrapNode returns true if a node has no DistSQL-processor equivalent.
+// This must be kept in sync with createPlanForNode.
+// TODO(jordan): refactor these to use the observer pattern to avoid duplication.
+func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
+	switch node.(type) {
+	case *scanNode:
+	case *indexJoinNode:
+	case *lookupJoinNode:
+	case *joinNode:
+	case *renderNode:
+	case *groupNode:
+	case *sortNode:
+	case *filterNode:
+	case *limitNode:
+	case *distinctNode:
+	case *unionNode:
+	case *valuesNode:
+	case *createStatsNode:
+	case *projectSetNode:
+	case *unaryNode:
+	case *zeroNode:
+	default:
+		return true
+	}
+	return false
+}
+
 // checkSupportForNode returns a distRecommendation (as described above) or
 // cannotDistribute and an error if the plan subtree is not distributable.
 // The error doesn't indicate complete failure - it's instead the reason that
@@ -451,10 +478,10 @@ type PlanningCtx struct {
 	isLocal  bool
 	planner  *planner
 	stmtType tree.StatementType
-	// finishedPlanningFirstNode is set to false until we've finished planning the
-	// root of the planNode tree. It's used to keep track of whether it's valid to
-	// run that root node in a special fast path mode.
-	finishedPlanningFirstNode bool
+	// planDepth is set to the current depth of the planNode tree. It's used to
+	// keep track of whether it's valid to run a root node in a special fast path
+	// mode.
+	planDepth int
 }
 
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
@@ -858,10 +885,6 @@ func tableOrdinal(desc *sqlbase.TableDescriptor, colID sqlbase.ColumnID) int {
 // this case we have to create a map from scanNode column ordinal to table
 // column ordinal (which is what the TableReader uses).
 func getScanNodeToTableOrdinalMap(n *scanNode) []int {
-	if n.colCfg.visibility != publicColumns {
-		panic("only publicColumns scan visibility supported")
-	}
-
 	if n.colCfg.wantedColumns == nil {
 		return nil
 	}
@@ -2200,6 +2223,8 @@ func applySortBasedOnFirst(source, target []uint32) ([]uint32, error) {
 func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx *PlanningCtx, node planNode,
 ) (plan PhysicalPlan, err error) {
+	planCtx.planDepth++
+
 	switch n := node.(type) {
 	case *scanNode:
 		plan, err = dsp.createTableReaders(planCtx, n, nil)
@@ -2326,16 +2351,60 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		)
 	}
 
-	planCtx.finishedPlanningFirstNode = true
-
 	return plan, err
 }
 
 // wrapPlan produces a DistSQL processor for an arbitrary planNode. This is
 // invoked when a particular planNode can't be distributed for some reason. It
-// will create a planNodeToRowSource wrapper, embed the planNode in that
-// wrapper, and hook the wrapper up to the rest of the plan.
+// will create a planNodeToRowSource wrapper for the sub-tree that's not
+// plannable by DistSQL. If that sub-tree has DistSQL-plannable sources, they
+// will be planned by DistSQL and connected to the wrapper.
 func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalPlan, error) {
+	useFastPath := planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected
+
+	// First, we search the planNode tree we're trying to wrap for the first
+	// DistSQL-enabled planNode in the tree. If we find one, we ask the planner to
+	// continue the DistSQL planning recursion on that planNode.
+	seenTop := false
+	nParents := uint32(0)
+	var p PhysicalPlan
+	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
+	// modify its parent later to connect its source to the DistSQL-planned
+	// subtree.
+	var firstNotWrapped planNode
+	walkPlan(planCtx.ctx, n, planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			switch plan.(type) {
+			case *explainDistSQLNode, *explainPlanNode:
+				// Don't continue recursing into explain nodes - they need to be left
+				// alone since they handle their own planning later.
+				return false, nil
+			}
+			if !seenTop {
+				// We know we're wrapping the first node, so ignore it.
+				seenTop = true
+				return true, nil
+			}
+			var err error
+			// Continue walking until we find a node that has a DistSQL
+			// representation - that's when we'll quit the wrapping process and hand
+			// control of planning back to the DistSQL physical planner.
+			if !dsp.mustWrapNode(plan) {
+				firstNotWrapped = plan
+				p, err = dsp.createPlanForNode(planCtx, plan)
+				if err != nil {
+					return false, err
+				}
+				nParents++
+				return false, nil
+			}
+			return true, nil
+		},
+	})
+	if nParents > 1 {
+		return PhysicalPlan{}, errors.Errorf("Can't wrap plan %v %T with more than one input", n, n)
+	}
+
 	// Copy the evalCtx.
 	evalCtx := *planCtx.ExtendedEvalCtx
 	// We permit the planNodeToRowSource to trigger the wrapped planNode's fast
@@ -2343,7 +2412,6 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 	// expecting is in fact RowsAffected. RowsAffected statements return a single
 	// row with the number of rows affected by the statement, and are the only
 	// types of statement where it's valid to invoke a plan's fast path.
-	useFastPath := !planCtx.finishedPlanningFirstNode && planCtx.stmtType == tree.RowsAffected
 	wrapper, err := makePlanNodeToRowSource(n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
@@ -2354,30 +2422,28 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	planCols := planColumns(n)
-	types := make([]sqlbase.ColumnType, len(planCols))
-	for i, t := range planCols {
-		colTyp, err := sqlbase.DatumTypeToColumnType(t.Typ)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-		types[i] = colTyp
+	wrapper.firstNotWrapped = firstNotWrapped
+
+	idx := uint32(len(p.LocalProcessors))
+	p.LocalProcessors = append(p.LocalProcessors, wrapper)
+	p.LocalProcessorIndexes = append(p.LocalProcessorIndexes, &idx)
+	var input []distsqlrun.InputSyncSpec
+	if firstNotWrapped != nil {
+		// We found a DistSQL-plannable subtree - create an input spec for it.
+		input = []distsqlrun.InputSyncSpec{{
+			Type:        distsqlrun.InputSyncSpec_UNORDERED,
+			ColumnTypes: p.ResultTypes,
+		}}
 	}
-	idx := uint32(0)
-	p := PhysicalPlan{
-		PhysicalPlan: distsqlplan.PhysicalPlan{
-			LocalProcessors:       []distsqlrun.LocalProcessor{wrapper},
-			LocalProcessorIndexes: []*uint32{&idx},
-			ResultTypes:           types,
-			ResultRouters:         make([]distsqlplan.ProcessorIdx, 1),
-		},
-		PlanToStreamColMap: identityMapInPlace(make([]int, len(planCols))),
-	}
+	name := nodeName(n)
 	proc := distsqlplan.Processor{
 		Node: dsp.nodeDesc.NodeID,
 		Spec: distsqlrun.ProcessorSpec{
+			Input: input,
 			Core: distsqlrun.ProcessorCoreUnion{LocalPlanNode: &distsqlrun.LocalPlanNodeSpec{
 				RowSourceIdx: &idx,
+				NumInputs:    &nParents,
+				Name:         &name,
 			}},
 			Post: distsqlrun.PostProcessSpec{},
 			Output: []distsqlrun.OutputRouterSpec{{
@@ -2387,6 +2453,16 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 		},
 	}
 	pIdx := p.AddProcessor(proc)
+	p.ResultTypes = wrapper.outputTypes
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(p.ResultTypes)))
+	if firstNotWrapped != nil {
+		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0)
+	}
+	if cap(p.ResultRouters) < 1 {
+		p.ResultRouters = make([]distsqlplan.ProcessorIdx, 1)
+	} else {
+		p.ResultRouters = p.ResultRouters[:1]
+	}
 	p.ResultRouters[0] = pIdx
 	return p, nil
 }
