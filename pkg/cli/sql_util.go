@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -493,6 +494,8 @@ func makeURLFromFlags(userinfo *url.Userinfo) *url.URL {
 	}
 }
 
+var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
+
 // makeSQLClient connects to the database using the connection
 // settings set by the command-line flags. The value of --url, if any
 // is provided is used as the source of configuration; otherwise a URL
@@ -605,6 +608,15 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 	// anything already in the URL should take priority.
 	if options.Get("application_name") == "" && appName != "" {
 		options.Set("application_name", appName)
+	}
+
+	// Set a connection timeout if none is provided already. This
+	// ensures that if the server was not initialized or there is some
+	// network issue, the client will not be left to hang forever.
+	//
+	// This is a lib/pq feature.
+	if options.Get("connect_timeout") == "" {
+		options.Set("connect_timeout", sqlConnTimeout)
 	}
 
 	baseURL.RawQuery = options.Encode()

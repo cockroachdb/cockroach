@@ -21,9 +21,22 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
+var (
+	keyA, keyB = roachpb.Key("a"), roachpb.Key("b")
+	keyC, keyD = roachpb.Key("c"), roachpb.Key("d")
+
+	spAB = roachpb.Span{Key: keyA, EndKey: keyB}
+	spBC = roachpb.Span{Key: keyB, EndKey: keyC}
+	spCD = roachpb.Span{Key: keyC, EndKey: keyD}
+	spAC = roachpb.Span{Key: keyA, EndKey: keyC}
 )
 
 type testStream struct {
@@ -55,7 +68,21 @@ func (s *testStream) Send(e *roachpb.RangeFeedEvent) error {
 	if s.mu.sendErr != nil {
 		return s.mu.sendErr
 	}
-	s.mu.events = append(s.mu.events, e)
+	// Send's contract does not promise that its provided events are safe for
+	// use after it has returned. To work around this, make a clone.
+	var eClone roachpb.RangeFeedEvent
+	{
+		b, err := protoutil.Marshal(e)
+		if err != nil {
+			panic(err)
+		}
+		err = protoutil.Unmarshal(b, &eClone)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	s.mu.events = append(s.mu.events, &eClone)
 	return nil
 }
 
@@ -109,16 +136,13 @@ func (r *testRegistration) Err() *roachpb.Error {
 func TestRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
-
-	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
-	spBC := roachpb.Span{Key: keyB, EndKey: keyC}
-	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
-	spAC := roachpb.Span{Key: keyA, EndKey: keyC}
-
+	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev3.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev4.MustSetValue(&roachpb.RangeFeedValue{Value: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
@@ -134,13 +158,13 @@ func TestRegistry(t *testing.T) {
 	rAC := newTestRegistration(spAC)
 
 	// Register 4 registrations.
-	reg.Register(rAB.registration)
+	reg.Register(&rAB.registration)
 	require.Equal(t, 1, reg.Len())
-	reg.Register(rBC.registration)
+	reg.Register(&rBC.registration)
 	require.Equal(t, 2, reg.Len())
-	reg.Register(rCD.registration)
+	reg.Register(&rCD.registration)
 	require.Equal(t, 3, reg.Len())
-	reg.Register(rAC.registration)
+	reg.Register(&rAC.registration)
 	require.Equal(t, 4, reg.Len())
 
 	// Publish to different spans.
@@ -215,4 +239,117 @@ func TestRegistry(t *testing.T) {
 	reg.Disconnect(spAC)
 	require.Equal(t, 0, reg.Len())
 	require.Nil(t, rAB.Err())
+
+	// Register first 2 registrations again.
+	reg.Register(&rAB.registration)
+	require.Equal(t, 1, reg.Len())
+	reg.Register(&rBC.registration)
+	require.Equal(t, 2, reg.Len())
+
+	// Publish event to only rAB.
+	reg.PublishToReg(&rAB.registration, ev1)
+	require.Equal(t, []*roachpb.RangeFeedEvent{ev1}, rAB.Events())
+	require.Nil(t, rAB.Err())
+	require.Nil(t, rBC.Events())
+	require.Nil(t, rBC.Err())
+
+	// Disconnect only rBC.
+	reg.DisconnectRegWithError(&rBC.registration, err1)
+	require.Equal(t, 1, reg.Len())
+	require.Nil(t, rAB.Err())
+	require.Equal(t, err1, rBC.Err())
+}
+
+func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	reg := makeRegistry()
+
+	r := newTestRegistration(spAB)
+	r.registration.caughtUp = true
+	r.registration.startTS = hlc.Timestamp{WallTime: 10}
+	reg.Register(&r.registration)
+
+	// Publish a value with a timestamp beneath the registration's start
+	// timestamp. Should be ignored.
+	ev := new(roachpb.RangeFeedEvent)
+	ev.MustSetValue(&roachpb.RangeFeedValue{
+		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 5}},
+	})
+	reg.PublishToOverlapping(spAB, ev)
+	require.Nil(t, r.Events())
+
+	// Publish a value with a timestamp equal to the registration's start
+	// timestamp. Should be ignored.
+	ev.MustSetValue(&roachpb.RangeFeedValue{
+		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 10}},
+	})
+	reg.PublishToOverlapping(spAB, ev)
+	require.Nil(t, r.Events())
+
+	// Publish a checkpoint with a timestamp beneath the registration's. Should
+	// be delivered.
+	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
+		ResolvedTS: hlc.Timestamp{WallTime: 5},
+	})
+	reg.PublishToOverlapping(spAB, ev)
+	require.Equal(t, []*roachpb.RangeFeedEvent{ev}, r.Events())
+}
+
+func TestRegistryPublishCheckpointNotCaughtUp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	reg := makeRegistry()
+
+	r := newTestRegistration(spAB)
+	r.registration.caughtUp = false
+	reg.Register(&r.registration)
+
+	// Publish a checkpoint before registration caught up. Should be ignored.
+	ev := new(roachpb.RangeFeedEvent)
+	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
+		ResolvedTS: hlc.Timestamp{WallTime: 5},
+	})
+	reg.PublishToOverlapping(spAB, ev)
+	require.Nil(t, r.Events())
+
+	// Publish a checkpoint after registration caught up. Should be delivered.
+	r.SetCaughtUp()
+	reg.PublishToOverlapping(spAB, ev)
+	require.Equal(t, []*roachpb.RangeFeedEvent{ev}, r.Events())
+}
+
+func TestRegistrationString(t *testing.T) {
+	testCases := []struct {
+		r   registration
+		exp string
+	}{
+		{
+			r: registration{
+				span: roachpb.Span{Key: roachpb.Key("a")},
+			},
+			exp: `[a @ 0.000000000,0+]`,
+		},
+		{
+			r: registration{span: roachpb.Span{
+				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			},
+			exp: `[{a-c} @ 0.000000000,0+]`,
+		},
+		{
+			r: registration{
+				span:    roachpb.Span{Key: roachpb.Key("d")},
+				startTS: hlc.Timestamp{WallTime: 10, Logical: 1},
+			},
+			exp: `[d @ 0.000000010,1+]`,
+		},
+		{
+			r: registration{span: roachpb.Span{
+				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
+				startTS: hlc.Timestamp{WallTime: 40, Logical: 9},
+			},
+			exp: `[{d-z} @ 0.000000040,9+]`,
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.exp, tc.r.String())
+	}
 }

@@ -44,7 +44,6 @@ func TestParseDatumStringAs(t *testing.T) {
 		},
 		types.Decimal: {
 			"0.0",
-			"-0.0",
 			"1.0",
 			"-1.0",
 			strconv.FormatFloat(math.MaxFloat64, 'G', -1, 64),
