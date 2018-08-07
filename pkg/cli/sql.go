@@ -1037,7 +1037,11 @@ func (c *cliState) doPrepareStatementLine(
 
 	if !endOfStmt {
 		if lastTok == '?' {
-			fmt.Fprintf(c.ins.Stdout(),
+			stdout := os.Stdout
+			if c.hasEditor() {
+				stdout = c.ins.Stdout()
+			}
+			fmt.Fprintf(stdout,
 				"Note: a single '?' is a JSON operator. If you want contextual help, use '??'.\n")
 		}
 		return contState
