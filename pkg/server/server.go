@@ -35,7 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/elazarl/go-bindata-assetfs"
+	assetfs "github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -758,7 +758,7 @@ func inspectEngines(
 // is necessarily ready to serve.
 type listenerInfo struct {
 	listen    string // the (RPC) listen address
-	advertise string // equals `listen` unless --advertise-host is used
+	advertise string // equals `listen` unless --advertise-addr is used
 	http      string // the HTTP endpoint
 }
 
@@ -1342,7 +1342,7 @@ func (s *Server) Start(ctx context.Context) error {
 		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try
 
 - starting the other nodes, if you haven't already
-- double-checking that the '--join' and '--host' flags are set up correctly
+- double-checking that the '--join' and '--listen'/'--advertise' flags are set up correctly
 - running the 'cockroach init' command if you are trying to initialize a new cluster
 
 If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."

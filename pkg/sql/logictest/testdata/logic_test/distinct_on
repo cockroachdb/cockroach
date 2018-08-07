@@ -84,6 +84,7 @@ SELECT DISTINCT ON (b, c, a) a FROM abc
 1
 1
 
+# We need to rowsort this since the ORDER BY isn't on the entire SELECT columns.
 query T rowsort
 SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
@@ -121,14 +122,14 @@ SELECT DISTINCT ON (x, y) y FROM xyz
 5
 1
 
-query TT rowsort
+query TT
 SELECT DISTINCT ON (a, c) a, b FROM abc ORDER BY a, c, b
 ----
 1 1
 1 1
 
 # We wrap this with an ORDER BY otherwise this would be non-deterministic.
-query TTT rowsort
+query TTT
 SELECT DISTINCT ON (c, a) b, c, a FROM abc ORDER BY c, a, b DESC
 ----
 1 1 1
@@ -157,7 +158,7 @@ SELECT DISTINCT ON (b) b FROM abc
 2
 
 # We wrap this with an ORDER BY otherwise this would be non-deterministic.
-query TTT rowsort
+query TTT
 SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b, c
 ----
 1 1 1
