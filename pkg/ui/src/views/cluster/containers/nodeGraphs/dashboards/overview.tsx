@@ -20,8 +20,7 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis label="queries">
-        <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
-        <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
+        <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
         <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
         <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
