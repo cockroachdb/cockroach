@@ -101,7 +101,6 @@ func (td *tableDeleter) fastDelete(
 
 	for _, span := range scan.spans {
 		log.VEvent(ctx, 2, "fast delete: skipping scan")
-		log.Warningf(ctx, "DelRange %s - %s", span.Key, span.EndKey)
 		if traceKV {
 			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}

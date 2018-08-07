@@ -349,6 +349,15 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 
 func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
 
+	// If there are no interleaved tables then don't take this path.
+	totalInterleaved := 0
+	for _, idx := range table.AllNonDropIndexes() {
+		totalInterleaved += len(idx.InterleavedBy)
+	}
+	if totalInterleaved == 0 {
+		return false
+	}
+
 	// contains all table IDs that are directly or indirectly interleaved into `table`,
 	// including `table` itself
 	interleavedMemo := make(map[sqlbase.ID]struct{})
