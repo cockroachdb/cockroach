@@ -52,7 +52,7 @@ func registerCDC(r *registry) {
 		c.Run(ctx, kafkaNode, `curl https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xzv`)
 		c.Run(ctx, kafkaNode, `sudo apt-get update`)
 		c.Run(ctx, kafkaNode, `yes | sudo apt-get install default-jre`)
-		c.Run(ctx, kafkaNode, `mkdir /mnt/data1/confluent`)
+		c.Run(ctx, kafkaNode, `mkdir -p /mnt/data1/confluent`)
 		c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
 
 		db := c.Conn(ctx, 1)
@@ -60,7 +60,7 @@ func registerCDC(r *registry) {
 			c.t.Fatal(err)
 		}
 		defer func() {
-			// Shut down any running feeds. Not neceesary for the nightly, but nice
+			// Shut down any running feeds. Not necessary for the nightly, but nice
 			// for development.
 			if _, err := db.Exec(`CANCEL JOBS (
 				SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
@@ -132,14 +132,14 @@ func registerCDC(r *registry) {
 				if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
 					return err
 				}
-				if nanos := progress.GetHighWater().WallTime; nanos > 0 {
+				if hw := progress.GetHighWater(); hw != nil && hw.WallTime > 0 {
 					if initialScanLatency == 0 {
-						initialScanLatency = timeutil.Since(timeutil.Unix(0, nanos))
+						initialScanLatency = timeutil.Since(timeutil.Unix(0, hw.WallTime))
 						l.printf("initial scan latency %s\n", initialScanLatency)
 						t.Status("finished initial scan")
 						continue
 					}
-					latency := timeutil.Since(timeutil.Unix(0, nanos))
+					latency := timeutil.Since(timeutil.Unix(0, hw.WallTime))
 					if latency < maxLatencyAllowed {
 						latencyDroppedBelowMaxAllowed = true
 					}
