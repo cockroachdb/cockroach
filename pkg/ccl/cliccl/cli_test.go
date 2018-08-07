@@ -105,6 +105,7 @@ func Example_cclzone() {
 	c.run("zone rm db.t.p1")
 	c.run("zone ls")
 	c.run("zone set db.t@primary --file=./../../cli/testdata/zone_attrs_advanced.yaml")
+	c.run("zone set db.t@primary --file=./../../cli/testdata/zone_attrs_experimental.yaml")
 
 	// Output:
 	// sql -e CREATE DATABASE db
@@ -226,5 +227,13 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
-	// experimental_lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
+	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
+	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs_experimental.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 90000
+	// num_replicas: 3
+	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
+	// lease_preferences: [[+zone=us-east-1a]]
 }

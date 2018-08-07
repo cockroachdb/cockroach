@@ -187,15 +187,21 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 // marshalableZoneConfig should be kept up-to-date with the real,
 // auto-generated ZoneConfig type, but with []Constraints changed to
 // ConstraintsList for backwards-compatible yaml marshaling and unmarshaling.
+// We also support parsing both lease_preferences (for v2.1+) and
+// experimental_lease_preferences (for v2.0), copying both into the same proto
+// field as needed.
+//
+// TODO(a-robinson,v2.2): Remove the experimental_lease_preferences field.
 type marshalableZoneConfig struct {
-	RangeMinBytes    int64             `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
-	RangeMaxBytes    int64             `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
-	GC               GCPolicy          `protobuf:"bytes,4,opt,name=gc" json:"gc"`
-	NumReplicas      int32             `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas" yaml:"num_replicas"`
-	Constraints      ConstraintsList   `protobuf:"bytes,6,rep,name=constraints" json:"constraints" yaml:"constraints,flow"`
-	LeasePreferences []LeasePreference `protobuf:"bytes,9,rep,name=lease_preferences,json=leasePreferences" json:"lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
-	Subzones         []Subzone         `protobuf:"bytes,8,rep,name=subzones" json:"subzones" yaml:"-"`
-	SubzoneSpans     []SubzoneSpan     `protobuf:"bytes,7,rep,name=subzone_spans,json=subzoneSpans" json:"subzone_spans" yaml:"-"`
+	RangeMinBytes                int64             `json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes                int64             `json:"range_max_bytes" yaml:"range_max_bytes"`
+	GC                           GCPolicy          `json:"gc"`
+	NumReplicas                  int32             `json:"num_replicas" yaml:"num_replicas"`
+	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
+	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow,omitempty"`
+	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
+	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
+	SubzoneSpans                 []SubzoneSpan     `json:"subzone_spans" yaml:"-"`
 }
 
 func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
@@ -208,6 +214,8 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	}
 	m.Constraints = ConstraintsList(c.Constraints)
 	m.LeasePreferences = c.LeasePreferences
+	// We intentionally do not round-trip ExperimentalLeasePreferences. We never
+	// want to return yaml containing it.
 	m.Subzones = c.Subzones
 	m.SubzoneSpans = c.SubzoneSpans
 	return m
@@ -221,6 +229,14 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 	c.NumReplicas = m.NumReplicas
 	c.Constraints = []Constraints(m.Constraints)
 	c.LeasePreferences = m.LeasePreferences
+	// Prefer a provided m.ExperimentalLeasePreferences value over whatever is in
+	// m.LeasePreferences, since we know that m.ExperimentalLeasePreferences can
+	// only possibly come from the user-specified input, whereas
+	// m.LeasePreferences could be the old value of the field retrieved from
+	// internal storage that the user is now trying to overwrite.
+	if m.ExperimentalLeasePreferences != nil {
+		c.LeasePreferences = m.ExperimentalLeasePreferences
+	}
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
 	return c
