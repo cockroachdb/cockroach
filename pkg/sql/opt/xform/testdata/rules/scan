@@ -44,6 +44,7 @@ SELECT k,f FROM a ORDER BY f DESC, k ASC LIMIT 10
 ----
 limit
  ├── columns: k:1(int!null) f:3(float)
+ ├── internal-ordering: -3,+1
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(3)

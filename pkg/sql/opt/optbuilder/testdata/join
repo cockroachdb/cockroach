@@ -997,6 +997,7 @@ SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twoc
 ----
 limit
  ├── columns: x:1(int!null) x:3(int!null) y:4(int) b:6(int!null) d:8(int!null) e:9(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
  │    ├── columns: onecolumn.x:1(int!null) twocolumn.x:3(int!null) twocolumn.y:4(int) onecolumn.x:6(int!null) twocolumn.x:8(int!null) twocolumn.y:9(int)
@@ -1114,6 +1115,7 @@ SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c U
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) y:5(int) y:8(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── sort
  │    ├── columns: twocolumn.x:1(int!null) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)

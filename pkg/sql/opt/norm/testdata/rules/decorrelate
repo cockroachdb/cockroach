@@ -1775,6 +1775,7 @@ project
       │    ├── fd: ()-->(10)
       │    ├── scalar-group-by
       │    │    ├── columns: max:10(string)
+      │    │    ├── internal-ordering: +8 opt(9)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
@@ -2281,6 +2282,7 @@ project
       ├── distinct-on
       │    ├── columns: x:1(int!null) y:2(int) k:3(int)
       │    ├── grouping columns: x:1(int!null)
+      │    ├── internal-ordering: +5,+6 opt(4)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    ├── sort
