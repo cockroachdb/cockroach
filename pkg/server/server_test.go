@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -858,6 +860,17 @@ func TestServeIndexHTML(t *testing.T) {
 </html>
 `
 
+	linkInFakeUI := func() {
+		ui.Asset = func(string) (_ []byte, _ error) { return }
+		ui.AssetDir = func(name string) (_ []string, _ error) { return }
+		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+	}
+	unlinkFakeUI := func() {
+		ui.Asset = nil
+		ui.AssetDir = nil
+		ui.AssetInfo = nil
+	}
+
 	t.Run("Insecure mode", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure: true,
@@ -874,32 +887,62 @@ func TestServeIndexHTML(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		resp, err := client.Get(s.AdminURL())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if resp.StatusCode != 200 {
-			t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-		}
-		respBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		respString := string(respBytes)
-		expected := fmt.Sprintf(
-			htmlTemplate,
-			fmt.Sprintf(
-				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
-				build.GetInfo().Tag,
-				build.VersionPrefix(),
-			),
-		)
-		if respString != expected {
-			t.Fatalf("expected %s; got %s", expected, respString)
-		}
+		t.Run("short build", func(t *testing.T) {
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(`<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>`,
+				build.GetInfo().Short())
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
+
+		t.Run("non-short build", func(t *testing.T) {
+			linkInFakeUI()
+			defer unlinkFakeUI()
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(
+				htmlTemplate,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+				),
+			)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
 	})
 
 	t.Run("Secure mode", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)
