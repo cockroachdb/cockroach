@@ -206,7 +206,7 @@ Ronald Rivest
 Clifford Stein
 
 # Ensure lookup join preserves ordering from the left side.
-query T rowsort
+query T
 SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
 Charles E Leiserson

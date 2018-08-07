@@ -288,6 +288,9 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		cfg.Binary,
 		"start",
 		"--insecure",
+		// Although --host/--port are deprecated, we cannot yet replace
+		// this here by --listen-addr/--listen-port, because
+		// TestVersionUpgrade will also try old binaries.
 		fmt.Sprintf("--host=%s", n.IPAddr()),
 		fmt.Sprintf("--port=%d", cfg.RPCPort),
 		fmt.Sprintf("--http-port=%d", cfg.HTTPPort),
