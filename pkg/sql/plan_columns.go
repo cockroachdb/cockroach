@@ -126,6 +126,9 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
+
+	case *rowSourceToPlanNode:
+		return n.planCols
 	}
 
 	// Every other node has no columns in their results.

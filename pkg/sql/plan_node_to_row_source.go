@@ -25,6 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type metadataForwarder interface {
+	forwardMetadata(metadata *distsqlrun.ProducerMetadata)
+}
+
 type planNodeToRowSource struct {
 	started bool
 	running bool
@@ -35,7 +39,21 @@ type planNodeToRowSource struct {
 	params      runParams
 	outputTypes []sqlbase.ColumnType
 
+	firstNotWrapped planNode
+
 	out distsqlrun.ProcOutputHelper
+
+	// metadataBuf will be populated by any upstream rowSourceToPlanNode
+	// processors that need to forward metadata to the end of the flow. They can't
+	// pass metadata through local processors, so they instead add the metadata
+	// to this buffer and expect us to forward it further.
+	metadataBuf []*distsqlrun.ProducerMetadata
+
+	// toDrain, if not nil, is the first upstream RowSource. When we're done
+	// executing, we need to drain this row source of its metadata in case the
+	// planNode tree we're wrapping returned an error, since planNodes don't know
+	// to drain trailing metadata.
+	toDrain distsqlrun.RowSource
 
 	// run time state machine values
 	row sqlbase.EncDatumRow
@@ -75,6 +93,27 @@ func (p *planNodeToRowSource) InitWithOutput(
 	return p.out.Init(post, p.outputTypes, p.params.EvalContext(), output)
 }
 
+// SetInput implements the LocalProcessor interface.
+func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsqlrun.RowSource) error {
+	if p.firstNotWrapped == nil {
+		// Short-circuit if we never set firstNotWrapped - indicating this planNode
+		// tree had no DistSQL-plannable subtrees.
+		return nil
+	}
+	p.toDrain = input
+	// Search the plan we're wrapping for firstNotWrapped, which is the planNode
+	// that DistSQL planning resumed in. Replace that planNode with input,
+	// wrapped as a planNode.
+	return walkPlan(ctx, p.node, planObserver{
+		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
+			if plan == p.firstNotWrapped {
+				return makeRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped)), nil
+			}
+			return nil, nil
+		},
+	})
+}
+
 func (p *planNodeToRowSource) OutputTypes() []sqlbase.ColumnType {
 	return p.out.OutputTypes()
 }
@@ -88,6 +127,7 @@ func (p *planNodeToRowSource) internalClose() {
 	if p.running {
 		p.node.Close(p.params.ctx)
 		p.running = false
+		p.started = true
 	}
 }
 
@@ -100,9 +140,6 @@ func (p *planNodeToRowSource) startExec(_ runParams) error {
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
-	if !p.running {
-		return nil, nil
-	}
 	if !p.started {
 		p.started = true
 		// This starts all of the nodes below this node.
@@ -147,6 +184,11 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 		}
 	}
 
+	if len(p.metadataBuf) > 0 {
+		var m *distsqlrun.ProducerMetadata
+		m, p.metadataBuf = p.metadataBuf[0], p.metadataBuf[1:]
+		return nil, m
+	}
 	for p.running {
 		valid, err := p.node.Next(p.params)
 		if err != nil {
@@ -159,7 +201,9 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 		}
 
 		for i, datum := range p.node.Values() {
-			p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+			if datum != nil {
+				p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+			}
 		}
 		// ProcessRow here is required to deal with projections, which won't be
 		// pushed into the wrapped plan.
@@ -173,6 +217,18 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 		}
 		if outRow != nil {
 			return outRow, nil
+		}
+	}
+	if p.toDrain != nil {
+		for !p.running {
+			row, meta := p.toDrain.Next()
+			if row == nil && meta == nil {
+				p.toDrain = nil
+				return nil, nil
+			}
+			if meta != nil {
+				return nil, meta
+			}
 		}
 	}
 	return nil, nil
@@ -196,4 +252,8 @@ func (p *planNodeToRowSource) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		wg.Done()
 	}
+}
+
+func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlrun.ProducerMetadata) {
+	p.metadataBuf = append(p.metadataBuf, metadata)
 }

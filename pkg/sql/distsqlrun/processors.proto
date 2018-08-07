@@ -353,6 +353,8 @@ message ZigzagJoinerSpec {
 // distsqlplan.PhysicalPlan.
 message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1;
+  optional uint32 NumInputs = 2;
+  optional string Name = 3;
 }
 
 message Columns {

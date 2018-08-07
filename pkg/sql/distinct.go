@@ -229,7 +229,7 @@ func (n *distinctNode) startExec(params runParams) error {
 		return err
 	}
 
-	n.run = makeRowSourceToPlanNode(proc)
+	n.run = makeRowSourceToPlanNode(proc, nil /* forwarder */, planColumns(n))
 
 	n.run.source.Start(params.ctx)
 
