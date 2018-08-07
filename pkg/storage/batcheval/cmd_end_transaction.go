@@ -158,11 +158,20 @@ func evalEndTransaction(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.Timestamp{}, true, nil, &existingTxn,
+		ctx, batch, key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &existingTxn,
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
+		if args.Commit {
+			return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
+		}
+		// For rollbacks, we don't consider not finding the txn record an error;
+		// we accept without fuss rollbacks for transactions where the txn record
+		// was never written (because the BeginTransaction's batch failed, or
+		// even where the BeginTransaction was never sent to server).
+		txn := h.Txn.Clone()
+		reply.Txn = &txn
+		return result.Result{}, nil
 	}
 	// We're using existingTxn on the reply, although it can be stale
 	// compared to the Transaction in the request (e.g. the Sequence,
