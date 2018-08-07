@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,38 +68,43 @@ func TestSchemaChangeLease(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
-	// Set MinSchemaChangeLeaseDuration to always expire the lease.
-	minLeaseDuration := sql.MinSchemaChangeLeaseDuration
-	sql.MinSchemaChangeLeaseDuration = 2 * sql.SchemaChangeLeaseDuration
-	defer func() {
-		sql.MinSchemaChangeLeaseDuration = minLeaseDuration
-	}()
 
 	const dbDescID = keys.MinNonPredefinedUserDescID
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
-`); err != nil {
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	var leaseDurationString string
+	sqlRun.QueryRow(t, `SHOW CLUSTER SETTING schemachanger.lease.duration`).Scan(&leaseDurationString)
+	leaseDuration, err := time.ParseDuration(leaseDurationString)
+	if err != nil {
 		t.Fatal(err)
 	}
+	sqlRun.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`)
 
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(dbDescID + 1)
 	var node = roachpb.NodeID(2)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	cs := cluster.MakeTestingClusterSettings()
+	u := cs.MakeUpdater()
+	// Set to always expire the lease.
+	if err := u.Set("schemachanger.lease.renew_fraction", "2.0", "f"); err != nil {
+		t.Fatal(err)
+	}
 	changer := sql.NewSchemaChangerForTesting(
 		id, 0, node, *kvDB, nil, jobRegistry,
-		&execCfg)
+		&execCfg, cs)
 
 	ctx := context.TODO()
 
 	// Acquire a lease.
-	lease, err := changer.AcquireLease(ctx)
+	lease, err = changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !validExpirationTime(lease.ExpirationTime) {
+	if !validExpirationTime(lease.ExpirationTime, leaseDuration) {
 		t.Fatalf("invalid expiration time: %s. now: %s",
 			timeutil.Unix(0, lease.ExpirationTime), timeutil.Now())
 	}
@@ -116,7 +122,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if !validExpirationTime(lease.ExpirationTime) {
+	if !validExpirationTime(lease.ExpirationTime, leaseDuration) {
 		t.Fatalf("invalid expiration time: %s", timeutil.Unix(0, lease.ExpirationTime))
 	}
 
@@ -151,8 +157,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	// Set MinSchemaChangeLeaseDuration to not expire the lease.
-	sql.MinSchemaChangeLeaseDuration = minLeaseDuration
+	// Reset to not expire the lease.
+	if err := u.Set("schemachanger.lease.renew_fraction", "0.4", "f"); err != nil {
+		t.Fatal(err)
+	}
 	oldLease = lease
 	if err := changer.ExtendLease(ctx, &lease); err != nil {
 		t.Fatal(err)
@@ -163,9 +171,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 }
 
-func validExpirationTime(expirationTime int64) bool {
+func validExpirationTime(expirationTime int64, leaseDuration time.Duration) bool {
 	now := timeutil.Now()
-	return expirationTime > now.Add(sql.SchemaChangeLeaseDuration/2).UnixNano() && expirationTime < now.Add(sql.SchemaChangeLeaseDuration*3/2).UnixNano()
+	return expirationTime > now.Add(leaseDuration/2).UnixNano() && expirationTime < now.Add(leaseDuration*3/2).UnixNano()
 }
 
 func TestSchemaChangeProcess(t *testing.T) {
@@ -197,7 +205,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())
 	changer := sql.NewSchemaChangerForTesting(
-		id, 0, node, *kvDB, leaseMgr, jobRegistry, &execCfg)
+		id, 0, node, *kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -271,7 +279,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
 		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry,
-		&execCfg,
+		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
@@ -479,7 +487,7 @@ func runSchemaChangeWithOperations(
 
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
-	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg)
+	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg, cluster.MakeTestingClusterSettings())
 	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
