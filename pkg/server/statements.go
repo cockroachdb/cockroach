@@ -60,6 +60,7 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
+	var nodeErr error
 	if err := s.iterateNodes(ctx, fmt.Sprintf("statement statistics for node %s", req.NodeID),
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
@@ -70,13 +71,13 @@ func (s *statusServer) Statements(
 			}
 		},
 		func(nodeID roachpb.NodeID, err error) {
-			// TODO(couchand): do something here...
+			nodeErr = err
 		},
 	); err != nil {
 		return nil, err
 	}
 
-	return response, nil
+	return response, nodeErr
 }
 
 func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.StatementsResponse, error) {
