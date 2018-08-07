@@ -929,10 +929,12 @@ func WriteTableDescs(
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
-func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
+func restoreJobDescription(
+	restore *tree.Restore, from []string, opts map[string]string,
+) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
-		Options: restore.Options,
+		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
 		From:    make(tree.Exprs, len(restore.From)),
 	}
@@ -1308,7 +1310,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(restoreStmt, from)
+	description, err := restoreJobDescription(restoreStmt, from, opts)
 	if err != nil {
 		return err
 	}

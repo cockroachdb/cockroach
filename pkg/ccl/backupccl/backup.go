@@ -433,12 +433,32 @@ func splitAndFilterSpans(
 	return out
 }
 
+func optsToKVOptions(opts map[string]string) tree.KVOptions {
+	if len(opts) == 0 {
+		return nil
+	}
+	sortedOpts := make([]string, 0, len(opts))
+	for k := range opts {
+		sortedOpts = append(sortedOpts, k)
+	}
+	sort.Strings(sortedOpts)
+	kvopts := make(tree.KVOptions, 0, len(opts))
+	for _, k := range sortedOpts {
+		opt := tree.KVOption{Key: tree.Name(k)}
+		if v := opts[k]; v != "" {
+			opt.Value = tree.NewDString(v)
+		}
+		kvopts = append(kvopts, opt)
+	}
+	return kvopts
+}
+
 func backupJobDescription(
-	backup *tree.Backup, to string, incrementalFrom []string,
+	backup *tree.Backup, to string, incrementalFrom []string, opts map[string]string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
-		Options: backup.Options,
+		Options: optsToKVOptions(opts),
 		Targets: backup.Targets,
 	}
 
@@ -1025,7 +1045,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
+		description, err := backupJobDescription(backupStmt, to, incrementalFrom, opts)
 		if err != nil {
 			return err
 		}
