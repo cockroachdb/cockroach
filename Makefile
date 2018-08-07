@@ -1399,14 +1399,12 @@ bin/roachtest: $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
-	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
-	mv -f $@.d.tmp $@.d
+	bin/prereqs $(if $($*-package),$($*-package),./pkg/cmd/$*) $@
 	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),./pkg/cmd/$*)
 
 $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
-	bin/prereqs -bin-name=$* -test $($*-package) > $@.d.tmp
-	mv -f $@.d.tmp $@.d
+	bin/prereqs -test $($*-package) $@
 	$(xgo) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
 
 bin/prereqs: ./pkg/cmd/prereqs/*.go
