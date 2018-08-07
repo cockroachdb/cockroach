@@ -17,6 +17,7 @@ package security
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -294,12 +295,34 @@ func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
 	return cm.clientCerts
 }
 
+// Error is the error type for this package.
+type Error struct {
+	Message string
+	Err     error
+}
+
+// Error implements the error interface.
+func (e *Error) Error() string {
+	return fmt.Sprintf("%s: %v", e.Message, e.Err)
+}
+
+// makeErrorf constructs an Error and returns it.
+func makeErrorf(err error, format string, args ...interface{}) *Error {
+	return &Error{
+		Message: fmt.Sprintf(format, args...),
+		Err:     err,
+	}
+}
+
+// makeError constructs an Error with just a string.
+func makeError(err error, s string) *Error { return makeErrorf(err, "%s", s) }
+
 // LoadCertificates creates a CertificateLoader to load all certs and keys.
 // Upon success, it swaps the existing certificates for the new ones.
 func (cm *CertificateManager) LoadCertificates() error {
 	cl := NewCertificateLoader(cm.certsDir)
 	if err := cl.Load(); err != nil {
-		return errors.Wrapf(err, "problem loading certs directory %s", cm.certsDir)
+		return makeErrorf(err, "problem loading certs directory %s", cm.certsDir)
 	}
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
@@ -329,22 +352,22 @@ func (cm *CertificateManager) LoadCertificates() error {
 	if cm.initialized {
 		// If we ran before, make sure we don't reload with missing/bad certificates.
 		if err := checkCertIsValid(caCert); checkCertIsValid(cm.caCert) == nil && err != nil {
-			return errors.Wrap(err, "reload would lose valid CA cert")
+			return makeError(err, "reload would lose valid CA cert")
 		}
 		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
-			return errors.Wrap(err, "reload would lose valid node cert")
+			return makeError(err, "reload would lose valid node cert")
 		}
 		if err := checkCertIsValid(nodeClientCert); checkCertIsValid(cm.nodeClientCert) == nil && err != nil {
-			return errors.Wrapf(err, "reload would lose valid client cert for '%s'", NodeUser)
+			return makeErrorf(err, "reload would lose valid client cert for '%s'", NodeUser)
 		}
 		if err := checkCertIsValid(clientCACert); checkCertIsValid(cm.clientCACert) == nil && err != nil {
-			return errors.Wrap(err, "reload would lose valid CA certificate for client verification")
+			return makeError(err, "reload would lose valid CA certificate for client verification")
 		}
 		if err := checkCertIsValid(uiCACert); checkCertIsValid(cm.uiCACert) == nil && err != nil {
-			return errors.Wrap(err, "reload would lose valid CA certificate for UI")
+			return makeError(err, "reload would lose valid CA certificate for UI")
 		}
 		if err := checkCertIsValid(uiCert); checkCertIsValid(cm.uiCert) == nil && err != nil {
-			return errors.Wrap(err, "reload would lose valid UI certificate")
+			return makeError(err, "reload would lose valid UI certificate")
 		}
 	}
 
@@ -512,7 +535,7 @@ func (cm *CertificateManager) getEmbeddedUIServerTLSConfig(
 // cm.mu must be held.
 func (cm *CertificateManager) getCACertLocked() (*CertInfo, error) {
 	if err := checkCertIsValid(cm.caCert); err != nil {
-		return nil, errors.Wrap(err, "problem with CA certificate")
+		return nil, makeError(err, "problem with CA certificate")
 	}
 	return cm.caCert, nil
 }
@@ -527,7 +550,7 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 	}
 
 	if err := checkCertIsValid(cm.clientCACert); err != nil {
-		return nil, errors.Wrap(err, "problem with client CA certificate")
+		return nil, makeError(err, "problem with client CA certificate")
 	}
 	return cm.clientCACert, nil
 }
@@ -542,7 +565,7 @@ func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 	}
 
 	if err := checkCertIsValid(cm.uiCACert); err != nil {
-		return nil, errors.Wrap(err, "problem with UI CA certificate")
+		return nil, makeError(err, "problem with UI CA certificate")
 	}
 	return cm.uiCACert, nil
 }
@@ -551,7 +574,7 @@ func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 	if err := checkCertIsValid(cm.nodeCert); err != nil {
-		return nil, errors.Wrap(err, "problem with node certificate")
+		return nil, makeError(err, "problem with node certificate")
 	}
 	return cm.nodeCert, nil
 }
@@ -565,7 +588,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 		return cm.getNodeCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
-		return nil, errors.Wrap(err, "problem with UI certificate")
+		return nil, makeError(err, "problem with UI certificate")
 	}
 	return cm.uiCert, nil
 }
@@ -576,7 +599,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getClientCertLocked(user string) (*CertInfo, error) {
 	ci := cm.clientCerts[user]
 	if err := checkCertIsValid(ci); err != nil {
-		return nil, errors.Wrapf(err, "problem with client cert for user %s", user)
+		return nil, makeErrorf(err, "problem with client cert for user %s", user)
 	}
 
 	return ci, nil
@@ -593,7 +616,7 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	}
 
 	if err := checkCertIsValid(cm.nodeClientCert); err != nil {
-		return nil, errors.Wrap(err, "problem with node client certificate")
+		return nil, makeError(err, "problem with node client certificate")
 	}
 	return cm.nodeClientCert, nil
 }

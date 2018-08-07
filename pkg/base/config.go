@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -152,8 +150,14 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-func didYouMeanInsecureError(err error) error {
-	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
+func wrapError(err error) error {
+	if _, ok := err.(*security.Error); !ok {
+		return &security.Error{
+			Message: "problem using security settings",
+			Err:     err,
+		}
+	}
+	return err
 }
 
 // InitDefaults sets up the default values for a config.
@@ -212,7 +216,7 @@ func (cfg *Config) LoadSecurityOptions(options url.Values, username string) erro
 		// Fetch CA cert. This is required.
 		caCertPath, err := cfg.GetCACertPath()
 		if err != nil {
-			return didYouMeanInsecureError(err)
+			return wrapError(err)
 		}
 		options.Add("sslmode", "verify-full")
 		options.Add("sslrootcert", caCertPath)
@@ -294,12 +298,12 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -316,12 +320,12 @@ func (cfg *Config) GetUIClientTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetUIClientTLSConfig()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -337,12 +341,12 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetServerTLSConfig()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -358,12 +362,12 @@ func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }

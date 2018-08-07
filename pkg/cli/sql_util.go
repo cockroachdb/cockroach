@@ -67,6 +67,29 @@ type sqlConn struct {
 	clusterOrganization string
 }
 
+// initialSQLConnectionError signals to the error decorator in
+// error.go that we're failing during the initial connection set-up.
+type initialSQLConnectionError struct {
+	err error
+}
+
+// Error implements the error interface.
+func (i *initialSQLConnectionError) Error() string { return i.err.Error() }
+
+// wrapConnError detects TCP EOF errors during the initial SQL handshake.
+// These are translated to a message "perhaps this is not a CockroachDB node"
+// at the top level.
+// EOF errors later in the SQL session should not be wrapped in that way,
+// because by that time we've established that the server is indeed a SQL
+// server.
+func wrapConnError(err error) error {
+	errMsg := err.Error()
+	if errMsg == "EOF" || errMsg == "unexpected EOF" {
+		return &initialSQLConnectionError{err}
+	}
+	return err
+}
+
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && cliCtx.isInteractive {
@@ -75,7 +98,7 @@ func (c *sqlConn) ensureConn() error {
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
-			return err
+			return wrapConnError(err)
 		}
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
@@ -88,7 +111,7 @@ func (c *sqlConn) ensureConn() error {
 		c.conn = conn.(sqlConnI)
 		if err := c.checkServerMetadata(); err != nil {
 			c.Close()
-			return err
+			return wrapConnError(err)
 		}
 		c.reconnecting = false
 	}
