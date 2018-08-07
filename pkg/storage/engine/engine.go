@@ -232,6 +232,10 @@ type Writer interface {
 	// sstables). Currently only used for performance testing of appending to the
 	// RocksDB WAL.
 	LogData(data []byte) error
+	// LogLogicalOp logs the specified logical mvcc operation with the provided
+	// details to the writer, if it has logical op logging enabled. For most
+	// Writer implementations, this is a no-op.
+	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
 }
 
 // ReadWriter is the read/write interface to an engine's data.
