@@ -10,6 +10,22 @@ source [file join [file dirnam $argv0] common.tcl]
 # because we don't want reads from that fifo to change the outcome.
 system "$argv start --insecure --pid-file=server_pid --background -s=path=logs/db --join=localhost:26258 >>logs/expect-cmd.log 2>&1"
 
+start_test "Check that the SQL shell successfully times out upon connecting to an uninitialized node"
+# We shorten the default timeout of 5 seconds to make this test run faster.
+set ::env(COCKROACH_CONNECT_TIMEOUT) "1"
+spawn /bin/bash
+send "PS1=':''/# '\r"
+eexpect ":/# "
+send "$argv sql\r"
+eexpect "Error: cannot dial server"
+send "exit\r"
+eexpect eof
+end_test
+
+# The following tests expect the client to wait forever.
+set ::env(COCKROACH_CONNECT_TIMEOUT) "0"
+
+
 # Start a shell and send a command. The shell should block at startup,
 # so we don't "expect" anything yet. The point of this test is to
 # verify that the command will succeed after blocking instead of
