@@ -26,10 +26,12 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1543,6 +1545,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 		kv.DistSenderConfig{
 			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
 			Clock:      s.Clock(), RPCContext: s.RPCContext(),
+			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
 		}, s.(*server.TestServer).Gossip(),
 	)
 	for _, key := range []string{"c"} {
