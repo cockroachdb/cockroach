@@ -204,6 +204,73 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	}
 }
 
+func TestGossipLocalityResolver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	rpcContext := newInsecureRPCContext(stopper)
+
+	gossipLocalityAdvertiseList := roachpb.Locality{}
+	tier := roachpb.Tier{}
+	tier.Key = "zone"
+	tier.Value = "1"
+
+	tier2 := roachpb.Tier{}
+	tier2.Key = "zone"
+	tier2.Value = "2"
+
+	gossipLocalityAdvertiseList.Tiers = append(gossipLocalityAdvertiseList.Tiers, tier)
+
+	node1PrivateAddress := util.MakeUnresolvedAddr("tcp", "1.0.0.1")
+	node2PrivateAddress := util.MakeUnresolvedAddr("tcp", "2.0.0.1")
+
+	node1PublicAddress := util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")
+	node2PublicAddress := util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")
+
+	var node1LocalityList []roachpb.LocalityAddress
+	nodeLocalityAddress := roachpb.LocalityAddress{}
+	nodeLocalityAddress.Address = node1PrivateAddress
+	nodeLocalityAddress.LocalityTier = tier
+
+	nodeLocalityAddress2 := roachpb.LocalityAddress{}
+	nodeLocalityAddress2.Address = node2PrivateAddress
+	nodeLocalityAddress2.LocalityTier = tier2
+
+	node1LocalityList = append(node1LocalityList, nodeLocalityAddress)
+	node1LocalityList = append(node1LocalityList, nodeLocalityAddress2)
+
+	var node2LocalityList []roachpb.LocalityAddress
+	node2LocalityList = append(node2LocalityList, nodeLocalityAddress2)
+
+	g := NewTestWithLocality(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), gossipLocalityAdvertiseList)
+	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: node1PublicAddress, LocalityAddress: node1LocalityList}
+	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: node2PublicAddress, LocalityAddress: node2LocalityList}
+
+	if err := g.SetNodeDescriptor(node1); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.SetNodeDescriptor(node2); err != nil {
+		t.Fatal(err)
+	}
+
+	nodeAddress, err := g.GetNodeIDAddress(node1.NodeID)
+	if err != nil {
+		t.Error(err)
+	}
+	if *nodeAddress != node1PrivateAddress {
+		t.Fatalf("expected: %s but got: %s address", node1PrivateAddress, *nodeAddress)
+	}
+
+	nodeAddress, err = g.GetNodeIDAddress(node2.NodeID)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if *nodeAddress != node2PublicAddress {
+		t.Fatalf("expected: %s but got: %s address", node2PublicAddress, *nodeAddress)
+	}
+}
+
 func TestGossipRaceLogStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -557,8 +624,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 
 		// node ID must be non-zero
 		gnode := NewTest(
-			roachpb.NodeID(i+1), rpcCtx, server, stopper, metric.NewRegistry(),
-		)
+			roachpb.NodeID(i+1), rpcCtx, server, stopper, metric.NewRegistry())
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)

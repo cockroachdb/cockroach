@@ -25,7 +25,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::pr
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Locality;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ReplicaIdent;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_StoreCapacity;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_NodeDescriptor;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_LocalityAddress;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_NodeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace protobuf_util_2funresolved_5faddr_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2funresolved_5faddr_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_UnresolvedAddr;
@@ -72,6 +73,11 @@ class NodeDescriptorDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<NodeDescriptor>
       _instance;
 } _NodeDescriptor_default_instance_;
+class LocalityAddressDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<LocalityAddress>
+      _instance;
+} _LocalityAddress_default_instance_;
 class StoreDescriptorDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<StoreDescriptor>
@@ -212,12 +218,29 @@ static void InitDefaultsNodeDescriptor() {
   ::cockroach::roachpb::NodeDescriptor::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_NodeDescriptor =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsNodeDescriptor}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_NodeDescriptor =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsNodeDescriptor}, {
       &protobuf_util_2funresolved_5faddr_2eproto::scc_info_UnresolvedAddr.base,
       &protobuf_roachpb_2fmetadata_2eproto::scc_info_Attributes.base,
       &protobuf_roachpb_2fmetadata_2eproto::scc_info_Locality.base,
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_Version.base,}};
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_Version.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_LocalityAddress.base,}};
+
+static void InitDefaultsLocalityAddress() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_LocalityAddress_default_instance_;
+    new (ptr) ::cockroach::roachpb::LocalityAddress();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::LocalityAddress::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<2> scc_info_LocalityAddress =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsLocalityAddress}, {
+      &protobuf_util_2funresolved_5faddr_2eproto::scc_info_UnresolvedAddr.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_Tier.base,}};
 
 static void InitDefaultsStoreDescriptor() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -303,6 +326,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_Percentiles.base);
   ::google::protobuf::internal::InitSCC(&scc_info_StoreCapacity.base);
   ::google::protobuf::internal::InitSCC(&scc_info_NodeDescriptor.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_LocalityAddress.base);
   ::google::protobuf::internal::InitSCC(&scc_info_StoreDescriptor.base);
   ::google::protobuf::internal::InitSCC(&scc_info_StoreDeadReplicas.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Locality.base);
@@ -2396,6 +2420,7 @@ const int NodeDescriptor::kLocalityFieldNumber;
 const int NodeDescriptor::kServerVersionFieldNumber;
 const int NodeDescriptor::kBuildTagFieldNumber;
 const int NodeDescriptor::kStartedAtFieldNumber;
+const int NodeDescriptor::kLocalityAddressFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
@@ -2408,7 +2433,8 @@ NodeDescriptor::NodeDescriptor()
 NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_) {
+      _has_bits_(from._has_bits_),
+      locality_address_(from.locality_address_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   build_tag_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.has_build_tag()) {
@@ -2475,6 +2501,7 @@ void NodeDescriptor::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  locality_address_.Clear();
   cached_has_bits = _has_bits_[0];
   if (cached_has_bits & 31u) {
     if (cached_has_bits & 0x00000001u) {
@@ -2603,6 +2630,17 @@ bool NodeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_locality_address()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2663,6 +2701,14 @@ void NodeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->started_at(), output);
   }
 
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->locality_address_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      8,
+      this->locality_address(static_cast<int>(i)),
+      output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.NodeDescriptor)
@@ -2673,6 +2719,16 @@ size_t NodeDescriptor::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += _internal_metadata_.unknown_fields().size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->locality_address_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->locality_address(static_cast<int>(i)));
+    }
+  }
 
   if (_has_bits_[0 / 32] & 127u) {
     if (has_build_tag()) {
@@ -2735,6 +2791,7 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  locality_address_.MergeFrom(from.locality_address_);
   cached_has_bits = from._has_bits_[0];
   if (cached_has_bits & 127u) {
     if (cached_has_bits & 0x00000001u) {
@@ -2780,6 +2837,7 @@ void NodeDescriptor::Swap(NodeDescriptor* other) {
 }
 void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
   using std::swap;
+  CastToBase(&locality_address_)->InternalSwap(CastToBase(&other->locality_address_));
   build_tag_.Swap(&other->build_tag_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(address_, other->address_);
@@ -2794,6 +2852,250 @@ void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
 
 ::std::string NodeDescriptor::GetTypeName() const {
   return "cockroach.roachpb.NodeDescriptor";
+}
+
+
+// ===================================================================
+
+void LocalityAddress::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_LocalityAddress_default_instance_._instance.get_mutable()->address_ = const_cast< ::cockroach::util::UnresolvedAddr*>(
+      ::cockroach::util::UnresolvedAddr::internal_default_instance());
+  ::cockroach::roachpb::_LocalityAddress_default_instance_._instance.get_mutable()->locality_tier_ = const_cast< ::cockroach::roachpb::Tier*>(
+      ::cockroach::roachpb::Tier::internal_default_instance());
+}
+void LocalityAddress::clear_address() {
+  if (address_ != NULL) address_->Clear();
+  clear_has_address();
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int LocalityAddress::kAddressFieldNumber;
+const int LocalityAddress::kLocalityTierFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+LocalityAddress::LocalityAddress()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_LocalityAddress.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.LocalityAddress)
+}
+LocalityAddress::LocalityAddress(const LocalityAddress& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      _has_bits_(from._has_bits_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_address()) {
+    address_ = new ::cockroach::util::UnresolvedAddr(*from.address_);
+  } else {
+    address_ = NULL;
+  }
+  if (from.has_locality_tier()) {
+    locality_tier_ = new ::cockroach::roachpb::Tier(*from.locality_tier_);
+  } else {
+    locality_tier_ = NULL;
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LocalityAddress)
+}
+
+void LocalityAddress::SharedCtor() {
+  ::memset(&address_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&locality_tier_) -
+      reinterpret_cast<char*>(&address_)) + sizeof(locality_tier_));
+}
+
+LocalityAddress::~LocalityAddress() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.LocalityAddress)
+  SharedDtor();
+}
+
+void LocalityAddress::SharedDtor() {
+  if (this != internal_default_instance()) delete address_;
+  if (this != internal_default_instance()) delete locality_tier_;
+}
+
+void LocalityAddress::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const LocalityAddress& LocalityAddress::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fmetadata_2eproto::scc_info_LocalityAddress.base);
+  return *internal_default_instance();
+}
+
+
+void LocalityAddress::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.LocalityAddress)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      GOOGLE_DCHECK(address_ != NULL);
+      address_->Clear();
+    }
+    if (cached_has_bits & 0x00000002u) {
+      GOOGLE_DCHECK(locality_tier_ != NULL);
+      locality_tier_->Clear();
+    }
+  }
+  _has_bits_.Clear();
+  _internal_metadata_.Clear();
+}
+
+bool LocalityAddress::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.LocalityAddress)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_address()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_locality_tier()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.LocalityAddress)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.LocalityAddress)
+  return false;
+#undef DO_
+}
+
+void LocalityAddress::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LocalityAddress)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_address(), output);
+  }
+
+  if (cached_has_bits & 0x00000002u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_locality_tier(), output);
+  }
+
+  output->WriteRaw(_internal_metadata_.unknown_fields().data(),
+                   static_cast<int>(_internal_metadata_.unknown_fields().size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LocalityAddress)
+}
+
+size_t LocalityAddress::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.LocalityAddress)
+  size_t total_size = 0;
+
+  total_size += _internal_metadata_.unknown_fields().size();
+
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_address()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *address_);
+    }
+
+    if (has_locality_tier()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *locality_tier_);
+    }
+
+  }
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void LocalityAddress::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const LocalityAddress*>(&from));
+}
+
+void LocalityAddress::MergeFrom(const LocalityAddress& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.LocalityAddress)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
+    }
+    if (cached_has_bits & 0x00000002u) {
+      mutable_locality_tier()->::cockroach::roachpb::Tier::MergeFrom(from.locality_tier());
+    }
+  }
+}
+
+void LocalityAddress::CopyFrom(const LocalityAddress& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.LocalityAddress)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LocalityAddress::IsInitialized() const {
+  return true;
+}
+
+void LocalityAddress::Swap(LocalityAddress* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void LocalityAddress::InternalSwap(LocalityAddress* other) {
+  using std::swap;
+  swap(address_, other->address_);
+  swap(locality_tier_, other->locality_tier_);
+  swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string LocalityAddress::GetTypeName() const {
+  return "cockroach.roachpb.LocalityAddress";
 }
 
 
@@ -4051,6 +4353,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::StoreCapacit
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::NodeDescriptor* Arena::CreateMaybeMessage< ::cockroach::roachpb::NodeDescriptor >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::NodeDescriptor >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LocalityAddress* Arena::CreateMaybeMessage< ::cockroach::roachpb::LocalityAddress >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::LocalityAddress >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::StoreDescriptor* Arena::CreateMaybeMessage< ::cockroach::roachpb::StoreDescriptor >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::StoreDescriptor >(arena);
