@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,22 @@ type Sink interface {
 	Flush(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
+}
+
+func getSink(sinkURI string, resultsCh chan<- tree.Datums) (Sink, error) {
+	u, err := url.Parse(sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	switch u.Scheme {
+	case sinkSchemeChannel:
+		return &channelSink{resultsCh: resultsCh}, nil
+	case sinkSchemeKafka:
+		kafkaTopicPrefix := u.Query().Get(sinkParamTopicPrefix)
+		return getKafkaSink(kafkaTopicPrefix, u.Host)
+	default:
+		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
+	}
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
