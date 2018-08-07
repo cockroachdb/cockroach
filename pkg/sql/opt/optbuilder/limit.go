@@ -26,8 +26,8 @@ import (
 //   SELECT k FROM kv LIMIT k
 // are not valid.
 func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
-	ordering := &inScope.physicalProps.Ordering
-	orderingPrivID := b.factory.InternOrderingChoice(ordering)
+	ordering := inScope.makeOrderingChoice()
+	orderingPrivID := b.factory.InternOrderingChoice(&ordering)
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery

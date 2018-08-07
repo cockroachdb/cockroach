@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -52,13 +51,13 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 	b.semaCtx.Properties.Require("ORDER BY", tree.RejectGenerators)
 
 	orderByScope := inScope.push()
-	orderByScope.physicalProps.Ordering.Columns = make([]props.OrderingColumnChoice, 0, len(orderBy))
+	orderByScope.ordering = make([]opt.OrderingColumn, 0, len(orderBy))
 
 	for i := range orderBy {
 		b.buildOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
 	}
 
-	projectionsScope.setOrdering(orderByScope.cols, &orderByScope.physicalProps.Ordering)
+	projectionsScope.setOrdering(orderByScope.cols, orderByScope.ordering)
 }
 
 // findIndexByName returns an index in the table with the given name. If the
@@ -133,7 +132,9 @@ func (b *Builder) buildOrderByIndex(
 			desc = !desc
 		}
 
-		orderByScope.physicalProps.Ordering.AppendCol(orderByScope.cols[i].id, desc)
+		orderByScope.ordering = append(orderByScope.ordering,
+			opt.MakeOrderingColumn(orderByScope.cols[i].id, desc),
+		)
 	}
 }
 
@@ -157,8 +158,9 @@ func (b *Builder) buildOrderByArg(
 
 	// Add the new columns to the ordering.
 	for i := start; i < len(orderByScope.cols); i++ {
-		desc := order.Direction == tree.Descending
-		orderByScope.physicalProps.Ordering.AppendCol(orderByScope.cols[i].id, desc)
+		orderByScope.ordering = append(orderByScope.ordering,
+			opt.MakeOrderingColumn(orderByScope.cols[i].id, order.Direction == tree.Descending),
+		)
 	}
 }
 

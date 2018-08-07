@@ -124,9 +124,8 @@ func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err erro
 	}()
 
 	outScope := b.buildStmt(b.stmt, &scope{builder: b})
-	root = outScope.group
-	outScope.setPresentation()
-	return root, &outScope.physicalProps, nil
+	physicalProps := outScope.makePhysicalProps()
+	return outScope.group, &physicalProps, nil
 }
 
 // builderError is used for semantic errors that occur during the build process

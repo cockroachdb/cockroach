@@ -31,9 +31,6 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	// We don't allow the statement under Explain to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	stmtScope := b.buildStmt(explain.Statement, &scope{builder: b})
-	// Calculate the presentation, since we will store it in the Explain op.
-	stmtScope.setPresentation()
-
 	outScope = inScope.push()
 
 	var cols sqlbase.ResultColumns
@@ -59,7 +56,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	def := memo.ExplainOpDef{
 		Options: opts,
 		ColList: colsToColList(outScope.cols),
-		Props:   stmtScope.physicalProps,
+		Props:   stmtScope.makePhysicalProps(),
 	}
 	outScope.group = b.factory.ConstructExplain(stmtScope.group, b.factory.InternExplainOpDef(&def))
 	return outScope
