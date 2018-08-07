@@ -146,8 +146,10 @@ func (b *Builder) constructGroupBy(
 		b.factory.InternColList(colList),
 	)
 	def := memo.GroupByDef{GroupingCols: groupingColSet}
-	// The ordering of the GROUP BY is inherited from the input.
-	def.Ordering.FromOrdering(ordering)
+	// The ordering of the GROUP BY is inherited from the input. This ordering is
+	// only useful for intra-group ordering (for order-sensitive aggregations like
+	// ARRAY_AGG). So we add the grouping columns as optional columns.
+	def.Ordering.FromOrderingWithOptCols(ordering, groupingColSet)
 	if groupingColSet.Empty() {
 		return b.factory.ConstructScalarGroupBy(input, aggs, b.factory.InternGroupByDef(&def))
 	}
