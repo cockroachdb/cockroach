@@ -2268,3 +2268,51 @@ func TestImportPgDump(t *testing.T) {
 		})
 	}
 }
+
+func TestImportCockroachDump(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal:///cockroachdump/dump.sql")
+	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY i", [][]string{
+		{"1", "test"},
+		{"2", "other"},
+	})
+	sqlDB.CheckQueryResults(t, "SELECT * FROM a", [][]string{
+		{"2"},
+	})
+	sqlDB.CheckQueryResults(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t", [][]string{
+		{"primary", "-6413178410144704641"},
+		{"t_t_idx", "-4841734847805280813"},
+	})
+	sqlDB.CheckQueryResults(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE a", [][]string{
+		{"primary", "-5808590958014384147"},
+	})
+	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t", [][]string{
+		{"t", `CREATE TABLE t (
+	i INT NOT NULL,
+	t STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	INDEX t_t_idx (t ASC),
+	FAMILY "primary" (i, t)
+)`},
+	})
+	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE a", [][]string{
+		{"a", `CREATE TABLE a (
+	i INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES t (i),
+	FAMILY "primary" (i)
+)`},
+	})
+}
