@@ -266,6 +266,8 @@ type Gossip struct {
 	// node ID to enable faster node lookup by address.
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
+
+	localityTierMap map[string]struct{}
 }
 
 // New creates an instance of a gossip node.
@@ -287,6 +289,7 @@ func New(
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
+	locality roachpb.Locality,
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
@@ -305,6 +308,11 @@ func New(
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
+		localityTierMap:   map[string]struct{}{},
+	}
+
+	for _, loc := range locality.Tiers {
+		g.localityTierMap[loc.String()] = struct{}{}
 	}
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
@@ -341,11 +349,23 @@ func NewTest(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 ) *Gossip {
+	return NewTestWithLocality(nodeID, rpcContext, grpcServer, stopper, registry, roachpb.Locality{})
+}
+
+// NewTestWithLocality calls NewTest with an explicit locality value.
+func NewTestWithLocality(
+	nodeID roachpb.NodeID,
+	rpcContext *rpc.Context,
+	grpcServer *grpc.Server,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+	locality roachpb.Locality,
+) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, rpcContext, grpcServer, stopper, registry)
+	gossip := New(ac, c, n, rpcContext, grpcServer, stopper, registry, locality)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -859,7 +879,13 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 	if err != nil {
 		return nil, err
 	}
-	return &nd.Address, nil
+	address := &nd.Address
+	for _, locality := range nd.LocalityAddress {
+		if _, ok := g.localityTierMap[locality.LocalityTier.String()]; ok {
+			return &locality.Address, nil
+		}
+	}
+	return address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
