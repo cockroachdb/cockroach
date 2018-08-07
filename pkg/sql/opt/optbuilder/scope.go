@@ -35,21 +35,22 @@ import (
 //
 // See builder.go for more details.
 type scope struct {
-	builder       *Builder
-	parent        *scope
-	cols          []scopeColumn
-	groupby       groupby
-	physicalProps props.Physical
+	builder *Builder
+	parent  *scope
+	cols    []scopeColumn
+	groupby groupby
+
+	// ordering records the ORDER BY columns associated with this scope. Each
+	// column is either in cols or in extraCols.
+	// Must not be modified in-place after being set.
+	ordering opt.Ordering
+
+	// distinctOnCols records the DISTINCT ON columns by ID.
+	distinctOnCols opt.ColSet
 
 	// extraCols contains columns specified by the ORDER BY or DISTINCT ON clauses
 	// which don't appear in cols.
 	extraCols []scopeColumn
-
-	// These fields remember the ORDER BY and DISTINCT ON columns by ID. They are
-	// used for convenience so we don't have to pass them around alongside the
-	// scope.
-	orderByCols    opt.ColSet
-	distinctOnCols opt.ColSet
 
 	// group is the memo.GroupID of the relational operator built with this scope.
 	group memo.GroupID
@@ -147,27 +148,23 @@ func (s *scope) addExtraColumns(cols []scopeColumn) {
 
 // setOrdering sets the ordering in the physical properties and adds any new
 // columns as extra columns.
-func (s *scope) setOrdering(cols []scopeColumn, ord *props.OrderingChoice) {
+func (s *scope) setOrdering(cols []scopeColumn, ord opt.Ordering) {
 	s.addExtraColumns(cols)
-	s.orderByCols = opt.ColSet{}
-	for i := range cols {
-		s.orderByCols.Add(int(cols[i].id))
-	}
-	s.physicalProps.Ordering = *ord
+	s.ordering = ord
 }
 
 // copyOrdering copies the ordering and the ORDER BY columns from the src scope.
 // The groups in the new columns are reset to 0.
 func (s *scope) copyOrdering(src *scope) {
-	s.physicalProps.Ordering = src.physicalProps.Ordering
-	s.orderByCols = src.orderByCols.Copy()
-	if src.orderByCols.Empty() {
+	s.ordering = src.ordering
+	if src.ordering.Empty() {
 		return
 	}
+	// Copy any columns that the scope doesn't already have.
 	existing := s.colSetWithExtraCols()
-	for i, ok := src.orderByCols.Next(0); ok; i, ok = src.orderByCols.Next(i + 1) {
-		if !existing.Contains(i) {
-			col := *src.getColumn(opt.ColumnID(i))
+	for _, ordCol := range src.ordering {
+		if !existing.Contains(int(ordCol.ID())) {
+			col := *src.getColumn(ordCol.ID())
 			// We want to reset the group, as this becomes a pass-through column in
 			// the new scope.
 			col.group = 0
@@ -192,19 +189,31 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 	return nil
 }
 
-// setPresentation sets s.physicalProps.Presentation (if not already set).
-func (s *scope) setPresentation() {
-	if s.physicalProps.Presentation != nil {
-		return
-	}
-	presentation := make(props.Presentation, 0, len(s.cols))
+// makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
+func (s *scope) makeOrderingChoice() props.OrderingChoice {
+	var oc props.OrderingChoice
+	oc.FromOrdering(s.ordering)
+	return oc
+}
+
+// makePhysicalProps constructs physical properties using the columns in the
+// scope for presentation and s.ordering for required ordering.
+func (s *scope) makePhysicalProps() props.Physical {
+	p := props.Physical{}
+
+	p.Presentation = make(props.Presentation, 0, len(s.cols))
 	for i := range s.cols {
 		col := &s.cols[i]
 		if !col.hidden {
-			presentation = append(presentation, opt.LabeledColumn{Label: string(col.name), ID: col.id})
+			p.Presentation = append(p.Presentation, opt.LabeledColumn{
+				Label: string(col.name),
+				ID:    col.id,
+			})
 		}
 	}
-	s.physicalProps.Presentation = presentation
+
+	p.Ordering.FromOrdering(s.ordering)
+	return p
 }
 
 // walkExprTree walks the given expression and performs name resolution,

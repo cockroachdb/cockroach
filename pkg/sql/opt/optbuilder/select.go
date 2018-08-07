@@ -193,7 +193,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	inScope.group = b.factory.ConstructRowNumber(
 		inScope.group,
 		b.factory.InternRowNumberDef(&memo.RowNumberDef{
-			Ordering: inScope.physicalProps.Ordering,
+			Ordering: inScope.makeOrderingChoice(),
 			ColID:    col.id,
 		}),
 	)
@@ -251,7 +251,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		panic(fmt.Errorf("unknown select statement: %T", stmt.Select))
 	}
 
-	if outScope.physicalProps.Ordering.Any() && orderBy != nil {
+	if outScope.ordering.Empty() && orderBy != nil {
 		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
