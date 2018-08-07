@@ -31,6 +31,13 @@ import (
 // Used mainly by EXPLAIN, but also for the collector of back-references
 // for view definitions.
 type planObserver struct {
+	// replaceNode is invoked upon entering a tree node. It's passed the pointer
+	// to the node from the node's parent, so implementations can edit or replace
+	// the parent's child. It is invoked before enterNode, can return false to
+	// stop the recursion, and isn't invoked on planNodes that are stored in
+	// their parents as concrete types.
+	replaceNode func(ctx context.Context, nodeName string, plan *planNode) (bool, error)
+
 	// enterNode is invoked upon entering a tree node. It can return false to
 	// stop the recursion at this node.
 	enterNode func(ctx context.Context, nodeName string, plan planNode) (bool, error)
@@ -50,7 +57,7 @@ type planObserver struct {
 // level.
 func walkPlan(ctx context.Context, plan planNode, observer planObserver) error {
 	v := makePlanVisitor(ctx, observer)
-	v.visit(plan)
+	v.visit(&plan)
 	return v.err
 }
 
@@ -69,13 +76,40 @@ func makePlanVisitor(ctx context.Context, observer planObserver) planVisitor {
 }
 
 // visit is the recursive function that supports walkPlan().
-func (v *planVisitor) visit(plan planNode) {
+func (v *planVisitor) visit(planPtr *planNode) {
+	if v.err != nil {
+		return
+	}
+
+	name := nodeName(*planPtr)
+
+	recurse := true
+	if v.observer.replaceNode != nil {
+		recurse, v.err = v.observer.replaceNode(v.ctx, name, planPtr)
+		if v.err != nil {
+			return
+		}
+	}
+	v.visitInternal(*planPtr, name, recurse)
+}
+
+// visitConcrete is like visit, but provided for the case where a planNode is
+// trying to recurse into a concrete planNode type, and not a planNode
+// interface.
+func (v *planVisitor) visitConcrete(plan planNode) {
 	if v.err != nil {
 		return
 	}
 
 	name := nodeName(plan)
-	recurse := true
+	v.visitInternal(plan, name, true)
+}
+
+func (v *planVisitor) visitInternal(plan planNode, name string, recurse bool) {
+	if v.err != nil {
+		return
+	}
+
 	if v.observer.enterNode != nil {
 		recurse, v.err = v.observer.enterNode(v.ctx, name, plan)
 		if v.err != nil {
@@ -154,7 +188,7 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.expr != nil {
 			v.expr(name, "filter", -1, n.filter)
 		}
-		v.visit(n.source.plan)
+		v.visit(&n.source.plan)
 
 	case *renderNode:
 		if v.observer.expr != nil {
@@ -162,11 +196,11 @@ func (v *planVisitor) visit(plan planNode) {
 				v.expr(name, "render", i, r)
 			}
 		}
-		v.visit(n.source.plan)
+		v.visit(&n.source.plan)
 
 	case *indexJoinNode:
-		v.visit(n.index)
-		v.visit(n.table)
+		v.visitConcrete(n.index)
+		v.visitConcrete(n.table)
 
 	case *lookupJoinNode:
 		if v.observer.attr != nil {
@@ -175,8 +209,8 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
 			v.expr(name, "pred", -1, n.onCond)
 		}
-		v.visit(n.input)
-		v.visit(n.table)
+		v.visit(&n.input)
+		v.visitConcrete(n.table)
 
 	case *joinNode:
 		if v.observer.attr != nil {
@@ -211,19 +245,19 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.expr != nil {
 			v.expr(name, "pred", -1, n.pred.onCond)
 		}
-		v.visit(n.left.plan)
-		v.visit(n.right.plan)
+		v.visit(&n.left.plan)
+		v.visit(&n.right.plan)
 
 	case *limitNode:
 		if v.observer.expr != nil {
 			v.expr(name, "count", -1, n.countExpr)
 			v.expr(name, "offset", -1, n.offsetExpr)
 		}
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *distinctNode:
 		if v.observer.attr == nil {
-			v.visit(n.plan)
+			v.visit(&n.plan)
 			break
 		}
 
@@ -251,7 +285,7 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "order key", buf.String())
 		}
 
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *sortNode:
 		if v.observer.attr != nil {
@@ -274,7 +308,7 @@ func (v *planVisitor) visit(plan planNode) {
 				v.observer.attr(name, "strategy", fmt.Sprintf("top %d", ss.topK))
 			}
 		}
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *groupNode:
 		if v.observer.attr != nil {
@@ -325,7 +359,7 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 		}
 
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *windowNode:
 		if v.observer.expr != nil {
@@ -336,17 +370,17 @@ func (v *planVisitor) visit(plan planNode) {
 				v.expr(name, "render", i, rexpr)
 			}
 		}
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *unionNode:
-		v.visit(n.left)
-		v.visit(n.right)
+		v.visit(&n.left)
+		v.visit(&n.right)
 
 	case *splitNode:
-		v.visit(n.rows)
+		v.visit(&n.rows)
 
 	case *relocateNode:
-		v.visit(n.rows)
+		v.visit(&n.rows)
 
 	case *insertNode:
 		if v.observer.attr != nil {
@@ -371,7 +405,7 @@ func (v *planVisitor) visit(plan planNode) {
 				v.expr(name, "check", i, cexpr)
 			}
 		}
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *upsertNode:
 		if v.observer.attr != nil {
@@ -399,7 +433,7 @@ func (v *planVisitor) visit(plan planNode) {
 				v.expr(name, d, i, e)
 			})
 		}
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *updateNode:
 		if v.observer.attr != nil {
@@ -424,24 +458,24 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 		}
 		// An updater has no sub-expressions, so nothing special to do here.
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *deleteNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
 		}
 		// A deleter has no sub-expressions, so nothing special to do here.
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *serializeNode:
-		v.visit(n.source)
+		v.visitConcrete(n.source)
 
 	case *rowCountNode:
-		v.visit(n.source)
+		v.visitConcrete(n.source)
 
 	case *createTableNode:
 		if n.n.As() {
-			v.visit(n.sourcePlan)
+			v.visit(&n.sourcePlan)
 		}
 
 	case *createViewNode:
@@ -466,38 +500,38 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "source", n.name)
 		}
 		if n.plan != nil {
-			v.visit(n.plan)
+			v.visit(&n.plan)
 		}
 
 	case *explainDistSQLNode:
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *ordinalityNode:
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *spoolNode:
 		if n.hardLimit > 0 && v.observer.attr != nil {
 			v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 		}
-		v.visit(n.source)
+		v.visit(&n.source)
 
 	case *showTraceReplicaNode:
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *explainPlanNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "expanded", strconv.FormatBool(n.expanded))
 		}
-		v.visit(n.plan)
+		v.visit(&n.plan)
 
 	case *cancelQueriesNode:
-		v.visit(n.rows)
+		v.visit(&n.rows)
 
 	case *cancelSessionsNode:
-		v.visit(n.rows)
+		v.visit(&n.rows)
 
 	case *controlJobsNode:
-		v.visit(n.rows)
+		v.visit(&n.rows)
 
 	case *setZoneConfigNode:
 		if v.observer.expr != nil {
@@ -510,7 +544,7 @@ func (v *planVisitor) visit(plan planNode) {
 				v.observer.expr(name, "render", i, texpr)
 			}
 		}
-		v.visit(n.source)
+		v.visit(&n.source)
 	}
 }
 
@@ -612,6 +646,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&relocateNode{}):             "relocate",
 	reflect.TypeOf(&renderNode{}):               "render",
 	reflect.TypeOf(&rowCountNode{}):             "count",
+	reflect.TypeOf(&rowSourceToPlanNode{}):      "row source to plan node",
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
