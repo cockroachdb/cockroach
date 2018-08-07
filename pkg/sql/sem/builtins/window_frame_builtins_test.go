@@ -65,8 +65,8 @@ func testSlidingWindow(t *testing.T, count int) {
 	wfr.Frame = &tree.WindowFrame{
 		Mode: tree.ROWS,
 		Bounds: tree.WindowFrameBounds{
-			StartBound: &tree.WindowFrameBound{BoundType: tree.ValuePreceding},
-			EndBound:   &tree.WindowFrameBound{BoundType: tree.ValueFollowing},
+			StartBound: &tree.WindowFrameBound{BoundType: tree.OffsetPreceding},
+			EndBound:   &tree.WindowFrameBound{BoundType: tree.OffsetFollowing},
 		},
 	}
 	testMin(t, evalCtx, wfr)
