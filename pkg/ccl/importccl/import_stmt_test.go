@@ -1112,7 +1112,7 @@ func TestImportCSVStmt(t *testing.T) {
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			); err != nil {
 				if !testutils.IsError(err, tc.err) {
-					t.Fatalf("%s: %v (%#v)", query, err, tc.args)
+					t.Fatalf("%s: %+v (%#v)", query, err, tc.args)
 				}
 				return
 			}
@@ -1135,9 +1135,6 @@ func TestImportCSVStmt(t *testing.T) {
 			isEmpty := len(tc.files) == 1 && tc.files[0] == empty[0]
 
 			if hasTransform {
-				if expected, actual := 0, restored.rows; expected != actual {
-					t.Fatalf("expected %d rows, got %d", expected, actual)
-				}
 				if err := sqlDB.DB.QueryRow(`SELECT count(*) FROM t`).Scan(&unused); !testutils.IsError(
 					err, "does not exist",
 				) {
@@ -1162,6 +1159,10 @@ func TestImportCSVStmt(t *testing.T) {
 					t.Fatalf("expected %d rows, got %d", expect, result)
 				}
 				return
+			}
+
+			if expected, actual := expectedRows, restored.rows; expected != actual {
+				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
 			// Verify correct number of rows via COUNT.

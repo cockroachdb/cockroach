@@ -71,7 +71,7 @@ func MaxImportBatchSize(st *cluster.Settings) int64 {
 type sstBatcher struct {
 	maxSize int64
 	// rows written in the current batch.
-	rowCounter rowCounter
+	rowCounter RowCounter
 	totalRows  roachpb.BulkOpSummary
 
 	sstWriter     engine.RocksDBSstFileWriter
@@ -88,7 +88,7 @@ func (b *sstBatcher) add(key engine.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
 		b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 	}
-	if err := b.rowCounter.count(key.Key); err != nil {
+	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
 	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
