@@ -726,7 +726,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 }
 
 // SetString sets d to s. Any non-standard NaN values are converted to a
-// normal NaN.
+// normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {
 	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
 	// and the precision to 2000 places. Any rounding or other inexact conversion
@@ -735,11 +735,16 @@ func (d *DDecimal) SetString(s string) error {
 	if res != 0 || err != nil {
 		return makeParseError(s, types.Decimal, nil)
 	}
-	if d.Decimal.Form == apd.NaNSignaling {
-		d.Decimal.Form = apd.NaN
-	}
-	if d.Decimal.Form == apd.NaN {
+	switch d.Form {
+	case apd.NaNSignaling:
+		d.Form = apd.NaN
 		d.Negative = false
+	case apd.NaN:
+		d.Negative = false
+	case apd.Finite:
+		if d.IsZero() && d.Negative {
+			d.Negative = false
+		}
 	}
 	return nil
 }

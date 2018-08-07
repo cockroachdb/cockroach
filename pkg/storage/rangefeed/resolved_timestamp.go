@@ -79,6 +79,7 @@ import (
 // changes to the closed timestamp and the tracking of unresolved intents be
 // handled carefully and in a total order.
 type resolvedTimestamp struct {
+	init       bool
 	closedTS   hlc.Timestamp
 	resolvedTS hlc.Timestamp
 	intentQ    unresolvedIntentQueue
@@ -93,6 +94,21 @@ func makeResolvedTimestamp() resolvedTimestamp {
 // Get returns the current value of the resolved timestamp.
 func (rts *resolvedTimestamp) Get() hlc.Timestamp {
 	return rts.resolvedTS
+}
+
+// Init informs the resolved timestamp that it has been provided all unresolved
+// intents within its key range that may have timestamps lower than the initial
+// closed timestamp. Once initialized, the resolvedTimestamp can begin operating
+// in its steady state. The method returns whether this caused the resolved
+// timestamp to move forward.
+func (rts *resolvedTimestamp) Init() bool {
+	rts.init = true
+	return rts.recompute()
+}
+
+// IsInit returns whether the resolved timestamp is initialized.
+func (rts *resolvedTimestamp) IsInit() bool {
+	return rts.init
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
@@ -146,6 +162,9 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 // timestamp and the in-flight intents that it is tracking. The method returns
 // whether this caused the resolved timestamp to move forward.
 func (rts *resolvedTimestamp) recompute() bool {
+	if !rts.IsInit() {
+		return false
+	}
 	newTS := rts.closedTS
 	if txn := rts.intentQ.Oldest(); txn != nil {
 		txnTS := txn.timestamp.FloorPrev()

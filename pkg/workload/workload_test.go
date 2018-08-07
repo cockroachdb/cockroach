@@ -66,27 +66,19 @@ func TestSetup(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
-			setupAttempt := func() {
-				t.Helper()
-
-				gen := bank.FromRows(test.rows)
-				if _, err := workload.Setup(ctx, sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
-					t.Fatalf("%+v", err)
-				}
-
-				for _, table := range gen.Tables() {
-					var c int
-					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table.Name)).Scan(&c)
-					if c != table.InitialRows.NumTotal {
-						t.Errorf(`%s: got %d rows expected %d`,
-							table.Name, c, table.InitialRows.NumTotal)
-					}
-				}
+			gen := bank.FromRows(test.rows)
+			if _, err := workload.Setup(ctx, sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
+				t.Fatalf("%+v", err)
 			}
 
-			// Test the setup multiple times. Should be idempotent.
-			setupAttempt()
-			setupAttempt()
+			for _, table := range gen.Tables() {
+				var c int
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table.Name)).Scan(&c)
+				if c != table.InitialRows.NumTotal {
+					t.Errorf(`%s: got %d rows expected %d`,
+						table.Name, c, table.InitialRows.NumTotal)
+				}
+			}
 		})
 	}
 }

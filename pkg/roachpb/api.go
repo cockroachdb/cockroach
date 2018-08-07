@@ -1109,3 +1109,12 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.IndexEntries += other.IndexEntries
 	b.SystemRecords += other.SystemRecords
 }
+
+// MustSetValue is like SetValue, except it resets the enum and panics if the
+// provided value is not a valid variant type.
+func (e *RangeFeedEvent) MustSetValue(value interface{}) {
+	e.Reset()
+	if !e.SetValue(value) {
+		panic(fmt.Sprintf("%T excludes %T", e, value))
+	}
+}

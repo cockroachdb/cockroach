@@ -250,7 +250,8 @@ func ApproxDatumSize(x interface{}) int64 {
 
 // Setup creates the given tables and fills them with initial data via batched
 // INSERTs. batchSize will only be used when positive (but INSERTs are batched
-// either way). The function is idempotent and can be called multiple times.
+// either way). The function is idempotent and can be called multiple times if
+// the Generator does not have any initial rows.
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
@@ -307,7 +308,6 @@ func Setup(
 				var numRows int
 				flush := func() error {
 					if len(params) > 0 {
-						insertStmtBuf.WriteString(` ON CONFLICT DO NOTHING`)
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
 							return errors.Wrapf(err, "failed insert into %s", table.Name)
