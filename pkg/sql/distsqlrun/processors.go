@@ -1044,10 +1044,21 @@ func newProcessor(
 		return newWindower(flowCtx, processorID, core.Windower, inputs[0], post, outputs[0])
 	}
 	if core.LocalPlanNode != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		numInputs := 0
+		if core.LocalPlanNode.NumInputs != nil {
+			numInputs = int(*core.LocalPlanNode.NumInputs)
+		}
+		if err := checkNumInOut(inputs, outputs, numInputs, 1); err != nil {
 			return nil, err
 		}
 		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
+		if numInputs == 1 {
+			if err := processor.SetInput(ctx, inputs[0]); err != nil {
+				return nil, err
+			}
+		} else if numInputs > 1 {
+			return nil, errors.Errorf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
+		}
 		err := processor.InitWithOutput(post, outputs[0])
 		return processor, err
 	}
@@ -1061,6 +1072,10 @@ type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
 	InitWithOutput(post *PostProcessSpec, output RowReceiver) error
+	// SetInput initializes this LocalProcessor with an input RowSource. Not all
+	// LocalProcessors need inputs, but this needs to be called if a
+	// LocalProcessor expects to get its data from another RowSource.
+	SetInput(ctx context.Context, input RowSource) error
 }
 
 // NewReadImportDataProcessor is externally implemented and registered by
