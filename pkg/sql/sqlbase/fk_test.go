@@ -644,6 +644,35 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		b.StopTimer()
 	})
 
+	b.Run("deleteRowsFromParent_interleaved", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM parentInterleaved`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
 	// For the self-referential table benchmarks, `numSRRows` rows are inserted and there is again a contrast between
 	// rows with foreign key references and those without.
 	// There are several different cases:
