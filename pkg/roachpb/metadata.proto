@@ -163,6 +163,14 @@ message NodeDescriptor {
   optional Version ServerVersion = 5 [(gogoproto.nullable) = false];
   optional string build_tag = 6 [(gogoproto.nullable) = false];
   optional int64 started_at = 7 [(gogoproto.nullable) = false];
+  repeated LocalityAddress locality_address = 8 [(gogoproto.nullable) = false];
+}
+
+// LocalityAddress holds the private address accessible only from other nodes
+// in the corresponding locality.
+message LocalityAddress {
+  optional util.UnresolvedAddr address = 1 [(gogoproto.nullable) = false];
+  optional Tier locality_tier = 2 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node

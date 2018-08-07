@@ -52,6 +52,8 @@ type Dialer struct {
 	rpcContext *rpc.Context
 	resolver   AddressResolver
 
+	locality roachpb.Locality
+
 	breakers syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
 }
 
