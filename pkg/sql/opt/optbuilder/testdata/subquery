@@ -1248,6 +1248,7 @@ SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
 ----
 offset
  ├── columns: x:1(int!null)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
  │    ├── columns: xyz.x:1(int!null)
@@ -1891,6 +1892,7 @@ select
                           ├── columns: max:11(string)
                           └── limit
                                ├── columns: a.i:7(int) max:11(string)
+                               ├── internal-ordering: +7
                                ├── sort
                                │    ├── columns: a.i:7(int) max:11(string)
                                │    ├── ordering: +7
