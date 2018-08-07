@@ -30,6 +30,7 @@ SELECT d, e FROM (SELECT d, 1 AS one, e FROM abcde) ORDER BY d, one, e LIMIT 10
 ----
 limit
  ├── columns: d:4(int) e:5(int)
+ ├── internal-ordering: +4,+5
  ├── cardinality: [0 - 10]
  ├── ordering: +4,+5 opt(6)
  ├── sort
@@ -45,6 +46,7 @@ SELECT b, c FROM abcde WHERE d=1 AND e=2 ORDER BY b, c, d, e, a LIMIT 10
 ----
 limit
  ├── columns: b:2(int) c:3(int)
+ ├── internal-ordering: +2,+3,+1 opt(4,5)
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: ()-->(4,5), (1)-->(2,3), (2,3)~~>(1)
@@ -124,6 +126,7 @@ SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
 ----
 scalar-group-by
  ├── columns: array_agg:6(int[])
+ ├── internal-ordering: +1
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
@@ -143,6 +146,7 @@ SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
 distinct-on
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── grouping columns: b:2(int) c:3(int)
+ ├── internal-ordering: +1 opt(2,3)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)-->(1)
  ├── ordering: +2,+3

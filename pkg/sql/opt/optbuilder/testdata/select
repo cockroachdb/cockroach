@@ -349,6 +349,7 @@ SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -385,6 +386,7 @@ SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
 ----
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -417,6 +419,7 @@ SELECT * FROM xyzw ORDER BY x LIMIT 1
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── scan xyzw
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -428,9 +431,11 @@ SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── offset
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── internal-ordering: +1
  │    ├── ordering: +1
  │    ├── scan xyzw
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -443,6 +448,7 @@ SELECT * FROM xyzw ORDER BY y OFFSET 1
 ----
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +2
  ├── ordering: +2
  ├── sort
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
@@ -456,9 +462,11 @@ SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── internal-ordering: +2
  ├── ordering: +2
  ├── offset
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ │    ├── internal-ordering: +2
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
