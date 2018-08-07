@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -137,6 +138,11 @@ func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaD
 // TODO(bdarnell): unify this with Validate().
 func (r RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
+}
+
+// Clone makes a deep copy of this RangeDescriptor.
+func (r *RangeDescriptor) Clone() RangeDescriptor {
+	return *protoutil.Clone(r).(*RangeDescriptor)
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.

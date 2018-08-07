@@ -2333,7 +2333,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, origRng)
 	}
 
-	copyDesc := *origDesc
+	copyDesc := origDesc.Clone()
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
@@ -2427,7 +2427,7 @@ func (s *Store) MergeRange(
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
 	// Update the end key of the subsuming range.
-	copy := *leftDesc
+	copy := leftDesc.Clone()
 	copy.EndKey = updatedEndKey
 	return leftRepl.setDesc(&copy)
 }

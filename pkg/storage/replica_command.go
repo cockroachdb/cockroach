@@ -273,7 +273,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 
 	// Init updated version of existing range descriptor.
-	leftDesc := *desc
+	leftDesc := desc.Clone()
 	leftDesc.EndKey = splitKey
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
@@ -386,7 +386,7 @@ func (r *Replica) AdminMerge(
 		return reply, roachpb.NewErrorf("cannot merge final range")
 	}
 
-	updatedLeftDesc := *origLeftDesc
+	updatedLeftDesc := origLeftDesc.Clone()
 	rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 
 	// Lookup right hand side range (subsumed). This really belongs
