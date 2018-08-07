@@ -350,6 +350,8 @@ func readPostgresCreateTable(
 						def.DefaultExpr.Expr = cmd.Default
 						create.Defs[i] = def
 					}
+				case *tree.AlterTableValidateConstraint:
+					// ignore
 				default:
 					return nil, errors.Errorf("unsupported statement: %s", stmt)
 				}
