@@ -161,7 +161,7 @@ type Node struct {
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  kv.TxnMetrics
 
-	storesServer storage.Server
+	perReplicaServer storage.Server
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -330,7 +330,7 @@ func NewNode(
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
 	}
-	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
+	n.perReplicaServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
 

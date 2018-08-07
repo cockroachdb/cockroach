@@ -182,7 +182,7 @@ func (r *Replica) collectChecksumFromReplica(
 		return CollectChecksumResponse{},
 			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)
 	}
-	client := NewConsistencyClient(conn)
+	client := NewPerReplicaClient(conn)
 	req := &CollectChecksumRequest{
 		StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		r.RangeID,

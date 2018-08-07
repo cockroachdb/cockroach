@@ -448,7 +448,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, s.recorder, s.registry, s.stopper,
 		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
-	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
+	storage.RegisterPerReplicaServer(s.grpc, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
