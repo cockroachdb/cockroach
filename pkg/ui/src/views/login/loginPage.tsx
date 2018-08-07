@@ -99,8 +99,11 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
               Please contact your database administrator for
               account access and password restoration.
             </p>
+            <div>
+
+            </div>
             <p className="aside">
-              <a href={docsURL.adminUIOverview} className="docs-link">
+              <a href={docsURL.adminUILogin} className="docs-link">
                 <span className="docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
                 <span className="docs-link__text">Read the documentation</span>
               </a>
