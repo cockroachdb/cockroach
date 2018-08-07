@@ -217,6 +217,12 @@ define AntiJoinApply {
 # the GroupBy operator will also be empty. If the grouping columns are empty,
 # then all input rows form a single group. GroupBy is used for queries with
 # aggregate functions, HAVING clauses and/or GROUP BY expressions.
+#
+# The Def private contains an ordering; this ordering is used to determine
+# intra-group ordering and is only useful if there is an order-dependent
+# aggregation (like ARRAY_AGG). Grouping columns are inconsequential in this
+# ordering; we currently set all grouping columns as optional in this ordering
+# (but note that this is not required by the operator).
 [Relational]
 define GroupBy {
     Input        Expr
