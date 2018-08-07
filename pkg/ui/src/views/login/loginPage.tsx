@@ -107,7 +107,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
             </p>
           </section>
           <section className="section login-page__form">
-            <h1 className="heading">Sign in to the Console</h1>
+            <h1 className="heading">Sign in to the Web UI</h1>
             {this.renderError()}
             <form onSubmit={this.handleSubmit}>
               <input
