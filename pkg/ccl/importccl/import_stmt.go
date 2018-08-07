@@ -835,12 +835,12 @@ func doDistributedCSVTransform(
 	walltime int64,
 	sstSize int64,
 	oversample int64,
-) error {
+) (roachpb.BulkOpSummary, error) {
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_INT},
+		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
@@ -868,10 +868,11 @@ func doDistributedCSVTransform(
 			return storageccl.MakeKeyRewriter(descs)
 		},
 	); err != nil {
+
 		// Check if this was a context canceled error and restart if it was.
 		if s, ok := status.FromError(errors.Cause(err)); ok {
 			if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
-				return jobs.NewRetryJobError("node failure")
+				return roachpb.BulkOpSummary{}, jobs.NewRetryJobError("node failure")
 			}
 		}
 
@@ -886,12 +887,9 @@ func doDistributedCSVTransform(
 			d := details.(*jobspb.Progress_Import).Import
 			return d.Completed()
 		}); err != nil {
-			return err
+			return roachpb.BulkOpSummary{}, err
 		}
-		return err
-	}
-	if transformOnly == "" {
-		return nil
+		return roachpb.BulkOpSummary{}, err
 	}
 
 	backupDesc := backupccl.BackupDescriptor{
@@ -901,11 +899,14 @@ func doDistributedCSVTransform(
 	for i := 0; i < n; i++ {
 		row := rows.At(i)
 		name := row[0].(*tree.DString)
-		size := row[1].(*tree.DInt)
+		var counts roachpb.BulkOpSummary
+		if err := protoutil.Unmarshal([]byte(*row[1].(*tree.DBytes)), &counts); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
+		backupDesc.EntryCounts.Add(counts)
 		checksum := row[2].(*tree.DBytes)
 		spanStart := row[3].(*tree.DBytes)
 		spanEnd := row[4].(*tree.DBytes)
-		backupDesc.EntryCounts.DataSize += int64(*size)
 		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
 			Path: string(*name),
 			Span: roachpb.Span{
@@ -914,6 +915,10 @@ func doDistributedCSVTransform(
 			},
 			Sha512: []byte(*checksum),
 		})
+	}
+
+	if transformOnly == "" {
+		return backupDesc.EntryCounts, nil
 	}
 
 	// The returned spans are from the SSTs themselves, and so don't perfectly
@@ -945,15 +950,15 @@ func doDistributedCSVTransform(
 
 	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
-		return err
+		return roachpb.BulkOpSummary{}, err
 	}
 	es, err := storageccl.MakeExportStorage(ctx, dest, p.ExecCfg().Settings)
 	if err != nil {
-		return err
+		return roachpb.BulkOpSummary{}, err
 	}
 	defer es.Close()
 
-	return finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
+	return backupDesc.EntryCounts, finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
 }
 
 type importResumer struct {
@@ -1002,9 +1007,14 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	return doDistributedCSVTransform(
+	res, err := doDistributedCSVTransform(
 		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample,
 	)
+	if err != nil {
+		return err
+	}
+	r.res = res
+	return nil
 }
 
 // OnFailOrCancel removes KV data that has been committed from a import that
