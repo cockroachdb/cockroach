@@ -189,12 +189,10 @@ func (b *Builder) buildSubqueryProjection(
 		cols := make(tree.Exprs, len(s.cols))
 		colGroups := make([]memo.GroupID, len(s.cols))
 		typ := types.TTuple{
-			Types:  make([]types.T, len(s.cols)),
-			Labels: make([]string, len(s.cols)),
+			Types: make([]types.T, len(s.cols)),
 		}
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
-			typ.Labels[i] = string(s.cols[i].name)
 			typ.Types[i] = s.cols[i].ResolvedType()
 			colGroups[i] = b.factory.ConstructVariable(b.factory.InternColumnID(s.cols[i].id))
 		}
