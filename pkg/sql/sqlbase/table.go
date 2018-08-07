@@ -1558,6 +1558,7 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 	for i := uint64(0); i < header.length; i++ {
 		if header.isNull(i) {
 			result.Array[i] = tree.DNull
+			result.HasNulls = true
 		} else {
 			val, b, err = decodeUntaggedDatum(a, elementType, b)
 			if err != nil {
