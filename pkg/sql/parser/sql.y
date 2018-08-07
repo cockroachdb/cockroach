@@ -7256,16 +7256,16 @@ opt_frame_clause:
     startBound := bounds.StartBound
     endBound := bounds.EndBound
     switch {
-    case startBound.BoundType == tree.ValuePreceding:
+    case startBound.BoundType == tree.OffsetPreceding:
       sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
       return 1
-    case startBound.BoundType == tree.ValueFollowing:
+    case startBound.BoundType == tree.OffsetFollowing:
       sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
       return 1
-    case endBound != nil && endBound.BoundType == tree.ValuePreceding:
+    case endBound != nil && endBound.BoundType == tree.OffsetPreceding:
       sqllex.Error("RANGE PRECEDING is only supported with UNBOUNDED")
       return 1
-    case endBound != nil && endBound.BoundType == tree.ValueFollowing:
+    case endBound != nil && endBound.BoundType == tree.OffsetFollowing:
       sqllex.Error("RANGE FOLLOWING is only supported with UNBOUNDED")
       return 1
     }
@@ -7294,7 +7294,7 @@ frame_extent:
     case startBound.BoundType == tree.UnboundedFollowing:
       sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
       return 1
-    case startBound.BoundType == tree.ValueFollowing:
+    case startBound.BoundType == tree.OffsetFollowing:
       sqllex.Error("frame starting from following row cannot end with current row")
       return 1
     }
@@ -7311,13 +7311,13 @@ frame_extent:
     case endBound.BoundType == tree.UnboundedPreceding:
       sqllex.Error("frame end cannot be UNBOUNDED PRECEDING")
       return 1
-    case startBound.BoundType == tree.CurrentRow && endBound.BoundType == tree.ValuePreceding:
+    case startBound.BoundType == tree.CurrentRow && endBound.BoundType == tree.OffsetPreceding:
       sqllex.Error("frame starting from current row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.ValueFollowing && endBound.BoundType == tree.ValuePreceding:
+    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.OffsetPreceding:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.ValueFollowing && endBound.BoundType == tree.CurrentRow:
+    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.CurrentRow:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
     }
@@ -7344,14 +7344,14 @@ frame_bound:
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.ValuePreceding,
+      BoundType: tree.OffsetPreceding,
     }
   }
 | a_expr FOLLOWING
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.ValueFollowing,
+      BoundType: tree.OffsetFollowing,
     }
   }
 
