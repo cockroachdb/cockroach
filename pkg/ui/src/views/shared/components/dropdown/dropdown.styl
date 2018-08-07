@@ -15,6 +15,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   white-space nowrap
   padding-right 10px
   color $body-color
+  cursor pointer
 
   &:hover
     background-color $dropdown-hover-color
@@ -22,10 +23,15 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   &__title
     vertical-align middle
     display inline-block
+    -webkit-user-select none
+    -moz-user-select none
+
 
   &__select
     display inline-block
     vertical-align middle
+    -webkit-user-select none
+    -moz-user-select none
 
     &:hover
       background-color $dropdown-hover-color
@@ -35,6 +41,8 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     display none
     color $link-color
     cursor pointer
+    -webkit-user-select none
+    -moz-user-select none
 
     &:first-child
       border-right 1px solid $button-border-color

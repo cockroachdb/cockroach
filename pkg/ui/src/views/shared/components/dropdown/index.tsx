@@ -7,6 +7,7 @@ import "./dropdown.styl";
 
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
+import ReactSelectClass from "react-select";
 
 export interface DropdownOption {
   value: string;
@@ -33,6 +34,26 @@ interface DropdownOwnProps {
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+  dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
+  titleRef: React.RefObject<HTMLDivElement> = React.createRef();
+  selectRef: React.RefObject<ReactSelectClass> = React.createRef();
+
+  constructor(props: DropdownOwnProps) {
+    super(props);
+
+    this.triggerSelectClick = this.triggerSelectClick.bind(this);
+  }
+
+  triggerSelectClick(e: any) {
+    const dropdownNode: any = this.dropdownRef.current as Node;
+    const titleNode: any = this.titleRef.current as Node;
+    const selectNode: any = this.selectRef.current;
+
+    if (e.target === dropdownNode || e.target === titleNode || e.target.className.indexOf("dropdown__select") > -1) {
+      selectNode.handleMouseDownOnMenu(e);
+    }
+  }
+
   render() {
     const {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
 
@@ -49,15 +70,27 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
     );
 
-    return <div className={className}>
+    return <div className={className} onClick={this.triggerSelectClick} ref={this.dropdownRef}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
       <span
         className={leftClassName}
         dangerouslySetInnerHTML={trustIcon(leftArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
       </span>
-      <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
-      <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
+      <span
+        className="dropdown__title"
+        ref={this.titleRef}>
+          {this.props.title}{this.props.title ? ":" : ""}
+      </span>
+      <Select
+        className="dropdown__select"
+        clearable={false}
+        searchable={false}
+        options={options}
+        value={selected}
+        onChange={onChange}
+        ref={this.selectRef}
+      />
       <span
         className={rightClassName}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}
