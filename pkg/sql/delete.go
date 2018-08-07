@@ -369,7 +369,13 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 	for len(interleavedQueue) > 0 {
 		tableID := interleavedQueue[0]
 		interleavedQueue = interleavedQueue[1:]
-
+		// should this be a panic?
+		if _, ok := fkTables[tableID]; !ok {
+			return false
+		}
+		if fkTables[tableID].Table == nil {
+			return false
+		}
 		for _, idx := range fkTables[tableID].Table.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO identify the cases where secondary indexes can still work with the fast path and allow them
@@ -406,7 +412,7 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 
 				idx, err := fkTables[ref.Table].Table.FindIndexByID(ref.Index)
 				if err != nil {
-					panic("Couldn't find index in foreign key reference")
+					return false
 				}
 
 				// All of these references MUST be ON DELETE CASCADE
