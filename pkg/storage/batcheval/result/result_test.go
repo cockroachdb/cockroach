@@ -47,6 +47,9 @@ func TestEvalResultIsZero(t *testing.T) {
 			case **storagebase.WriteBatch:
 				*f = new(storagebase.WriteBatch)
 				defer func() { *f = nil }()
+			case **storagebase.LogicalOpLog:
+				*f = new(storagebase.LogicalOpLog)
+				defer func() { *f = nil }()
 			default:
 				tf := v.Type().Field(i)
 				t.Fatalf("unknown field %s of type %s on %T", tf.Name, tf.Type, p)

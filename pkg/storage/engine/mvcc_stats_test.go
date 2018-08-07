@@ -734,11 +734,11 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		engine := engine.NewBatch()
 		defer engine.Close()
 
-		value2 := roachpb.MakeValueFromString("longvalue")
-		vVal2Size := int64(len(value2.RawBytes))
+		val2 := roachpb.MakeValueFromString("longvalue")
+		vVal2Size := int64(len(val2.RawBytes))
 		require.EqualValues(t, vVal2Size, 14)
 
-		if err := MVCCPut(ctx, engine, &aggMS, key, ts3, value2, txn); err != nil {
+		if err := MVCCPut(ctx, engine, &aggMS, key, ts3, val2, txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1104,8 +1104,8 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	vVal1Size := int64(len(val1.RawBytes))
 	require.EqualValues(t, vVal1Size, 10)
 
-	value2 := roachpb.MakeValueFromString("longvalue")
-	vVal2Size := int64(len(value2.RawBytes))
+	val2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(val2.RawBytes))
 	require.EqualValues(t, vVal2Size, 14)
 
 	expMS := enginepb.MVCCStats{
@@ -1127,7 +1127,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	}).Size())
 	require.EqualValues(t, mVal2Size, 46)
 
-	if err := MVCCPut(ctx, engine, aggMS, key, ts2, value2, txn); err != nil {
+	if err := MVCCPut(ctx, engine, aggMS, key, ts2, val2, txn); err != nil {
 		t.Fatal(err)
 	}
 
