@@ -147,7 +147,7 @@ func TestPrereqs(t *testing.T) {
 		} {
 			t.Run(tc.path, func(t *testing.T) {
 				var buf bytes.Buffer
-				if err := run(&buf, tc.path, tc.includeTest); err != nil {
+				if err := run(&buf, tc.path, tc.includeTest, ""); err != nil {
 					t.Fatal(err)
 				}
 				if e, a := tc.exp, buf.String(); e != a {
