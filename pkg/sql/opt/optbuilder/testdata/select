@@ -664,14 +664,14 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int AS a, int AS b})
+           │    ├── columns: column3:3(tuple{int, int})
            │    ├── values
            │    │    ├── columns: column1:1(int) column2:2(int)
            │    │    └── tuple [type=tuple{int, int}]
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 1 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int AS a, int AS b}]
+           │         └── tuple [type=tuple{int, int}]
            │              ├── variable: column1 [type=int]
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
@@ -707,14 +707,14 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3(tuple{int, int})
                 │    ├── values
                 │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    └── tuple [type=tuple{int, int}]
                 │    │         ├── const: 1 [type=int]
                 │    │         └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
+                │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -755,7 +755,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int AS a, int AS b})
+           │    ├── columns: column3:3(tuple{int, int})
            │    ├── select
            │    │    ├── columns: column1:1(int!null) column2:2(int)
            │    │    ├── values
@@ -768,7 +768,7 @@ project
            │    │              ├── variable: column1 [type=int]
            │    │              └── const: 1 [type=int]
            │    └── projections
-           │         └── tuple [type=tuple{int AS a, int AS b}]
+           │         └── tuple [type=tuple{int, int}]
            │              ├── variable: column1 [type=int]
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
@@ -810,7 +810,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
@@ -823,7 +823,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
+                │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -865,7 +865,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
@@ -878,7 +878,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
+                │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
@@ -920,7 +920,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int AS a, int AS b})
+                │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
@@ -933,7 +933,7 @@ project
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
                 │    └── projections
-                │         └── tuple [type=tuple{int AS a, int AS b}]
+                │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]

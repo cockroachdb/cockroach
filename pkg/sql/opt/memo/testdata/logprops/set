@@ -139,16 +139,16 @@ select
  │    └── interesting orderings: (+1)
  └── filters [type=bool, outer=(1,2)]
       └── eq [type=bool, outer=(1,2)]
-           ├── subquery [type=tuple{int AS x, int AS u}, outer=(1,2)]
+           ├── subquery [type=tuple{int, int}, outer=(1,2)]
            │    └── max1-row
-           │         ├── columns: column13:13(tuple{int AS x, int AS u})
+           │         ├── columns: column13:13(tuple{int, int})
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
            │         ├── stats: [rows=1]
            │         ├── key: ()
            │         ├── fd: ()-->(13)
            │         └── project
-           │              ├── columns: column13:13(tuple{int AS x, int AS u})
+           │              ├── columns: column13:13(tuple{int, int})
            │              ├── outer: (1,2)
            │              ├── stats: [rows=1400]
            │              ├── prune: (13)
@@ -190,7 +190,7 @@ select
            │              │         └── projections [outer=(2,8)]
            │              │              └── variable: xy.y [type=int, outer=(2)]
            │              └── projections [outer=(11,12)]
-           │                   └── tuple [type=tuple{int AS x, int AS u}, outer=(11,12)]
+           │                   └── tuple [type=tuple{int, int}, outer=(11,12)]
            │                        ├── variable: x [type=int, outer=(11)]
            │                        └── variable: u [type=int, outer=(12)]
            └── tuple [type=tuple{int, int}]
