@@ -1197,7 +1197,20 @@ func mvccPutInternal(
 		if ms != nil {
 			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		}
+		if err == nil {
+			engine.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
+				Key:   key,
+				Value: roachpb.Value{RawBytes: value},
+			})
+		}
 		return err
+	}
+
+	// Determine what the logical operation is. Are we writing an intent
+	// or a value directly?
+	logicalOp := MVCCWriteValueOpType
+	if txn != nil {
+		logicalOp = MVCCWriteIntentOpType
 	}
 
 	var meta *enginepb.MVCCMetadata
@@ -1236,6 +1249,7 @@ func mvccPutInternal(
 			// the same timestamp (see comments in else block) we can
 			// overwrite the existing intent; otherwise we must manually
 			// delete the old intent, taking care with MVCC stats.
+			logicalOp = MVCCUpdateIntentOpType
 			if metaTimestamp.Less(timestamp) {
 				{
 					// If the older write intent has a version underneath it, we need to
@@ -1360,6 +1374,19 @@ func mvccPutInternal(
 		ms.Add(updateStatsOnPut(key, prevValSize, origMetaKeySize, origMetaValSize,
 			metaKeySize, metaValSize, meta, newMeta))
 	}
+
+	// Log the logical MVCC operation.
+	logicalOpDetails := MVCCLogicalOpDetails{
+		Key: key,
+		Value: roachpb.Value{
+			Timestamp: timestamp,
+			RawBytes:  value,
+		},
+	}
+	if buf.newMeta.Txn != nil {
+		logicalOpDetails.Txn = *buf.newMeta.Txn
+	}
+	engine.LogLogicalOp(logicalOp, logicalOpDetails)
 
 	return maybeTooOldErr
 }
@@ -2317,6 +2344,21 @@ func mvccResolveWriteIntent(
 				return false, err
 			}
 		}
+
+		// Log the logical MVCC operation.
+		logicalOp := MVCCCommitIntentOpType
+		if pushed {
+			logicalOp = MVCCUpdateIntentOpType
+		}
+		engine.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
+			Txn: intent.Txn,
+			Key: intent.Key,
+			Value: roachpb.Value{
+				Timestamp: intent.Txn.Timestamp,
+			},
+			Unsafe: true,
+		})
+
 		return true, nil
 	}
 
@@ -2346,6 +2388,13 @@ func mvccResolveWriteIntent(
 	if err := engine.Clear(latestKey); err != nil {
 		return false, err
 	}
+
+	// Log the logical MVCC operation.
+	engine.LogLogicalOp(MVCCAbortIntentOpType, MVCCLogicalOpDetails{
+		Txn:    intent.Txn,
+		Key:    intent.Key,
+		Unsafe: true,
+	})
 
 	unsafeNextKey, unsafeNextValue, ok, err := unsafeNextVersion(iter, latestKey)
 	if err != nil {
