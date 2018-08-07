@@ -72,19 +72,7 @@ var AssetInfo func(name string) (os.FileInfo, error)
 // IndexHTMLTemplate takes arguments about the current session and returns HTML which
 // includes the UI JavaScript bundles, plus a script tag which sets the currently logged in user
 // so that the UI JavaScript can decide whether to show a login page.
-var IndexHTMLTemplate *template.Template
-
-// IndexHTMLArgs are the arguments to IndexHTMLTemplate.
-type IndexHTMLArgs struct {
-	ExperimentalUseLogin bool
-	LoginEnabled         bool
-	LoggedInUser         *string
-	Tag                  string
-	Version              string
-}
-
-func init() {
-	t, err := template.New("index").Parse(`<!DOCTYPE html>
+var IndexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <html>
 	<head>
 		<title>Cockroach Console</title>
@@ -103,9 +91,13 @@ func init() {
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
-`)
-	if err != nil {
-		panic(fmt.Sprintf("can't parse template: %s", err))
-	}
-	IndexHTMLTemplate = t
+`))
+
+// IndexHTMLArgs are the arguments to IndexHTMLTemplate.
+type IndexHTMLArgs struct {
+	ExperimentalUseLogin bool
+	LoginEnabled         bool
+	LoggedInUser         *string
+	Tag                  string
+	Version              string
 }
