@@ -45,6 +45,7 @@ type poller struct {
 	db       *client.DB
 	clock    *hlc.Clock
 	gossip   *gossip.Gossip
+	spans    []roachpb.Span
 	targets  map[sqlbase.ID]string
 	buf      *buffer
 
@@ -54,6 +55,7 @@ type poller struct {
 func makePoller(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
+	spans []roachpb.Span,
 	startTime hlc.Timestamp,
 	buf *buffer,
 ) *poller {
@@ -63,18 +65,23 @@ func makePoller(
 		clock:     execCfg.Clock,
 		gossip:    execCfg.Gossip,
 		highWater: startTime,
+		spans:     spans,
 		targets:   details.Targets,
 		buf:       buf,
 	}
 }
 
-func (p *poller) fetchSpans(ctx context.Context, ts hlc.Timestamp) ([]roachpb.Span, error) {
+func fetchSpansForTargets(
+	ctx context.Context, db *client.DB, targets map[sqlbase.ID]string, ts hlc.Timestamp,
+) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		spans = nil
-		txn.SetFixedTimestamp(ctx, ts)
+		if ts != (hlc.Timestamp{}) {
+			txn.SetFixedTimestamp(ctx, ts)
+		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID, origName := range p.targets {
+		for tableID, origName := range targets {
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 			if err != nil {
 				if errors.Cause(err) == sqlbase.ErrDescriptorNotFound {
@@ -96,6 +103,20 @@ func (p *poller) fetchSpans(ctx context.Context, ts hlc.Timestamp) ([]roachpb.Sp
 		return nil
 	})
 	return spans, err
+}
+
+func equalSpanSets(a, b roachpb.Spans) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sort.Sort(a)
+	sort.Sort(b)
+	for i := range a {
+		if !a[i].EqualValue(b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a
@@ -125,9 +146,16 @@ func (p *poller) Run(ctx context.Context) error {
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
-		spans, err := p.fetchSpans(ctx, nextHighWater)
+		newSpans, err := fetchSpansForTargets(ctx, p.db, p.targets, nextHighWater)
 		if err != nil {
 			return err
+		}
+		if !equalSpanSets(p.spans, newSpans) {
+			// The SpanFrontier at the end of this changefeed flow currently
+			// depends on the set of tracked spans being static. We may have to
+			// support it changing eventually, but for now we don't, so error
+			// defensively.
+			return errors.Errorf(`the set of tracked spans changed: %v to %v`, p.spans, newSpans)
 		}
 
 		var ranges []roachpb.RangeDescriptor
@@ -143,7 +171,7 @@ func (p *poller) Run(ctx context.Context) error {
 		type rangeMarker struct{}
 
 		var spanCovering intervalccl.Covering
-		for _, span := range spans {
+		for _, span := range p.spans {
 			spanCovering = append(spanCovering, intervalccl.Range{
 				Start:   []byte(span.Key),
 				End:     []byte(span.EndKey),
@@ -218,13 +246,10 @@ func (p *poller) Run(ctx context.Context) error {
 						return err
 					}
 				}
-				return nil
+				return p.buf.AddResolved(ctx, span, nextHighWater)
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return err
-		}
-		if err := p.buf.AddResolved(ctx, nextHighWater); err != nil {
 			return err
 		}
 

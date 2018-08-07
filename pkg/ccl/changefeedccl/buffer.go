@@ -11,14 +11,14 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type bufferEntry struct {
-	kv roachpb.KeyValue
-	// TODO(dan): Make this specific to a span.
-	resolved hlc.Timestamp
+	kv       roachpb.KeyValue
+	resolved *jobspb.ResolvedSpan
 }
 
 // buffer mediates between the changed data poller and the rest of the
@@ -43,10 +43,8 @@ func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue) error {
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
-//
-// TODO(dan): Make this specific to a span.
-func (b *buffer) AddResolved(ctx context.Context, ts hlc.Timestamp) error {
-	return b.addEntry(ctx, bufferEntry{resolved: ts})
+func (b *buffer) AddResolved(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) error {
+	return b.addEntry(ctx, bufferEntry{resolved: &jobspb.ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
 func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
