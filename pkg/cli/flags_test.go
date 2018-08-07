@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -109,7 +109,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 		}
 
 		// Check fractional values.
-		maxMem, err := server.GetTotalMemory(context.TODO())
+		maxMem, err := status.GetTotalMemory(context.TODO())
 		if err != nil {
 			t.Logf("total memory unknown: %v", err)
 			return
