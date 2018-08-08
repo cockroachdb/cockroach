@@ -279,7 +279,6 @@ SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 ----
 project
  ├── columns: f:3(float) r:6(float)
- ├── fd: (3)-->(6)
  ├── select
  │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
  │    ├── key: (1)
@@ -396,7 +395,6 @@ SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
 project
  ├── columns: f:3(float) r:5(float)
  ├── cardinality: [0 - 5]
- ├── fd: (3)-->(5)
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]
@@ -616,7 +614,6 @@ SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 project
  ├── columns: f:3(float) r:5(float)
  ├── cardinality: [0 - 5]
- ├── fd: (3)-->(5)
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]

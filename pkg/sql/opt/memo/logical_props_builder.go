@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -319,7 +320,27 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 		childLogical := projections.Child(i).Logical()
 		if !childLogical.Scalar.CanHaveSideEffects {
 			from := childLogical.Scalar.OuterCols.Intersection(inputProps.OutputCols)
-			relational.FuncDeps.AddSynthesizedCol(from, colID)
+
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			//
+			// We only add the FD if composite types are not involved.
+			//
+			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// arithmetic.
+			composite := false
+			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
+				typ := ev.Metadata().ColumnType(opt.ColumnID(i))
+				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+					composite = true
+					break
+				}
+			}
+			if !composite {
+				relational.FuncDeps.AddSynthesizedCol(from, colID)
+			}
 		}
 	}
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
