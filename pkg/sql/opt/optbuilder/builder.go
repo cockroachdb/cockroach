@@ -73,9 +73,6 @@ type Builder struct {
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
 	catalog opt.Catalog
-
-	// Skip index 0 in order to reserve it to indicate the "unknown" column.
-	colMap []scopeColumn
 }
 
 // New creates a new Builder structure initialized with the given
@@ -91,7 +88,6 @@ func New(
 	return &Builder{
 		factory: factory,
 		stmt:    stmt,
-		colMap:  make([]scopeColumn, 1),
 		ctx:     ctx,
 		semaCtx: semaCtx,
 		evalCtx: evalCtx,
