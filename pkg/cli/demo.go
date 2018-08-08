@@ -27,9 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-
-	// Force at least the example workloads to exist
-	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 )
 
 var demoCmd = &cobra.Command{
