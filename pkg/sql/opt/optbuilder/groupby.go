@@ -82,8 +82,9 @@ type groupby struct {
 
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
-	def  memo.FuncOpDef
-	args []memo.GroupID
+	def      memo.FuncOpDef
+	distinct bool
+	args     []memo.GroupID
 }
 
 func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy) bool {
@@ -245,6 +246,10 @@ func (b *Builder) buildAggregation(
 			colID := argCols[0].id
 			argCols = argCols[1:]
 			argList[j] = b.factory.ConstructVariable(b.factory.InternColumnID(colID))
+			if agg.distinct {
+				// Wrap the argument with AggDistinct.
+				argList[j] = b.factory.ConstructAggDistinct(argList[j])
+			}
 		}
 		aggCols[i].group = constructAggLookup[agg.def.Name](b.factory, argList)
 	}
@@ -372,9 +377,6 @@ func (b *Builder) buildAggregateFunction(
 			"aggregate functions with multiple arguments are not supported yet"),
 		})
 	}
-	if f.Type == tree.DistinctFuncType {
-		panic(unimplementedf("aggregates with DISTINCT are not supported yet"))
-	}
 	if f.Filter != nil {
 		panic(unimplementedf("aggregates with FILTER are not supported yet"))
 	}
@@ -382,8 +384,9 @@ func (b *Builder) buildAggregateFunction(
 	aggInScope, aggOutScope := inScope.startAggFunc()
 
 	info := aggregateInfo{
-		def:  funcDef,
-		args: make([]memo.GroupID, len(f.Exprs)),
+		def:      funcDef,
+		distinct: (f.Type == tree.DistinctFuncType),
+		args:     make([]memo.GroupID, len(f.Exprs)),
 	}
 	aggInScopeColsBefore := len(aggInScope.cols)
 	for i, pexpr := range f.Exprs {

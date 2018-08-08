@@ -134,8 +134,13 @@ define Projections {
 
 # Aggregations is a set of aggregate expressions that will become output columns
 # for a containing GroupBy operator. The expressions can only consist of
-# aggregate functions and variable references. More complex expressions must be
-# formulated using a Project operator as input to the GroupBy operator.
+# aggregate functions, variable references, and modifiers like AggDistinct.
+# Examples of valid expressions:
+#   (Min (Variable 1))
+#   (Count (AggDistinct (Variable 1)))
+#
+# More complex arguments must be formulated using a Project operator as input to
+# the GroupBy operator.
 #
 # The private Cols field contains the list of column indexes returned by the
 # expression, as an opt.ColList. It is legal for Cols to be empty.
@@ -653,5 +658,13 @@ define ConstNotNullAgg {
 # FirstAggs in a DistinctOn.
 [Scalar, Aggregate]
 define FirstAgg {
+    Input Expr
+}
+
+# AggDistinct is used as a modifier that wraps the input of an aggregate
+# function. It causes the respective aggregation to only process each distinct
+# value once.
+[Scalar]
+define AggDistinct {
     Input Expr
 }

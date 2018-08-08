@@ -137,9 +137,14 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 			// Can't reject nulls for the aggregate.
 			return opt.ColSet{}
 		}
+		arg := agg.Child(0)
+		// Ignore AggDistinct.
+		if arg.Operator() == opt.AggDistinctOp {
+			arg = arg.Child(0)
+		}
 
 		// Get column ID of aggregate's Variable operator input.
-		inColID := agg.Child(0).Private().(opt.ColumnID)
+		inColID := arg.Private().(opt.ColumnID)
 
 		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {

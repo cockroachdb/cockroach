@@ -137,6 +137,9 @@ func init() {
 		opt.ConstAggOp:        typeAsFirstArg,
 		opt.ConstNotNullAggOp: typeAsFirstArg,
 		opt.FirstAggOp:        typeAsFirstArg,
+
+		// Modifiers for aggregations pass through their argument.
+		opt.AggDistinctOp: typeAsFirstArg,
 	}
 
 	for _, op := range opt.BooleanOperators {

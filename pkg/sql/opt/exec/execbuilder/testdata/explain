@@ -624,5 +624,6 @@ project
  └── projections
       └── const: 1 [type=int]
 
-statement error aggregates with DISTINCT are not supported yet
-EXPLAIN (OPT) SELECT sum(DISTINCT x) FROM (VALUES (1), (1), (2)) AS t(x)
+# Test with an unsupported statement.
+statement error window functions are not supported
+EXPLAIN (OPT) SELECT avg(x) OVER () FROM (VALUES (1)) AS t(x)
