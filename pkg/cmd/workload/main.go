@@ -18,30 +18,14 @@ package main
 import (
 	"os"
 
-	"github.com/spf13/cobra"
-
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/allccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/allccl" // init hooks
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl" // init hooks
+	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 )
 
-var rootCmd = setCmdDefaults(&cobra.Command{
-	Use: `workload`,
-})
-
 func main() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := workloadcli.WorkloadCmd().Execute(); err != nil {
 		// Cobra has already printed the error message.
 		os.Exit(1)
-	}
-}
-
-func handleErrs(
-	f func(cmd *cobra.Command, args []string) error,
-) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
-		err := f(cmd, args)
-		if err != nil {
-			cmd.Println("Error:", err.Error())
-			os.Exit(1)
-		}
 	}
 }

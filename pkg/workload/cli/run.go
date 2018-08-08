@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package cli
 
 import (
 	"context"
@@ -40,11 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var runCmd = setCmdDefaults(&cobra.Command{
-	Use:   `run`,
-	Short: `Run a workload's operations against a cluster`,
-})
-
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
 var maxRate = runFlags.Float64(
@@ -54,11 +49,6 @@ var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run 
 var doInit = runFlags.Bool("init", false, "Automatically run init")
 var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 
-var initCmd = setCmdDefaults(&cobra.Command{
-	Use:   `init`,
-	Short: `Set up tables for a workload`,
-})
-
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
 
@@ -67,49 +57,71 @@ var histograms = runFlags.String(
 	"File to write per-op incremental and cumulative histogram data.")
 
 func init() {
-	for _, meta := range workload.Registered() {
-		gen := meta.New()
-		var genFlags *pflag.FlagSet
-		if f, ok := gen.(workload.Flagser); ok {
-			genFlags = f.Flags().FlagSet
+	AddSubCmd(func() *cobra.Command {
+		var initCmd = SetCmdDefaults(&cobra.Command{
+			Use:   `init`,
+			Short: `set up tables for a workload`,
+		})
+		for _, meta := range workload.Registered() {
+			gen := meta.New()
+			var genFlags *pflag.FlagSet
+			if f, ok := gen.(workload.Flagser); ok {
+				genFlags = f.Flags().FlagSet
+			}
+
+			genInitCmd := SetCmdDefaults(&cobra.Command{
+				Use:   meta.Name,
+				Short: meta.Description,
+				Args:  cobra.ArbitraryArgs,
+			})
+			genInitCmd.Flags().AddFlagSet(initFlags)
+			genInitCmd.Flags().AddFlagSet(genFlags)
+			genInitCmd.Run = CmdHelper(gen, runInit)
+			initCmd.AddCommand(genInitCmd)
 		}
+		return initCmd
+	})
+	AddSubCmd(func() *cobra.Command {
+		var runCmd = SetCmdDefaults(&cobra.Command{
+			Use:   `run`,
+			Short: `run a workload's operations against a cluster`,
+		})
+		for _, meta := range workload.Registered() {
+			gen := meta.New()
+			var genFlags *pflag.FlagSet
+			if f, ok := gen.(workload.Flagser); ok {
+				genFlags = f.Flags().FlagSet
+			}
 
-		genInitCmd := setCmdDefaults(&cobra.Command{
-			Use:   meta.Name,
-			Short: meta.Description,
-			Args:  cobra.ArbitraryArgs,
-		})
-		genInitCmd.Flags().AddFlagSet(initFlags)
-		genInitCmd.Flags().AddFlagSet(genFlags)
-		genInitCmd.Run = cmdHelper(gen, runInit)
-		initCmd.AddCommand(genInitCmd)
-
-		genRunCmd := setCmdDefaults(&cobra.Command{
-			Use:   meta.Name,
-			Short: meta.Description,
-			Args:  cobra.ArbitraryArgs,
-		})
-		genRunCmd.Flags().AddFlagSet(runFlags)
-		genRunCmd.Flags().AddFlagSet(genFlags)
-		initFlags.VisitAll(func(initFlag *pflag.Flag) {
-			// Every init flag is a valid run flag that implies the --init option.
-			f := *initFlag
-			f.Usage += ` (implies --init)`
-			genRunCmd.Flags().AddFlag(&f)
-		})
-		genRunCmd.Run = cmdHelper(gen, runRun)
-		runCmd.AddCommand(genRunCmd)
-	}
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(runCmd)
+			genRunCmd := SetCmdDefaults(&cobra.Command{
+				Use:   meta.Name,
+				Short: meta.Description,
+				Args:  cobra.ArbitraryArgs,
+			})
+			genRunCmd.Flags().AddFlagSet(runFlags)
+			genRunCmd.Flags().AddFlagSet(genFlags)
+			initFlags.VisitAll(func(initFlag *pflag.Flag) {
+				// Every init flag is a valid run flag that implies the --init option.
+				f := *initFlag
+				f.Usage += ` (implies --init)`
+				genRunCmd.Flags().AddFlag(&f)
+			})
+			genRunCmd.Run = CmdHelper(gen, runRun)
+			runCmd.AddCommand(genRunCmd)
+		}
+		return runCmd
+	})
 }
 
-func cmdHelper(
+// CmdHelper handles common workload command logic, such as error handling and
+// ensuring the database name in the connection string (if provided) matches the
+// expected one.
+func CmdHelper(
 	gen workload.Generator, fn func(gen workload.Generator, urls []string, dbName string) error,
 ) func(*cobra.Command, []string) {
 	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
 
-	return handleErrs(func(cmd *cobra.Command, args []string) error {
+	return HandleErrs(func(cmd *cobra.Command, args []string) error {
 		if h, ok := gen.(workload.Hookser); ok {
 			if h.Hooks().Validate != nil {
 				if err := h.Hooks().Validate(); err != nil {
@@ -136,12 +148,12 @@ func cmdHelper(
 	})
 }
 
-// setCmdDefaults ensures that the provided Cobra command will properly report
+// SetCmdDefaults ensures that the provided Cobra command will properly report
 // an error if the user specifies an invalid subcommand. It is safe to call on
 // any Cobra command.
 //
 // This is a wontfix bug in Cobra: https://github.com/spf13/cobra/pull/329
-func setCmdDefaults(cmd *cobra.Command) *cobra.Command {
+func SetCmdDefaults(cmd *cobra.Command) *cobra.Command {
 	if cmd.Run == nil && cmd.RunE == nil {
 		cmd.Run = func(cmd *cobra.Command, args []string) {
 			_ = cmd.Usage()
@@ -321,7 +333,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}()
 
 	var numErr int
-	tick := time.Tick(time.Second)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	done := make(chan os.Signal, 3)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 
@@ -357,7 +370,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			}
 			return err
 
-		case <-tick:
+		case <-ticker.C:
 			startElapsed := timeutil.Since(start)
 			reg.Tick(func(t workload.HistogramTick) {
 				if i%20 == 0 {

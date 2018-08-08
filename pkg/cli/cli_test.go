@@ -1798,6 +1798,7 @@ Available Commands:
   version     output version information
   debug       debugging commands
   sqlfmt      format SQL statements
+  workload    generators for data and query loads
   help        Help about any command
 
 Flags:
