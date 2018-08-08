@@ -155,7 +155,6 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 func (b *Builder) buildScanFromTableRef(
 	tab opt.Table, ref *tree.TableRef, inScope *scope,
 ) (outScope *scope) {
-
 	if ref.Columns != nil && len(ref.Columns) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"an explicit list of column IDs must include at least one column")})
@@ -165,7 +164,6 @@ func (b *Builder) buildScanFromTableRef(
 	// (all columns). whereas an array of length 0 means 'zero columns'.
 	// Lists of zero columns are not supported and will throw an error."
 	// The error for lists of zero columns is thrown in the caller function
-	// for buildScanWithTableRef.
 	// for buildScanFromTableRef.
 	var ordinals []int
 	if ref.Columns != nil {
@@ -212,7 +210,7 @@ func (b *Builder) buildScan(
 		}
 
 		col := tab.Column(ord)
-		colID := b.factory.Metadata().TableColumn(tabID, ord)
+		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
 		name := tree.Name(col.ColName())
 		outScope.cols = append(outScope.cols, scopeColumn{

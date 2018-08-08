@@ -124,7 +124,7 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.Orderin
 	index := md.Table(s.Table).Index(s.Index)
 	for i := 0; i < index.KeyColumnCount(); i++ {
 		indexCol := index.Column(i)
-		colID := md.TableColumn(s.Table, indexCol.Ordinal)
+		colID := s.Table.ColumnID(indexCol.Ordinal)
 		if s.Reverse {
 			ordering.AppendCol(colID, !indexCol.Descending)
 		} else {
