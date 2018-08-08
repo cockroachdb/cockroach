@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package cliccl
 
 import (
 	"context"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 )
 
 var useast1bFixtures = workloadccl.FixtureConfig{
@@ -55,25 +56,26 @@ func config() workloadccl.FixtureConfig {
 	return config
 }
 
-var fixturesCmd = setCmdDefaults(&cobra.Command{
-	Use: `fixtures`,
+var fixturesCmd = workloadcli.SetCmdDefaults(&cobra.Command{
+	Use:   `fixtures`,
+	Short: `tools for quickly synthesizing and loading large datasets`,
 })
-var fixturesListCmd = setCmdDefaults(&cobra.Command{
+var fixturesListCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `list`,
-	Short: `List all fixtures stored on GCS`,
-	Run:   handleErrs(fixturesList),
+	Short: `list all fixtures stored on GCS`,
+	Run:   workloadcli.HandleErrs(fixturesList),
 })
-var fixturesMakeCmd = setCmdDefaults(&cobra.Command{
+var fixturesMakeCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `make`,
-	Short: `Regenerate and store a fixture on GCS`,
+	Short: `regenerate and store a fixture on GCS`,
 })
-var fixturesLoadCmd = setCmdDefaults(&cobra.Command{
+var fixturesLoadCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `load`,
-	Short: `Load a fixture into a running cluster. An enterprise license is required.`,
+	Short: `load a fixture into a running cluster. An enterprise license is required.`,
 })
-var fixturesURLCmd = setCmdDefaults(&cobra.Command{
+var fixturesURLCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `url`,
-	Short: `Generate the GCS URL for a fixture`,
+	Short: `generate the GCS URL for a fixture`,
 })
 
 var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
@@ -116,51 +118,53 @@ func getStorage(ctx context.Context) (*storage.Client, error) {
 }
 
 func init() {
-	for _, meta := range workload.Registered() {
-		gen := meta.New()
-		var genFlags *pflag.FlagSet
-		if f, ok := gen.(workload.Flagser); ok {
-			genFlags = f.Flags().FlagSet
-			// Hide runtime-only flags so they don't clutter up the help text,
-			// but don't remove them entirely so if someone switches from
-			// `./workload run` to `./workload fixtures` they don't have to
-			// remove them from the invocation.
-			for flagName, meta := range f.Flags().Meta {
-				if meta.RuntimeOnly || meta.CheckConsistencyOnly {
-					_ = genFlags.MarkHidden(flagName)
+	workloadcli.AddSubCmd(func() *cobra.Command {
+		for _, meta := range workload.Registered() {
+			gen := meta.New()
+			var genFlags *pflag.FlagSet
+			if f, ok := gen.(workload.Flagser); ok {
+				genFlags = f.Flags().FlagSet
+				// Hide runtime-only flags so they don't clutter up the help text,
+				// but don't remove them entirely so if someone switches from
+				// `./workload run` to `./workload fixtures` they don't have to
+				// remove them from the invocation.
+				for flagName, meta := range f.Flags().Meta {
+					if meta.RuntimeOnly || meta.CheckConsistencyOnly {
+						_ = genFlags.MarkHidden(flagName)
+					}
 				}
 			}
+
+			genMakeCmd := workloadcli.SetCmdDefaults(&cobra.Command{
+				Use:  meta.Name + ` [CRDB URI]`,
+				Args: cobra.RangeArgs(0, 1),
+			})
+			genMakeCmd.Flags().AddFlagSet(genFlags)
+			genMakeCmd.Run = workloadcli.CmdHelper(gen, fixturesMake)
+			fixturesMakeCmd.AddCommand(genMakeCmd)
+
+			genLoadCmd := workloadcli.SetCmdDefaults(&cobra.Command{
+				Use:  meta.Name + ` [CRDB URI]`,
+				Args: cobra.RangeArgs(0, 1),
+			})
+			genLoadCmd.Flags().AddFlagSet(genFlags)
+			genLoadCmd.Run = workloadcli.CmdHelper(gen, fixturesLoad)
+			fixturesLoadCmd.AddCommand(genLoadCmd)
+
+			genURLCmd := workloadcli.SetCmdDefaults(&cobra.Command{
+				Use:  meta.Name,
+				Args: cobra.NoArgs,
+			})
+			genURLCmd.Flags().AddFlagSet(genFlags)
+			genURLCmd.Run = fixturesURL(gen)
+			fixturesURLCmd.AddCommand(genURLCmd)
 		}
-
-		genMakeCmd := setCmdDefaults(&cobra.Command{
-			Use:  meta.Name + ` [CRDB URI]`,
-			Args: cobra.RangeArgs(0, 1),
-		})
-		genMakeCmd.Flags().AddFlagSet(genFlags)
-		genMakeCmd.Run = cmdHelper(gen, fixturesMake)
-		fixturesMakeCmd.AddCommand(genMakeCmd)
-
-		genLoadCmd := setCmdDefaults(&cobra.Command{
-			Use:  meta.Name + ` [CRDB URI]`,
-			Args: cobra.RangeArgs(0, 1),
-		})
-		genLoadCmd.Flags().AddFlagSet(genFlags)
-		genLoadCmd.Run = cmdHelper(gen, fixturesLoad)
-		fixturesLoadCmd.AddCommand(genLoadCmd)
-
-		genURLCmd := setCmdDefaults(&cobra.Command{
-			Use:  meta.Name,
-			Args: cobra.NoArgs,
-		})
-		genURLCmd.Flags().AddFlagSet(genFlags)
-		genURLCmd.Run = fixturesURL(gen)
-		fixturesURLCmd.AddCommand(genURLCmd)
-	}
-	fixturesCmd.AddCommand(fixturesListCmd)
-	fixturesCmd.AddCommand(fixturesMakeCmd)
-	fixturesCmd.AddCommand(fixturesLoadCmd)
-	fixturesCmd.AddCommand(fixturesURLCmd)
-	rootCmd.AddCommand(fixturesCmd)
+		fixturesCmd.AddCommand(fixturesListCmd)
+		fixturesCmd.AddCommand(fixturesMakeCmd)
+		fixturesCmd.AddCommand(fixturesLoadCmd)
+		fixturesCmd.AddCommand(fixturesURLCmd)
+		return fixturesCmd
+	})
 }
 
 func fixturesList(_ *cobra.Command, _ []string) error {
@@ -272,7 +276,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 }
 
 func fixturesURL(gen workload.Generator) func(*cobra.Command, []string) {
-	return handleErrs(func(*cobra.Command, []string) error {
+	return workloadcli.HandleErrs(func(*cobra.Command, []string) error {
 		if h, ok := gen.(workload.Hookser); ok {
 			if err := h.Hooks().Validate(); err != nil {
 				return err
