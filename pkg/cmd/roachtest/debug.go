@@ -33,7 +33,7 @@ func registerDebug(r *registry) {
 		// present.
 		debugExtractExist := func(node int, file string) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach debug zip "+file+" --insecure --port "+port); err != nil {
+			if err := c.RunE(ctx, c.Node(node), "./cockroach debug zip "+file+" --insecure --host=:"+port); err != nil {
 				return err
 			}
 
