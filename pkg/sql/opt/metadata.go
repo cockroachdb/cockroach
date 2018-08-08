@@ -15,15 +15,50 @@
 package opt
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // TableID uniquely identifies the usage of a table within the scope of a
-// query. The ids of its columns start at the table id and proceed sequentially
-// from there. See the comment for Metadata for more details.
-type TableID int32
+// query. TableID 0 is reserved to mean "unknown table".
+//
+// Internally, the TableID consists of an index into the Metadata.tables slice,
+// as well as the ColumnID of the first column in the table. Subsequent columns
+// have sequential ids, relative to their ordinal position in the table.
+//
+// See the comment for Metadata for more details on identifiers.
+type TableID uint64
+
+const (
+	tableIDMask = 0xffffffff
+)
+
+// ColumnID returns the metadata id of the column at the given ordinal position
+// in the table.
+//
+// NOTE: This method does not do bounds checking, so it's up to the caller to
+//       ensure that a column really does exist at this ordinal position.
+func (t TableID) ColumnID(ord int) ColumnID {
+	return t.firstColID() + ColumnID(ord)
+}
+
+// makeTableID constructs a new TableID from its component parts.
+func makeTableID(index int, firstColID ColumnID) TableID {
+	// Bias the table index by 1.
+	return TableID((uint64(index+1) << 32) | uint64(firstColID))
+}
+
+// firstColID returns the ColumnID of the first column in the table.
+func (t TableID) firstColID() ColumnID {
+	return ColumnID(t & tableIDMask)
+}
+
+// index returns the index of the table in Metadata.tables. It's biased by 1, so
+// that TableID 0 can be be reserved to mean "unknown table".
+func (t TableID) index() int {
+	return int((t>>32)&tableIDMask) - 1
+}
 
 // TableAnnID uniquely identifies an annotation on an instance of table
 // metadata. A table annotation allows arbitrary values to be cached with table
@@ -85,13 +120,10 @@ const maxTableAnnIDCount = 2
 //   -- [1] -> y
 type Metadata struct {
 	// cols stores information about each metadata column, indexed by ColumnID.
-	// Skip id 0 so that it is reserved for "unknown column".
 	cols []mdColumn
 
-	// tables maps from table id to the catalog metadata for the table. The
-	// table id is the id of the first column in the table. The remaining
-	// columns form a contiguous group following that id.
-	tables map[TableID]*mdTable
+	// tables stores information about each metadata table, indexed by TableID.
+	tables []mdTable
 }
 
 // mdTable stores information about one of the tables stored in the metadata.
@@ -107,7 +139,8 @@ type mdTable struct {
 // including its label and type.
 type mdColumn struct {
 	// tabID is the identifier of the base table to which this column belongs.
-	// If the column was synthesized (i.e. no base table), then the value is zero.
+	// If the column was synthesized (i.e. no base table), then the value is set
+	// to UnknownTableID.
 	tabID TableID
 
 	// label is the best-effort name of this column. Since the same column can
@@ -122,21 +155,19 @@ type mdColumn struct {
 
 // NewMetadata constructs a new instance of metadata for the optimizer.
 func NewMetadata() *Metadata {
-	// Skip mdColumn index 0 so that it is reserved for "unknown column".
-	return &Metadata{cols: make([]mdColumn, 1)}
+	return &Metadata{}
 }
 
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
 	md.cols = append(md.cols, mdColumn{label: label, typ: typ})
-	return ColumnID(len(md.cols) - 1)
+	return ColumnID(len(md.cols))
 }
 
 // NumColumns returns the count of columns tracked by this Metadata instance.
 func (md *Metadata) NumColumns() int {
-	// Index 0 is skipped.
-	return len(md.cols) - 1
+	return len(md.cols)
 }
 
 // IndexColumns returns the set of columns in the given index.
@@ -146,9 +177,9 @@ func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
 	index := tab.Index(indexOrdinal)
 
 	var indexCols ColSet
-	for i := 0; i < index.ColumnCount(); i++ {
+	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		ord := index.Column(i).Ordinal
-		indexCols.Add(int(md.TableColumn(tableID, ord)))
+		indexCols.Add(int(tableID.ColumnID(ord)))
 	}
 	return indexCols
 }
@@ -157,95 +188,91 @@ func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
 // column belongs. If the column has no base table because it was synthesized,
 // ColumnTableID returns zero.
 func (md *Metadata) ColumnTableID(id ColumnID) TableID {
-	if id == 0 {
-		panic("uninitialized column id 0")
-	}
-	return md.cols[id].tabID
+	// ColumnID is biased so that 0 is never used (reserved to indicate the
+	// unknown column).
+	return md.cols[id-1].tabID
 }
 
 // ColumnLabel returns the label of the given column. It is used for pretty-
 // printing and debugging.
 func (md *Metadata) ColumnLabel(id ColumnID) string {
-	if id == 0 {
-		panic("uninitialized column id 0")
-	}
-	return md.cols[id].label
+	// ColumnID is biased so that 0 is never used (reserved to indicate the
+	// unknown column).
+	return md.cols[id-1].label
 }
 
 // ColumnType returns the SQL scalar type of the given column.
 func (md *Metadata) ColumnType(id ColumnID) types.T {
-	if id == 0 {
-		panic("uninitialized column id 0")
-	}
-	return md.cols[id].typ
+	// ColumnID is biased so that 0 is never used (reserved to indicate the
+	// unknown column).
+	return md.cols[id-1].typ
 }
 
 // ColumnOrdinal returns the ordinal position of the column in its base table.
 // It panics if the column has no base table because it was synthesized.
 func (md *Metadata) ColumnOrdinal(id ColumnID) int {
-	if id == 0 {
-		panic("uninitialized column id 0")
-	}
 	tabID := md.cols[id].tabID
 	if tabID == 0 {
 		panic("column was synthesized and has no ordinal position")
 	}
-	return int(id) - int(tabID)
+	return int(id - tabID.firstColID())
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query).
 func (md *Metadata) AddTable(tab Table) TableID {
-	return md.AddTableWithName(tab, "")
+	return md.AddTableWithName(tab, string(tab.TabName().TableName))
 }
 
 // AddTableWithName indexes a new reference to a table within the query.
 // Separate references to the same table are assigned different table ids
-// (e.g. in a self-join query). Optionally, include a table name tabName to
-// override the name in tab when creating column labels.
+// (e.g. in a self-join query). The given table name is used when creating
+// column labels.
 func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
-	tabID := TableID(md.NumColumns() + 1)
-	if tabName == "" {
-		tabName = string(tab.TabName().TableName)
-	}
-
-	for i := 0; i < tab.ColumnCount(); i++ {
-		var label string
-		col := tab.Column(i)
-		if tabName == "" {
-			label = string(col.ColName())
-		} else {
-			label = fmt.Sprintf("%s.%s", tabName, col.ColName())
-		}
-		md.cols = append(md.cols, mdColumn{tabID: tabID, label: label, typ: col.DatumType()})
-	}
-
+	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
-		md.tables = make(map[TableID]*mdTable)
+		md.tables = make([]mdTable, 0, 1)
+	}
+	md.tables = append(md.tables, mdTable{tab: tab})
+
+	colCount := tab.ColumnCount()
+	if md.cols == nil {
+		md.cols = make([]mdColumn, 0, colCount)
 	}
 
-	md.tables[tabID] = &mdTable{tab: tab}
+	for i := 0; i < colCount; i++ {
+		col := tab.Column(i)
+
+		// Format column name.
+		colName := string(col.ColName())
+		var sb strings.Builder
+		sb.Grow(len(tabName) + len(colName) + 1)
+		sb.WriteString(tabName)
+		sb.WriteRune('.')
+		sb.WriteString(colName)
+
+		md.cols = append(md.cols, mdColumn{
+			tabID: tabID,
+			label: sb.String(),
+			typ:   col.DatumType(),
+		})
+	}
+
 	return tabID
 }
 
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) Table {
-	return md.tables[tabID].tab
-}
-
-// TableColumn returns the metadata id of the column at the given ordinal
-// position in the table.
-func (md *Metadata) TableColumn(tabID TableID, ord int) ColumnID {
-	return ColumnID(int(tabID) + ord)
+	return md.tables[tabID.index()].tab
 }
 
 // TableAnnotation returns the given annotation that is associated with the
 // given table. If the table has no such annotation, TableAnnotation returns
 // nil.
 func (md *Metadata) TableAnnotation(tabID TableID, annID TableAnnID) interface{} {
-	return md.tables[tabID].anns[annID]
+	return md.tables[tabID.index()].anns[annID]
 }
 
 // SetTableAnnotation associates the given annotation with the given table. The
@@ -255,7 +282,7 @@ func (md *Metadata) TableAnnotation(tabID TableID, annID TableAnnID) interface{}
 //
 // See the TableAnnID comment for more details and a usage example.
 func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann interface{}) {
-	md.tables[tabID].anns[tabAnnID] = ann
+	md.tables[tabID.index()].anns[tabAnnID] = ann
 }
 
 // NewTableAnnID allocates a unique annotation identifier that is used to
