@@ -65,7 +65,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		}
 
 		tab := b.resolveTable(tn)
-		return b.buildScan(tab, tn, nil, inScope)
+		return b.buildScan(tab, tn, nil /* ordinals */, inScope)
 
 	case *tree.ParenTableExpr:
 		return b.buildTable(source.Expr, inScope)
@@ -191,8 +191,7 @@ func (b *Builder) buildScan(
 ) (outScope *scope) {
 	md := b.factory.Metadata()
 
-	var tabName string
-	tabName = tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
 	tabID := md.AddTableWithName(tab, tabName)
 
 	colCount := len(ordinals)
