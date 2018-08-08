@@ -226,6 +226,11 @@ func (p *planner) getTableScanByRef(
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
 	}
 
+	if tref.Columns != nil && len(tref.Columns) == 0 {
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"an explicit list of column IDs must include at least one column")
+	}
+
 	// Ideally, we'd like to populate DatabaseName here, however that
 	// would require a reverse-lookup from DB ID to database name, and
 	// we do not provide an API to do this without a KV lookup. The
