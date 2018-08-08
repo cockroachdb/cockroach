@@ -31,6 +31,24 @@ scalar-group-by
       └── const-agg [type=string, outer=(1)]
            └── variable: abc.a [type=string, outer=(1)]
 
+# Verify the rule still fires even if DISTINCT is used.
+opt
+select max(DISTINCT a) FROM abc
+----
+scalar-group-by
+ ├── columns: max:5(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc,rev
+ │    ├── columns: a:1(string!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── const-agg [type=string, outer=(1)]
+           └── variable: abc.a [type=string, outer=(1)]
+
 opt
 select max(b) FROM abc
 ----

@@ -182,7 +182,7 @@ group      ·            ·                  (count, count, sum, sum, min, min) 
  │         aggregate 2  sum(v)             ·                                   ·
  │         aggregate 3  sum(DISTINCT v)    ·                                   ·
  │         aggregate 4  min(v)             ·                                   ·
- │         aggregate 5  min(DISTINCT v)    ·                                   ·
+ │         aggregate 5  min(v)             ·                                   ·
  │         scalar       ·                  ·                                   ·
  └── scan  ·            ·                  (v)                                 ·
 ·          table        kv@primary         ·                                   ·
