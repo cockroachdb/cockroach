@@ -325,6 +325,7 @@ project
  ├── key: (1)
  └── limit
       ├── columns: k:1(int!null) i:2(int)
+      ├── internal-ordering: +2
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -348,6 +349,7 @@ project
  ├── cardinality: [0 - 10]
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
@@ -373,6 +375,7 @@ project
  ├── fd: (1)-->(4)
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
@@ -430,6 +433,7 @@ project
  ├── key: (1)
  └── offset
       ├── columns: k:1(int!null) i:2(int)
+      ├── internal-ordering: +2
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── sort
@@ -451,6 +455,7 @@ project
  ├── columns: s:4(string)
  └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       ├── sort
@@ -474,6 +479,7 @@ project
  ├── fd: (1)-->(4)
  └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       ├── sort
@@ -503,6 +509,7 @@ project
  ├── columns: tree:5(string) columns:10(string)
  └── offset
       ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+      ├── internal-ordering: +5
       ├── sort
       │    ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       │    ├── ordering: +5
@@ -527,11 +534,13 @@ project
  ├── key: (1)
  └── limit
       ├── columns: k:1(int!null) i:2(int)
+      ├── internal-ordering: +2
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── internal-ordering: +2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
@@ -556,11 +565,13 @@ project
  ├── cardinality: [0 - 10]
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── internal-ordering: +2,+1
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1
@@ -587,11 +598,13 @@ project
  ├── fd: (1)-->(4)
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── internal-ordering: +2,+1
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1

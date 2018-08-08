@@ -57,8 +57,11 @@ import (
 //
 //   a=1
 //
-// In the last example, the optional columns can be interleaved anywhere in the
-// sequence of ordering columns, as they have no effect on the ordering.
+// Another case for optional columns is when we are grouping along a set of
+// columns and only care about the intra-group ordering.
+//
+// The optional columns can be interleaved anywhere in the sequence of ordering
+// columns, as they have no effect on the ordering.
 type OrderingChoice struct {
 	// Optional is the set of columns that can appear at any position in the
 	// ordering. Columns in Optional must not appear in the Columns sequence.
@@ -195,6 +198,22 @@ func (oc *OrderingChoice) FromOrdering(ord opt.Ordering) {
 	}
 }
 
+// FromOrderingWithOptCols sets this OrderingChoice to the given opt.Ordering
+// and with the given optional columns. Any optional columns in the given
+// ordering are ignored.
+func (oc *OrderingChoice) FromOrderingWithOptCols(ord opt.Ordering, optCols opt.ColSet) {
+	oc.Optional = optCols.Copy()
+	oc.Columns = make([]OrderingColumnChoice, 0, len(ord))
+	for i := range ord {
+		if !oc.Optional.Contains(int(ord[i].ID())) {
+			oc.Columns = append(oc.Columns, OrderingColumnChoice{
+				Group:      util.MakeFastIntSet(int(ord[i].ID())),
+				Descending: ord[i].Descending(),
+			})
+		}
+	}
+}
+
 // ToOrdering returns an opt.Ordering instance composed of the shortest possible
 // orderings that this instance allows. If there are several, then one is chosen
 // arbitrarily.
@@ -255,30 +274,128 @@ func (oc *OrderingChoice) Implies(other *OrderingChoice) bool {
 		return false
 	}
 
-	left, right := 0, 0
-	for {
-		if right >= len(other.Columns) {
-			return true
-		}
+	for left, right := 0, 0; right < len(other.Columns); {
 		if left >= len(oc.Columns) {
 			return false
 		}
 
-		leftCol := &oc.Columns[left]
-		rightCol := other.Columns[right]
+		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
 
-		if leftCol.Descending != rightCol.Descending || !leftCol.Group.SubsetOf(rightCol.Group) {
-			// Failed to match the right column, so last hope is that the left
-			// column is optional in the right set.
-			if leftCol.Group.Intersects(other.Optional) {
-				left++
-				continue
-			}
+		switch {
+		case leftCol.Descending == rightCol.Descending && leftCol.Group.SubsetOf(rightCol.Group):
+			// The columns match.
+			left, right = left+1, right+1
+
+		case leftCol.Group.Intersects(other.Optional):
+			// Left column is optional in the right set.
+			left++
+
+		default:
 			return false
 		}
+	}
+	return true
+}
 
-		left++
-		right++
+// Intersects returns true if there are orderings that satisfy both
+// OrderingChoices. See Intersection for more information.
+func (oc *OrderingChoice) Intersects(other *OrderingChoice) bool {
+	for left, right := 0, 0; left < len(oc.Columns) && right < len(other.Columns); {
+		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
+		switch {
+		case leftCol.Descending == rightCol.Descending && leftCol.Group.Intersects(rightCol.Group):
+			// The columns match.
+			left, right = left+1, right+1
+
+		case leftCol.Group.Intersects(other.Optional):
+			// Left column is optional in the right set.
+			left++
+
+		case rightCol.Group.Intersects(oc.Optional):
+			// Right column is optional in the left set.
+			right++
+
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// Intersection returns an OrderingChoice that Implies both ordering choices.
+// Can only be called if Intersects is true. Some examples:
+//
+//  +1           ∩ <empty> = +1
+//  +1           ∩ +1,+2   = +1,+2
+//  +1,+2 opt(3) ∩ +1,+3   = +1,+3,+2
+//
+// In general, OrderingChoice is not expressive enough to represent the
+// intersection. In such cases, an OrderingChoice representing a subset of the
+// intersection is returned. For example,
+//  +1 opt(2) ∩ +2 opt(1)
+// can be either +1,+2 or +2,+1; only one of these is returned. Note that
+// the function may not be commutative in this case. In practice, such cases are
+// unlikely.
+//
+// It is guaranteed that if one OrderingChoice Implies the other, it will also
+// be the Intersection.
+func (oc *OrderingChoice) Intersection(other *OrderingChoice) OrderingChoice {
+	// We have to handle Any cases separately because an Any ordering choice has
+	// no optional columns (even though semantically it should have all possible
+	// columns as optional).
+	if oc.Any() {
+		return other.Copy()
+	}
+	if other.Any() {
+		return oc.Copy()
+	}
+
+	result := make([]OrderingColumnChoice, 0, len(oc.Columns)+len(other.Columns))
+
+	left, right := 0, 0
+	for left < len(oc.Columns) && right < len(other.Columns) {
+		leftCol, rightCol := &oc.Columns[left], &other.Columns[right]
+
+		switch {
+		case leftCol.Descending == rightCol.Descending && leftCol.Group.Intersects(rightCol.Group):
+			// The columns match.
+			result = append(result, OrderingColumnChoice{
+				Group:      leftCol.Group.Intersection(rightCol.Group),
+				Descending: leftCol.Descending,
+			})
+			left, right = left+1, right+1
+
+		case leftCol.Group.Intersects(other.Optional):
+			// Left column is optional in the right set.
+			result = append(result, OrderingColumnChoice{
+				Group:      leftCol.Group.Intersection(other.Optional),
+				Descending: leftCol.Descending,
+			})
+			left++
+
+		case rightCol.Group.Intersects(oc.Optional):
+			// Right column is optional in the left set.
+			result = append(result, OrderingColumnChoice{
+				Group:      rightCol.Group.Intersection(oc.Optional),
+				Descending: rightCol.Descending,
+			})
+			right++
+
+		default:
+			panic("non-intersecting sets")
+		}
+	}
+	// An ordering matched a prefix of the other. Append the tail of the other
+	// ordering.
+	for ; left < len(oc.Columns); left++ {
+		result = append(result, oc.Columns[left])
+	}
+	for ; right < len(other.Columns); right++ {
+		result = append(result, other.Columns[right])
+	}
+	return OrderingChoice{
+		Optional: oc.Optional.Intersection(other.Optional),
+		Columns:  result,
 	}
 }
 

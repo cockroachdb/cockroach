@@ -826,6 +826,7 @@ project
            ├── subquery [type=int[]]
            │    └── scalar-group-by
            │         ├── columns: array_agg:3(int[])
+           │         ├── internal-ordering: +2
            │         ├── scan x
            │         │    ├── columns: a:2(int!null)
            │         │    └── ordering: +2
@@ -896,6 +897,7 @@ project
            ├── subquery [type=int[]]
            │    └── scalar-group-by
            │         ├── columns: array_agg:2(int[])
+           │         ├── internal-ordering: -1
            │         ├── sort
            │         │    ├── columns: column1:1(int)
            │         │    ├── ordering: -1

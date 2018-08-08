@@ -851,7 +851,7 @@ ORDER BY no_w_id, no_d_id
 sort
  ├── columns: max:4(int)
  ├── stats: [rows=1000, distinct(2,3)=1000]
- ├── cost: 1508.63137
+ ├── cost: 1408.97353
  ├── key: (2,3)
  ├── fd: (2,3)-->(4)
  ├── ordering: +3,+2
@@ -884,7 +884,7 @@ ORDER BY o_w_id, o_d_id
 sort
  ├── columns: max:9(int)
  ├── stats: [rows=1000, distinct(2,3)=1000]
- ├── cost: 1518.63137
+ ├── cost: 1418.97353
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -975,7 +975,7 @@ ORDER BY o_w_id, o_d_id
 sort
  ├── columns: sum:9(decimal)
  ├── stats: [rows=1000, distinct(2,3)=1000]
- ├── cost: 1558.63137
+ ├── cost: 1458.97353
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -1007,7 +1007,7 @@ ORDER BY ol_w_id, ol_d_id
 sort
  ├── columns: count:11(int)
  ├── stats: [rows=1000, distinct(2,3)=1000]
- ├── cost: 1518.63137
+ ├── cost: 1418.97353
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2

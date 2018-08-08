@@ -251,6 +251,7 @@ SELECT array_agg(z) FROM (SELECT * FROM a ORDER BY y)
 ----
 scalar-group-by
  ├── columns: array_agg:5(decimal[])
+ ├── internal-ordering: +2
  ├── sort
  │    ├── columns: y:2(float!null) z:3(decimal)
  │    ├── ordering: +2
@@ -265,6 +266,7 @@ SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY x, y DESC)
 ----
 scalar-group-by
  ├── columns: array_agg:5(int[])
+ ├── internal-ordering: +1,-2
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null)
  │    └── ordering: +1,-2
@@ -655,6 +657,7 @@ SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10
 ----
 limit
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1,+2
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -671,6 +674,7 @@ SELECT * FROM abc ORDER BY a, b OFFSET 10
 ----
 offset
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1,+2
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -699,6 +703,7 @@ sort
  ├── ordering: +2
  └── limit
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── internal-ordering: +1,+2
       ├── select
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    ├── ordering: +1,+2
@@ -717,6 +722,7 @@ sort
  ├── ordering: +2
  └── offset
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── internal-ordering: +1,+2
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1,+2
@@ -739,6 +745,7 @@ SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a
 ----
 limit
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -755,6 +762,7 @@ SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a
 ----
 offset
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -777,6 +785,7 @@ SELECT * FROM (SELECT * FROM abc WHERE a+b>c ORDER BY a, b LIMIT 10) ORDER BY a,
 ----
 limit
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1,+2,+3
  ├── select
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -793,6 +802,7 @@ SELECT * FROM (SELECT * FROM abc ORDER BY a, b OFFSET 10) ORDER BY a, b, c
 ----
 offset
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1,+2
  ├── ordering: +1,+2,+3
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -818,7 +828,7 @@ sort
       └── scan abc
            └── columns: b:2(int!null) c:3(int!null)
 
-# In this case the ordeirng is passed through.
+# In this case the ordering is passed through.
 opt
 SELECT DISTINCT a, b, c FROM abc ORDER BY a, b
 ----
@@ -831,36 +841,53 @@ scan abc
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b
 ----
-distinct-on
+sort
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
- ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2
- ├── sort
- │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    ├── ordering: +2
- │    └── scan abc
- │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- └── aggregations
-      └── first-agg [type=int]
-           └── variable: abc.a [type=int]
+ └── distinct-on
+      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── aggregations
+           └── first-agg [type=int]
+                └── variable: abc.a [type=int]
 
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
 ----
-distinct-on
+sort
  ├── columns: a:1(int) b:2(int!null) c:3(int!null)
- ├── grouping columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2,+3
+ └── distinct-on
+      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── internal-ordering: +1 opt(2,3)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1 opt(2,3)
+      └── aggregations
+           └── first-agg [type=int]
+                └── variable: abc.a [type=int]
+
+opt
+SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+distinct-on
+ ├── columns: a:1(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null)
+ ├── internal-ordering: -3,+2 opt(1)
+ ├── ordering: +1
  ├── sort
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    ├── ordering: +2,+3,+1
+ │    ├── ordering: +1,-3,+2
  │    └── scan abc
  │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.a [type=int]
+           └── variable: abc.c [type=int]
 
-# Pass through a stronger ordering from above.
+# Pass through the ordering from above.
 opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc) ORDER BY a
 ----
@@ -875,6 +902,7 @@ distinct-on
       └── first-agg [type=int]
            └── variable: abc.c [type=int]
 
+# Internal orderings that refer just to ON columns can be ignored.
 opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a) ORDER BY a, b
 ----
@@ -889,7 +917,6 @@ distinct-on
       └── first-agg [type=int]
            └── variable: abc.c [type=int]
 
-# Pass down the internal ordering if it is stronger.
 opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER BY a
 ----
@@ -899,26 +926,66 @@ distinct-on
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    └── ordering: +1,+2
+ │    └── ordering: +1
  └── aggregations
       └── first-agg [type=int]
            └── variable: abc.c [type=int]
 
-# Can't pass down incompatible ordering.
+# The c,b part of the inner ordering can be ignored.
 opt
-SELECT * FROM (SELECT DISTINCT ON(b, c) a, b, c FROM abc ORDER BY b, c) ORDER BY c
+SELECT * FROM (SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY c, b, a) ORDER BY a
+----
+distinct-on
+ ├── columns: a:1(int) b:2(int!null) c:3(int!null)
+ ├── grouping columns: b:2(int!null) c:3(int!null)
+ ├── internal-ordering: +1 opt(2,3)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: abc.a [type=int]
+
+# There is no ordering that satisfies both the intra-group ordering of c+ and the
+# inter-group ordering of a+; we have to sort twice.
+opt
+SELECT * FROM (SELECT DISTINCT ON (b) a, b, c FROM abc ORDER BY b, c) ORDER BY a
 ----
 sort
- ├── columns: a:1(int) b:2(int!null) c:3(int!null)
- ├── ordering: +3
+ ├── columns: a:1(int) b:2(int!null) c:3(int)
+ ├── ordering: +1
  └── distinct-on
-      ├── columns: a:1(int) b:2(int!null) c:3(int!null)
-      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── columns: a:1(int) b:2(int!null) c:3(int)
+      ├── grouping columns: b:2(int!null)
+      ├── internal-ordering: +3 opt(2)
       ├── sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    ├── ordering: +2,+3
+      │    ├── ordering: +3 opt(2)
       │    └── scan abc
       │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── aggregations
+           ├── first-agg [type=int]
+           │    └── variable: abc.a [type=int]
            └── first-agg [type=int]
-                └── variable: abc.a [type=int]
+                └── variable: abc.c [type=int]
+
+# Same as above, except we can use the index ordering for the distinct input.
+opt
+SELECT * FROM (SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b) ORDER BY c
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── ordering: +3
+ └── distinct-on
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
+      ├── grouping columns: a:1(int!null)
+      ├── internal-ordering: +2 opt(1)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +2 opt(1)
+      └── aggregations
+           ├── first-agg [type=int]
+           │    └── variable: abc.b [type=int]
+           └── first-agg [type=int]
+                └── variable: abc.c [type=int]
