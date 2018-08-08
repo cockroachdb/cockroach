@@ -628,11 +628,11 @@ func (ir *intentResolver) runAsyncTask(
 	return nil
 }
 
-// processIntentsAsync asynchronously processes intents which were
+// cleanupIntentsAsync asynchronously processes intents which were
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs during inconsistent
 // reads.
-func (ir *intentResolver) processIntentsAsync(
+func (ir *intentResolver) cleanupIntentsAsync(
 	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
 ) error {
 	now := r.store.Clock().Now()
