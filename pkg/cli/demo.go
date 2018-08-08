@@ -16,14 +16,20 @@ package cli
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+
+	// Force at least the example workloads to exist
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 )
 
 var demoCmd = &cobra.Command{
@@ -31,14 +37,40 @@ var demoCmd = &cobra.Command{
 	Short: "open a demo sql shell",
 	Long: `
 Start an in-memory, standalone, single-node CockroachDB instance, and open an
-interactive SQL prompt to it.
+interactive SQL prompt to it. Various datasets are available to be preloaded as
+subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,
-	RunE:    MaybeDecorateGRPCError(runDemo),
+	RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
+		return runDemo(cmd, nil /* gen */)
+	}),
 }
 
-func setupTransientServer() (connURL string, adminURL string, cleanup func(), err error) {
+func init() {
+	for _, meta := range workload.Registered() {
+		gen := meta.New()
+		var genFlags *pflag.FlagSet
+		if f, ok := gen.(workload.Flagser); ok {
+			genFlags = f.Flags().FlagSet
+		}
+
+		genDemoCmd := &cobra.Command{
+			Use:   meta.Name,
+			Short: meta.Description,
+			Args:  cobra.ArbitraryArgs,
+			RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
+				return runDemo(cmd, gen)
+			}),
+		}
+		genDemoCmd.Flags().AddFlagSet(genFlags)
+		demoCmd.AddCommand(genDemoCmd)
+	}
+}
+
+func setupTransientServer(
+	gen workload.Generator,
+) (connURL string, adminURL string, cleanup func(), err error) {
 	cleanup = func() {}
 	ctx := context.Background()
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
@@ -67,11 +99,30 @@ func setupTransientServer() (connURL string, adminURL string, cleanup func(), er
 		RawQuery: options.Encode(),
 	}
 
+	if gen != nil {
+		meta := gen.Meta()
+		url.Path = meta.Name
+		db, err := gosql.Open("postgres", url.String())
+		if err != nil {
+			return ``, ``, nil, err
+		}
+		defer db.Close()
+		if _, err := db.Exec(`CREATE DATABASE ` + meta.Name); err != nil {
+			return ``, ``, nil, err
+		}
+
+		ctx := context.TODO()
+		const batchSize, concurrency = 0, 0
+		if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+			return ``, ``, nil, err
+		}
+	}
+
 	return url.String(), server.AdminURL(), cleanup, nil
 }
 
-func runDemo(cmd *cobra.Command, _ []string) error {
-	connURL, adminURL, cleanup, err := setupTransientServer()
+func runDemo(cmd *cobra.Command, gen workload.Generator) error {
+	connURL, adminURL, cleanup, err := setupTransientServer(gen)
 	defer cleanup()
 	if err != nil {
 		return checkAndMaybeShout(err)
