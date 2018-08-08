@@ -46,6 +46,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
+	// register some workloads for TestWorkload
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 )
 
 type cliTest struct {
@@ -1798,6 +1801,7 @@ Available Commands:
   version     output version information
   debug       debugging commands
   sqlfmt      format SQL statements
+  workload    generators for data and query loads
   help        Help about any command
 
 Flags:
@@ -2342,6 +2346,22 @@ writing ` + os.DevNull + `
 
 	if out != expected {
 		t.Errorf("expected:\n%s\ngot:\n%s", expected, out)
+	}
+}
+
+func TestWorkload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{noServer: true})
+	defer c.cleanup()
+
+	out, err := c.RunWithCapture("workload run --help")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(out, `startrek`) {
+		t.Fatalf(`startrek workload failed to register got: %s`, out)
 	}
 }
 
