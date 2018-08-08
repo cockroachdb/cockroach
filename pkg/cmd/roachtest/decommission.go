@@ -155,13 +155,13 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
 			defer time.Sleep(time.Second) // work around quit returning too early
-			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port)
+			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port)
 		}
 
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
 			t.Status("decommissioning node %s", id)
-			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --port "+port+" "+id)
+			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --host=:"+port+" "+id)
 		}
 
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {

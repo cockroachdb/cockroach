@@ -164,44 +164,60 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start"}, ":" + base.DefaultPort, ":" + base.DefaultPort},
 		{[]string{"start", "--listen-addr", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort},
 		{[]string{"start", "--listen-addr", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"start", "--listen-port", "12345"}, ":12345", ":12345"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--listen-port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345"},
+		{[]string{"start", "--listen-addr", ":12345"}, ":12345", ":12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345"}, "127.0.0.1:12345", "127.0.0.1:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--port", "55555"}, "127.0.0.1:55555", "127.0.0.1:55555"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111:12345"}, ":" + base.DefaultPort, "192.168.0.111:12345"},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--listen-port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345"},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--listen-port", "54321", "--advertise-port", "12345"}, "127.0.0.1:54321", "192.168.0.111:12345"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-port", "12345"}, ":12345", "192.168.0.111:12345"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345"},
-		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--advertise-addr", "192.168.0.111"}, "127.0.0.1:12345", "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1:54321", "--advertise-addr", "192.168.0.111:12345"}, "127.0.0.1:54321", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-addr", ":12345"}, ":12345", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--listen-addr", ":54321"}, ":54321", "192.168.0.111:12345"},
 		// confirm hostnames will work
 		{[]string{"start", "--listen-addr", "my.host.name"}, "my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort},
 		{[]string{"start", "--listen-addr", "myhostname"}, "myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort},
 		// confirm IPv6 works too
-		{[]string{"start", "--listen-addr", "::1"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort},
-		{[]string{"start", "--listen-addr", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
-		// Backward-compatibility flags
+		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort},
+		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
+
+		// Backward-compatibility flag combinations.
 		{[]string{"start", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort},
 		{[]string{"start", "--port", "12345"}, ":12345", ":12345"},
 		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "::1"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort},
+		{[]string{"start", "--listen-addr", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, "127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345"},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, "127.0.0.1:54321", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345"},
+		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345"},
 	}
 
 	for i, td := range testData {
-		initCLIDefaults()
-		if err := f.Parse(td.args); err != nil {
-			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
-		}
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
 
-		extraServerFlagInit()
-		if td.expectedAddr != serverCfg.Addr {
-			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
-				i, td.expectedAddr, serverCfg.Addr, td.args)
-		}
-		if td.expectedAdvertiseAddr != serverCfg.AdvertiseAddr {
-			t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
-				i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
-		}
+			extraServerFlagInit()
+			if td.expectedAddr != serverCfg.Addr {
+				t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
+					i, td.expectedAddr, serverCfg.Addr, td.args)
+			}
+			if td.expectedAdvertiseAddr != serverCfg.AdvertiseAddr {
+				t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
+					i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
+			}
+		})
 	}
 }
 
@@ -225,14 +241,22 @@ func TestClientConnSettings(t *testing.T) {
 		{[]string{"quit"}, ":" + base.DefaultPort},
 		{[]string{"quit", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
 		{[]string{"quit", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"quit", "--port", "12345"}, ":12345"},
-		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
+		{[]string{"quit", "--host", ":12345"}, ":12345"},
+		{[]string{"quit", "--host", "127.0.0.1:12345"}, "127.0.0.1:12345"},
 		// confirm hostnames will work
 		{[]string{"quit", "--host", "my.host.name"}, "my.host.name:" + base.DefaultPort},
 		{[]string{"quit", "--host", "myhostname"}, "myhostname:" + base.DefaultPort},
 		// confirm IPv6 works too
+		{[]string{"quit", "--host", "[::1]"}, "[::1]:" + base.DefaultPort},
+		{[]string{"quit", "--host", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
+
+		// Deprecated syntax.
+		{[]string{"quit", "--port", "12345"}, ":12345"},
+		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
 		{[]string{"quit", "--host", "::1"}, "[::1]:" + base.DefaultPort},
-		{[]string{"quit", "--host", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
+		{[]string{"quit", "--host", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
 	}
 
 	for i, td := range testData {

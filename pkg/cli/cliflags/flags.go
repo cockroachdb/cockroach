@@ -206,16 +206,22 @@ can also be specified (e.g. .25).`,
 	}
 
 	ClientHost = FlagInfo{
-		Name:        "host",
-		EnvVar:      "COCKROACH_HOST",
-		Description: `Database server host to connect to.`,
+		Name:   "host",
+		EnvVar: "COCKROACH_HOST",
+		Description: `
+CockroachDB node to connect to.
+This can be specified either as an address/hostname, or
+together with a port number as in -s myhost:26257.
+If the port number is left unspecified, it defaults to 26257.
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	}
 
 	ClientPort = FlagInfo{
 		Name:        "port",
 		Shorthand:   "p",
 		EnvVar:      "COCKROACH_PORT",
-		Description: `Database server port to connect to.`,
+		Description: `Deprecated. Use --host=<host>:<port>.`,
 	}
 
 	Database = FlagInfo{
@@ -267,8 +273,7 @@ sql_safe_updates = FALSE.`,
 	}
 
 	Set = FlagInfo{
-		Name:      "set",
-		Shorthand: "s",
+		Name: "set",
 		Description: `
 Set a client-side configuration parameter before running the SQL
 shell. This flag may be specified multiple times.`,
@@ -327,9 +332,12 @@ or both forms can be used together, for example:
 	ListenAddr = FlagInfo{
 		Name: "listen-addr",
 		Description: `
-The address or hostname to listen on. An IPv6 address can also be
-specified with the notation [...], for example [::1] or
-[fe80::f6f2:::].
+The address/hostname and port to listen on, for example
+--listen-addr=myhost:26257 or --listen-addr=:26257 (listen on all
+interfaces). If the port part is left unspecified, it defaults
+to 26257.
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:26257 or [fe80::f6f2:::]:26257.
 If --advertise-addr is left unspecified, the node will also announce
 this address for use by other nodes. It is strongly recommended to use
 --advertise-addr in cloud and container deployments or any setup where
@@ -341,16 +349,6 @@ NAT is present between cluster nodes.`,
 		Description: `Alias for --listen-addr. Deprecated.`,
 	}
 
-	ListenPort = FlagInfo{
-		Name:      "listen-port",
-		Shorthand: "p",
-		Description: `
-The port to bind to.
-If --advertise-port is left unspecified, the node will also announce
-this port for use by other nodes. If a router implements NAT or N:M
-port forwarding, be sure to also use --advertise-port.`,
-	}
-
 	ServerPort = FlagInfo{
 		Name:        "port",
 		Description: `Alias for --listen-port. Deprecated.`,
@@ -359,10 +357,14 @@ port forwarding, be sure to also use --advertise-port.`,
 	AdvertiseAddr = FlagInfo{
 		Name: "advertise-addr",
 		Description: `
-The address or hostname to advertise to other CockroachDB nodes for intra-cluster
-communication; it must resolve and be routable from other nodes in the cluster.
+The address/hostname and port to advertise to other CockroachDB nodes
+for intra-cluster communication. It must resolve and be routable from
+other nodes in the cluster.
+If left unspecified, it defaults to the setting of --listen-addr.
 An IPv6 address can also be specified with the notation [...], for
-example [::1] or [fe80::f6f2:::].`,
+example [::1]:26257 or [fe80::f6f2:::]:26257.
+The port number should be the same as in --listen-addr unless port
+forwarding is set up on an intermediate firewall/router.`,
 	}
 
 	AdvertiseHost = FlagInfo{
@@ -371,16 +373,18 @@ example [::1] or [fe80::f6f2:::].`,
 	}
 
 	AdvertisePort = FlagInfo{
-		Name: "advertise-port",
-		Description: `
-The port to advertise to other CockroachDB nodes for intra-cluster
-communication. This should not be set differently from --listen-port
-unless port forwarding is set up on an intermediate firewall/router.`,
+		Name:        "advertise-port",
+		Description: `Deprecated. Use --advertise-addr=<host>:<port>.`,
 	}
 
 	ListenHTTPAddr = FlagInfo{
-		Name:        "http-addr",
-		Description: `The hostname or IP address to bind to for HTTP requests.`,
+		Name: "http-addr",
+		Description: `
+The hostname or IP address to bind to for HTTP requests.
+If left unspecified, the address part defaults to the setting of
+--listen-addr. The port number defaults to 8080.
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:8080 or [fe80::f6f2:::]:8080.`,
 	}
 
 	ListenHTTPAddrAlias = FlagInfo{
@@ -390,7 +394,7 @@ unless port forwarding is set up on an intermediate firewall/router.`,
 
 	ListenHTTPPort = FlagInfo{
 		Name:        "http-port",
-		Description: `The port to bind to for HTTP requests.`,
+		Description: `Deprecated. Use --http-addr=<host>:<port>.`,
 	}
 
 	ListeningURLFile = FlagInfo{

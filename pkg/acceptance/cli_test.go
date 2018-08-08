@@ -117,9 +117,9 @@ function finish() {
 trap finish EXIT
 
 HOST=$(hostname -f)
-$bin start --logtostderr=INFO --background --insecure --listen-addr="${HOST}" --listen-port=12345 &> out
-$bin sql --insecure --host="${HOST}" --port=12345 -e "show databases"
-$bin quit --insecure --host="${HOST}" --port=12345
+$bin start --logtostderr=INFO --background --insecure --listen-addr="${HOST}":12345 &> out
+$bin sql --insecure --host="${HOST}":12345 -e "show databases"
+$bin quit --insecure --host="${HOST}":12345
 `
 	containerConfig.Cmd = []string{"/bin/bash", "-c", script}
 	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
