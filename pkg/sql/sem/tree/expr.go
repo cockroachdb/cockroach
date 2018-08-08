@@ -837,6 +837,16 @@ type ArrayFlatten struct {
 func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
+	if ctx.HasFlags(FmtParsable) {
+		if t, ok := node.Subquery.(*DTuple); ok {
+			if len(t.D) == 0 {
+				if colTyp, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+					ctx.WriteString(":::")
+					colTyp.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+				}
+			}
+		}
+	}
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
