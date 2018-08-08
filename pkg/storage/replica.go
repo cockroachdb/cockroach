@@ -2904,7 +2904,7 @@ func (r *Replica) executeReadOnlyBatch(
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
+		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
 			log.Warning(ctx, err)
 		}
 	}
@@ -3118,7 +3118,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}
@@ -6420,7 +6420,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		// This is called from handleLocalEvalResult (with raftMu locked),
 		// so disallow synchronous processing (which blocks that mutex for
 		// too long and is a potential deadlock).
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
+		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}
 		return config.SystemConfig{}, errSystemConfigIntent
