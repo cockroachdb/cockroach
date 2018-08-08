@@ -376,7 +376,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 	for i, a := range s.groupby.aggs {
 		// Find an existing aggregate that has the same function and the same
 		// arguments.
-		if a.def == agg.def && len(a.args) == len(agg.args) {
+		if a.def == agg.def && a.distinct == agg.distinct && len(a.args) == len(agg.args) {
 			match := true
 			for j, arg := range a.args {
 				if arg != agg.args[j] {
