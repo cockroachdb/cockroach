@@ -125,13 +125,9 @@ func BeginTransaction(
 		return result.Result{}, roachpb.NewTransactionAbortedError()
 	}
 
-	// Transaction heartbeats don't begin until after the transaction record
-	// has been laid down and the response has returned to the transaction
-	// coordinator. This poses a problem for BeginTxn requests that get
-	// delayed, because it's possible that the transaction records they
-	// write will look inactive immediately after being written. To avoid
-	// this situation resulting in transactions being aborted unnecessarily,
-	// we bump the record's heartbeat timestamp right before laying it down.
+	// Initialize the LastHeartbeat field to the present time. This allows the
+	// transaction record to survive for a while regardless of when the first
+	// heartbeat arrives.
 	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
 	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
