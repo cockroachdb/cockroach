@@ -90,6 +90,9 @@ SELECT ARRAY(SELECT 3 WHERE false)
 ----
 {}
 
+statement ok
+SELECT ARRAY(SELECT 3 WHERE false) FROM k
+
 query T
 SELECT ARRAY(SELECT 3)
 ----
