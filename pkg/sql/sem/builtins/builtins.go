@@ -3009,6 +3009,9 @@ var ceilImpl = makeBuiltin(defProps(),
 	decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 		dd := &tree.DDecimal{}
 		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
+		if dd.IsZero() {
+			dd.Negative = false
+		}
 		return dd, err
 	}, "Calculates the smallest integer greater than `val`."),
 )
