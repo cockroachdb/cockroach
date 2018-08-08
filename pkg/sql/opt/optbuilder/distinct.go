@@ -98,8 +98,11 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 
 	def := memo.GroupByDef{
 		GroupingCols: distinctOnCols.Copy(),
-		Ordering:     inScope.makeOrderingChoice(),
 	}
+	// The ordering is used for intra-group ordering. Ordering with respect to the
+	// DISTINCT ON columns doesn't affect intra-group ordering, so we add these
+	// columns as optional.
+	def.Ordering.FromOrderingWithOptCols(inScope.ordering, distinctOnCols)
 
 	// Set up a new scope for the output of DISTINCT ON. This scope differs from
 	// the input scope in that it doesn't have "extra" ORDER BY columns, e.g.

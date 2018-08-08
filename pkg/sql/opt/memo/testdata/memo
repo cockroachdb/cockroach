@@ -25,6 +25,7 @@ LIMIT 10
 ----
 limit
  ├── columns: y:2(int!null) x:3(string!null) c:5(int)
+ ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── fd: (2)-->(5)
@@ -89,6 +90,7 @@ project
  ├── ordering: +2
  ├── limit
  │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
+ │    ├── internal-ordering: +2
  │    ├── cardinality: [0 - 10]
  │    ├── stats: [rows=10]
  │    ├── key: (1,3)

@@ -123,14 +123,14 @@ SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 group-by
  ├── columns: array_agg:5(int[]) b:2(int) c:3(int)
  ├── grouping columns: b:2(int) c:3(int)
+ ├── internal-ordering: +1 opt(2,3)
  ├── key: (2,3)
  ├── fd: (3)~~>(2), (2,3)-->(5)
  ├── prune: (5)
- ├── interesting orderings: (+2)
  ├── sort
  │    ├── columns: a:1(int) b:2(int) c:3(int)
  │    ├── fd: (3)~~>(1,2)
- │    ├── ordering: +2,+1
+ │    ├── ordering: +1 opt(2,3)
  │    ├── prune: (1-3)
  │    └── scan abc
  │         ├── columns: a:1(int) b:2(int) c:3(int)
@@ -205,6 +205,7 @@ SELECT * FROM abc ORDER BY b LIMIT 10
 ----
 limit
  ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
  ├── fd: (3)~~>(1,2)
  ├── ordering: +2
@@ -226,6 +227,7 @@ SELECT * FROM abc ORDER BY a OFFSET 10
 ----
 offset
  ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── internal-ordering: +1
  ├── fd: (3)~~>(1,2)
  ├── ordering: +1
  ├── prune: (2,3)

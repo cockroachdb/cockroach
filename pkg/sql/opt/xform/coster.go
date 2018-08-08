@@ -195,9 +195,10 @@ func (c *coster) computeVirtualScanCost(
 // rowSortCost is the CPU cost to sort one row, which depends on the number of
 // columns in the sort key.
 func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
-	// We multiply by 2 to ensure that a sort is almost always
-	// more expensive than a reverse scan or an index scan.
-	return 2 * memo.Cost(numKeyCols) * cpuCostFactor
+	// There is a fixed "non-comparison" cost and a comparison cost proportional
+	// to the key columns. Note that the cost has to be high enough so that a
+	// sort is almost always more expensive than a reverse scan or an index scan.
+	return (1 + memo.Cost(numKeyCols)) * cpuCostFactor
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
@@ -333,6 +334,10 @@ func (c *coster) computeGroupByCost(candidate *memo.BestExpr, logical *props.Log
 	def := candidate.Private(c.mem).(*memo.GroupByDef)
 	groupingColCount := def.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
+
+	// TODO(radu): take into account how many grouping columns we have an ordering
+	// on for DistinctOn.
+
 	return cost + c.computeChildrenCost(candidate)
 }
 

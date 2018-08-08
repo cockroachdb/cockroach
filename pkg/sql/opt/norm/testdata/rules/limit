@@ -136,6 +136,7 @@ SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5
 ----
 limit
  ├── columns: k:1(int!null) r:6(float)
+ ├── internal-ordering: +6
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(6)
@@ -168,6 +169,7 @@ project
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 5]
  │    ├── key: (2,3)
  │    ├── ordering: +3
@@ -247,6 +249,7 @@ project
  ├── ordering: +1
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
+ │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    ├── ordering: +1
@@ -266,6 +269,7 @@ SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 ----
 offset
  ├── columns: k:1(int!null) r:6(float)
+ ├── internal-ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(6)
  ├── ordering: +6
@@ -295,6 +299,7 @@ project
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── sort
@@ -349,11 +354,13 @@ project
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
+ │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 10]
  │    ├── key: (2,3)
  │    ├── ordering: +3
  │    ├── offset
  │    │    ├── columns: i:2(int) f:3(float)
+ │    │    ├── internal-ordering: +3
  │    │    ├── key: (2,3)
  │    │    ├── ordering: +3
  │    │    ├── sort

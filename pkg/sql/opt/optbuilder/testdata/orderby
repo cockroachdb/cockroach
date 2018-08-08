@@ -63,6 +63,7 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 ----
 limit
  ├── columns: a:1(int!null) b:2(int)
+ ├── internal-ordering: -2
  ├── ordering: -2
  ├── sort
  │    ├── columns: a:1(int!null) b:2(int)
@@ -117,6 +118,7 @@ SELECT a AS foo, (a) AS foo FROM t ORDER BY foo LIMIT 1
 ----
 limit
  ├── columns: foo:1(int!null) foo:1(int!null)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
  │    ├── columns: a:1(int!null)
@@ -176,6 +178,7 @@ SELECT b FROM t ORDER BY a LIMIT 1
 ----
 limit
  ├── columns: b:2(int)
+ ├── internal-ordering: +1
  ├── ordering: +1
  ├── project
  │    ├── columns: a:1(int!null) b:2(int)
@@ -332,6 +335,7 @@ build
 ----
 limit
  ├── columns: a:1(int!null)
+ ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
  │    ├── columns: a:1(int!null)
@@ -347,6 +351,7 @@ build
 ----
 limit
  ├── columns: a:1(int!null)
+ ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
  │    ├── columns: a:1(int!null)
@@ -679,6 +684,7 @@ SELECT a FROM abc ORDER BY a DESC LIMIT 1
 ----
 limit
  ├── columns: a:1(int!null)
+ ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
  │    ├── columns: a:1(int!null)
@@ -694,6 +700,7 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 offset
  ├── columns: a:1(int!null)
+ ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
  │    ├── columns: a:1(int!null)
@@ -902,6 +909,7 @@ SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writ
 ----
 limit
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
+ ├── internal-ordering: +1,+2,+3
  ├── ordering: +1,+2,+3
  ├── project
  │    ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null)
