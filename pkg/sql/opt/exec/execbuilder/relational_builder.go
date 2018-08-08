@@ -219,7 +219,7 @@ func (*Builder) getColumns(
 	columnCount := md.Table(tableID).ColumnCount()
 	n := 0
 	for i := 0; i < columnCount; i++ {
-		colID := md.TableColumn(tableID, i)
+		colID := tableID.ColumnID(i)
 		if cols.Contains(int(colID)) {
 			needed.Add(i)
 			output.Set(int(colID), n)

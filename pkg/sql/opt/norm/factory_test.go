@@ -36,13 +36,13 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 
 	cat := createFiltersCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
-	ay := f.Metadata().TableColumn(a, 1)
+	ax := a.ColumnID(0)
+	ay := a.ColumnID(1)
 	aCols := util.MakeFastIntSet(int(ax), int(ay))
 
 	a2 := f.Metadata().AddTable(cat.Table("a"))
-	a2x := f.Metadata().TableColumn(a2, 0)
-	a2y := f.Metadata().TableColumn(a2, 1)
+	a2x := a2.ColumnID(0)
+	a2y := a2.ColumnID(1)
 	a2Cols := util.MakeFastIntSet(int(a2x), int(a2y))
 
 	scan := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a, Cols: aCols}))
@@ -122,7 +122,7 @@ func TestSimplifyFilters(t *testing.T) {
 
 	cat := createFiltersCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
+	ax := a.ColumnID(0)
 
 	variable := f.ConstructVariable(f.InternColumnID(ax))
 	constant := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
