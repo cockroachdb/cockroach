@@ -383,6 +383,9 @@ func (ef *execFactory) constructGroupBy(
 			aggFn,
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
+		if agg.Distinct {
+			f.setDistinct()
+		}
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, sqlbase.ResultColumn{
 			Name: fmt.Sprintf("agg%d", i),
