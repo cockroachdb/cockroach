@@ -165,7 +165,6 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 5]
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
@@ -293,7 +292,6 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 ----
 project
  ├── columns: f:3(float) r:6(float)
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
@@ -348,7 +346,6 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 project
  ├── columns: f:3(float) r:6(float)
  ├── cardinality: [0 - 10]
- ├── fd: (3)-->(6)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2(int) f:3(float)
