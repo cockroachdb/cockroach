@@ -1398,7 +1398,7 @@ func (txn *Txn) GenerateForcedRetryableError(msg string) error {
 		txn.ID(),
 		roachpb.MakeTransaction(
 			txn.DebugName(),
-			nil, // aseKey
+			nil, // baseKey
 			txn.UserPriority(),
 			txn.Isolation(),
 			txn.db.clock.Now(),
