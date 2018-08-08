@@ -2230,6 +2230,7 @@ func TestZip(t *testing.T) {
 	const expected = `debug zip ` + os.DevNull + `
 writing ` + os.DevNull + `
   debug/events
+  debug/rangelog
   debug/liveness
   debug/settings
   debug/gossip/liveness
