@@ -61,3 +61,18 @@ $input
     (AppendReducedGroupingCols $input $aggregations $def)
     (ReduceGroupingCols $input $def)
 )
+
+# EliminateAggDistinctForKeys eliminates unnecessary AggDistinct modifiers when
+# it is known that the aggregation argument is unique within each group.
+[EliminateAggDistinctForKeys, Normalize]
+(GroupBy | ScalarGroupBy
+    $input:*
+    $aggregations:*
+    $def:* & (CanRemoveAggDistinctForKeys $aggregations $def $input)
+)
+=>
+((OpName)
+    $input
+    (RemoveAggDistinctForKeys $aggregations $def $input)
+    $def
+)
