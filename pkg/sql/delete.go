@@ -361,9 +361,7 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 
 	// contains all table IDs that are directly or indirectly interleaved into `table`,
 	// including `table` itself
-	interleavedMemo := make(map[sqlbase.ID]struct{})
-	interleavedQueue := make([]sqlbase.ID, 0)
-	interleavedQueue = append(interleavedQueue, table.ID)
+	interleavedQueue := []sqlbase.ID{table.ID}
 
 	// if the base table is interleaved in another table, fail
 	// TODO let this succeed if this is part of another table's fast path (???).
@@ -388,7 +386,6 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 			// Don't allow any secondary indexes
 			// TODO identify the cases where secondary indexes can still work with the fast path and allow them
 			if idx.ID != fkTables[tableID].Table.PrimaryIndex.ID {
-				log.Warning(context.TODO(), "not fast path: Secondary index")
 				return false
 			}
 
@@ -402,19 +399,13 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
 
 				// Append the next tables to inspect to the queue
-				if _, ok := interleavedMemo[ref.Table]; !ok {
-					interleavedQueue = append(interleavedQueue, ref.Table)
-					interleavedMemo[ref.Table] = struct{}{}
-				}
 			}
 			// The index can't be referenced by anything that's not the interleaved relationship
 			for _, ref := range idx.ReferencedBy {
 				if _, ok := interleavedIdxs[ref.Table]; !ok {
-					log.Warning(context.TODO(), "non-interleaved relationship fk reference")
 					return false
 				}
 				if _, ok := interleavedIdxs[ref.Table][ref.Index]; !ok {
-					log.Warning(context.TODO(), "non-interleaved relationship fk reference")
 					return false
 				}
 
@@ -425,10 +416,14 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 
 				// All of these references MUST be ON DELETE CASCADE
 				if idx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
-					log.Warningf(context.TODO(), "not fast path: Non cascade on ref %d, %d to %d, %d. action is %s", ref.Table, ref.Index, tableID, idx.ID, sqlbase.ForeignKeyReference_Action_name[int32(ref.OnDelete)])
 					return false
 				}
 			}
+
+			for _, ref := range idx.InterleavedBy {
+				interleavedQueue = append(interleavedQueue, ref.Table)
+			}
+
 		}
 	}
 

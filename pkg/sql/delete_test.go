@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS external_ref(
 	id INT,
 	parent_id INT,
 	child_id INT,
-	FOREIGN KEY (parent_id, child_id) REFERENCES child(pid, id)
+	FOREIGN KEY (parent_id, child_id) REFERENCES child(pid, id) ON DELETE CASCADE
 )
 `,
 		`child_with_index`: `
