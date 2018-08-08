@@ -358,7 +358,7 @@ func init() {
 	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
 	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
 
-	for _, cmd := range []*cobra.Command{sqlShellCmd, demoCmd} {
+	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		VarFlag(f, &sqlCtx.execStmts, cliflags.Execute)
