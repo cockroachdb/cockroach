@@ -2853,3 +2853,20 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `DROP SEQUENCE t_id_seq`)
 	})
 }
+
+func TestBackupRestoreShowJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`, localFoo, "data 2")
+	sqlDB.CheckQueryResults(t, "SELECT description FROM [SHOW JOBS] ORDER BY description", [][]string{
+		{"BACKUP DATABASE data TO 'nodelocal:///foo' WITH revision_history"},
+		{"RESTORE TABLE data.bank FROM 'nodelocal:///foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
+	})
+}
