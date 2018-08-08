@@ -42,7 +42,7 @@ func newCLITest(args base.TestServerArgs) cliTest {
 	}
 	return cliTest{
 		TestServer: s.(*server.TestServer),
-		connArgs:   []string{"--insecure", "--host=" + host, "--port=" + port},
+		connArgs:   []string{"--insecure", "--host=" + host + ":" + port},
 	}
 }
 
