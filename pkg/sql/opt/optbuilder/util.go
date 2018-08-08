@@ -157,21 +157,19 @@ func (b *Builder) synthesizeColumn(
 	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
 ) *scopeColumn {
 	if label == "" {
-		label = fmt.Sprintf("column%d", len(b.colMap))
+		label = fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1)
 	}
 
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
-	col := scopeColumn{
+	scope.cols = append(scope.cols, scopeColumn{
 		origName: name,
 		name:     name,
 		typ:      typ,
 		id:       colID,
 		expr:     expr,
 		group:    group,
-	}
-	b.colMap = append(b.colMap, col)
-	scope.cols = append(scope.cols, col)
+	})
 	return &scope.cols[len(scope.cols)-1]
 }
 
