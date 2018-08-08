@@ -565,7 +565,7 @@ SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
 ----
--0  1  1  1  -0
+-0  1  1  1  0
 
 query RR
 SELECT cos(-0.5), cos(0.5)
@@ -620,7 +620,7 @@ SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
 query RRRRR
 SELECT ceil(-0.5::float), ceil(0.5::float), ceiling(0.5::float), ceil(0.1::decimal), ceiling(-0.9::decimal)
 ----
--0  1  1  1  -0
+-0  1  1  1  0
 
 query RR
 SELECT cos(-0.5), cos(0.5)
