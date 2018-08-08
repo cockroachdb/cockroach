@@ -16,6 +16,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -151,6 +152,52 @@ func (a aliasStrVar) Set(v string) error {
 // Type implements the pflag.Value interface.
 func (a aliasStrVar) Type() string { return "string" }
 
+// addrSetter wraps a address/port configuration option pair and
+// enables setting them both with a single command-line flag.
+type addrSetter struct {
+	addr *string
+	port *string
+}
+
+// String implements the pflag.Value interface.
+func (a addrSetter) String() string {
+	return net.JoinHostPort(*a.addr, *a.port)
+}
+
+// Type implements the pflag.Value interface
+func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
+
+// Set implement the pflag.Value interface.
+func (a addrSetter) Set(v string) error {
+	addr, port, err := net.SplitHostPort(v)
+	if err != nil {
+		if aerr, ok := err.(*net.AddrError); ok {
+			if strings.HasPrefix(aerr.Err, "too many colons") {
+				// Maybe this was an IPv6 address using the deprecated syntax
+				// without '[...]'. Try that.
+				// Note: the following is valid even if *a.port is empty.
+				// (An empty port number is always a valid listen address.)
+				maybeAddr := "[" + v + "]:" + *a.port
+				addr, port, err = net.SplitHostPort(maybeAddr)
+				if err == nil {
+					fmt.Fprintf(stderr,
+						"warning: the syntax \"%s\" for IPv6 addresses is deprecated; use \"[%s]\"\n", v, v)
+				}
+			} else if strings.HasPrefix(aerr.Err, "missing port") {
+				// It's inconvenient that SplitHostPort doesn't know how to ignore
+				// a missing port number. Oh well.
+				addr, port, err = net.SplitHostPort(v + ":" + *a.port)
+			}
+		}
+	}
+	if err != nil {
+		return err
+	}
+	*a.addr = addr
+	*a.port = port
+	return nil
+}
+
 func init() {
 	initCLIDefaults()
 
@@ -211,25 +258,23 @@ func init() {
 		f := StartCmd.Flags()
 
 		// Server flags.
-		StringFlag(f, &startCtx.serverListenAddr, cliflags.ListenAddr, startCtx.serverListenAddr)
+		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
 		VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
 		_ = f.MarkDeprecated(cliflags.ServerHost.Name, "use --listen-addr/--advertise-addr instead.")
-
-		StringFlag(f, &serverListenPort, cliflags.ListenPort, serverListenPort)
 		VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
-		_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-port/--advertise-port instead.")
+		_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-addr instead.")
 
-		StringFlag(f, &serverAdvertiseAddr, cliflags.AdvertiseAddr, serverAdvertiseAddr)
+		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
 		_ = f.MarkDeprecated(cliflags.AdvertiseHost.Name, "use --advertise-addr instead.")
 
 		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
+		_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
 
-		StringFlag(f, &serverHTTPAddr, cliflags.ListenHTTPAddr, serverHTTPAddr)
-		VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
+		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		_ = f.MarkDeprecated(cliflags.ListenHTTPAddrAlias.Name, "use --http-addr instead.")
-
 		StringFlag(f, &serverHTTPPort, cliflags.ListenHTTPPort, serverHTTPPort)
+		_ = f.MarkDeprecated(cliflags.ListenHTTPPort.Name, "use --http-addr=...:<port> instead.")
 
 		StringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		VarFlag(f, &serverCfg.Locality, cliflags.Locality)
@@ -317,8 +362,9 @@ func init() {
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		StringFlag(f, &clientConnHost, cliflags.ClientHost, clientConnHost)
+		VarFlag(f, addrSetter{&clientConnHost, &clientConnPort}, cliflags.ClientHost)
 		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
+		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
 
