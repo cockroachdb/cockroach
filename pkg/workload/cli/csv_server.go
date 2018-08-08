@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package cli
 
 import (
 	"fmt"
@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var csvServerCmd = setCmdDefaults(&cobra.Command{
+var csvServerCmd = SetCmdDefaults(&cobra.Command{
 	Use:   `csv-server`,
-	Short: `Serves csv table data through an HTTP interface`,
+	Short: `serves csv table data through an HTTP interface`,
 	Args:  cobra.NoArgs,
 	RunE:  runCSVServer,
 })
@@ -36,7 +36,7 @@ var port *int
 
 func init() {
 	port = csvServerCmd.Flags().Int(`port`, 8081, `The port to bind to`)
-	rootCmd.AddCommand(csvServerCmd)
+	AddSubCmd(func() *cobra.Command { return csvServerCmd })
 }
 
 func runCSVServer(_ *cobra.Command, _ []string) error {

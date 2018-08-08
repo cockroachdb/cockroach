@@ -13,19 +13,13 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+// +build windows
+
+package cli
 
 import (
 	"os"
-
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/allccl" // init hooks
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl" // init hooks
-	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 )
 
-func main() {
-	if err := workloadcli.WorkloadCmd().Execute(); err != nil {
-		// Cobra has already printed the error message.
-		os.Exit(1)
-	}
-}
+// exitSignals are the signals that will cause workload to exit.
+var exitSignals = []os.Signal{os.Interrupt}
