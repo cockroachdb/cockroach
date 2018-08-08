@@ -34,6 +34,10 @@ interface DropdownOwnProps {
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+  dropdownRef: React.RefObject<HTMLDivElement>;
+  titleRef: React.RefObject<HTMLDivElement>;
+  selectRef: React.RefObject<ReactSelectClass>;
+
   constructor(props: DropdownOwnProps) {
     super(props);
 
@@ -42,10 +46,6 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     this.selectRef = React.createRef();
     this.triggerSelectClick = this.triggerSelectClick.bind(this);
   }
-  
-  dropdownRef: React.RefObject<HTMLDivElement>;
-  titleRef: React.RefObject<HTMLDivElement>;
-  selectRef: React.RefObject<ReactSelectClass>;
 
   triggerSelectClick(e: any) {
     const dropdownNode: any = this.dropdownRef.current as Node;
@@ -54,7 +54,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
 
     if (e.target === dropdownNode || e.target === titleNode || e.target.className.indexOf("dropdown__select") > -1) {
       selectNode.handleMouseDownOnMenu(e);
-    } 
+    }
   }
 
   render() {
