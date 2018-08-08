@@ -624,17 +624,14 @@ message StatementsRequest {
 }
 
 message StatementsResponse {
-  message StatementStatisticsKey {
-    string statement = 1;
-    string app = 2;
-    bool distSQL = 3;
-    bool failed = 4;
-    int32 node_id = 5 [ (gogoproto.customname) = "NodeID",
+  message ExtendedStatementStatisticsKey {
+    cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
+    int32 node_id = 2 [(gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
 
   message CollectedStatementStatistics {
-    StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+    ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 

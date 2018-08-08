@@ -28,6 +28,7 @@ interface SingleStatementStatistics {
   statement: string;
   app: string[];
   distSQL: boolean[];
+  opt: boolean[];
   failed: boolean[];
   node_id: number[];
   stats: StatementStatistics;
@@ -157,7 +158,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
       return null;
     }
 
-    const { stats, statement, app, distSQL, failed } = this.props.statement;
+    const { stats, statement, app, distSQL, opt, failed } = this.props.statement;
 
     if (!stats) {
       const sourceApp = this.props.params[appAttr];
@@ -297,6 +298,10 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(distSQL) }</td>
               </tr>
               <tr className="numeric-stats-table__row--body">
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used cost-based optimizer?</th>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(opt) }</td>
+              </tr>
+              <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Failed?</th>
                 <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(failed) }</td>
               </tr>
@@ -362,6 +367,7 @@ export const selectStatement = createSelector(
       byNode: coalesceNodeStats(results),
       app: _.uniq(results.map(s => s.app)),
       distSQL: _.uniq(results.map(s => s.distSQL)),
+      opt: _.uniq(results.map(s => s.opt)),
       failed: _.uniq(results.map(s => s.failed)),
       node_id: _.uniq(results.map(s => s.node_id)),
     };

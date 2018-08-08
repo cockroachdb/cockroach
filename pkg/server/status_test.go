@@ -929,7 +929,7 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	var statementsInResponse []string
 	for _, respStatement := range resp.Statements {
-		statementsInResponse = append(statementsInResponse, respStatement.Key.Statement)
+		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
 	}
 
 	sort.Strings(expectedStatements)

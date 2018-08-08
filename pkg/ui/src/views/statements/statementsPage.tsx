@@ -197,8 +197,8 @@ export const selectApps = createSelector(
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (statement.key.app) {
-          apps[statement.key.app] = true;
+        if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
         } else {
           sawBlank = true;
         }
