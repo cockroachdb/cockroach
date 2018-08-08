@@ -709,10 +709,10 @@ DELETE FROM t.test3;
 								// client sends an async EndTransaction. However, with
 								// concurrent uses of the txn, it's possible for that cleanup to
 								// race with the BeginTransaction. If the cleanup wins the race,
-								// it gets a "transaction not found" error, and then the
-								// BeginTransaction succeeds and nobody cleans it up. Again, if
-								// the txn had actually been aborted, the transaction record
-								// would already be in place.
+								// it succeeds (even though it doesn't find the txn record), and
+								// then the BeginTransaction also succeeds and nobody cleans it
+								// up. Again, if the txn had actually been aborted, the
+								// transaction record would already be in place.
 								if _, ok := err.(*roachpb.TransactionAbortedError); ok {
 									// We use a WaitGroup to make sure this async abort cleans up
 									// before the subtest.

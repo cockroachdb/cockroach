@@ -10531,3 +10531,52 @@ func TestRangeStatsRequest(t *testing.T) {
 	require.Equal(t, expMS.ValCount+1, resMS.ValCount)
 	require.Equal(t, expMS.LiveCount+1, resMS.LiveCount)
 }
+
+// Test that an EndTransaction(commit=false) request that doesn't find its
+// transaction record doesn't return an error.
+// This is relied upon by the client which liberally sends rollbacks even when
+// it's unclear whether the txn record has been written.
+func TestRollbackMissingTxnRecordNoError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	key := roachpb.Key("bogus key")
+	txn := roachpb.MakeTransaction("test", key,
+		roachpb.NormalUserPriority, enginepb.SERIALIZABLE,
+		tc.Clock().Now(), tc.Clock().MaxOffset().Nanoseconds())
+
+	res, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
+		RangeID: tc.repl.RangeID,
+		Txn:     &txn,
+	}, &roachpb.EndTransactionRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Commit: false,
+	})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if res.Header().Txn == nil {
+		t.Fatal("expected Txn to be filled on the response")
+	}
+
+	// For good measure, let's take the opportunity to check replay protection for
+	// a BeginTransaction arriving after the rollback.
+	_, pErr = client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
+		RangeID: tc.repl.RangeID,
+		Txn:     &txn,
+	}, &roachpb.BeginTransactionRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+	})
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
+		t.Fatalf("expected replay error, got: %v", pErr)
+	}
+}
