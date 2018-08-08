@@ -103,6 +103,7 @@ func (rts *resolvedTimestamp) Get() hlc.Timestamp {
 // timestamp to move forward.
 func (rts *resolvedTimestamp) Init() bool {
 	rts.init = true
+	rts.intentQ.assertPositiveRefCounts()
 	return rts.recompute()
 }
 
@@ -151,6 +152,18 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
+		// If the resolved timestamp has been initialized then we can remove the
+		// txn from the queue immediately after we observe that it has been
+		// aborted. However, if the resolved timestamp has not yet been
+		// initialized then we decrement from the txn's reference count. This
+		// permits the refcount to drop below 0, which is important to handle
+		// correctly when events may be out of order. For instance, before the
+		// resolved timestamp is initialized, it's possible that we see an
+		// intent get aborted before we see it in the first place. If we didn't
+		// let the refcount drop below 0, we would risk leaking a reference.
+		if rts.IsInit() {
+			return rts.intentQ.Del(t.TxnID)
+		}
 		return rts.intentQ.DecrRef(t.TxnID, hlc.Timestamp{})
 
 	default:
@@ -415,4 +428,16 @@ func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
 	delete(uiq.txns, txn.txnID)
 	heap.Remove(&uiq.minHeap, txn.index)
 	return wasMin
+}
+
+// assertPositiveRefCounts asserts that all unresolved intent refcounts for
+// transactions in the unresolvedIntentQueue are positive. Assertion takes O(n)
+// time, where n is the total number of transactions being tracked in the queue.
+func (uiq *unresolvedIntentQueue) assertPositiveRefCounts() {
+	for _, txn := range uiq.txns {
+		if txn.refCount <= 0 {
+			panic(fmt.Sprintf("unexpected txn refcount %d for txn %+v in unresolvedIntentQueue",
+				txn.refCount, txn))
+		}
+	}
 }
