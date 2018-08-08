@@ -114,3 +114,15 @@ func (c *CustomFuncs) makeAggCols(
 		i++
 	}
 }
+
+// extractAggInputColumn returns the input ColumnID of an aggregate operator.
+func extractAggInputColumn(ev memo.ExprView) opt.ColumnID {
+	if !ev.IsAggregate() {
+		panic("not an Aggregate")
+	}
+	arg := ev.Child(0)
+	if arg.Operator() == opt.AggDistinctOp {
+		arg = arg.Child(0)
+	}
+	return arg.Private().(opt.ColumnID)
+}
