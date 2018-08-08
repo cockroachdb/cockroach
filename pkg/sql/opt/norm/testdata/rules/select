@@ -235,7 +235,6 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) 
 ----
 project
  ├── columns: f:3(float) r:7(float)
- ├── fd: (3)-->(7)
  ├── select
  │    ├── columns: i:2(int) f:3(float) column6:6(float!null)
  │    ├── key: (2,3)

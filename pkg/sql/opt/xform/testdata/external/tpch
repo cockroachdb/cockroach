@@ -254,7 +254,6 @@ sort
       ├── fd: (9,10)-->(17,18,20,22-26)
       ├── project
       │    ├── columns: column19:19(float) column21:21(float) l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_returnflag:9(string) l_linestatus:10(string)
-      │    ├── fd: (6,7)-->(19)
       │    ├── select
       │    │    ├── columns: l_quantity:5(float) l_extendedprice:6(float) l_discount:7(float) l_tax:8(float) l_returnflag:9(string) l_linestatus:10(string) l_shipdate:11(date!null)
       │    │    ├── scan lineitem
