@@ -23,13 +23,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -683,8 +683,12 @@ DELETE FROM t.test3;
 							magicVals.abortCounts[key] = 2
 						}
 					}
-					var wg sync.WaitGroup
-					defer wg.Wait()
+					var wg errgroup.Group
+					defer func() {
+						if err := wg.Wait(); err != nil {
+							t.Fatal(err)
+						}
+					}()
 					cleanupFilter := cmdFilters.AppendFilter(
 						func(args storagebase.FilterArgs) *roachpb.Error {
 							if err := injectErrors(args.Req, args.Hdr, magicVals, false /* verifyTxn */); err != nil {
@@ -712,11 +716,7 @@ DELETE FROM t.test3;
 								if _, ok := err.(*roachpb.TransactionAbortedError); ok {
 									// We use a WaitGroup to make sure this async abort cleans up
 									// before the subtest.
-									wg.Add(1)
-									go func() {
-										defer wg.Done()
-										assureTxnAborted(t, s, args.Hdr.Txn)
-									}()
+									wg.Go(func() error { return assureTxnAborted(s, args.Hdr.Txn) })
 								}
 								return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 							}
@@ -762,7 +762,7 @@ END;
 // is aborted. It is important that this accompanies an injected
 // TransactionAbortedError in situations with concurrent Txn requests. If not,
 // this can lead to incorrect assumptions by the client.
-func assureTxnAborted(t *testing.T, s serverutils.TestServerInterface, txn *roachpb.Transaction) {
+func assureTxnAborted(s serverutils.TestServerInterface, txn *roachpb.Transaction) error {
 	abortBa := roachpb.BatchRequest{}
 	push := &roachpb.PushTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -775,8 +775,9 @@ func assureTxnAborted(t *testing.T, s serverutils.TestServerInterface, txn *roac
 	push.PusherTxn.Priority = roachpb.MaxTxnPriority
 	abortBa.Add(push)
 	if _, pErr := s.DistSender().Send(context.Background(), abortBa); pErr != nil {
-		t.Fatalf("failed to abort transaction: %v", pErr)
+		return errors.Wrapf(pErr.GoError(), "failed to abort transaction")
 	}
+	return nil
 }
 
 // Test that aborted txn are only retried once.
