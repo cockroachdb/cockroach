@@ -529,7 +529,7 @@ func makeS3Storage(
 	if conf.Endpoint != "" {
 		config.Endpoint = &conf.Endpoint
 		if conf.Region == "" {
-			return nil, errors.New("s3 region must be specified when using custom endpoints")
+			region = "default-region"
 		}
 		client, err := makeHTTPClient(settings)
 		if err != nil {
@@ -552,6 +552,9 @@ func makeS3Storage(
 		}
 	}
 	sess.Config.Region = aws.String(region)
+	if conf.Endpoint != "" {
+		sess.Config.S3ForcePathStyle = aws.Bool(true)
+	}
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,

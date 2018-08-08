@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// Server implements ConsistencyServer.
+// Server implements PerReplicaServer.
 type Server struct {
 	stores *Stores
 }
 
-var _ ConsistencyServer = Server{}
+var _ PerReplicaServer = Server{}
 
 // MakeServer returns a new instance of Server.
 func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
@@ -42,7 +42,7 @@ func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) er
 	return f(store)
 }
 
-// CollectChecksum implements ConsistencyServer.
+// CollectChecksum implements PerReplicaServer.
 func (is Server) CollectChecksum(
 	ctx context.Context, req *CollectChecksumRequest,
 ) (*CollectChecksumResponse, error) {

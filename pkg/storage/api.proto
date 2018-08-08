@@ -54,6 +54,6 @@ message CollectChecksumResponse {
   storage.engine.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
 }
 
-service Consistency {
+service PerReplica {
   rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
 }
