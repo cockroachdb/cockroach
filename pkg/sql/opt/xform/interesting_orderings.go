@@ -74,7 +74,7 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 		o := make(opt.Ordering, 0, numIndexCols)
 		for j := 0; j < numIndexCols; j++ {
 			indexCol := index.Column(j)
-			colID := md.TableColumn(def.Table, indexCol.Ordinal)
+			colID := def.Table.ColumnID(indexCol.Ordinal)
 			if !def.Cols.Contains(int(colID)) {
 				break
 			}
