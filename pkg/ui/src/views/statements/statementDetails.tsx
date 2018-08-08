@@ -294,7 +294,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 </td>
               </tr>
               <tr className="numeric-stats-table__row--body">
-                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Used DistSQL?</th>
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Distributed execution?</th>
                 <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(distSQL) }</td>
               </tr>
               <tr className="numeric-stats-table__row--body">
