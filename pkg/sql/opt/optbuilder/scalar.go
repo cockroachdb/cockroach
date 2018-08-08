@@ -550,7 +550,6 @@ func NewScalar(
 	sb := &ScalarBuilder{
 		Builder: Builder{
 			factory: factory,
-			colMap:  make([]scopeColumn, 1, 1+md.NumColumns()),
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
@@ -562,14 +561,12 @@ func NewScalar(
 	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		name := tree.Name(md.ColumnLabel(colID))
-		col := scopeColumn{
+		sb.scope.cols = append(sb.scope.cols, scopeColumn{
 			origName: name,
 			name:     name,
 			typ:      md.ColumnType(colID),
 			id:       colID,
-		}
-		sb.colMap = append(sb.colMap, col)
-		sb.scope.cols = append(sb.scope.cols, col)
+		})
 	}
 
 	return sb
