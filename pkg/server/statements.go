@@ -90,12 +90,9 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 
 	for i, stmt := range stmtStats {
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
-			Key: serverpb.StatementsResponse_StatementStatisticsKey{
-				Statement: stmt.Key.Query,
-				App:       stmt.Key.App,
-				NodeID:    s.gossip.NodeID.Get(),
-				DistSQL:   stmt.Key.DistSQL,
-				Failed:    stmt.Key.Failed,
+			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
+				KeyData: stmt.Key,
+				NodeID:  s.gossip.NodeID.Get(),
 			},
 			Stats: stmt.Stats,
 		}
