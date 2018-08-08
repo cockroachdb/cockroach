@@ -355,6 +355,7 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 		totalInterleaved += len(idx.InterleavedBy)
 	}
 	if totalInterleaved == 0 {
+		log.Warning(context.TODO(), "Base table has no interleaved tables")
 		return false
 	}
 
