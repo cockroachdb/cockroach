@@ -3241,15 +3241,94 @@ func TestCancelSchemaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doCancel = true
-	if _, err := db.Exec(`ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')`); !testutils.IsError(err, "job canceled") {
-		t.Fatalf("unexpected %v", err)
-	}
-	if _, err := db.Exec(`CREATE INDEX ON t.test (v)`); !testutils.IsError(err, "job canceled") {
-		t.Fatalf("unexpected %v", err)
+	testCases := []struct {
+		sql string
+		// Set to true if this schema change is to be canceled.
+		cancel bool
+	}{
+		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4::DECIMAL CREATE FAMILY f2`,
+			true},
+		{`CREATE INDEX foo ON t.public.test (v)`,
+			true},
+		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2::DECIMAL CREATE FAMILY f3`,
+			false},
+		{`CREATE INDEX foo ON t.public.test (v)`,
+			false},
 	}
 
-	doCancel = false
-	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.2')`)
-	sqlDB.Exec(t, `CREATE INDEX ON t.test (v)`)
+	idx := 0
+	for _, tc := range testCases {
+		doCancel = tc.cancel
+		if doCancel {
+			if _, err := db.Exec(tc.sql); !testutils.IsError(err, "job canceled") {
+				t.Fatalf("unexpected %v", err)
+			}
+			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled, jobs.Record{
+				Username:    security.RootUser,
+				Description: tc.sql,
+				DescriptorIDs: sqlbase.IDs{
+					tableDesc.ID,
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			idx++
+			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+				Username:    security.RootUser,
+				Description: "ROLL BACK " + tc.sql,
+				DescriptorIDs: sqlbase.IDs{
+					tableDesc.ID,
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			sqlDB.Exec(t, tc.sql)
+			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+				Username:    security.RootUser,
+				Description: tc.sql,
+				DescriptorIDs: sqlbase.IDs{
+					tableDesc.ID,
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		idx++
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the index foo over v is consistent, and that column x has
+	// been backfilled properly.
+	rows, err := db.Query(`SELECT v, x from t.test@foo`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for ; rows.Next(); count++ {
+		var val int
+		var x float64
+		if err := rows.Scan(&val, &x); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if count != val {
+			t.Errorf("e = %d, v = %d", count, val)
+		}
+		if 1.2 != x {
+			t.Errorf("e = %f, v = %f", 1.2, x)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	eCount := maxValue + 1
+	if eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
 }
