@@ -60,13 +60,31 @@ CREATE TABLE IF NOT EXISTS childNoCascade(
 ) INTERLEAVE IN PARENT parent(pid)
 `,
 		`grandchild`: `
-CREATE TABLE grandchild(
+CREATE TABLE IF NOT EXISTS grandchild(
     gid INT,
     pid INT,
     id INT,
     FOREIGN KEY (gid, pid) REFERENCES child(pid, id) ON UPDATE CASCADE ON DELETE CASCADE,
     PRIMARY KEY(gid, pid, id)
 ) INTERLEAVE IN PARENT child(gid, pid)
+`,
+		`external_ref`: `
+CREATE TABLE IF NOT EXISTS external_ref(
+	id INT,
+	parent_id INT,
+	child_id INT,
+	FOREIGN KEY (parent_id, child_id) REFERENCES child(pid, id)
+)
+`,
+		`child_with_index`: `
+CREATE TABLE IF NOT EXISTS child_with_index(
+	pid INT,
+	child_id INT,
+	other_field STRING,
+	PRIMARY KEY (pid, child_id),
+	FOREIGN KEY (pid) REFERENCES parent(id),
+	UNIQUE (other_field)
+) INTERLEAVE IN PARENT parent(pid); CREATE INDEX ON child_with_index (other_field) STORING (child_id)
 `,
 	}
 
@@ -83,7 +101,7 @@ CREATE TABLE grandchild(
 	setup := func(tablesNeeded ...string) {
 		drop(tablesNeeded...)
 		for _, table := range tablesNeeded {
-			log.Warningf(context.TODO(), "test: table %s", table)
+			log.Warningf(context.TODO(), "test: creating table %s", table)
 			if _, ok := tables[table]; !ok {
 				t.Fatal(errors.New("invalid table name for setup"))
 			}
@@ -147,5 +165,69 @@ CREATE TABLE grandchild(
 	t.Run("canDeleteFastInterleaved, two children", testCheck(true, "parent", "child", "sibling"))
 	t.Run("canDeleteFastInterleaved, two children", testCheck(true, "parent", "child", "sibling", "grandchild"))
 	t.Run("canDeleteFastInterleaved, two children", testCheck(true, "parent", "child", "grandchild"))
+	t.Run("canDeleteFastInterleaved, one child, external ref", testCheck(false, "parent", "child", "external_ref"))
+	t.Run("canDeleteFastInterleaved, one child with a secondary index", testCheck(false, "parent", "child_with_index"))
 	//t.Run("canDeleteFastInterleaved, two children", testCheck(false, "parent", "childNoCascade")) // turning this on returns a "panic: missing table" triggered by trying to get the table descriptor for childNoCascade.
+}
+
+func TestInterleavedFastDeleteRestorable(t *testing.T) {
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	parentStmt := `
+CREATE TABLE IF NOT EXISTS parent(
+  id INT PRIMARY KEY
+)`
+	childStmt := `
+CREATE TABLE IF NOT EXISTS child(
+  pid INT,
+  id INT,
+  PRIMARY KEY (pid, id),
+  FOREIGN KEY(pid) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE
+) INTERLEAVE IN PARENT parent(pid)`
+
+	if _, err := sqlDB.Exec(parentStmt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(childStmt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO parent SELECT generate_series(1,10)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO child(pid, id) SELECT parent.id, 1 from parent`); err != nil {
+		t.Fatal(err)
+	}
+	var timestamp string
+	if err := sqlDB.QueryRow("SELECT cluster_logical_timestamp()").Scan(&timestamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM parent WHERE id <= 5`); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := sqlDB.Query(fmt.Sprintf(`SELECT * FROM parent AS OF SYSTEM TIME '%s'`, timestamp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for rows.Next() {
+		count++
+	}
+
+	if count != 10 {
+		t.Fatal(fmt.Sprintf("Expected 10 rows from AS OF SYSTEM TIME query, got %d", count))
+	}
+
+	rows, err = sqlDB.Query(fmt.Sprintf(`SELECT * FROM child AS OF SYSTEM TIME '%s'`, timestamp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count = 0
+	for rows.Next() {
+		count++
+	}
+
+	if count != 10 {
+		t.Fatal(fmt.Sprintf("Expected 10 rows from AS OF SYSTEM TIME query, got %d", count))
+	}
 }
