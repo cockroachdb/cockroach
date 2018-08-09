@@ -103,9 +103,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		eventsName    = base + "/events"
 		gossipLName   = base + "/gossip/liveness"
 		gossipNName   = base + "/gossip/nodes"
-		metricsName   = base + "/metrics"
 		livenessName  = base + "/liveness"
+		metricsName   = base + "/metrics"
 		nodesPrefix   = base + "/nodes"
+		rangelogName  = base + "/rangelog"
 		reportsPrefix = base + "/reports"
 		schemaPrefix  = base + "/schema"
 		settingsName  = base + "/settings"
@@ -156,6 +157,20 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			}
 		} else {
 			if err := z.createJSON(eventsName, events); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if rangelog, err := admin.RangeLog(ctx, &serverpb.RangeLogRequest{}); err != nil {
+			if err := z.createError(rangelogName, err); err != nil {
+				return err
+			}
+		} else {
+			if err := z.createJSON(rangelogName, rangelog); err != nil {
 				return err
 			}
 		}
