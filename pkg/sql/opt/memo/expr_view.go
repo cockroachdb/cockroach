@@ -355,6 +355,9 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if def.HardLimit > 0 {
 			tp.Childf("limit: %d", def.HardLimit)
 		}
+		if !def.Flags.Empty() {
+			tp.Childf("flags: %s", def.Flags)
+		}
 
 	case opt.LookupJoinOp:
 		def := ev.Private().(*LookupJoinDef)
