@@ -8,8 +8,8 @@
 # constrained Scan.
 [ConstrainScan, Explore]
 (Select
-  (Scan $def:* & (CanConstrainScan $def))
-  $filter:*
+  (Scan $def:*)
+  $filter:* & (CanConstrainScan $def $filter)
 )
 =>
 (ConstrainScan $filter $def)
@@ -103,10 +103,10 @@
 [ConstrainIndexJoinScan, Explore]
 (Select
   (IndexJoin
-    (Scan $scanDef:* & (CanConstrainScan $scanDef))
+    (Scan $scanDef:*)
     $indexJoinDef:*
   )
-  $filter:*
+  $filter:* & (CanConstrainScan $scanDef $filter)
 )
 =>
 (ConstrainIndexJoinScan $filter $scanDef $indexJoinDef)
