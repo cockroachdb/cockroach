@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -107,10 +106,6 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
-
-	// inExternalTxn, if set, means that mu.txn is not owned by the txnState. This
-	// happens for the InternalExecutor.
-	inExternalTxn bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -202,7 +197,6 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.mu.txn.SetDebugName(opName)
 	} else {
 		ts.mu.txn = txn
-		ts.inExternalTxn = true
 	}
 	ts.mu.Unlock()
 
@@ -234,11 +228,6 @@ func (ts *txnState) finishSQLTxn() {
 	}
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
-	}
-
-	if !ts.mu.txn.IsFinalized() && !ts.inExternalTxn {
-		panic(fmt.Sprintf(
-			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
 	}
 
 	if ts.recordingThreshold > 0 {

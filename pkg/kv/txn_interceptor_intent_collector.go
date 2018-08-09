@@ -95,12 +95,6 @@ func (ic *txnIntentCollector) SendLocked(
 		et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
 		ba.Header.DistinctSpans = distinct && distinctSpans
 
-		if len(et.IntentSpans) == 0 {
-			// If there aren't any intents, then there's factually no
-			// transaction to end. Read-only txns have all of their state
-			// in the client.
-			return nil, roachpb.NewErrorf("cannot commit a read-only transaction")
-		}
 		if log.V(3) {
 			for _, intent := range et.IntentSpans {
 				log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)

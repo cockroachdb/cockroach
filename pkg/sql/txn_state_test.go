@@ -58,13 +58,11 @@ type testContext struct {
 func makeTestContext() testContext {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(
-			func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				return nil, nil
-			},
-		)
-	})
+	factory := client.MakeMockTxnSenderFactory(
+		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, *roachpb.Error) {
+			return nil, nil
+		})
 
 	settings := cluster.MakeTestingClusterSettings()
 	ambient := testutils.MakeAmbientCtx()
@@ -211,7 +209,6 @@ type expKVTxn struct {
 	tsNanos     *int64
 	origTSNanos *int64
 	maxTSNanos  *int64
-	isFinalized *bool
 }
 
 func checkTxn(txn *client.Txn, exp expKVTxn) error {
@@ -230,21 +227,19 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 		return errors.Errorf("expected UserPriority: %s, but got: %s",
 			*exp.userPriority, txn.UserPriority())
 	}
-	if exp.tsNanos != nil && *exp.tsNanos != txn.Proto().Timestamp.WallTime {
+	proto := txn.Serialize()
+	if exp.tsNanos != nil && *exp.tsNanos != proto.Timestamp.WallTime {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
-			*exp.tsNanos, txn.Proto().Timestamp)
+			*exp.tsNanos, proto.Timestamp)
 	}
 	if origTimestamp := txn.OrigTimestamp(); exp.origTSNanos != nil &&
 		*exp.origTSNanos != origTimestamp.WallTime {
 		return errors.Errorf("expected OrigTimestamp: %d, but got: %s",
 			*exp.origTSNanos, origTimestamp)
 	}
-	if exp.maxTSNanos != nil && *exp.maxTSNanos != txn.Proto().MaxTimestamp.WallTime {
+	if exp.maxTSNanos != nil && *exp.maxTSNanos != proto.MaxTimestamp.WallTime {
 		return errors.Errorf("expected MaxTimestamp: %d, but got: %s",
-			*exp.maxTSNanos, txn.Proto().MaxTimestamp)
-	}
-	if exp.isFinalized != nil && *exp.isFinalized != txn.IsFinalized() {
-		return errors.Errorf("expected finalized: %t but wasn't", *exp.isFinalized)
+			*exp.maxTSNanos, proto.MaxTimestamp)
 	}
 	return nil
 }
@@ -275,8 +270,6 @@ func TestTransitions(t *testing.T) {
 	iso := enginepb.SERIALIZABLE
 	pri := roachpb.NormalUserPriority
 	maxTS := testCon.clock.Now().Add(testCon.clock.MaxOffset().Nanoseconds(), 0 /* logical */)
-	varTrue := true
-	varFalse := false
 	type test struct {
 		name string
 
@@ -330,7 +323,6 @@ func TestTransitions(t *testing.T) {
 				tsNanos:      &now.WallTime,
 				origTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
-				isFinalized:  &varFalse,
 			},
 		},
 		{
@@ -354,7 +346,6 @@ func TestTransitions(t *testing.T) {
 				tsNanos:      &now.WallTime,
 				origTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
-				isFinalized:  &varFalse,
 			},
 		},
 		//
@@ -428,7 +419,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: True, IsCommit: False}, b
@@ -439,9 +430,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
-			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// Like the above test - get a retriable error while we can auto-retry,
@@ -457,7 +446,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: dummyRewCap,
 				}
 				return eventRetriableErr{CanAutoRetry: True, IsCommit: True}, b
@@ -468,9 +457,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
-			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// Get a retriable error when we can no longer auto-retry, but the client
@@ -485,7 +472,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
@@ -496,9 +483,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
-			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// Like the above (a retriable error when we can no longer auto-retry, but
@@ -517,7 +502,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: False, IsCommit: True}, b
@@ -560,7 +545,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
@@ -570,9 +555,7 @@ func TestTransitions(t *testing.T) {
 				expCode: skipBatch,
 				expEv:   txnAborted,
 			},
-			expTxn: &expKVTxn{
-				isFinalized: &varTrue,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// Like the above, but this time with an implicit txn: we get a retriable
@@ -587,7 +570,7 @@ func TestTransitions(t *testing.T) {
 					err: roachpb.NewHandledRetryableTxnError(
 						"test retriable err",
 						ts.mu.txn.ID(),
-						*ts.mu.txn.Proto()),
+						*ts.mu.txn.Serialize()),
 					rewCap: rewindCapability{},
 				}
 				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
@@ -614,9 +597,7 @@ func TestTransitions(t *testing.T) {
 				expCode: skipBatch,
 				expEv:   txnAborted,
 			},
-			expTxn: &expKVTxn{
-				isFinalized: &varTrue,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// We go to CommitWait (after a RELEASE SAVEPOINT).
@@ -633,9 +614,7 @@ func TestTransitions(t *testing.T) {
 				expCode: advanceOne,
 				expEv:   txnCommit,
 			},
-			expTxn: &expKVTxn{
-				isFinalized: &varTrue,
-			},
+			expTxn: &expKVTxn{},
 		},
 		{
 			// Restarting from Open via ROLLBACK TO SAVEPOINT.
@@ -687,9 +666,7 @@ func TestTransitions(t *testing.T) {
 				expCode: advanceOne,
 				expEv:   noEvent,
 			},
-			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
-			},
+			expTxn: &expKVTxn{},
 		},
 		//
 		// Tests starting from the RestartWait state.
@@ -769,9 +746,7 @@ func TestTransitions(t *testing.T) {
 			expAdv: expAdvance{
 				expCode: skipBatch,
 			},
-			expTxn: &expKVTxn{
-				isFinalized: &varTrue,
-			},
+			expTxn: &expKVTxn{},
 		},
 	}
 

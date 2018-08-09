@@ -73,7 +73,8 @@ func TestTrace(t *testing.T) {
 				"session recording",
 				"sql txn",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -124,7 +125,8 @@ func TestTrace(t *testing.T) {
 				"flow",
 				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -157,7 +159,8 @@ func TestTrace(t *testing.T) {
 				"session recording",
 				"sql txn",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -186,7 +189,8 @@ func TestTrace(t *testing.T) {
 				"flow",
 				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -215,7 +219,7 @@ func TestTrace(t *testing.T) {
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
-				"dist sender",
+				"dist sender send",
 				"kv.DistSender: sending partial batch",
 				"/cockroach.roachpb.Internal/Batch",
 			},
