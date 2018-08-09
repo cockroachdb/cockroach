@@ -49,6 +49,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 0})))
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 1})))
 	require.Equal(t, 1, len(uiq.Before(hlc.Timestamp{WallTime: 2})))
+	require.NotPanics(t, func() { uiq.assertPositiveRefCounts() })
 
 	// Decrement a non-existent txn.
 	txn2 := uuid.MakeV4()
@@ -60,6 +61,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 1})))
 	require.Equal(t, 1, len(uiq.Before(hlc.Timestamp{WallTime: 3})))
 	require.Equal(t, 2, len(uiq.Before(hlc.Timestamp{WallTime: 5})))
+	require.Panics(t, func() { uiq.assertPositiveRefCounts() })
 
 	// Update a non-existent txn.
 	txn3 := uuid.MakeV4()
@@ -139,15 +141,26 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 
-	// Delete txn2. txn1 new oldest.
-	adv = uiq.Del(txn2)
+	// Increase txn2's ref count, which results in deletion. txn1 new oldest.
+	adv = uiq.IncRef(txn2, nil, txn2TS)
 	require.True(t, adv)
 	require.Equal(t, 1, uiq.Len())
 	require.Equal(t, txn1, uiq.Oldest().txnID)
 	require.Equal(t, newTxn1TS, uiq.Oldest().timestamp)
+	require.NotPanics(t, func() { uiq.assertPositiveRefCounts() })
 
 	// Decrease txn1's ref count. Should be empty again.
 	adv = uiq.DecrRef(txn1, hlc.Timestamp{})
+	require.True(t, adv)
+	require.Equal(t, 0, uiq.Len())
+
+	// Add new txn. Immediately delete. Should be empty again.
+	txn6 := uuid.MakeV4()
+	adv = uiq.IncRef(txn6, nil, hlc.Timestamp{WallTime: 20})
+	require.False(t, adv)
+	require.Equal(t, 1, uiq.Len())
+	require.Equal(t, txn6, uiq.Oldest().txnID)
+	adv = uiq.Del(txn6)
 	require.True(t, adv)
 	require.Equal(t, 0, uiq.Len())
 }
@@ -237,7 +250,10 @@ func TestResolvedTimestamp(t *testing.T) {
 
 	// Third transaction at higher timestamp. No effect.
 	txn3 := uuid.MakeV4()
-	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn3, hlc.Timestamp{WallTime: 40}))
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn3, hlc.Timestamp{WallTime: 30}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn3, hlc.Timestamp{WallTime: 31}))
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
@@ -279,6 +295,25 @@ func TestResolvedTimestamp(t *testing.T) {
 	fwd = rts.ConsumeLogicalOp(commitIntentOp(txn2, hlc.Timestamp{WallTime: 35}))
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 40}, rts.Get())
+
+	// Fifth transaction at higher timestamp. No effect.
+	txn5 := uuid.MakeV4()
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn5, hlc.Timestamp{WallTime: 45}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, rts.Get())
+	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn5, hlc.Timestamp{WallTime: 46}))
+	require.False(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 40}, rts.Get())
+
+	// Forward closed timestamp. Resolved timestamp moves to earliest intent.
+	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 50})
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 45}, rts.Get())
+
+	// Fifth transaction aborted. Resolved timestamp moves to closed timestamp.
+	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn5))
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, rts.Get())
 }
 
 func TestResolvedTimestampNoClosedTimestamp(t *testing.T) {
@@ -352,33 +387,91 @@ func TestResolvedTimestampNoIntents(t *testing.T) {
 
 func TestResolvedTimestampInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
 
-	// Set a closed timestamp. Not initialized so no resolved timestamp.
-	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{}, rts.Get())
+	t.Run("CT Before Init", func(t *testing.T) {
+		rts := makeResolvedTimestamp()
 
-	// Init. Resolved timestamp moves to closed timestamp.
-	fwd = rts.Init()
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+		// Set a closed timestamp. Not initialized so no resolved timestamp.
+		fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
-	rts2 := makeResolvedTimestamp()
+		// Init. Resolved timestamp moves to closed timestamp.
+		fwd = rts.Init()
+		require.True(t, fwd)
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+	})
+	t.Run("No CT Before Init", func(t *testing.T) {
+		rts := makeResolvedTimestamp()
 
-	// Add an intent. Not initialized so no resolved timestamp.
-	txn1 := uuid.MakeV4()
-	fwd = rts2.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{}, rts2.Get())
+		// Add an intent. Not initialized so no resolved timestamp.
+		txn1 := uuid.MakeV4()
+		fwd := rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
-	// Set a closed timestamp. Not initialized so no resolved timestamp.
-	fwd = rts2.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{}, rts2.Get())
+		// Init. Resolved timestamp undefined.
+		fwd = rts.Init()
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+	})
+	t.Run("Write Before Init", func(t *testing.T) {
+		rts := makeResolvedTimestamp()
 
-	// Init. Resolved timestamp moves below first unresolved intent.
-	fwd = rts2.Init()
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, rts2.Get())
+		// Add an intent. Not initialized so no resolved timestamp.
+		txn1 := uuid.MakeV4()
+		fwd := rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Set a closed timestamp. Not initialized so no resolved timestamp.
+		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Init. Resolved timestamp moves below first unresolved intent.
+		fwd = rts.Init()
+		require.True(t, fwd)
+		require.Equal(t, hlc.Timestamp{WallTime: 2}, rts.Get())
+	})
+	t.Run("Abort + Write Before Init", func(t *testing.T) {
+		rts := makeResolvedTimestamp()
+
+		// Abort an intent. Not initialized so no resolved timestamp.
+		txn1 := uuid.MakeV4()
+		fwd := rts.ConsumeLogicalOp(abortIntentOp(txn1))
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Later, write an intent for the same transaction. This should cancel
+		// out with the out-of-order txn abort operation. If this abort hadn't
+		// allowed the unresolvedTxn's ref count to drop below 0, this would
+		// have created a reference that would never be cleaned up.
+		fwd = rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 3}))
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Set a closed timestamp. Not initialized so no resolved timestamp.
+		fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Init. Resolved timestamp moves to closed timestamp.
+		fwd = rts.Init()
+		require.True(t, fwd)
+		require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
+	})
+	t.Run("Abort Before Init, No Write", func(t *testing.T) {
+		rts := makeResolvedTimestamp()
+
+		// Abort an intent. Not initialized so no resolved timestamp.
+		txn1 := uuid.MakeV4()
+		fwd := rts.ConsumeLogicalOp(abortIntentOp(txn1))
+		require.False(t, fwd)
+		require.Equal(t, hlc.Timestamp{}, rts.Get())
+
+		// Init. Negative txn ref count causes panic. Init should not have
+		// been called because an intent must not have been accounted for.
+		require.Panics(t, func() { rts.Init() })
+	})
 }

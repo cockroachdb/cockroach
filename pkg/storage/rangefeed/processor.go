@@ -28,6 +28,13 @@ import (
 )
 
 const (
+	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// push all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
+	defaultPushTxnsInterval = 250 * time.Millisecond
+	// defaultPushTxnsAge is the default age at which a Processor will begin to
+	// consider a transaction old enough to push.
+	defaultPushTxnsAge = 10 * time.Second
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
 	defaultCheckStreamsInterval = 100 * time.Millisecond
@@ -38,16 +45,33 @@ type Config struct {
 	log.AmbientContext
 	Clock *hlc.Clock
 	Span  roachpb.RSpan
-	// TODO(nvanbenschoten): add an IntentPusher dependency.
+
+	TxnPusher        TxnPusher
+	PushTxnsInterval time.Duration
+	PushTxnsAge      time.Duration
 
 	EventChanCap         int
-	PushIntentsInterval  time.Duration
 	CheckStreamsInterval time.Duration
 }
 
 // SetDefaults initializes unset fields in Config to values
 // suitable for use by a Processor.
 func (sc *Config) SetDefaults() {
+	if sc.TxnPusher == nil {
+		if sc.PushTxnsInterval != 0 {
+			panic("nil TxnPusher with non-zero PushTxnsInterval")
+		}
+		if sc.PushTxnsAge != 0 {
+			panic("nil TxnPusher with non-zero PushTxnsAge")
+		}
+	} else {
+		if sc.PushTxnsInterval == 0 {
+			sc.PushTxnsInterval = defaultPushTxnsInterval
+		}
+		if sc.PushTxnsAge == 0 {
+			sc.PushTxnsAge = defaultPushTxnsAge
+		}
+	}
 	if sc.CheckStreamsInterval == 0 {
 		sc.CheckStreamsInterval = defaultCheckStreamsInterval
 	}
@@ -127,25 +151,25 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 		// Launch an async task to scan over the resolved timestamp iterator and
 		// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 		if rtsIter != nil {
-			initScan := makeInitResolvedTSScan(p, rtsIter)
+			initScan := newInitResolvedTSScan(p, rtsIter)
 			err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 			if err != nil {
-				initScan.Cancel() // clean up
+				initScan.Cancel()
 			}
 		} else {
 			p.initResolvedTS(ctx)
 		}
 
-		// intentPushTicker periodically pushes all unresolved intents that are
-		// above a certain age, helping to ensure that the resolved timestamp
-		// continues to make progress.
-		var intentPushTicker *time.Ticker
-		var intentPushTickerC <-chan time.Time
-		var intentPushAttemptC chan struct{}
-		if p.PushIntentsInterval > 0 {
-			intentPushTicker = time.NewTicker(p.PushIntentsInterval)
-			intentPushTickerC = intentPushTicker.C
-			defer intentPushTicker.Stop()
+		// txnPushTicker periodically pushes the transaction record of all
+		// unresolved intents that are above a certain age, helping to ensure
+		// that the resolved timestamp continues to make progress.
+		var txnPushTicker *time.Ticker
+		var txnPushTickerC <-chan time.Time
+		var txnPushAttemptC chan struct{}
+		if p.PushTxnsInterval > 0 {
+			txnPushTicker = time.NewTicker(p.PushTxnsInterval)
+			txnPushTickerC = txnPushTicker.C
+			defer txnPushTicker.Stop()
 		}
 
 		// checkStreamsTicker periodically checks whether any streams have
@@ -167,7 +191,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				// Launch an async catch-up scan for the new registration.
 				// Ignore error if quiescing.
 				if r.catchUpIter != nil {
-					catchUp := makeCatchUpScan(p, &r)
+					catchUp := newCatchUpScan(p, &r)
 					err := stopper.RunAsyncTask(ctx, "rangefeed: catch-up scan", catchUp.Run)
 					if err != nil {
 						catchUp.Cancel()
@@ -189,38 +213,49 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				p.consumeEvent(ctx, e)
 
 			// Check whether any unresolved intents need a push.
-			case <-intentPushTickerC:
-				// TODO(nvanbenschoten): maybe move to a method somewhere.
-				// TODO(nvanbenschoten): pull out this constant duration.
-				before := p.Clock.Now().Add(-10*time.Second.Nanoseconds(), 0)
+			case <-txnPushTickerC:
+				// Don't perform transaction push attempts until the resolved
+				// timestamp has been initialized.
+				if !p.rts.IsInit() {
+					continue
+				}
+
+				now := p.Clock.Now()
+				before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
 				oldTxns := p.rts.intentQ.Before(before)
 
 				if len(oldTxns) > 0 {
-					// Set the ticker channel to nil so that it can't trigger a second
-					// concurrent push. Create a push attempt response channel.
-					intentPushTickerC = nil
-					intentPushAttemptC = make(chan struct{})
+					toPush := make([]enginepb.TxnMeta, len(oldTxns))
+					for i, txn := range oldTxns {
+						toPush[i] = enginepb.TxnMeta{
+							ID:        txn.txnID,
+							Key:       txn.txnKey,
+							Timestamp: txn.timestamp,
+						}
+					}
 
-					if err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old intents",
-						func(ctx context.Context) {
-							log.Infof(ctx, "need to push the following txns: %v\n", oldTxns)
-							close(intentPushAttemptC)
-						},
-					); err != nil {
-						// Ignore. stopper.ShouldQuiesce will trigger soon.
-						// Set err to avoid "empty branch" lint warning.
-						err = nil
+					// Set the ticker channel to nil so that it can't trigger a
+					// second concurrent push. Create a push attempt response
+					// channel that is closed when the push attempt completes.
+					txnPushTickerC = nil
+					txnPushAttemptC = make(chan struct{})
+
+					// Launch an async transaction push attempt that pushes the
+					// timestamp of all transactions beneath the push offset.
+					// Ignore error if quiescing.
+					pushTxns := newTxnPushAttempt(p, toPush, now, txnPushAttemptC)
+					err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
+					if err != nil {
+						pushTxns.Cancel()
 					}
 				}
 
 			// Update the resolved timestamp based on the push attempt.
-			case <-intentPushAttemptC:
+			case <-txnPushAttemptC:
 				// Reset the ticker channel so that it can trigger push attempts
 				// again. Set the push attempt channel back to nil.
-				intentPushTickerC = intentPushTicker.C
-				intentPushAttemptC = nil
-
-				// TODO(nvanbenschoten): update p.rts based on push attempt.
+				txnPushTickerC = txnPushTicker.C
+				txnPushAttemptC = nil
 
 			// Check whether any streams have disconnected.
 			case <-checkStreamsTicker.C:
@@ -233,7 +268,6 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 
 			// Exit on stopper.
 			case <-stopper.ShouldQuiesce():
-				// TODO(nvanbenschoten): should this return an error?
 				p.reg.Disconnect(all)
 				return
 			}

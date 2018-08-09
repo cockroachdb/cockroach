@@ -363,7 +363,7 @@ type intentResolver struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Map from txn ID being pushed to a refcount of intents waiting on the push.
+		// Map from txn ID being pushed to a refcount of requests waiting on the push.
 		inFlightPushes map[uuid.UUID]int
 		// Set of txn IDs whose list of intent spans are being resolved. Note that
 		// this pertains only to EndTransaction-style intent cleanups, whether called
@@ -420,7 +420,7 @@ func (ir *intentResolver) processWriteIntentError(
 		}
 	}
 
-	resolveIntents, pErr := ir.maybePushTransactions(
+	resolveIntents, pErr := ir.maybePushIntents(
 		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
@@ -459,7 +459,7 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 	return *txn
 }
 
-// maybePushTransactions tries to push the conflicting transaction(s)
+// maybePushIntents tries to push the conflicting transaction(s)
 // responsible for the given intents: either move its
 // timestamp forward on a read/write conflict, abort it on a
 // write/write conflict, or do nothing if the transaction is no longer
@@ -483,69 +483,105 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 // c) resolving intents upon EndTransaction which are not local to the given
 //    range. This is the only path in which the transaction is going to be
 //    in non-pending state and doesn't require a push.
-func (ir *intentResolver) maybePushTransactions(
+func (ir *intentResolver) maybePushIntents(
 	ctx context.Context,
 	intents []roachpb.Intent,
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
 	skipIfInFlight bool,
 ) ([]roachpb.Intent, *roachpb.Error) {
-	now := ir.store.Clock().Now()
-
-	// Split intents into those we need to push and those which are good to
-	// resolve.
-	ir.mu.Lock()
-	// TODO(tschottdorf): can optimize this and use same underlying slice.
-	var pushIntents []roachpb.Intent
-	cleanupInFlightPushesLocked := func() {
-		for _, intent := range pushIntents {
-			ir.mu.inFlightPushes[intent.Txn.ID]--
-			if ir.mu.inFlightPushes[intent.Txn.ID] == 0 {
-				delete(ir.mu.inFlightPushes, intent.Txn.ID)
-			}
-		}
-	}
-	pushTxns := map[uuid.UUID]enginepb.TxnMeta{}
+	// Attempt to push the transaction(s) which created the conflicting intent(s).
+	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
 	for _, intent := range intents {
 		if intent.Status != roachpb.PENDING {
 			// The current intent does not need conflict resolution
 			// because the transaction is already finalized.
 			// This shouldn't happen as all intents created are in
 			// the PENDING status.
-			cleanupInFlightPushesLocked()
-			ir.mu.Unlock()
 			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
 		}
-		_, alreadyPushing := pushTxns[intent.Txn.ID]
-		_, pushTxnInFlight := ir.mu.inFlightPushes[intent.Txn.ID]
-		if !alreadyPushing && pushTxnInFlight && skipIfInFlight {
+		pushTxns[intent.Txn.ID] = intent.Txn
+	}
+
+	pushedTxns, pErr := ir.maybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	var resolveIntents []roachpb.Intent
+	for _, intent := range intents {
+		pushee, ok := pushedTxns[intent.Txn.ID]
+		if !ok {
+			// The intent was not pushed.
+			if !skipIfInFlight {
+				log.Fatalf(ctx, "no PushTxn response for intent %+v", intent)
+			}
+			// It must have been skipped.
+			continue
+		}
+		intent.Txn = pushee.TxnMeta
+		intent.Status = pushee.Status
+		resolveIntents = append(resolveIntents, intent)
+	}
+	return resolveIntents, nil
+}
+
+// maybePushTransactions is like maybePushIntents except it takes a set of
+// transactions to push instead of a set of intents. This set of provided
+// transactions may be modified by the method. It returns a set of transaction
+// protos corresponding to the pushed transactions.
+func (ir *intentResolver) maybePushTransactions(
+	ctx context.Context,
+	pushTxns map[uuid.UUID]enginepb.TxnMeta,
+	h roachpb.Header,
+	pushType roachpb.PushTxnType,
+	skipIfInFlight bool,
+) (map[uuid.UUID]roachpb.Transaction, *roachpb.Error) {
+	// Decide which transactions to push and which to ignore because
+	// of other in-flight requests. For those transactions that we
+	// will be pushing, increment their ref count in the in-flight
+	// pushes map.
+	ir.mu.Lock()
+	for txnID := range pushTxns {
+		_, pushTxnInFlight := ir.mu.inFlightPushes[txnID]
+		if pushTxnInFlight && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
-				log.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", intent.Txn.ID)
+				log.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", txnID)
 			}
-			continue
+			delete(pushTxns, txnID)
 		} else {
-			pushTxns[intent.Txn.ID] = intent.Txn
-			pushIntents = append(pushIntents, intent)
-			ir.mu.inFlightPushes[intent.Txn.ID]++
+			ir.mu.inFlightPushes[txnID]++
 		}
 	}
+	cleanupInFlightPushes := func() {
+		ir.mu.Lock()
+		for txnID := range pushTxns {
+			ir.mu.inFlightPushes[txnID]--
+			if ir.mu.inFlightPushes[txnID] == 0 {
+				delete(ir.mu.inFlightPushes, txnID)
+			}
+		}
+		ir.mu.Unlock()
+	}
 	ir.mu.Unlock()
-	if len(pushIntents) == 0 {
+	if len(pushTxns) == 0 {
 		return nil, nil
 	}
 
 	log.Eventf(ctx, "pushing %d transaction(s)", len(pushTxns))
 
-	// Attempt to push the transaction(s) which created the conflicting intent(s).
+	// Attempt to push the transaction(s).
+	now := ir.store.Clock().Now()
+	pusherTxn := getPusherTxn(h)
 	var pushReqs []roachpb.Request
 	for _, pushTxn := range pushTxns {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key: pushTxn.Key,
 			},
-			PusherTxn: getPusherTxn(h),
+			PusherTxn: pusherTxn,
 			PusheeTxn: pushTxn,
 			PushTo:    h.Timestamp,
 			// The timestamp is used by PushTxn for figuring out whether the
@@ -563,9 +599,7 @@ func (ir *intentResolver) maybePushTransactions(
 	if err := ir.store.db.Run(ctx, b); err != nil {
 		pErr = b.MustPErr()
 	}
-	ir.mu.Lock()
-	cleanupInFlightPushesLocked()
-	ir.mu.Unlock()
+	cleanupInFlightPushes()
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -580,18 +614,7 @@ func (ir *intentResolver) maybePushTransactions(
 		pushedTxns[txn.ID] = txn
 		log.Eventf(ctx, "%s is now %s", txn.ID, txn.Status)
 	}
-
-	var resolveIntents []roachpb.Intent
-	for _, intent := range pushIntents {
-		pushee, ok := pushedTxns[intent.Txn.ID]
-		if !ok {
-			log.Fatalf(ctx, "no PushTxn response for intent %+v\nreqs: %+v", intent, pushReqs)
-		}
-		intent.Txn = pushee.TxnMeta
-		intent.Status = pushee.Status
-		resolveIntents = append(resolveIntents, intent)
-	}
-	return resolveIntents, nil
+	return pushedTxns, nil
 }
 
 // runAsyncTask semi-synchronously runs a generic task function. If
@@ -628,11 +651,11 @@ func (ir *intentResolver) runAsyncTask(
 	return nil
 }
 
-// processIntentsAsync asynchronously processes intents which were
+// cleanupIntentsAsync asynchronously processes intents which were
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs during inconsistent
 // reads.
-func (ir *intentResolver) processIntentsAsync(
+func (ir *intentResolver) cleanupIntentsAsync(
 	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
 ) error {
 	now := r.store.Clock().Now()
@@ -658,7 +681,7 @@ func (ir *intentResolver) cleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
-	resolveIntents, pushErr := ir.maybePushTransactions(
+	resolveIntents, pushErr := ir.maybePushIntents(
 		ctx, intents, h, pushType, true, /* skipIfInFlight */
 	)
 	if pushErr != nil {
