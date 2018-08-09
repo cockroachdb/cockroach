@@ -73,9 +73,9 @@ var EmptyList = ListID{Offset: 1, Length: 0}
 //   [2 4]  : ListID{Offset: 6, Length: 2}
 //
 type listStorage struct {
-	// index maps the path of each node in the prefix tree to the index of the
-	// list in the lists slice. See listStorageKey comment for more details
-	// about node path format.
+	// index maps the path of each node in the prefix tree to an Offset value
+	// (biased index of the list in the lists slice). See listStorageKey comment
+	// for more details about node path format.
 	index map[listStorageKey]uint32
 	lists []GroupID
 }
@@ -90,12 +90,6 @@ type listStorageKey struct {
 	item   GroupID
 }
 
-// init must be called before using other methods on listStorage.
-func (ls *listStorage) init() {
-	ls.index = make(map[listStorageKey]uint32)
-	ls.lists = make([]GroupID, 1)
-}
-
 // intern adds the given list to storage and returns an id that can later be
 // used to retrieve the list by calling the lookup method. If the list has been
 // previously added to storage, then intern always returns the same list id
@@ -104,6 +98,10 @@ func (ls *listStorage) init() {
 func (ls *listStorage) intern(list []GroupID) ListID {
 	// Start with empty prefix.
 	prefix := EmptyList
+
+	if ls.index == nil {
+		ls.index = make(map[listStorageKey]uint32)
+	}
 
 	for i, item := range list {
 		// Is there an existing list for the prefix + next item?
@@ -126,7 +124,8 @@ func (ls *listStorage) intern(list []GroupID) ListID {
 // change the elements of the returned list or append to it. lookup is an O(1)
 // operation.
 func (ls *listStorage) lookup(id ListID) []GroupID {
-	return ls.lists[id.Offset : id.Offset+id.Length]
+	// Convert the offset from being 1-based to being 0-based.
+	return ls.lists[id.Offset-1 : id.Offset+id.Length-1]
 }
 
 func (ls *listStorage) appendList(prefix ListID, list []GroupID) ListID {
@@ -134,11 +133,11 @@ func (ls *listStorage) appendList(prefix ListID, list []GroupID) ListID {
 
 	// If prefix is the last list in the slice, then optimize by appending only
 	// the suffix.
-	if prefix.Offset+prefix.Length == uint32(len(ls.lists)) {
+	if prefix.Offset+prefix.Length-1 == uint32(len(ls.lists)) {
 		offset = prefix.Offset
 		ls.lists = append(ls.lists, list[prefix.Length:]...)
 	} else {
-		offset = uint32(len(ls.lists))
+		offset = uint32(len(ls.lists)) + 1
 		ls.lists = append(ls.lists, list...)
 	}
 
