@@ -334,8 +334,13 @@ func (ps *privateStorage) internExplainOpDef(def *ExplainOpDef) PrivateID {
 	ps.keyBuf.writeUvarint(uint64(def.Options.Mode))
 	// This isn't a column set, but writing it out works just the same.
 	ps.keyBuf.writeColSet(def.Options.Flags)
+	// Add a separator between the set and list. Note that the column IDs cannot
+	// be 0.
+	ps.keyBuf.writeUvarint(0)
 	ps.keyBuf.writeColList(def.ColList)
-	ps.keyBuf.WriteString(def.Props.Fingerprint())
+	// Now write the physical properties.
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writePhysProps(&def.Props)
 	typ := (*ExplainOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -363,6 +368,10 @@ func (ps *privateStorage) internShowTraceOpDef(def *ShowTraceOpDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+// internMergeOnDef adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internMergeOnDef always
+// returns the same private id that was returned from the previous call.
 func (ps *privateStorage) internMergeOnDef(def *MergeOnDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
@@ -497,6 +506,23 @@ func (ps *privateStorage) internTypedExpr(expr tree.TypedExpr) PrivateID {
 	return ps.addValue(privateKey{iface: expr}, expr)
 }
 
+// internPhysProps adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internPhysProps always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writePhysProps(physical)
+	typ := (*props.Physical)(nil)
+	id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]
+	if ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, physical)
+}
+
 func (ps *privateStorage) addValue(key privateKey, val interface{}) PrivateID {
 	id := PrivateID(len(ps.privates))
 	ps.privates = append(ps.privates, val)
@@ -576,4 +602,15 @@ func (kb *keyBuffer) writeGroupList(groupList []GroupID) {
 		cnt := binary.PutUvarint(buf[:], uint64(col))
 		kb.Write(buf[:cnt])
 	}
+}
+
+// writePhysProps writes the presentation columns, followed by the ordering
+// spec.
+func (kb *keyBuffer) writePhysProps(physical *props.Physical) {
+	for _, col := range physical.Presentation {
+		kb.writeUvarint(uint64(col.ID))
+		kb.WriteString(col.Label)
+		kb.writeUvarint(0)
+	}
+	kb.writeOrderingChoice(&physical.Ordering)
 }

@@ -103,7 +103,7 @@ func BenchmarkPhases(b *testing.B) {
 type benchmark struct {
 }
 
-func newBenchmark(b *testing.B) *benchmark {
+func newBenchmark(_ *testing.B) *benchmark {
 	return &benchmark{}
 }
 

@@ -440,6 +440,38 @@ func TestInternTypedExpr(t *testing.T) {
 	}
 }
 
+func TestInternPhysProps(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	ordering := props.ParseOrderingChoice("+(1|2),+3 opt(4,5)")
+
+	p := props.Physical{Presentation: presentation, Ordering: ordering}
+	id1 := ps.internPhysProps(&p)
+	id2 := ps.internPhysProps(&p)
+	if id1 != id2 {
+		t.Errorf("same physical property instance didn't return same private ID")
+	}
+
+	presentation2 := props.Presentation{opt.LabeledColumn{Label: "d", ID: 1}}
+	ordering2 := props.ParseOrderingChoice("+(1|2),+3 opt(4,6)")
+
+	p2 := props.Physical{Presentation: presentation2, Ordering: ordering}
+	id1 = ps.internPhysProps(&p)
+	id2 = ps.internPhysProps(&p2)
+	if id1 == id2 {
+		t.Errorf("different physical property instances didn't return different private IDs")
+	}
+
+	p3 := props.Physical{Presentation: presentation2, Ordering: ordering2}
+	id1 = ps.internPhysProps(&p2)
+	id2 = ps.internPhysProps(&p3)
+	if id1 == id2 {
+		t.Errorf("different physical property instances didn't return different private IDs")
+	}
+}
+
 // Ensure that interning values that already exist does not cause unexpected
 // allocations.
 func TestPrivateStorageAllocations(t *testing.T) {
@@ -477,6 +509,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	datum := tree.NewDInt(1)
 	typ := types.Int
 	colTyp := coltypes.Int
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	physProps := props.Physical{Presentation: presentation, Ordering: orderingChoice}
 
 	testutils.TestNoMallocs(t, func() {
 		ps.internColumnID(colID)
@@ -496,6 +530,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internType(typ)
 		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
+		ps.internPhysProps(&physProps)
 	})
 }
 
@@ -534,6 +569,8 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	datum := tree.NewDInt(1)
 	typ := types.Int
 	colTyp := coltypes.Int
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	physProps := props.Physical{Presentation: presentation, Ordering: orderingChoice}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -555,5 +592,6 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internType(typ)
 		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
+		ps.internPhysProps(&physProps)
 	}
 }
