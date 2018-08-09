@@ -49,8 +49,16 @@ type Optimizer struct {
 	evalCtx  *tree.EvalContext
 	f        *norm.Factory
 	mem      *memo.Memo
-	coster   Coster
 	explorer explorer
+
+	// coster implements the default cost model. If SetCoster is not called, this
+	// coster will be used.
+	coster coster
+
+	// override will be set if SetCoster is called with a replacement coster. The
+	// Coster interface is more expensive to call because the candidate argument
+	// escapes, so it's only used when required.
+	override Coster
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
 	// This state could be discarded once optimization is complete.
@@ -75,7 +83,7 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 		evalCtx:  evalCtx,
 		f:        f,
 		mem:      f.Memo(),
-		coster:   newCoster(f.Memo()),
+		coster:   coster{mem: f.Memo()},
 		stateMap: make(map[optStateKey]*optState),
 	}
 	o.explorer.init(o)
@@ -94,13 +102,16 @@ func (o *Optimizer) Factory() *norm.Factory {
 // optimizer is constructed, it creates a default coster that will be used
 // unless it is overridden with a call to SetCoster.
 func (o *Optimizer) Coster() Coster {
-	return o.coster
+	if o.override != nil {
+		return o.override
+	}
+	return &o.coster
 }
 
 // SetCoster overrides the default coster. The optimizer will now use the given
 // coster to estimate the cost of expression execution.
 func (o *Optimizer) SetCoster(coster Coster) {
-	o.coster = coster
+	o.override = coster
 }
 
 // DisableOptimizations disables all transformation rules, including normalize
@@ -328,7 +339,8 @@ func (o *Optimizer) optimizeGroup(group memo.GroupID, required memo.PhysicalProp
 	for {
 		fullyOptimized := true
 
-		for i := 0; i < o.mem.ExprCount(group); i++ {
+		exprCount := o.mem.ExprCount(group)
+		for i := 0; i < exprCount; i++ {
 			eid := memo.ExprID{Group: group, Expr: memo.ExprOrdinal(i)}
 
 			// If this expression has already been fully optimized for the given
@@ -347,9 +359,11 @@ func (o *Optimizer) optimizeGroup(group memo.GroupID, required memo.PhysicalProp
 			}
 		}
 
-		// Now generate new expressions that are logically equivalent to other
-		// expressions in this group.
-		if !o.explorer.exploreGroup(group).fullyExplored {
+		// Now try to generate new expressions that are logically equivalent to
+		// other expressions in this group. Only do this if this wasn't already
+		// done by a recursive invocation on this group (with different physical
+		// properties).
+		if exprCount != o.mem.ExprCount(group) || !o.explorer.exploreGroup(group).fullyExplored {
 			fullyOptimized = false
 		}
 
@@ -387,7 +401,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 	if o.canProvidePhysicalProps(eid, required) {
 		e := o.mem.Expr(eid)
 		candidateBest := memo.MakeBestExpr(e.Operator(), eid, required)
-		for child := 0; child < e.ChildCount(); child++ {
+		for child, cnt := 0, e.ChildCount(); child < cnt; child++ {
 			childGroup := e.ChildGroup(o.mem, child)
 
 			// Given required parent properties, get the properties required from
@@ -485,7 +499,18 @@ func (o *Optimizer) enforceProps(
 // group. If so, then the candidate becomes the new lowest cost expression.
 func (o *Optimizer) ratchetCost(candidate *memo.BestExpr) {
 	group := candidate.Group()
-	cost := o.coster.ComputeCost(candidate, o.mem.GroupProperties(group))
+
+	// Use the default coster if no override coster has been set. Make a copy
+	// of the candidate expression if using the override coster in order to avoid
+	// triggering its escape in the default fast-path case.
+	var cost memo.Cost
+	if o.override != nil {
+		copy := *candidate
+		cost = o.override.ComputeCost(&copy, o.mem.GroupProperties(group))
+	} else {
+		cost = o.coster.ComputeCost(candidate, o.mem.GroupProperties(group))
+	}
+
 	candidate.SetCost(cost)
 	state := o.lookupOptState(group, candidate.Required())
 	if state.best == memo.UnknownBestExprID {
@@ -635,7 +660,7 @@ type optStateAlloc struct {
 // allocate returns a pointer to a new, empty optState struct. The pointer is
 // stable, meaning that its location won't change as other optState structs are
 // allocated.
-func (a optStateAlloc) allocate() *optState {
+func (a *optStateAlloc) allocate() *optState {
 	if a.page == nil {
 		a.page = make([]optState, 0, initialPageSize)
 	} else if len(a.page) == cap(a.page) {

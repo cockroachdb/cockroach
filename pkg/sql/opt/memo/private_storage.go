@@ -465,10 +465,11 @@ func (ps *privateStorage) internType(datumType types.T) PrivateID {
 	// types.TTuple. So use the string name of the type, and distinguish that
 	// from other private types by using the reflect.Type of the types.T value.
 	typ := reflect.TypeOf(datumType)
-	if id, ok := ps.privatesMap[privateKey{iface: typ, str: datumType.String()}]; ok {
+	str := datumType.String()
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: str}]; ok {
 		return id
 	}
-	return ps.addValue(privateKey{iface: typ, str: datumType.String()}, datumType)
+	return ps.addValue(privateKey{iface: typ, str: str}, datumType)
 }
 
 // internColType adds the given value to storage and returns an id that can
@@ -510,6 +511,11 @@ func (ps *privateStorage) internTypedExpr(expr tree.TypedExpr) PrivateID {
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internPhysProps always
 // returns the same private id that was returned from the previous call.
+//
+// NOTE: Unlike other intern methods, internPhysProps will make a copy of the
+//       physical props if they have not yet been interned (rather than directly
+//       adding the passed pointer). This allows callers to allocate the
+//       physical props on the stack without them escaping to the heap.
 func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
@@ -520,7 +526,10 @@ func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
 	if ok {
 		return id
 	}
-	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, physical)
+
+	// Make a copy of the physical props so that argument doesn't escape.
+	copy := *physical
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, &copy)
 }
 
 func (ps *privateStorage) addValue(key privateKey, val interface{}) PrivateID {
