@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -82,6 +83,7 @@ func (m *mysqldumpReader) readFile(
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
+
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
 		if err == io.EOF {
@@ -96,7 +98,7 @@ func (m *mysqldumpReader) readFile(
 		switch i := stmt.(type) {
 		case *mysql.Insert:
 			name := i.Table.Name.String()
-			conv, ok := m.tables[name]
+			conv, ok := m.tables[lex.NormalizeName(name)]
 			if !ok {
 				// not importing this table.
 				continue
@@ -224,6 +226,7 @@ func readMysqlCreateTable(
 	match string,
 	fks fkHandler,
 ) ([]*sqlbase.TableDescriptor, error) {
+	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
@@ -252,7 +255,7 @@ func readMysqlCreateTable(
 			return nil, errors.Wrap(err, "mysql parse error")
 		}
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
-			name := i.NewName.Name.String()
+			name := lex.NormalizeName(i.NewName.Name.String())
 			if match != "" && match != name {
 				found = append(found, name)
 				continue
