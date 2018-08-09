@@ -384,8 +384,7 @@ var TxnStateTransitions = Compile(Pattern{
 				// rollback to a regular savepoint, clearly we couldn't bump the
 				// timestamp in that case. In the special case of the cockroach_restart
 				// savepoint, it's not clear to me what a user's expectation might be.
-				state.mu.txn.Proto().Restart(
-					0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
+				state.mu.txn.ManualRestart(args.Ctx, hlc.Timestamp{})
 				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},

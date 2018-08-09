@@ -1675,14 +1675,15 @@ func TestPropagateTxnOnError(t *testing.T) {
 	epoch := 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		epoch++
+		proto := txn.Serialize()
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
-			if !txn.Proto().Writing {
+			if !proto.Writing {
 				t.Errorf("unexpected non-writing txn")
 			}
 		} else {
 			// Writing must be false since we haven't run any write command.
-			if txn.Proto().Writing {
+			if proto.Writing {
 				t.Errorf("unexpected writing txn")
 			}
 		}

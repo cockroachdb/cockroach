@@ -42,12 +42,12 @@ import (
 // that it has already been aborted (by a 3rd party). That is, we don't wait for
 // the client to find out before the intents are removed.
 // This relies on the TxnCoordSender's heartbeat loop to notice the changed
-// transaction status and do an async abort. Note that, as of June 2018,
-// subsequent requests sent through the TxnCoordSender return
-// TransactionAbortedErrors. On those errors, the contract is that the
-// client.Txn creates a new transaction internally and switches the
-// TxnCoordSender instance. The expectation is that the old transaction has been
-// cleaned up by that point.
+// transaction status and do an async abort.
+// After the heartbeat loop finds out about the abort, subsequent requests sent
+// through the TxnCoordSender return TransactionAbortedErrors. On those errors,
+// the contract is that the client.Txn creates a new transaction internally and
+// switches the TxnCoordSender instance. The expectation is that the old
+// transaction has been cleaned up by that point.
 func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

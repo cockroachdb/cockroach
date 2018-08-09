@@ -413,7 +413,7 @@ func (ex *connExecutor) execStmtInOpenState(
 					IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
 					CanAutoRetry: fsm.FromBool(canAutoRetry),
 				}
-				txn.Proto().Restart(0 /* userPriority */, 0 /* upgradePriority */, ex.server.cfg.Clock.Now())
+				txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
 				payload := eventRetriableErrPayload{
 					err: roachpb.NewHandledRetryableTxnError(
 						"serializable transaction timestamp pushed (detected by connExecutor)",
@@ -494,7 +494,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 			`cannot publish new versions for tables: %v, old versions still in use`,
 			tables),
 		txn.ID(),
-		*txn.Proto(),
+		*txn.Serialize(),
 	)
 	// We cleanup the transaction and create a new transaction after
 	// waiting for the invariant to be satisfied because the wait time
@@ -504,7 +504,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
 	// table descriptor intents can be laid down here after the invariant
 	// has been checked.
-	isolation := txn.Proto().Isolation
+	isolation := txn.Isolation()
 	userPriority := txn.UserPriority()
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
