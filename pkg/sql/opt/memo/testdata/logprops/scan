@@ -98,3 +98,54 @@ scan a@secondary
  ├── stats: [rows=1000]
  ├── prune: (4)
  └── interesting orderings: ()
+
+exec-ddl
+CREATE TABLE t (
+  a INT,
+  b CHAR,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b),
+  INDEX bc (b, c),
+  INDEX dc (d, c),
+  INDEX a_desc (a DESC),
+  FAMILY (a, b),
+  FAMILY (c),
+  FAMILY (d)
+)
+----
+TABLE t
+ ├── a int not null
+ ├── b string not null
+ ├── c int
+ ├── d string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── b string not null
+ ├── INDEX bc
+ │    ├── b string not null
+ │    ├── c int
+ │    └── a int not null
+ ├── INDEX dc
+ │    ├── d string
+ │    ├── c int
+ │    ├── a int not null
+ │    └── b string not null
+ └── INDEX a_desc
+      ├── a int not null desc
+      └── b string not null
+
+# Test case where one of the explorations causes construction of a scan with a
+# contradiction.
+opt
+SELECT * FROM t WHERE a > 1 AND a < 2
+----
+scan t
+ ├── columns: a:1(int!null) b:2(string!null) c:3(int) d:4(string)
+ ├── constraint: /1/2: contradiction
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── prune: (2-4)
+ └── interesting orderings: (+1,+2) (+2,+3,+1) (+4,+3,+1,+2) (-1,+2)

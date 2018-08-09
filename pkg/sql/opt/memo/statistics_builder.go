@@ -350,15 +350,14 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 	s := &relProps.Stats
 	s.Init()
 
-	def := ev.Private().(*ScanOpDef)
-
-	// Short cut if there is a contradiction.
-	if def.Constraint != nil && def.Constraint.IsContradiction() {
+	// Short cut if cardinality is 0.
+	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = 0
 		return
 	}
 
+	def := ev.Private().(*ScanOpDef)
 	if def.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
@@ -439,12 +438,8 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	s := &relProps.Stats
 	s.Init()
 
-	filter := ev.Child(1)
-
-	// Shortcut if the filter is false or there is a contradiction.
-	// (True filters are removed by normalization).
-	constraintSet := filter.Logical().Scalar.Constraints
-	if filter.Operator() == opt.FalseOp || constraintSet == constraint.Contradiction {
+	// Short cut if cardinality is 0.
+	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = 0
 		return
@@ -452,6 +447,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 
 	// Update stats based on filter conditions.
 
+	filter := ev.Child(1)
 	equivGroups := sb.getEquivalencyGroups(ev, relProps, &filter.Logical().Scalar.FuncDeps)
 
 	// Calculate distinct counts for constrained columns
@@ -548,6 +544,13 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *pro
 func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
 	s.Init()
+
+	// Short cut if cardinality is 0.
+	if relProps.Cardinality.IsZero() {
+		s.RowCount = 0
+		s.Selectivity = 0
+		return
+	}
 
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
 	rightStats := &ev.childGroup(1).logical.Relational.Stats

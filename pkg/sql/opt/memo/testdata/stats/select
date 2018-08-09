@@ -71,6 +71,7 @@ SELECT * FROM a WHERE false
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -164,6 +165,7 @@ SELECT * FROM a WHERE x > 5 AND x < 0
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -267,26 +269,31 @@ SELECT pk FROM tab0 WHERE
 ----
 project
  ├── columns: pk:1(int!null)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: (1)
  └── select
       ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:27(bool)
+      ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
       ├── key: (1)
       ├── fd: (1)-->(2,27)
       ├── project
       │    ├── columns: case:27(bool) tab0.pk:1(int!null) tab0.col0:2(int)
+      │    ├── cardinality: [0 - 0]
       │    ├── stats: [rows=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,27)
       │    ├── group-by
       │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:26(bool)
       │    │    ├── grouping columns: tab0.pk:1(int!null)
+      │    │    ├── cardinality: [0 - 0]
       │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,26)
       │    │    ├── right-join
       │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:19(int) case:24(bool) notnull:25(bool)
+      │    │    │    ├── cardinality: [0 - 0]
       │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    ├── fd: (1)-->(2,24), (19)~~>(25)
       │    │    │    ├── project
@@ -302,22 +309,26 @@ project
       │    │    │    │              └── null [type=unknown]
       │    │    │    ├── select
       │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:24(bool)
+      │    │    │    │    ├── cardinality: [0 - 0]
       │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    ├── key: (1)
       │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: case:24(bool) tab0.pk:1(int!null) tab0.col0:2(int)
+      │    │    │    │    │    ├── cardinality: [0 - 0]
       │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    │    ├── group-by
       │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:23(bool)
       │    │    │    │    │    │    ├── grouping columns: tab0.pk:1(int!null)
+      │    │    │    │    │    │    ├── cardinality: [0 - 0]
       │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    ├── fd: (1)-->(2,23)
       │    │    │    │    │    │    ├── right-join
       │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:12(int) notnull:22(bool)
+      │    │    │    │    │    │    │    ├── cardinality: [0 - 0]
       │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    │    │    ├── fd: (1)-->(2), (12)~~>(22)
       │    │    │    │    │    │    │    ├── project
@@ -333,6 +344,7 @@ project
       │    │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
+      │    │    │    │    │    │    │    │    ├── cardinality: [0 - 0]
       │    │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
       │    │    │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    │    │    ├── fd: (1)-->(2)

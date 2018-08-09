@@ -102,7 +102,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		var cols opt.ColSet
 		for i := 0; i < tab.ColumnCount(); i++ {
-			cols.Add(int(mem.metadata.TableColumn(tabID, i)))
+			cols.Add(int(tabID.ColumnID(i)))
 		}
 
 		sb := &statisticsBuilder{}
