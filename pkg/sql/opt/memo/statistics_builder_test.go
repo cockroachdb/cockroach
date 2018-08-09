@@ -102,7 +102,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		var cols opt.ColSet
 		for i := 0; i < tab.ColumnCount(); i++ {
-			cols.Add(int(mem.metadata.TableColumn(tabID, i)))
+			cols.Add(int(tabID.ColumnID(i)))
 		}
 
 		sb := &statisticsBuilder{}
@@ -121,9 +121,9 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		sel := MakeSelectExpr(scanGroup, filterGroup)
 		selGroup := mem.newGroup(Expr(sel))
 		ev := MakeNormExprView(mem, selGroup.id)
-		relProps := &props.Relational{FuncDeps: props.FuncDepSet{}}
+		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		s := &relProps.Stats
-		s.Init()
+		s.Init(relProps)
 
 		// Calculate distinct counts.
 		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)

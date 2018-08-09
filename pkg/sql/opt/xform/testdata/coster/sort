@@ -36,16 +36,19 @@ SELECT f FROM a WHERE k < 0 AND k > 10 ORDER BY f DESC
 ----
 sort
  ├── columns: f:2(float!null)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── cost: 0
  ├── ordering: -2
  └── project
       ├── columns: f:2(float!null)
+      ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
       ├── cost: 0
       └── scan a
            ├── columns: k:1(int!null) f:2(float!null)
            ├── constraint: /1/-2: contradiction
+           ├── cardinality: [0 - 0]
            ├── stats: [rows=0]
            ├── cost: 0
            └── key: (1,2)
