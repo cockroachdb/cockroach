@@ -236,12 +236,20 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 //
 // ----------------------------------------------------------------------
 
-// CanConstrainScan returns true if the scan can have a constraint applied to
-// it. This is only possible when it has no constraints and when it does not
-// have a limit applied to it (since limit is applied after the constraint).
-func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID) bool {
+// CanConstrainScan returns true if the scan could potentially have a constraint
+// applied to it from the given filter. This is only possible when
+//  - it has no constraints already, and
+//  - it does not have a limit (which would apply pre-filter), and
+//  - the filter involves the first column of the index.
+func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID, filter memo.GroupID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Constraint == nil && scanOpDef.HardLimit == 0
+	if scanOpDef.Constraint != nil || scanOpDef.HardLimit != 0 {
+		return false
+	}
+	md := c.e.mem.Metadata()
+	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
+	firstIndexCol := scanOpDef.Table.ColumnID(index.Column(0).Ordinal)
+	return c.OuterCols(filter).Contains(int(firstIndexCol))
 }
 
 // constrainedScanOpDef tries to push a filter into a scanOpDef as a
