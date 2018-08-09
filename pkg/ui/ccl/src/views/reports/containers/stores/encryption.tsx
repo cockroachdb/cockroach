@@ -96,7 +96,7 @@ export default class EncryptionStatus {
     const { store } = this.props;
     const rawStatus = store.encryption_status;
     if (_.isEmpty(rawStatus)) {
-      return null;
+      return [ this.renderSimpleRow("Encryption status", "Not encrypted") ];
     }
 
     let decodedStatus;
@@ -106,10 +106,6 @@ export default class EncryptionStatus {
       decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(rawStatus);
     } catch (e) {
       return [ this.renderSimpleRow("Encryption status", "Error decoding protobuf: " + e.toString()) ];
-    }
-
-    if (decodedStatus == null) {
-      return null;
     }
 
     return [
