@@ -77,6 +77,7 @@ CREATE TABLE system.lease (
   version    INT,
   "nodeID"   INT,
   expiration TIMESTAMP,
+  epoch      INT,
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
@@ -408,10 +409,11 @@ var (
 			{Name: "version", ID: 2, Type: colTypeInt},
 			{Name: "nodeID", ID: 3, Type: colTypeInt},
 			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
+			{Name: "epoch", ID: 5, Type: colTypeInt, Nullable: true},
 		},
-		NextColumnID: 5,
+		NextColumnID: 6,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
+			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration", "epoch"}, ColumnIDs: []ColumnID{1, 2, 3, 4, 5}},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",

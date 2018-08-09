@@ -197,7 +197,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,7 +229,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
