@@ -139,6 +139,27 @@ $reports-table
   margin 0
   padding 0
 
+.stores-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+    max-width none
+    width 100%
+
+    &--header
+      background-color $link-color
+      text-align right
+      width 150px
+      min-width 150px
+
+      &--row
+        background-color $link-color
+        text-align center
+        color white
+        font-weight 900
+
 .connections-table
   @extend $reports-table
   font-size 12px

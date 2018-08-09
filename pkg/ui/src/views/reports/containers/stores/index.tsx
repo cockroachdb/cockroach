@@ -3,17 +3,20 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
+import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
 import { storesRequestKey, refreshStores } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
+import Loading from "src/views/shared/components/loading";
 
-import "./stores.styl";
+import spinner from "assets/spinner.gif";
 
 interface StoresOwnProps {
-  stores: protos.cockroach.server.serverpb.StoresResponse;
+  stores: protos.cockroach.server.serverpb.IStoreDetails[];
+  loading: boolean;
   lastError: Error;
   refreshStores: typeof refreshStores;
 }
@@ -58,55 +61,41 @@ class Stores extends React.Component<StoresProps, {}> {
     );
   }
 
-  renderStore(store: protos.cockroach.server.serverpb.IStoreDetails, key: number) {
+  renderStore = (store: protos.cockroach.server.serverpb.IStoreDetails) => {
     return (
-      <table key={key} className="stores-table">
+      <table key={store.store_id} className="stores-table">
         <tbody>
           { this.renderSimpleRow("Store ID", store.store_id.toString()) }
-          <EncryptionStatus store={store} />
+          { new EncryptionStatus({store: store}).getEncryptionRows() }
         </tbody>
       </table>
     );
   }
 
-  render() {
+  renderContent = () => {
     const nodeID = this.props.params[nodeIDAttr];
     if (!_.isNil(this.props.lastError)) {
       return (
-        <div className="section">
-          <Helmet>
-            <title>Stores | Debug</title>
-          </Helmet>
-          <h1>Stores</h1>
-          <h2>Error loading stores for node {nodeID}</h2>
-        </div>
+        <h2>Error loading stores for node {nodeID}</h2>
       );
     }
+
     const { stores } = this.props;
     if (_.isEmpty(stores)) {
       return (
-        <div className="section">
-          <Helmet>
-            <title>Stores | Debug</title>
-          </Helmet>
-          <h1>Stores</h1>
-          <h2>Loading cluster status...</h2>
-        </div>
+        <h2>No stores were found on node {nodeID}.</h2>
       );
     }
 
-    if (_.isEmpty(stores.stores)) {
-      return (
-        <div className="section">
-          <Helmet>
-            <title>Stores | Debug</title>
-          </Helmet>
-          <h1>Stores</h1>
-          <h2>No stores were found on node {this.props.params[nodeIDAttr]}.</h2>
-        </div>
-      );
-    }
+    return (
+      <React.Fragment>
+        { _.map(this.props.stores,  this.renderStore) }
+      </React.Fragment>
+    );
+  }
 
+  render() {
+    const nodeID = this.props.params[nodeIDAttr];
     let header: string = null;
     if (_.isNaN(parseInt(nodeID, 10))) {
       header = "Local Node";
@@ -121,21 +110,54 @@ class Stores extends React.Component<StoresProps, {}> {
         </Helmet>
         <h1>Stores</h1>
         <h2>{header} stores</h2>
-        {
-          _.map(stores.stores, (store, key) => (
-            this.renderStore(store, key)
-          ))
-        }
+        <Loading
+          loading={this.props.loading}
+          className="loading-image loading-image__spinner"
+          image={spinner}
+          render={this.renderContent}
+        />
       </div>
     );
   }
 }
 
-function mapStateToProps(state: AdminUIState, props: StoresProps) {
+function selectStoresState(state: AdminUIState, props: StoresProps) {
   const nodeIDKey = storesRequestKey(storesRequestFromProps(props));
+  return state.cachedData.stores[nodeIDKey];
+}
+
+const selectStoresLoading = createSelector(
+  selectStoresState,
+  (stores) => _.isEmpty(stores) || _.isEmpty(stores.data),
+);
+
+const selectSortedStores = createSelector(
+  selectStoresLoading,
+  selectStoresState,
+  (loading, stores) => {
+    if (loading) {
+      return null;
+    }
+    return _.sortBy(stores.data.stores, (store) => store.store_id);
+  },
+);
+
+const selectStoresLastError = createSelector(
+  selectStoresLoading,
+  selectStoresState,
+  (loading, stores) => {
+    if (loading) {
+      return null;
+    }
+    return stores.lastError;
+  },
+);
+
+function mapStateToProps(state: AdminUIState, props: StoresProps) {
   return {
-    stores: state.cachedData.stores[nodeIDKey] && state.cachedData.stores[nodeIDKey].data,
-    lastError: state.cachedData.stores[nodeIDKey] && state.cachedData.stores[nodeIDKey].lastError,
+    stores: selectSortedStores(state, props),
+    loading: selectStoresLoading(state, props),
+    lastError: selectStoresLastError(state, props),
   };
 }
 
