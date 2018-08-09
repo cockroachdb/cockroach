@@ -92,19 +92,6 @@ export default class EncryptionStatus {
     ];
   }
 
-  decodeEncryptionStatus(data: Uint8Array): protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus {
-    let decodedStatus;
-
-    // Attempt to decode protobuf.
-    try {
-      decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(data);
-    } catch (e) {
-      console.log("Error decoding protobuf: ", e);
-      return null;
-    }
-    return decodedStatus;
-  }
-
   getEncryptionRows() {
     const { store } = this.props;
     const rawStatus = store.encryption_status;
@@ -112,7 +99,15 @@ export default class EncryptionStatus {
       return null;
     }
 
-    const decodedStatus = this.decodeEncryptionStatus(rawStatus);
+    let decodedStatus;
+
+    // Attempt to decode protobuf.
+    try {
+      decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(rawStatus);
+    } catch (e) {
+      return [ this.renderSimpleRow("Encryption status", "Error decoding protobuf: " + e.toString()) ];
+    }
+
     if (decodedStatus == null) {
       return null;
     }
