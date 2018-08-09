@@ -399,6 +399,7 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
 void DBSstFileWriterClose(DBSstFileWriter* fw);
 
 void DBRunLDB(int argc, char** argv);
+void DBRunSSTDump(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);

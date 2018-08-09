@@ -917,6 +917,20 @@ https://github.com/facebook/rocksdb/wiki/Administration-and-Data-Access-Tool#ldb
 	},
 }
 
+var debugSSTDumpCmd = &cobra.Command{
+	Use:   "sst_dump",
+	Short: "run the RocksDB 'sst_dump' tool",
+	Long: `
+Runs the RocksDB 'sst_dump' tool
+`,
+	// sst_dump does its own flag parsing.
+	// TODO(mberhault): support encrypted stores.
+	DisableFlagParsing: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		engine.RunSSTDump(args)
+	},
+}
+
 var debugEnvCmd = &cobra.Command{
 	Use:   "env",
 	Short: "output environment settings",
@@ -1392,6 +1406,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
 	debugDecodeKeyCmd,
 	debugRocksDBCmd,
+	debugSSTDumpCmd,
 	debugGossipValuesCmd,
 	debugTimeSeriesDumpCmd,
 	debugSyncTestCmd,
