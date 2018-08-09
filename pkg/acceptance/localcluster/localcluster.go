@@ -77,7 +77,7 @@ func (b *LocalCluster) AssertAndStop(ctx context.Context, t testing.TB) {
 // ExecCLI implements cluster.Cluster.
 func (b *LocalCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	cmd = append([]string{b.Cfg.Binary}, cmd...)
-	cmd = append(cmd, "--insecure", "--port", b.Port(ctx, i))
+	cmd = append(cmd, "--insecure", "--host", ":"+b.Port(ctx, i))
 	c := exec.CommandContext(ctx, cmd[0], cmd[1:]...)
 	var o, e bytes.Buffer
 	c.Stdout, c.Stderr = &o, &e
