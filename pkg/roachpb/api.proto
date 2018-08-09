@@ -1498,7 +1498,18 @@ message BatchResponse {
 
   message Header {
     reserved 4;
-    // error is non-nil if an error occurred.
+    // error communicates a structured error (i.e. one originating from a Node)
+    // while the BatchResponse is sent over the network. If the code were
+    // written today, the RPC endpoint would return a message containing both a
+    // BatchResponse and an Error, and this embedding would go away. However, it
+    // returns only a BatchResponse, and so the Error needs to be tucked away
+    // somewhere (the structured error cannot be communicated via an RPC-level
+    // error).
+    //
+    // Outside of the RPC boundaries, this field is nil and must neither be
+    // checked nor populated (it is reset by the DistSender, which extracts this
+    // error and returns it separately). In effect, nearly no usage of
+    // BatchResponse needs to care about this field.
     Error error = 1;
     // timestamp is set only for non-transactional responses and denotes the
     // timestamp at which the batch executed. The timestamp cache is updated
