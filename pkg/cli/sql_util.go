@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -515,7 +516,7 @@ var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5"
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
-// application_name.
+// application_name. It is prefixed with '$ ' to mark it as internal.
 func makeSQLClient(appName string) (*sqlConn, error) {
 	var baseURL *url.URL
 	var options url.Values
@@ -608,7 +609,7 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 	// Load the application name. It's not a command-line flag, so
 	// anything already in the URL should take priority.
 	if options.Get("application_name") == "" && appName != "" {
-		options.Set("application_name", appName)
+		options.Set("application_name", sql.InternalAppNamePrefix+appName)
 	}
 
 	// Set a connection timeout if none is provided already. This

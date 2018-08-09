@@ -757,7 +757,7 @@ func Example_demo() {
 	// defaultdb
 	// demo -e show application_name
 	// application_name
-	// cockroach demo
+	// $ cockroach demo
 	// demo --format=table -e show database
 	//   database
 	// +-----------+
@@ -825,7 +825,7 @@ func Example_sql() {
 	// Output:
 	// sql -e show application_name
 	// application_name
-	// cockroach sql
+	// $ cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 as "3" -e select * from t.f
