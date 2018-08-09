@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -312,7 +313,9 @@ func (s *sqlStats) getStmtStats(
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
-				maybeHashedAppName = HashForReporting(salt, appName)
+				if !strings.HasPrefix("internal-", appName) {
+					maybeHashedAppName = HashForReporting(salt, appName)
+				}
 			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
