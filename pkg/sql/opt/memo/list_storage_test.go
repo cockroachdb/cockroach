@@ -21,7 +21,6 @@ import (
 
 func TestListStorage(t *testing.T) {
 	var ls listStorage
-	ls.init()
 
 	catID := ls.intern(stringToGroups("cat"))
 	if catID != (ListID{Offset: 1, Length: 3}) {

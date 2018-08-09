@@ -146,7 +146,6 @@ func New() *Memo {
 		groups:   make([]group, 1),
 	}
 
-	m.listStorage.init()
 	m.privateStorage.init()
 	return m
 }
