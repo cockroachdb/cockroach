@@ -36,7 +36,7 @@ func TestPhysicalProps(t *testing.T) {
 		opt.LabeledColumn{Label: "b", ID: 2},
 	}
 	phys = &props.Physical{Presentation: presentation}
-	testPhysicalProps(t, phys, "p:a:1,b:2")
+	testPhysicalProps(t, phys, "[presentation: a:1,b:2]")
 
 	if presentation.Any() {
 		t.Error("presentation should not be empty")
@@ -53,12 +53,12 @@ func TestPhysicalProps(t *testing.T) {
 	// Add ordering props.
 	ordering := props.ParseOrderingChoice("+1,+5")
 	phys.Ordering = ordering
-	testPhysicalProps(t, phys, "p:a:1,b:2 o:+1,+5")
+	testPhysicalProps(t, phys, "[presentation: a:1,b:2] [ordering: +1,+5]")
 }
 
 func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {
 	t.Helper()
-	actual := physProps.Fingerprint()
+	actual := physProps.String()
 	if actual != expected {
 		t.Errorf("\nexpected: %s\nactual: %s", expected, actual)
 	}
