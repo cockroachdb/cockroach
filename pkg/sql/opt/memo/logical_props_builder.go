@@ -158,11 +158,13 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Cardinality
 	// -----------
-	// Don't bother setting cardinality from scan's HardLimit or Constraint,
-	// since those are created by exploration patterns and won't ever be the
-	// basis for the logical props on a newly created memo group.
+	// Don't bother setting cardinality from scan's HardLimit, since that is
+	// created by exploration patterns and won't ever be the basis for the
+	// logical props on a newly created memo group.
 	relational.Cardinality = props.AnyCardinality
-	if relational.FuncDeps.HasMax1Row() {
+	if def.Constraint != nil && def.Constraint.IsContradiction() {
+		relational.Cardinality = relational.Cardinality.AtMost(0)
+	} else if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
 	}
 
@@ -216,6 +218,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	inputProps := ev.childGroup(0).logical.Relational
 	filterProps := ev.childGroup(1).logical.Scalar
+	filter := ev.Child(1)
 
 	// Output Columns
 	// --------------
@@ -257,7 +260,9 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// -----------
 	// Select filter can filter any or all rows.
 	relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
-	if relational.FuncDeps.HasMax1Row() {
+	if filter.Operator() == opt.FalseOp || filterProps.Constraints == constraint.Contradiction {
+		relational.Cardinality = relational.Cardinality.AtMost(0)
+	} else if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
 	}
 
@@ -1166,15 +1171,37 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	ev ExprView, left, right props.Cardinality,
 ) props.Cardinality {
 	var card props.Cardinality
+	filter := ev.Child(2)
+	contradiction := filter.Operator() == opt.FalseOp ||
+		filter.Logical().Scalar.Constraints == constraint.Contradiction
+
+	// Semi/Anti join cardinality never exceeds left input cardinality, and
+	// allows zero rows.
 	switch ev.Operator() {
-	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		// Semi/Anti join cardinality never exceeds left input cardinality, and
-		// allows zero rows.
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		if contradiction {
+			return left.AtMost(0)
+		}
+		return left.AsLowAs(0)
+
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		if contradiction {
+			return left
+		}
 		return left.AsLowAs(0)
 	}
 
 	// Other join types can return up to cross product of rows.
 	card = left.Product(right)
+
+	// Apply filter to cardinality.
+	if filter.Operator() != opt.TrueOp {
+		if contradiction {
+			card = card.AtMost(0)
+		} else {
+			card = card.AsLowAs(0)
+		}
+	}
 
 	// Outer joins return minimum number of rows, depending on type.
 	switch ev.Operator() {
@@ -1185,12 +1212,12 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
 		card = card.AtLeast(right.Min)
 	}
-
-	// Apply filter to cardinality.
-	if ev.Child(2).Operator() == opt.TrueOp {
-		return card
+	switch ev.Operator() {
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AsHighAs(left.Min + right.Min)
 	}
-	return card.AsLowAs(0)
+
+	return card
 }
 
 func (b *logicalPropsBuilder) makeSetCardinality(

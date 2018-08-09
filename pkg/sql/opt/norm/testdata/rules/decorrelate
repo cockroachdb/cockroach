@@ -3399,7 +3399,7 @@ SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── left-join-apply
+ ├── inner-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool) exists:11(bool)
  │    ├── key: (1)
  │    ├── fd: (1)-->(8,11)
@@ -3409,24 +3409,25 @@ project
  │    ├── inner-join-apply
  │    │    ├── columns: column1:8(bool) exists:11(bool)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [0 - 1]
+ │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(8,11)
  │    │    ├── project
  │    │    │    ├── columns: exists:11(bool)
  │    │    │    ├── outer: (1)
- │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(11)
  │    │    │    ├── group-by
  │    │    │    │    ├── columns: true_agg:10(bool)
  │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
  │    │    │    │    ├── right-join
  │    │    │    │    │    ├── columns: x:6(int) true:9(bool)
  │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [1 - ]
  │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    ├── fd: ()~~>(9), (6)-->(9)
  │    │    │    │    │    ├── project
@@ -3467,7 +3468,7 @@ SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
  ├── columns: column1:12(bool)
- ├── left-join-apply
+ ├── inner-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool) case:11(bool)
  │    ├── key: (1)
  │    ├── fd: (1)-->(8,11)
@@ -3477,24 +3478,25 @@ project
  │    ├── inner-join-apply
  │    │    ├── columns: column1:8(bool) case:11(bool)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [0 - 1]
+ │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(8,11)
  │    │    ├── project
  │    │    │    ├── columns: case:11(bool)
  │    │    │    ├── outer: (1)
- │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(11)
  │    │    │    ├── group-by
  │    │    │    │    ├── columns: bool_or:10(bool)
  │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
  │    │    │    │    ├── right-join
  │    │    │    │    │    ├── columns: x:6(int) notnull:9(bool)
  │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [1 - ]
  │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    ├── fd: (6)-->(9)
  │    │    │    │    │    ├── project
@@ -3595,9 +3597,11 @@ semi-join-apply
  │    ├── project
  │    │    ├── columns: v:4(int)
  │    │    ├── outer: (1)
+ │    │    ├── cardinality: [1 - ]
  │    │    └── right-join
  │    │         ├── columns: u:3(int) v:4(int)
  │    │         ├── outer: (1)
+ │    │         ├── cardinality: [1 - ]
  │    │         ├── key: (3)
  │    │         ├── fd: (3)-->(4)
  │    │         ├── scan uv

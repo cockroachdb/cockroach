@@ -70,6 +70,15 @@ func (c Cardinality) AsLowAs(min uint32) Cardinality {
 	return c
 }
 
+// AsHighAs ratchets the max bound upwards in order to ensure that it allows
+// values that are <= the max value.
+func (c Cardinality) AsHighAs(max uint32) Cardinality {
+	if max > c.Max {
+		return Cardinality{Min: c.Min, Max: max}
+	}
+	return c
+}
+
 // AtLeast ratchets the bounds upwards so that they're at least as big as the
 // given min value.
 func (c Cardinality) AtLeast(min uint32) Cardinality {
