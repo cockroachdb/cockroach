@@ -72,7 +72,7 @@ class Stores extends React.Component<StoresProps, {}> {
     );
   }
 
-  renderContent() {
+  renderContent = () => {
     const nodeID = this.props.params[nodeIDAttr];
     if (!_.isNil(this.props.lastError)) {
       return (
@@ -114,9 +114,8 @@ class Stores extends React.Component<StoresProps, {}> {
           loading={this.props.loading}
           className="loading-image loading-image__spinner"
           image={spinner}
-        >
-          {this.renderContent()}
-        </Loading>
+          render={this.renderContent}
+        />
       </div>
     );
   }
@@ -124,26 +123,34 @@ class Stores extends React.Component<StoresProps, {}> {
 
 function selectStoresState(state: AdminUIState, props: StoresProps) {
   const nodeIDKey = storesRequestKey(storesRequestFromProps(props));
-  return state.cachedData.stores[nodeIDKey] && state.cachedData.stores[nodeIDKey];
+  return state.cachedData.stores[nodeIDKey];
 }
 
 const selectStoresLoading = createSelector(
   selectStoresState,
-  (stores) => _.isEmpty(stores.data),
+  (stores) => _.isEmpty(stores) || _.isEmpty(stores.data),
 );
 
 const selectSortedStores = createSelector(
+  selectStoresLoading,
   selectStoresState,
-  (stores) => (
-    _.sortBy(stores.data.stores, (store) => store.store_id)
-  ),
+  (loading, stores) => {
+    if (loading) {
+      return null;
+    }
+    return _.sortBy(stores.data.stores, (store) => store.store_id);
+  },
 );
 
 const selectStoresLastError = createSelector(
+  selectStoresLoading,
   selectStoresState,
-  (stores) => (
-   stores.lastError
-  ),
+  (loading, stores) => {
+    if (loading) {
+      return null;
+    }
+    return stores.lastError;
+  },
 );
 
 function mapStateToProps(state: AdminUIState, props: StoresProps) {
