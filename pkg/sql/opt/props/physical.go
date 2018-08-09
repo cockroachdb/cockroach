@@ -50,8 +50,12 @@ type Physical struct {
 	Ordering OrderingChoice
 }
 
-// Defined returns true if any physical property is defined. If none is
-// defined, then this is an instance of MinPhysProps.
+// MinPhysProps are the default physical properties that require nothing and
+// provide nothing.
+var MinPhysProps Physical
+
+// Defined is true if any physical property is defined. If none is defined, then
+// this is an instance of MinPhysProps.
 func (p *Physical) Defined() bool {
 	return !p.Presentation.Any() || !p.Ordering.Any()
 }
@@ -65,8 +69,7 @@ func (p *Physical) ColSet() opt.ColSet {
 	return colSet
 }
 
-// FormatString writes physical properties to a human-readable format.
-func (p *Physical) FormatString(verbose bool) string {
+func (p *Physical) String() string {
 	hasProjection := !p.Presentation.Any()
 	hasOrdering := !p.Ordering.Any()
 
@@ -78,14 +81,9 @@ func (p *Physical) FormatString(verbose bool) string {
 	var buf bytes.Buffer
 
 	if hasProjection {
-		if verbose {
-			buf.WriteString("[presentation: ")
-			p.Presentation.format(&buf)
-			buf.WriteByte(']')
-		} else {
-			buf.WriteString("p:")
-			p.Presentation.format(&buf)
-		}
+		buf.WriteString("[presentation: ")
+		p.Presentation.format(&buf)
+		buf.WriteByte(']')
 
 		if hasOrdering {
 			buf.WriteString(" ")
@@ -93,27 +91,12 @@ func (p *Physical) FormatString(verbose bool) string {
 	}
 
 	if hasOrdering {
-		if verbose {
-			buf.WriteString("[ordering: ")
-			p.Ordering.Format(&buf)
-			buf.WriteByte(']')
-		} else {
-			buf.WriteString("o:")
-			p.Ordering.Format(&buf)
-		}
+		buf.WriteString("[ordering: ")
+		p.Ordering.Format(&buf)
+		buf.WriteByte(']')
 	}
 
 	return buf.String()
-}
-
-// Fingerprint returns a string that uniquely describes this set of physical
-// properties. It is suitable for use as a hash key in a map.
-func (p *Physical) Fingerprint() string {
-	return p.FormatString(false /* verbose */)
-}
-
-func (p *Physical) String() string {
-	return p.FormatString(true /* verbose */)
 }
 
 // Equals returns true if the two physical properties are identical.
