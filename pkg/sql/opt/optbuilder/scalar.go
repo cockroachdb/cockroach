@@ -305,12 +305,13 @@ func (b *Builder) buildScalarHelper(
 	case *tree.ComparisonExpr:
 		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
 			out, _ = b.buildMultiRowSubquery(t, inScope)
+		} else if b.hasSubOperator(t) {
+			// Cases where the RHS is a subquery and not a scalar (of which only an
+			// array or tuple is legal) were handled above.
+			out = b.buildAnyScalar(t, inScope)
 		} else {
 			left := b.buildScalarHelper(t.TypedLeft(), "", inScope, nil)
 			right := b.buildScalarHelper(t.TypedRight(), "", inScope, nil)
-
-			// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
-			// and All to various formulations of the opt Exists operator.
 
 			fn := comparisonOpMap[t.Operator]
 
@@ -417,6 +418,32 @@ func (b *Builder) buildScalarHelper(
 	}
 
 	return b.finishBuildScalar(scalar, out, label, inScope, outScope)
+}
+
+func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
+	return t.Operator == tree.Any || t.Operator == tree.All || t.Operator == tree.Some
+}
+
+func (b *Builder) buildAnyScalar(t *tree.ComparisonExpr, inScope *scope) memo.GroupID {
+	left := b.buildScalarHelper(t.TypedLeft(), "", inScope, nil)
+	right := b.buildScalarHelper(t.TypedRight(), "", inScope, nil)
+
+	subop := opt.ComparisonOpMap[t.SubOperator]
+
+	if t.Operator == tree.All {
+		subop = opt.NegateOpMap[subop]
+	}
+
+	out := b.factory.ConstructAnyScalar(
+		left,
+		right,
+		b.factory.InternOperator(subop),
+	)
+
+	if t.Operator == tree.All {
+		out = b.factory.ConstructNot(out)
+	}
+	return out
 }
 
 // buildDatum maps certain datums to separate operators, for easier matching.

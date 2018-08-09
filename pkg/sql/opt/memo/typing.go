@@ -127,6 +127,7 @@ func init() {
 		opt.SubqueryOp:        typeSubquery,
 		opt.ArrayOp:           typeAsPrivate,
 		opt.ColumnAccessOp:    typeColumnAccess,
+		opt.AnyScalarOp:       typeAsBool,
 
 		// Override default typeAsAggregate behavior for aggregate functions with
 		// a large number of possible overloads or where ReturnType depends on
