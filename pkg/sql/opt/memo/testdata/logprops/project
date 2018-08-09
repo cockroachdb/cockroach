@@ -102,7 +102,7 @@ select
            │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    ├── outer: (1)
            │              │    ├── cardinality: [0 - 1]
-           │              │    ├── stats: [rows=1, distinct(5)=1]
+           │              │    ├── stats: [rows=1, distinct(1)=1, distinct(5)=1]
            │              │    ├── key: ()
            │              │    ├── fd: ()-->(5-7)
            │              │    ├── prune: (6,7)
@@ -251,7 +251,7 @@ project
                           ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
                           ├── outer: (1)
                           ├── cardinality: [0 - 1]
-                          ├── stats: [rows=1, distinct(4)=1]
+                          ├── stats: [rows=1, distinct(1)=1, distinct(4)=1]
                           ├── key: ()
                           ├── fd: ()-->(4-7)
                           ├── prune: (5-7)
@@ -315,7 +315,7 @@ project
                                     ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
                                     ├── outer: (1)
                                     ├── cardinality: [0 - 1]
-                                    ├── stats: [rows=1, distinct(8)=1]
+                                    ├── stats: [rows=1, distinct(1)=1, distinct(8)=1]
                                     ├── key: ()
                                     ├── fd: ()-->(8-11)
                                     ├── prune: (9-11)

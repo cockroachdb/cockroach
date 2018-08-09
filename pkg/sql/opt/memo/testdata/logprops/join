@@ -148,7 +148,7 @@ project
       │         └── inner-join-apply
       │              ├── columns: v:6(int!null) n:9(int!null)
       │              ├── outer: (1)
-      │              ├── stats: [rows=1000, distinct(9)=1]
+      │              ├── stats: [rows=1000, distinct(1)=1, distinct(9)=1]
       │              ├── fd: ()-->(9)
       │              ├── interesting orderings: ()
       │              ├── scan uv
@@ -166,7 +166,7 @@ project
       │              │    └── select
       │              │         ├── columns: n:9(int!null)
       │              │         ├── outer: (6)
-      │              │         ├── stats: [rows=1, distinct(9)=1]
+      │              │         ├── stats: [rows=1, distinct(6)=1, distinct(9)=1]
       │              │         ├── fd: ()-->(9)
       │              │         ├── interesting orderings: (+9)
       │              │         ├── scan mn@secondary
@@ -230,7 +230,7 @@ project
       │         └── inner-join
       │              ├── columns: v:6(int!null) m:8(int!null)
       │              ├── outer: (1,2)
-      │              ├── stats: [rows=1000, distinct(8)=1000]
+      │              ├── stats: [rows=1000, distinct(1)=1, distinct(2)=1, distinct(8)=1]
       │              ├── fd: ()-->(8)
       │              ├── prune: (6)
       │              ├── interesting orderings: () (+8)
@@ -331,7 +331,7 @@ project
       │    │    └── select
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
+      │    │         ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
       │    │         ├── fd: ()-->(5)
       │    │         ├── interesting orderings: ()
       │    │         ├── scan uv
@@ -436,7 +436,7 @@ right-join
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── stats: [rows=1.42857143, distinct(8)=1.42857143]
+ │         │    │         │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(8)=1]
  │         │    │         │    ├── fd: ()-->(8)
  │         │    │         │    ├── interesting orderings: ()
  │         │    │         │    ├── scan uv
@@ -545,7 +545,7 @@ project
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=1.42857143, distinct(8)=1.42857143]
+      │    │         │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(8)=1]
       │    │         │    ├── fd: ()-->(8)
       │    │         │    ├── interesting orderings: ()
       │    │         │    ├── scan uv
@@ -620,7 +620,7 @@ semi-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=1.42857143, distinct(6)=1.42857143]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(6)=1]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
@@ -738,7 +738,7 @@ anti-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=1.42857143, distinct(6)=1.42857143]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(6)=1]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
@@ -948,7 +948,7 @@ semi-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()
@@ -1024,7 +1024,7 @@ anti-join-apply
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=1.42857143, distinct(5)=1.42857143]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()

@@ -109,7 +109,7 @@ select
                 └── select
                      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                      ├── outer: (1)
-                     ├── stats: [rows=1.42857143, distinct(3)=1.42857143]
+                     ├── stats: [rows=1.42857143, distinct(1)=1, distinct(3)=1]
                      ├── key: (5)
                      ├── fd: ()-->(3), (5)-->(4)
                      ├── prune: (4,5)
@@ -152,7 +152,7 @@ select
            │    └── select
            │         ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            │         ├── outer: (1)
-           │         ├── stats: [rows=1.42857143, distinct(3)=1.42857143]
+           │         ├── stats: [rows=1.42857143, distinct(1)=1, distinct(3)=1]
            │         ├── key: (5)
            │         ├── fd: ()-->(3), (5)-->(4)
            │         ├── prune: (4,5)

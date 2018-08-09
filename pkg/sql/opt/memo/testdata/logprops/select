@@ -100,7 +100,7 @@ select
                 ├── columns: k:3(int!null) u:4(float) v:5(string)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1, distinct(3)=1]
+                ├── stats: [rows=1, distinct(1)=1, distinct(3)=1]
                 ├── key: ()
                 ├── fd: ()-->(3-5)
                 ├── prune: (4,5)
@@ -109,7 +109,7 @@ select
                 │    ├── columns: k:3(int!null) u:4(float) v:5(string)
                 │    ├── outer: (2)
                 │    ├── cardinality: [0 - 1]
-                │    ├── stats: [rows=1, distinct(3)=1]
+                │    ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
                 │    ├── key: ()
                 │    ├── fd: ()-->(3-5)
                 │    ├── prune: (4,5)
@@ -378,7 +378,7 @@ project
                 │              │    └── select
                 │              │         ├── columns: x:6(int!null) y:7(int!null)
                 │              │         ├── outer: (2)
-                │              │         ├── stats: [rows=1.42857143, distinct(7)=1.42857143]
+                │              │         ├── stats: [rows=1.42857143, distinct(2)=1, distinct(7)=1]
                 │              │         ├── key: (6)
                 │              │         ├── fd: ()-->(7)
                 │              │         ├── prune: (6)
