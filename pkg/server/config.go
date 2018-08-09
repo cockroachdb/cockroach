@@ -316,7 +316,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		panic(err)
 	}
 
-	requireWebLogin := envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_REQUIRE_WEB_LOGIN", false)
+	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 
 	cfg := Config{
 		Config:                         new(base.Config),
@@ -329,7 +329,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ScanMinIdleTime:                defaultScanMinIdleTime,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: requireWebLogin,
+		EnableWebSessionAuthentication: !disableWebLogin,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
