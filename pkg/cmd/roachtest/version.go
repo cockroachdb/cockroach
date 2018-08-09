@@ -166,7 +166,7 @@ func registerVersion(r *registry) {
 			stop := func(node int) error {
 				l.printf("stopping node %d\n", node)
 				port := fmt.Sprintf("{pgport:%d}", node)
-				if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
+				if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port); err != nil {
 					return err
 				}
 				// NB: we still call Stop to make sure the process is dead when we try

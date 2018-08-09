@@ -534,9 +534,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenAddr.Name)
 					} else if le.Addr == serverCfg.HTTPAddr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPPort.Name)
+						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPAddr.Name)
 					}
 				}
 
@@ -815,9 +815,7 @@ func clientFlags() string {
 	flags := []string{os.Args[0]}
 	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
 	if err == nil {
-		flags = append(flags,
-			"--host="+host,
-			"--port="+port)
+		flags = append(flags, "--host="+host+":"+port)
 	}
 	if startCtx.serverInsecure {
 		flags = append(flags, "--insecure")
@@ -1001,6 +999,9 @@ func addrWithDefaultHost(addr string) (string, error) {
 	}
 	if host == "" {
 		host = "localhost"
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
 	}
 	return net.JoinHostPort(host, port), nil
 }
