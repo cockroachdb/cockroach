@@ -170,6 +170,8 @@ var _ tree.WindowFunc = &firstValueWindow{}
 var _ tree.WindowFunc = &lastValueWindow{}
 var _ tree.WindowFunc = &nthValueWindow{}
 
+const noFilterIdx = -1
+
 // aggregateWindowFunc aggregates over the the current row's window frame, using
 // the internal tree.AggregateFunc to perform the aggregation.
 type aggregateWindowFunc struct {
@@ -197,6 +199,9 @@ func (w *aggregateWindowFunc) Compute(
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wfr.PeerRowCount; i++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(wfr.RowIdx+i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		args := wfr.ArgsWithRowOffset(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.
@@ -261,6 +266,9 @@ func (w *framableAggregateWindowFunc) Compute(
 
 	// Accumulate all values in the window frame.
 	for i := wfr.FrameStartIdx(); i < wfr.FrameEndIdx(); i++ {
+		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(i).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+			continue
+		}
 		args := wfr.ArgsByRowIdx(i)
 		var value tree.Datum
 		// COUNT_ROWS takes no arguments.

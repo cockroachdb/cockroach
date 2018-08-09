@@ -1883,7 +1883,7 @@ SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 statement ok
 DELETE FROM kv WHERE k = 12
 
-query error FILTER within a window function call is not yet supported
+query error FILTER specified but rank\(\) is not an aggregate function
 SELECT k, rank() FILTER (WHERE k=1) OVER () FROM kv
 
 # Issue #14606: correctly handle aggregation functions above the windowing level
@@ -2261,3 +2261,42 @@ Laptop      Dell             800.00   6450.00
 Tablet      iPad             700.00   6450.00
 Tablet      Kindle Fire      150.00   6450.00
 Tablet      Samsung          200.00   6450.00
+
+statement error aggregate functions are not allowed in FILTER
+SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
+
+statement error incompatible FILTER expression type: int
+SELECT count(*) FILTER (WHERE 1) OVER () FROM products
+
+statement error syntax error at or near "filter"
+SELECT price FILTER (WHERE price=1) OVER () FROM products
+
+query II
+SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM products
+----
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+11  0
+
+query RRRR
+SELECT avg(price) FILTER (WHERE price > 300) OVER w1, sum(price) FILTER (WHERE group_name = 'Smartphone') OVER w2, avg(price) FILTER (WHERE price = 200 OR price = 700) OVER w1, avg(price) FILTER (WHERE price < 900) OVER w2 FROM products WINDOW w1 AS (ORDER BY group_id), w2 AS (PARTITION BY group_name ORDER BY price, group_id) ORDER BY group_id
+----
+NULL                   200.00   200.00                 200.00
+400.00                 600.00   200.00                 300.00
+450.00                 1100.00  200.00                 366.66666666666666667
+600.00                 2000.00  200.00                 366.66666666666666667
+750.00                 NULL     200.00                 733.33333333333333333
+740.00                 NULL     450.00                 700.00
+733.33333333333333333  NULL     533.33333333333333333  700.00
+742.85714285714285714  NULL     533.33333333333333333  733.33333333333333333
+737.50                 NULL     575.00                 350.00
+737.50                 NULL     575.00                 150.00
+737.50                 NULL     500.00                 175.00
