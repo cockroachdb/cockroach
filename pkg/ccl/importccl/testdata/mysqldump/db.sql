@@ -16,6 +16,33 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `SECOND`
+--
+
+DROP TABLE IF EXISTS `SECOND`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `SECOND` (
+  `i` int(11) NOT NULL,
+  `k` int(11) DEFAULT NULL,
+  PRIMARY KEY (`i`),
+  UNIQUE KEY `ik` (`i`,`k`),
+  KEY `ki` (`k`,`i`),
+  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `SECOND`
+--
+
+LOCK TABLES `SECOND` WRITE;
+/*!40000 ALTER TABLE `SECOND` DISABLE KEYS */;
+INSERT INTO `SECOND` VALUES (-7,7),(-6,6),(-5,5),(-4,4),(-3,3),(-2,2),(-1,1);
+/*!40000 ALTER TABLE `SECOND` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `everything`
 --
 
@@ -59,35 +86,8 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-07-25 22:06:58',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-08-09 18:03:02',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
-UNLOCK TABLES;
-
---
--- Table structure for table `second`
---
-
-DROP TABLE IF EXISTS `second`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `second` (
-  `i` int(11) NOT NULL,
-  `k` int(11) DEFAULT NULL,
-  PRIMARY KEY (`i`),
-  UNIQUE KEY `ik` (`i`,`k`),
-  KEY `ki` (`k`,`i`),
-  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Dumping data for table `second`
---
-
-LOCK TABLES `second` WRITE;
-/*!40000 ALTER TABLE `second` DISABLE KEYS */;
-INSERT INTO `second` VALUES (-7,7),(-6,6),(-5,5),(-4,4),(-3,3),(-2,2),(-1,1);
-/*!40000 ALTER TABLE `second` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -153,4 +153,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-07-25 22:06:58
+-- Dump completed on 2018-08-09 18:03:02

@@ -16,13 +16,13 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `second`
+-- Table structure for table `SECOND`
 --
 
-DROP TABLE IF EXISTS `second`;
+DROP TABLE IF EXISTS `SECOND`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `second` (
+CREATE TABLE `SECOND` (
   `i` int(11) NOT NULL,
   `k` int(11) DEFAULT NULL,
   PRIMARY KEY (`i`),
@@ -33,13 +33,13 @@ CREATE TABLE `second` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `second`
+-- Dumping data for table `SECOND`
 --
 
-LOCK TABLES `second` WRITE;
-/*!40000 ALTER TABLE `second` DISABLE KEYS */;
-INSERT INTO `second` VALUES (-7,7),(-6,6),(-5,5),(-4,4),(-3,3),(-2,2),(-1,1);
-/*!40000 ALTER TABLE `second` ENABLE KEYS */;
+LOCK TABLES `SECOND` WRITE;
+/*!40000 ALTER TABLE `SECOND` DISABLE KEYS */;
+INSERT INTO `SECOND` VALUES (-7,7),(-6,6),(-5,5),(-4,4),(-3,3),(-2,2),(-1,1);
+/*!40000 ALTER TABLE `SECOND` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -51,4 +51,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-07-25 22:06:58
+-- Dump completed on 2018-08-09 18:03:02
