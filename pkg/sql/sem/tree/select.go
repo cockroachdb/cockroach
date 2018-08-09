@@ -24,6 +24,7 @@
 package tree
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -259,35 +260,66 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
 
-// IndexHints represents "@<index_name>" or "@{param[,param]}" where param is
-// one of:
-//  - FORCE_INDEX=<index_name>
+// IndexHints represents "@<index_name|index_id>" or "@{param[,param]}" where
+// param is one of:
+//  - FORCE_INDEX=<index_name|index_id>
 //  - NO_INDEX_JOIN
 // It is used optionally after a table name in SELECT statements.
 type IndexHints struct {
-	Index       UnrestrictedName
-	IndexID     IndexID
+	Index   UnrestrictedName
+	IndexID IndexID
+	// NoIndexJoin cannot be specified together with an index.
 	NoIndexJoin bool
 }
 
+// ForceIndex returns true if a forced index was specified, either using a name
+// or an IndexID.
+func (ih *IndexHints) ForceIndex() bool {
+	return ih.Index != "" || ih.IndexID != 0
+}
+
+// CombineWith combines two IndexHints structures, returning an error if they
+// conflict with one another.
+func (ih *IndexHints) CombineWith(other *IndexHints) error {
+	if ih.NoIndexJoin && other.NoIndexJoin {
+		return errors.New("NO_INDEX_JOIN specified multiple times")
+	}
+	noIndexJoin := ih.NoIndexJoin || other.NoIndexJoin
+
+	if noIndexJoin && (ih.ForceIndex() || other.ForceIndex()) {
+		return errors.New("FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN")
+	}
+
+	if other.ForceIndex() {
+		if ih.ForceIndex() {
+			return errors.New("FORCE_INDEX specified multiple times")
+		}
+		ih.Index = other.Index
+		ih.IndexID = other.IndexID
+	}
+
+	ih.NoIndexJoin = noIndexJoin
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
-func (n *IndexHints) Format(ctx *FmtCtx) {
-	if !n.NoIndexJoin {
+func (ih *IndexHints) Format(ctx *FmtCtx) {
+	if !ih.NoIndexJoin {
 		ctx.WriteByte('@')
-		if n.Index != "" {
-			ctx.FormatNode(&n.Index)
+		if ih.Index != "" {
+			ctx.FormatNode(&ih.Index)
 		} else {
-			ctx.Printf("[%d]", n.IndexID)
+			ctx.Printf("[%d]", ih.IndexID)
 		}
 	} else {
-		if n.Index == "" && n.IndexID == 0 {
+		if ih.Index == "" && ih.IndexID == 0 {
 			ctx.WriteString("@{NO_INDEX_JOIN}")
 		} else {
 			ctx.WriteString("@{FORCE_INDEX=")
-			if n.Index != "" {
-				ctx.FormatNode(&n.Index)
+			if ih.Index != "" {
+				ctx.FormatNode(&ih.Index)
 			} else {
-				ctx.Printf("[%d]", n.IndexID)
+				ctx.Printf("[%d]", ih.IndexID)
 			}
 			ctx.WriteString(",NO_INDEX_JOIN}")
 		}

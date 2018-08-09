@@ -148,7 +148,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// exposed to users, consider adding a version to the fingerprint output.
 	sql := fmt.Sprintf(`SELECT
 	  xor_agg(fnv64(%s))::string AS fingerprint
-	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
+	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,

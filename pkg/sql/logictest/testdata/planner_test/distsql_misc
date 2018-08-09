@@ -11,9 +11,9 @@ query T
 SELECT url FROM [EXPLAIN (DISTSQL)
     SELECT leftside.v, leftside.k, leftside.data, rightside.v, rightside.k, rightside.data
     FROM
-      (SELECT v,k,data FROM test@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY v,k,data) AS leftside
+      (SELECT v,k,data FROM test@{FORCE_INDEX=[1]} ORDER BY v,k,data) AS leftside
     FULL OUTER JOIN
-      (SELECT v,k,data FROM test@{FORCE_INDEX=[2],NO_INDEX_JOIN} ORDER BY v,k,data) AS rightside
+      (SELECT v,k,data FROM test@{FORCE_INDEX=[2]} ORDER BY v,k,data) AS rightside
       ON leftside.v = rightside.v AND leftside.k = rightside.k AND leftside.data = rightside.data
     WHERE (leftside.k IS NULL) OR
           (rightside.k IS NULL)
@@ -44,7 +44,7 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     FROM
       (SELECT child_id, id, id2 FROM child@{NO_INDEX_JOIN} ORDER BY id, id2) AS p
     FULL OUTER JOIN
-      (SELECT id, id2 FROM parent@{FORCE_INDEX=[2],NO_INDEX_JOIN} ORDER BY id, id2) AS c
+      (SELECT id, id2 FROM parent@{FORCE_INDEX=[2]} ORDER BY id, id2) AS c
       ON p.id = c.id AND p.id2 = c.id2
     WHERE (p.id IS NOT NULL OR p.id2 IS NOT NULL) AND
           c.id IS NULL AND c.id2 IS NULL

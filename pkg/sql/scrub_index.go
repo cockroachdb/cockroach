@@ -260,7 +260,7 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 //   FROM
 //     (SELECT * FROM test@{NO_INDEX_JOIN} AS left ORDER BY k, s, v)
 //   FULL OUTER JOIN
-//     (SELECT * FROM test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} AS right ORDER BY k, s, v)
+//     (SELECT * FROM test@{FORCE_INDEX=v_idx} AS right ORDER BY k, s, v)
 //   ON
 //      left.k = right.k AND
 //      left.s = right.s AND
@@ -309,9 +309,9 @@ func createIndexCheckQuery(
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1]} %[10]s ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS rightside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d]} %[10]s ORDER BY %[5]s) AS rightside
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`

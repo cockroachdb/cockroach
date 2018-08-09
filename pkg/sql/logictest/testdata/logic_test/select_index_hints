@@ -98,6 +98,3 @@ SELECT * FROM abcd@badidx
 
 query error index \"badidx\" not found
 SELECT * FROM abcd@{FORCE_INDEX=badidx}
-
-query error index \"cd\" is not covering and NO_INDEX_JOIN was specified
-SELECT b, c, d FROM abcd@{FORCE_INDEX=cd,NO_INDEX_JOIN} WHERE c = 10
