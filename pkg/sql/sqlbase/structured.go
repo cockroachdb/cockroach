@@ -2278,7 +2278,7 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		return ColumnType_UUID, nil
 	case types.INet:
 		return ColumnType_INET, nil
-	case types.Oid:
+	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegType, types.RegProcedure:
 		return ColumnType_OID, nil
 	case types.Unknown:
 		return ColumnType_NULL, nil

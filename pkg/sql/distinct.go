@@ -190,7 +190,7 @@ func (p *planner) distinct(
 
 func (n *distinctNode) startExec(params runParams) error {
 	flowCtx := &distsqlrun.FlowCtx{
-		EvalCtx: *params.EvalContext(),
+		EvalCtx: params.EvalContext(),
 	}
 
 	cols := make([]int, len(planColumns(n.plan)))
@@ -200,12 +200,25 @@ func (n *distinctNode) startExec(params runParams) error {
 
 	spec := createDistinctSpec(n, cols)
 
-	input, err := makePlanNodeToRowSource(n.plan, params)
+	input, err := makePlanNodeToRowSource(n.plan, params, false)
 	if err != nil {
 		return err
 	}
 	if len(spec.DistinctColumns) == 0 {
 		return errors.New("cannot initialize a distinctNode with 0 columns")
+	}
+
+	// Normally, startExec isn't recursive, since it's invoked for all nodes using
+	// the planTree walker. And as normal, the walker will startExec the source
+	// of this distinct.
+	// But, we also need to startExec our planNodeToRowSource to properly
+	// initialize it. That won't get touched via the planNode walker, so we have
+	// to do it recursively here.
+	if err := input.startExec(params); err != nil {
+		return err
+	}
+	if err := input.InitWithOutput(&distsqlrun.PostProcessSpec{}, nil); err != nil {
+		return err
 	}
 
 	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
