@@ -1272,7 +1272,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		typ = funcTypeName[node.Type] + " "
 	}
 
-	// We need to remove name anonimization for the function name in
+	// We need to remove name anonymization for the function name in
 	// particular. Do this by overriding the flags.
 	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
 	subCtx.FormatNode(&node.Func)
@@ -1281,6 +1281,19 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
+	if ctx.HasFlags(FmtParsable) && node.typ != nil {
+		if node.fnProps.AmbiguousReturnType {
+			if typ, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+				// There's no type annotation available for tuples.
+				// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
+				// when we should and can put an annotation here. #28579
+				if _, ok := typ.(coltypes.TTuple); !ok {
+					ctx.WriteString(":::")
+					ctx.WriteString(typ.TypeName())
+				}
+			}
+		}
+	}
 	if node.Filter != nil {
 		ctx.WriteString(" FILTER (WHERE ")
 		ctx.FormatNode(node.Filter)

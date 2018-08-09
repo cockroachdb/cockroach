@@ -73,7 +73,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	CHECK (i > 0),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
@@ -82,7 +82,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT NULL,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -93,7 +93,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
@@ -101,7 +101,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT NULL,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
