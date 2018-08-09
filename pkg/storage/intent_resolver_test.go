@@ -30,7 +30,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TestPushTransactionsWithNonPendingIntent verifies that maybePushTransactions
+// TestPushTransactionsWithNonPendingIntent verifies that maybePushIntents
 // returns an error when a non-pending intent is passed.
 func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -47,7 +47,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
 	}
 	for _, intents := range testCases {
-		if _, pErr := tc.store.intentResolver.maybePushTransactions(
+		if _, pErr := tc.store.intentResolver.maybePushIntents(
 			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
 		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
 			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
