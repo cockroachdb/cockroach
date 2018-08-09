@@ -89,15 +89,14 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 	}
 
 	drop := func(tables ...string) {
-		// dropping has to be done in reverse so no drop causes a foreign key violation
-		for i := len(tables) - 1; i >= 0; i-- {
-			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tables[i])); err != nil {
+		for _, table := range tables {
+			if _, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, table)); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 
-	// This function is to be called at the beginning of each sub-benchmark to set up the necessary tables.
+	// setup is called at the beginning of every sub-test
 	setup := func(tablesNeeded ...string) {
 		drop(tablesNeeded...)
 		for _, table := range tablesNeeded {
