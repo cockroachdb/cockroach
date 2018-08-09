@@ -168,6 +168,11 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
+	if def.Flags.ForceIndex && def.Flags.Index != def.Index {
+		// If we are forcing an index, any other index has a very high cost. In
+		// practice, this will only happen when this is a primary index scan.
+		return 1e100
+	}
 	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {
