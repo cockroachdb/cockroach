@@ -141,6 +141,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+
 	/* Always call first on any conn that is to be used with libpqtypes */
 	PQinitTypes(conn);
 
@@ -161,9 +162,11 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	// '1401-01-19 BC'
+	// '1401-01-19'
 	PGdate date;
-	date.isbc = 1;
+	// TODO(jordan): put this back when #28099 is fixed.
+	// date.isbc = 1;
+	date.isbc = 0;
 	date.year = 1401;
 	date.mon  = 0;
 	date.mday = 19;
@@ -250,6 +253,7 @@ int main(int argc, char *argv[]) {
 	tstz.time.usec   = 0;
 	tstz.time.withtz = 1;
 	tstz.time.gmtoff = 0;
+
 	if (!PQputf(param, "%timestamptz", &tstz)) {
 		fprintf(stderr, "ERROR PQputf(timestamptz): %s\n", PQgeterror());
 		return 1;
@@ -419,6 +423,7 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "ERROR resultFormat=%d PQgetf(timestamptz): %s\n", resultFormat, PQgeterror());
 				return 1;
 			}
+
 			if (!timestampEqual(recvtstz, tstz)) {
 				fprintf(stderr, "resultFormat=%d expected:\n", resultFormat);
 				timestampPrint(tstz);

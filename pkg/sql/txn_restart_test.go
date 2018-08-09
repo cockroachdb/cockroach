@@ -1749,14 +1749,16 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 
 			// We'll run a statement that produces enough results to overflow the
 			// buffers and start streaming results to the client before the retriable
-			// error is injected. We do this through a single statement (a UNION)
-			// instead of two separate statements in order to support the autoCommit
-			// test which needs a single statement.
+			// error is injected. We do this by running a generate series that blows
+			// up at the very end, with a CASE statement.
 			sql := fmt.Sprintf(`
 				%s
-				SELECT generate_series(1, 10000)
-				UNION ALL
-				SELECT crdb_internal.force_retry('1s');
+				SELECT
+					CASE x
+          WHEN 10000 THEN crdb_internal.force_retry('1s')
+          ELSE x
+					END
+        FROM generate_series(1, 10000) AS t(x);
 				%s`,
 				prefix, suffix)
 			_, err := sqlDB.Exec(sql)

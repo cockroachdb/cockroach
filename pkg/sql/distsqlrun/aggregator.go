@@ -419,7 +419,7 @@ func (ag *orderedAggregator) close() {
 func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
 		res, err := ag.lastOrdGroupCols[colIdx].Compare(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, &ag.flowCtx.EvalCtx, &row[colIdx],
+			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.flowCtx.EvalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -886,7 +886,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	for i, f := range ag.funcs {
 		// TODO(radu): we should account for the size of impl (this needs to be done
 		// in each aggregate constructor).
-		bucket[i] = f.create(&ag.flowCtx.EvalCtx)
+		bucket[i] = f.create(ag.flowCtx.EvalCtx)
 	}
 	return bucket, nil
 }

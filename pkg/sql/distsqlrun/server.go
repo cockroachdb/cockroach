@@ -17,9 +17,9 @@ package distsqlrun
 import (
 	"context"
 	"io"
-	time "time"
+	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"sync"
@@ -282,6 +282,7 @@ func (ds *ServerImpl) setupFlow(
 	parentMonitor *mon.BytesMonitor,
 	req *SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
+	localState LocalState,
 ) (context.Context, *Flow, error) {
 	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
 		err := errors.Errorf(
@@ -319,6 +320,7 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
+	txn := localState.Txn
 	if txn := req.DeprecatedTxn; txn != nil {
 		if req.TxnCoordMeta != nil {
 			return nil, nil, errors.Errorf("provided both Txn and TxnCoordMeta")
@@ -326,77 +328,87 @@ func (ds *ServerImpl) setupFlow(
 		meta := roachpb.MakeTxnCoordMeta(*txn)
 		req.TxnCoordMeta = &meta
 	}
-	var txn *client.Txn
 	if meta := req.TxnCoordMeta; meta != nil {
-		// The flow will run in a Txn that specifies child=true because we
-		// do not want each distributed Txn to heartbeat the transaction.
-		txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+		if !localState.IsLocal {
+			// The flow will run in a Txn that specifies child=true because we
+			// do not want each distributed Txn to heartbeat the transaction.
+			txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+		}
 	}
 
-	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
-	if err != nil {
-		tracing.FinishSpan(sp)
-		return ctx, nil, err
-	}
+	var evalCtx *tree.EvalContext
+	if localState.EvalContext != nil {
+		evalCtx = localState.EvalContext
+		evalCtx.Mon = &monitor
+		evalCtx.ActiveMemAcc = &acc
+		evalCtx.Txn = txn
+	} else {
+		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
+		if err != nil {
+			tracing.FinishSpan(sp)
+			return ctx, nil, err
+		}
 
-	var be sessiondata.BytesEncodeFormat
-	switch req.EvalContext.BytesEncodeFormat {
-	case BytesEncodeFormat_HEX:
-		be = sessiondata.BytesEncodeHex
-	case BytesEncodeFormat_ESCAPE:
-		be = sessiondata.BytesEncodeEscape
-	case BytesEncodeFormat_BASE64:
-		be = sessiondata.BytesEncodeBase64
-	default:
-		return nil, nil, errors.Errorf("unknown byte encode format: %s",
-			req.EvalContext.BytesEncodeFormat.String())
-	}
-	sd := &sessiondata.SessionData{
-		ApplicationName: req.EvalContext.ApplicationName,
-		Database:        req.EvalContext.Database,
-		User:            req.EvalContext.User,
-		SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
-		SequenceState:   sessiondata.NewSequenceState(),
-		DataConversion: sessiondata.DataConversionConfig{
-			Location:          location,
-			BytesEncodeFormat: be,
-			ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
-		},
-	}
-	ie := &lazyInternalExecutor{
-		newInternalExecutor: func() tree.SessionBoundInternalExecutor {
-			return ds.SessionBoundInternalExecutorFactory(ctx, sd)
-		},
-	}
+		var be sessiondata.BytesEncodeFormat
+		switch req.EvalContext.BytesEncodeFormat {
+		case BytesEncodeFormat_HEX:
+			be = sessiondata.BytesEncodeHex
+		case BytesEncodeFormat_ESCAPE:
+			be = sessiondata.BytesEncodeEscape
+		case BytesEncodeFormat_BASE64:
+			be = sessiondata.BytesEncodeBase64
+		default:
+			return nil, nil, errors.Errorf("unknown byte encode format: %s",
+				req.EvalContext.BytesEncodeFormat.String())
+		}
+		sd := &sessiondata.SessionData{
+			ApplicationName: req.EvalContext.ApplicationName,
+			Database:        req.EvalContext.Database,
+			User:            req.EvalContext.User,
+			SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+			SequenceState:   sessiondata.NewSequenceState(),
+			DataConversion: sessiondata.DataConversionConfig{
+				Location:          location,
+				BytesEncodeFormat: be,
+				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
+			},
+		}
+		ie := &lazyInternalExecutor{
+			newInternalExecutor: func() tree.SessionBoundInternalExecutor {
+				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
+			},
+		}
 
-	evalCtx := tree.EvalContext{
-		Settings:     ds.ServerConfig.Settings,
-		SessionData:  sd,
-		ClusterID:    ds.ServerConfig.ClusterID.Get(),
-		NodeID:       nodeID,
-		ReCache:      ds.regexpCache,
-		Mon:          &monitor,
-		ActiveMemAcc: &acc,
-		// TODO(andrei): This is wrong. Each processor should override Ctx with its
-		// own context.
-		CtxProvider:      simpleCtxProvider{ctx: ctx},
-		Txn:              txn,
-		Planner:          &dummyEvalPlanner{},
-		Sequence:         &dummySequenceOperators{},
-		InternalExecutor: ie,
+		evalPlanner := &dummyEvalPlanner{}
+		sequence := &dummySequenceOperators{}
+		evalCtx = &tree.EvalContext{
+			Settings:     ds.ServerConfig.Settings,
+			SessionData:  sd,
+			ClusterID:    ds.ServerConfig.ClusterID.Get(),
+			NodeID:       nodeID,
+			ReCache:      ds.regexpCache,
+			Mon:          &monitor,
+			ActiveMemAcc: &acc,
+			// TODO(andrei): This is wrong. Each processor should override Ctx with its
+			// own context.
+			CtxProvider:      simpleCtxProvider{ctx: ctx},
+			Txn:              txn,
+			Planner:          evalPlanner,
+			Sequence:         sequence,
+			InternalExecutor: ie,
+		}
+		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
+		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+		var haveSequences bool
+		for _, seq := range req.EvalContext.SeqState.Seqs {
+			evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
+			haveSequences = true
+		}
+		if haveSequences {
+			evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
+				*req.EvalContext.SeqState.LastSeqIncremented)
+		}
 	}
-	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
-	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-	var haveSequences bool
-	for _, seq := range req.EvalContext.SeqState.Seqs {
-		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
-		haveSequences = true
-	}
-	if haveSequences {
-		evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
-			*req.EvalContext.SeqState.LastSeqIncremented)
-	}
-
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
@@ -417,16 +429,16 @@ func (ds *ServerImpl) setupFlow(
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 		traceKV:        req.TraceKV,
 	}
-
-	ctx = flowCtx.AnnotateCtx(ctx)
-
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer)
-	flowCtx.AddLogTagStr("f", f.id.Short())
+	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
 	if err := f.setup(ctx, &req.Flow); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
 		return ctx, nil, err
+	}
+	if !f.isLocal() {
+		flowCtx.AddLogTagStr("f", f.id.Short())
+		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
 }
@@ -439,7 +451,32 @@ func (ds *ServerImpl) setupFlow(
 func (ds *ServerImpl) SetupSyncFlow(
 	ctx context.Context, parentMonitor *mon.BytesMonitor, req *SetupFlowRequest, output RowReceiver,
 ) (context.Context, *Flow, error) {
-	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output)
+	return ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{})
+}
+
+// LocalState carries information that is required to set up a flow with wrapped
+// planNodes.
+type LocalState struct {
+	// IsLocal is true if the flow is being run locally in the first place.
+	IsLocal bool
+	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
+	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
+	LocalProcs  []LocalProcessor
+	EvalContext *tree.EvalContext
+	Txn         *client.Txn
+}
+
+// SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node.
+// It's used by the gateway node to set up the flows local to it. Otherwise,
+// the same as SetupSyncFlow.
+func (ds *ServerImpl) SetupLocalSyncFlow(
+	ctx context.Context,
+	parentMonitor *mon.BytesMonitor,
+	req *SetupFlowRequest,
+	output RowReceiver,
+	localState LocalState,
+) (context.Context, *Flow, error) {
+	return ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState)
 }
 
 // RunSyncFlow is part of the DistSQLServer interface.
@@ -488,7 +525,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */)
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

@@ -251,7 +251,7 @@ func TestJoinReader(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(context.Background())
 				flowCtx := FlowCtx{
-					EvalCtx:  evalCtx,
+					EvalCtx:  &evalCtx,
 					Settings: st,
 					txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 				}
@@ -380,7 +380,7 @@ INSERT INTO test.t VALUES
 			// Initialize join reader args.
 			indexIdx := uint32(1) // first (and only) secondary index
 			flowCtx := FlowCtx{
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 				Settings: st,
 				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 			}
@@ -462,7 +462,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer sp.Finish()
 
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.LeafTxn),
 	}
@@ -552,7 +552,7 @@ func BenchmarkJoinReader(b *testing.B) {
 	defer evalCtx.Stop(context.Background())
 
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 	}

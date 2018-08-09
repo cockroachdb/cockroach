@@ -156,22 +156,6 @@ func TestMultiNodeExportStmt(t *testing.T) {
 	}
 }
 
-func TestExportNonTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{UseDatabase: "test"}},
-	)
-	defer tc.Stopper().Stop(context.Background())
-	db := sqlutils.MakeSQLRunner(tc.Conns[0])
-	db.Exec(t, "CREATE DATABASE test")
-
-	if _, err := db.DB.Exec(
-		`EXPORT INTO CSV 'nodelocal:///series' WITH chunk_rows = '10' FROM SELECT generate_series(1, 100)`,
-	); !testutils.IsError(err, "unsupported EXPORT query") {
-		t.Fatal(err)
-	}
-}
-
 func TestExportJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dir, cleanupDir := testutils.TempDir(t)

@@ -203,7 +203,6 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.input.Start(fetcherCtx)
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
 		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,

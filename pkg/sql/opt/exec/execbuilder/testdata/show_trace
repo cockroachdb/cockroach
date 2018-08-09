@@ -305,7 +305,7 @@ output row: [9]
 statement ok
 SET tracing = on,kv,results; VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1); SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
@@ -318,7 +318,7 @@ output row: [3 4]
 statement ok
 SET tracing = on,kv,results; SELECT * FROM abc EXCEPT SELECT * FROM abc WHERE b > 'p'; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
@@ -326,14 +326,14 @@ fetched: /abc/primary/1/'one' -> NULL
 fetched: /abc/primary/2/'two' -> NULL
 fetched: /abc/primary/3/'three' -> NULL
 fetched: /abc/primary/1/'one' -> NULL
-output row: [1 'one' NULL]
 fetched: /abc/primary/2/'two' -> NULL
 fetched: /abc/primary/3/'three' -> NULL
+output row: [1 'one' NULL]
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b > 1; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
@@ -345,10 +345,10 @@ fetched: /ab/primary/1/4 -> NULL
 fetched: /ab/primary/1/5 -> NULL
 fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
-output row: [2 2]
 fetched: /ab/primary/2/6 -> NULL
-output row: [2 6]
 fetched: /ab/primary/3/9 -> NULL
+output row: [2 2]
+output row: [2 6]
 output row: [3 9]
 
 statement ok

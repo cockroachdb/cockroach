@@ -495,7 +495,7 @@ func TestZigzagJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 				Settings: st,
 				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 			}
@@ -558,7 +558,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 	}
