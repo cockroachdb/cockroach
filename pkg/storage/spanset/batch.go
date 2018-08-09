@@ -295,6 +295,12 @@ func (s spanSetWriter) LogData(data []byte) error {
 	return s.w.LogData(data)
 }
 
+func (s spanSetWriter) LogLogicalOp(
+	op engine.MVCCLogicalOpType, details engine.MVCCLogicalOpDetails,
+) {
+	s.w.LogLogicalOp(op, details)
+}
+
 type spanSetReadWriter struct {
 	spanSetReader
 	spanSetWriter

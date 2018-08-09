@@ -16,7 +16,6 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"testing"
@@ -38,9 +37,7 @@ import (
 
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
-	if !op.SetValue(val) {
-		panic(fmt.Sprintf("unknown logical mvcc op: %v", val))
-	}
+	op.MustSetValue(val)
 	return op
 }
 

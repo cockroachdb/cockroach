@@ -3193,6 +3193,7 @@ func (r *Replica) requestToProposal(
 		proposal.command = &storagebase.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
+			LogicalOpLog:         res.LogicalOpLog,
 		}
 	}
 
@@ -5309,6 +5310,13 @@ func (r *Replica) processRaftCommand(
 		// before notifying a potentially waiting client.
 		r.handleEvalResultRaftMuLocked(ctx, lResult,
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
+
+		// Provide the command's corresponding logical operations to the
+		// Replica's rangefeed. If no rangefeed is running, this will be a
+		// no-op.
+		// TODO(nvanbenschoten): consume the logical ops when we have
+		// rangefeed plugged in.
+		// r.mu.rangefeed.ConsumeLogicalOps(raftCmd.LogicalOps)
 	}
 
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
@@ -5763,9 +5771,38 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch.Close()
 		}
 		batch = r.store.Engine().NewBatch()
+		var opLogger *engine.OpLoggerBatch
+		if false /* enable cdc */ {
+			// TODO(nvanbenschoten): we need a way to turn this on when any
+			// replica (not just the leaseholder) wants it and off when no
+			// replicas want it. This turns out to be pretty involved.
+			//
+			// The current plan is to:
+			// - create a range-id local key that stores all replicas that are
+			//   subscribed to logical operations, along with their corresponding
+			//   liveness epoch.
+			// - create a new command that adds or subtracts replicas from this
+			//   structure. The command will be a write across the entire replica
+			//   span so that it is serialized with all writes.
+			// - each replica will add itself to this set when it first needs
+			//   logical ops. It will then wait until it sees the replicated command
+			//   that added itself pop out through Raft so that it knows all
+			//   commands that are missing logical ops are gone.
+			// - It will then proceed as normal, relying on the logical ops to
+			//   always be included on the raft commands. When its no longer
+			//   needs logical ops, it will remove itself from the set.
+			// - The leaseholder will have a new queue to detect registered
+			//   replicas that are no longer live and remove them from the
+			//   set to prevent "leaking" subscriptions.
+			// - The condition here to add logical logging will be:
+			//     if len(replicaState.logicalOpsSubs) > 0 { ... }
+			opLogger = engine.NewOpLoggerBatch(batch)
+			batch = opLogger
+		}
 		if util.RaceEnabled {
 			batch = spanset.NewBatch(batch, spans)
 		}
+
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
 		// If we can retry, set a higher batch timestamp and continue.
 		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
@@ -5776,6 +5813,11 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			}
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
+		}
+		if ops := opLogger.LogicalOps(); len(ops) > 0 {
+			res.LogicalOpLog = &storagebase.LogicalOpLog{
+				Ops: ops,
+			}
 		}
 		break
 	}

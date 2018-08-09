@@ -156,10 +156,17 @@ message ReplicatedEvalResult {
 // WriteBatch is the serialized representation of a RocksDB write
 // batch. A wrapper message is used so that the absence of the field
 // can be distinguished from a zero-length batch, and so structs
-// containing pointers to it can be compared with the == operator (we
-// rely on this in storage.EvalResult)
+// containing pointers to it can be compared with the == operator.
 message WriteBatch {
   bytes data = 1;
+}
+
+// LogicalOpLog is a log of logical MVCC operations. A wrapper message
+// is used so that the absence of the field can be distinguished from a
+// zero-length batch, and so structs containing pointers to it can be
+// compared with the == operator.
+message LogicalOpLog {
+  repeated storage.engine.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
 }
 
 // RaftCommand is the message written to the raft log. It contains
@@ -235,8 +242,18 @@ message RaftCommand {
 
   // Proposer-evaluated KV mode.
 
+  // replicated_eval_result is a set of structured information that instructs
+  // replicated state changes to the part of a Range's replicated state machine
+  // that exists outside of RocksDB.
   ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
+  // write_batch is a RocksDB WriteBatch that will be applied to RockDB during
+  // the application of the Raft command. The batch can be thought of as a
+  // series of replicated instructions that inform a RocksDB engine on how to
+  // change.
   WriteBatch write_batch = 14;
+  // logical_op_log contains a series of logical MVCC operations that correspond
+  // to the physical operations being made in the write_batch.
+  LogicalOpLog logical_op_log = 15;
 
   reserved 1, 10001 to 10014;
 }
