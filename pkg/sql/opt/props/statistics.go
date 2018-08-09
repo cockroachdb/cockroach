@@ -87,6 +87,13 @@ func (s *Statistics) String() string {
 	return buf.String()
 }
 
+// Init initializes the data members of Statistics.
+func (s *Statistics) Init() {
+	s.Selectivity = 1
+	s.ColStats = make(map[opt.ColumnID]*ColumnStatistic)
+	s.MultiColStats = make(map[string]*ColumnStatistic)
+}
+
 // ColumnStatistic is a collection of statistics that applies to a particular
 // set of columns. In theory, a table could have a ColumnStatistic object
 // for every possible subset of columns. In practice, it is only worth
