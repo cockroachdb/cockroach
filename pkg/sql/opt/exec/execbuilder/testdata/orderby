@@ -401,34 +401,30 @@ CREATE TABLE abcd (
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abc
-·          spans  /1/4-/1/5
+scan  ·      ·
+·     table  abcd@abc
+·     spans  /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)

@@ -78,36 +78,34 @@ render     ·         ·                (col1, col2, col3)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]@bc
 ----
-scan  ·      ·           (c, d, p)  p!=NULL; weak-key(c,d,p)
-·     table  num_ref@bc  ·          ·
-·     spans  ALL         ·          ·
+render     ·         ·           (c, d, p)  ·
+ │         render 0  c           ·          ·
+ │         render 1  d           ·          ·
+ │         render 2  p           ·          ·
+ └── scan  ·         ·           (p, d, c)  ·
+·          table     num_ref@bc  ·          ·
+·          spans     ALL         ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@bc
 ----
-render     ·         ·                (c)                                        ·
- │         render 0  num_ref_alias.c  ·                                          ·
- └── scan  ·         ·                (c, p[hidden,omitted], d[hidden,omitted])  p!=NULL; weak-key(c,p,d)
-·          table     num_ref@bc       ·                                          ·
-·          spans     ALL              ·                                          ·
+scan  ·      ·           (c)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@bc
 ----
-render     ·         ·                (d)                                        ·
- │         render 0  num_ref_alias.d  ·                                          ·
- └── scan  ·         ·                (d, p[hidden,omitted], c[hidden,omitted])  p!=NULL; weak-key(d,p,c)
-·          table     num_ref@bc       ·                                          ·
-·          spans     ALL              ·                                          ·
+scan  ·      ·           (d)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@bc
 ----
-render     ·         ·                (p)                                        p!=NULL
- │         render 0  num_ref_alias.p  ·                                          ·
- └── scan  ·         ·                (p, d[hidden,omitted], c[hidden,omitted])  p!=NULL; weak-key(p,d,c)
-·          table     num_ref@bc       ·                                          ·
-·          spans     ALL              ·                                          ·
+scan  ·      ·           (p)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[1]

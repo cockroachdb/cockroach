@@ -30,6 +30,12 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 	ev.Logical().Verify()
 
 	switch ev.Operator() {
+	case opt.ScanOp:
+		def := ev.Private().(*memo.ScanOpDef)
+		if def.Flags.NoIndexJoin && def.Flags.ForceIndex {
+			panic("NoIndexJoin and ForceIndex set")
+		}
+
 	case opt.ProjectionsOp:
 		// Check that we aren't passing through columns in projection expressions.
 		n := ev.ChildCount()

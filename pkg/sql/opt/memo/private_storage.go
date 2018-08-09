@@ -241,6 +241,14 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	ps.keyBuf.writeVarint(def.HardLimit)
 	ps.keyBuf.writeColSet(def.Cols)
 
+	flags := 0
+	if def.Flags.NoIndexJoin {
+		flags = 1
+	} else if def.Flags.ForceIndex {
+		flags = 2 + def.Flags.Index
+	}
+	ps.keyBuf.writeUvarint(uint64(flags))
+
 	typ := (*ScanOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id

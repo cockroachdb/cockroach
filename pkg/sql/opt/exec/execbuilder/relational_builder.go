@@ -269,6 +269,20 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	md := ev.Metadata()
 	tab := md.Table(def.Table)
 
+	// Check if we tried to force a specific index but there was no Scan with that
+	// index in the memo.
+	if def.Flags.ForceIndex && def.Flags.Index != def.Index {
+		idx := tab.Index(def.Flags.Index)
+		var err error
+		if idx.IsInverted() {
+			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.IdxName())
+		} else {
+			// This should never happen.
+			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.IdxName())
+		}
+		return execPlan{}, err
+	}
+
 	needed, output := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
