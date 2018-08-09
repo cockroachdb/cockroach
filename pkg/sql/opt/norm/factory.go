@@ -163,13 +163,12 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
-	ev := memo.MakeNormExprView(f.mem, group)
 
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
 	// TODO(radu): replace this with a flag that is true for all tests.
 	if util.RaceEnabled {
-		f.checkExpr(ev)
+		f.checkExpr(memo.MakeNormExprView(f.mem, group))
 	}
 	return group
 }

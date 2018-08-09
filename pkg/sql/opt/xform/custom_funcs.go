@@ -82,18 +82,13 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	md := c.e.mem.Metadata()
 	tab := md.Table(scanOpDef.Table)
 
-	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
-	pkCols := make(opt.ColList, primaryIndex.KeyColumnCount())
-	for i := range pkCols {
-		pkCols[i] = scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)
-	}
-
 	// Add a reverse index scan memo group for the primary index.
 	newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: 0, Cols: scanOpDef.Cols, Reverse: true}
 	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
 	c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
+	var pkCols opt.ColList
 	for i := 1; i < tab.IndexCount(); i++ {
 		if tab.Index(i).IsInverted() {
 			// Ignore inverted indexes.
@@ -114,6 +109,13 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 		} else {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
+			if pkCols == nil {
+				primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
+				pkCols = make(opt.ColList, primaryIndex.KeyColumnCount())
+				for i := range pkCols {
+					pkCols[i] = scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)
+				}
+			}
 
 			// We scan whatever columns we need which are available from the index,
 			// plus the PK columns. The main reason is to allow pushing of filters as
