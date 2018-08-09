@@ -137,9 +137,10 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
 type Result struct {
-	Local      LocalResult
-	Replicated storagebase.ReplicatedEvalResult
-	WriteBatch *storagebase.WriteBatch
+	Local        LocalResult
+	Replicated   storagebase.ReplicatedEvalResult
+	WriteBatch   *storagebase.WriteBatch
+	LogicalOpLog *storagebase.LogicalOpLog
 }
 
 // IsZero reports whether p is the zero value.
@@ -151,6 +152,9 @@ func (p *Result) IsZero() bool {
 		return false
 	}
 	if p.WriteBatch != nil {
+		return false
+	}
+	if p.LogicalOpLog != nil {
 		return false
 	}
 	return true
@@ -332,6 +336,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 	}
 	q.Local.UpdatedTxns = nil
+
+	if q.LogicalOpLog != nil {
+		if p.LogicalOpLog == nil {
+			p.LogicalOpLog = q.LogicalOpLog
+		} else {
+			p.LogicalOpLog.Ops = append(p.LogicalOpLog.Ops, q.LogicalOpLog.Ops...)
+		}
+	}
+	q.LogicalOpLog = nil
 
 	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))

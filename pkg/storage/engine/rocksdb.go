@@ -763,6 +763,11 @@ func (r *RocksDB) LogData(data []byte) error {
 	panic("unimplemented")
 }
 
+// LogLogicalOp is part of the Writer interface.
+func (r *RocksDB) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
+}
+
 // ApplyBatchRepr atomically applies a set of batched updates. Created by
 // calling Repr() on a batch. Using this method is equivalent to constructing
 // and committing a batch whose Repr() equals repr.
@@ -1048,6 +1053,10 @@ func (r *rocksDBReadOnly) LogData(data []byte) error {
 	panic("not implemented")
 }
 
+func (r *rocksDBReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	panic("not implemented")
+}
+
 // NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Batch {
 	return newRocksDBBatch(r, false /* writeOnly */)
@@ -1315,6 +1324,10 @@ func (r *distinctBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error 
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
+}
+
+func (r *distinctBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
 }
 
 func (r *distinctBatch) close() {
@@ -1614,6 +1627,10 @@ func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
 	return dbClearIterRange(r.batch, iter, start, end)
+}
+
+func (r *rocksDBBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
 }
 
 // NewIterator returns an iterator over the batch and underlying engine. Note
