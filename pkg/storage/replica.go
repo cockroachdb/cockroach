@@ -791,7 +791,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
 	desc := r.Desc()
-	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, desc, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()

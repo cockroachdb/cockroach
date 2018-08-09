@@ -440,6 +440,7 @@ type OutgoingSnapshot struct {
 	// sideloaded storage in the meantime.
 	WithSideloaded func(func(sideloadStorage) error) error
 	RaftEntryCache *raftEntryCache
+	snapType       string
 }
 
 // Close releases the resources associated with the snapshot.
@@ -534,6 +535,7 @@ func snapshot(
 				ConfState: cs,
 			},
 		},
+		snapType: snapType,
 	}, nil
 }
 
@@ -636,11 +638,7 @@ const (
 )
 
 func clearRangeData(
-	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
-	keyCount int64,
-	eng engine.Engine,
-	batch engine.Batch,
+	ctx context.Context, desc *roachpb.RangeDescriptor, eng engine.Engine, batch engine.Batch,
 ) error {
 	iter := eng.NewIterator(false)
 	defer iter.Close()
@@ -653,12 +651,33 @@ func clearRangeData(
 	// perhaps we should fix RocksDB to handle large numbers of tombstones in an
 	// sstable better.
 	const clearRangeMinKeys = 64
-	const metadataRanges = 2
-	for i, keyRange := range rditer.MakeAllKeyRanges(desc) {
-		// Metadata ranges always have too few keys to justify ClearRange (see
-		// above), but the data range's key count needs to be explicitly checked.
+	keyRanges := rditer.MakeAllKeyRanges(desc)
+	for _, keyRange := range keyRanges {
+		// Peek into the range to see whether it's large enough to justify
+		// ClearRange. Note that the work done here is bounded by
+		// clearRangeMinKeys, so it will be fairly cheap even for large
+		// ranges.
+		//
+		// TODO(bdarnell): Move this into ClearIterRange so we don't have
+		// to do this scan twice.
+		count := 0
+		iter.Seek(keyRange.Start)
+		for {
+			valid, err := iter.Valid()
+			if err != nil {
+				return err
+			}
+			if !valid || !iter.Key().Less(keyRange.End) {
+				break
+			}
+			count++
+			if count > clearRangeMinKeys {
+				break
+			}
+			iter.Next()
+		}
 		var err error
-		if i >= metadataRanges && keyCount >= clearRangeMinKeys {
+		if count > clearRangeMinKeys {
 			err = batch.ClearRange(keyRange.Start, keyRange.End)
 		} else {
 			err = batch.ClearIterRange(iter, keyRange.Start, keyRange.End)
@@ -687,7 +706,6 @@ func (r *Replica) applySnapshot(
 
 	r.mu.RLock()
 	replicaID := r.mu.replicaID
-	keyCount := r.mu.state.Stats.KeyCount
 	r.mu.RUnlock()
 
 	snapType := inSnap.snapType
@@ -764,7 +782,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	if err := clearRangeData(ctx, s.Desc, keyCount, r.store.Engine(), batch); err != nil {
+	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	stats.clear = timeutil.Now()

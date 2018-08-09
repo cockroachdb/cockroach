@@ -3718,12 +3718,42 @@ func sendSnapshot(
 
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
-	logEntries := make([][]byte, 0, endIndex-firstIndex)
 
+	preallocSize := endIndex - firstIndex
+	const maxPreallocSize = 1000
+	if preallocSize > maxPreallocSize {
+		// It's possible for the raft log to become enormous in certain
+		// sustained failure conditions. We may bail out of the snapshot
+		// process early in scanFunc, but in the worst case this
+		// preallocation is enough to run the server out of memory. Limit
+		// the size of the buffer we will preallocate.
+		preallocSize = maxPreallocSize
+	}
+	logEntries := make([][]byte, 0, preallocSize)
+
+	var raftLogBytes int64
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		bytes, err := kv.Value.GetBytes()
 		if err == nil {
 			logEntries = append(logEntries, bytes)
+			raftLogBytes += int64(len(bytes))
+			if snap.snapType == snapTypePreemptive && raftLogBytes > 4*raftLogMaxSize {
+				// If the raft log is too large, abort the snapshot instead of
+				// potentially running out of memory. However, if this is a
+				// raft-initiated snapshot (instead of a preemptive one), we
+				// have a dilemma. It may be impossible to truncate the raft
+				// log until we have caught up a peer with a snapshot. Since
+				// we don't know the exact size at which we will run out of
+				// memory, we err on the size of allowing the snapshot if it
+				// is raft-initiated, while aborting preemptive snapshots at a
+				// reasonable threshold. (Empirically, this is good enough:
+				// the situations that result in large raft logs have not been
+				// observed to result in raft-initiated snapshots).
+				return false, errors.Errorf(
+					"aborting snapshot because raft log is too large "+
+						"(%d bytes after processing %d of %d entries)",
+					raftLogBytes, len(logEntries), endIndex-firstIndex)
+			}
 		}
 		return false, err
 	}
