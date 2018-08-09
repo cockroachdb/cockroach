@@ -103,14 +103,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	indexHints := &tree.IndexHints{
+	indexFlags := &tree.IndexFlags{
 		IndexID:     tree.IndexID(o.indexDesc.ID),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
 	scan.run.isCheck = true
 	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
-	if err := scan.initTable(ctx, params.p, o.tableDesc, indexHints, colCfg); err != nil {
+	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err
 	}
 	plan := planNode(scan)

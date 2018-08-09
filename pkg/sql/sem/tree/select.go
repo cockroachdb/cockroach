@@ -260,12 +260,12 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID uint32
 
-// IndexHints represents "@<index_name|index_id>" or "@{param[,param]}" where
+// IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:
 //  - FORCE_INDEX=<index_name|index_id>
 //  - NO_INDEX_JOIN
 // It is used optionally after a table name in SELECT statements.
-type IndexHints struct {
+type IndexFlags struct {
 	Index   UnrestrictedName
 	IndexID IndexID
 	// NoIndexJoin cannot be specified together with an index.
@@ -274,13 +274,13 @@ type IndexHints struct {
 
 // ForceIndex returns true if a forced index was specified, either using a name
 // or an IndexID.
-func (ih *IndexHints) ForceIndex() bool {
+func (ih *IndexFlags) ForceIndex() bool {
 	return ih.Index != "" || ih.IndexID != 0
 }
 
-// CombineWith combines two IndexHints structures, returning an error if they
+// CombineWith combines two IndexFlags structures, returning an error if they
 // conflict with one another.
-func (ih *IndexHints) CombineWith(other *IndexHints) error {
+func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoIndexJoin && other.NoIndexJoin {
 		return errors.New("NO_INDEX_JOIN specified multiple times")
 	}
@@ -303,7 +303,7 @@ func (ih *IndexHints) CombineWith(other *IndexHints) error {
 }
 
 // Format implements the NodeFormatter interface.
-func (ih *IndexHints) Format(ctx *FmtCtx) {
+func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	if !ih.NoIndexJoin {
 		ctx.WriteByte('@')
 		if ih.Index != "" {
@@ -330,7 +330,7 @@ func (ih *IndexHints) Format(ctx *FmtCtx) {
 // alias.
 type AliasedTableExpr struct {
 	Expr       TableExpr
-	Hints      *IndexHints
+	IndexFlags *IndexFlags
 	Ordinality bool
 	As         AliasClause
 }
@@ -338,8 +338,8 @@ type AliasedTableExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Expr)
-	if node.Hints != nil {
-		ctx.FormatNode(node.Hints)
+	if node.IndexFlags != nil {
+		ctx.FormatNode(node.IndexFlags)
 	}
 	if node.Ordinality {
 		ctx.WriteString(" WITH ORDINALITY")
