@@ -142,19 +142,19 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {}
 query TTBTTT
 SHOW COLUMNS FROM system.jobs
 ----
-id        INT        false  unique_rowid()  ·  {"primary","jobs_status_created_idx"}
-status    STRING     false  NULL            ·  {"jobs_status_created_idx"}
-created   TIMESTAMP  false  now()           ·  {"jobs_status_created_idx"}
-payload   BYTES      false  NULL            ·  {}
-progress  BYTES      true   NULL            ·  {}
+id        INT        false  unique_rowid()     ·  {"primary","jobs_status_created_idx"}
+status    STRING     false  NULL               ·  {"jobs_status_created_idx"}
+created   TIMESTAMP  false  now():::TIMESTAMP  ·  {"jobs_status_created_idx"}
+payload   BYTES      false  NULL               ·  {}
+progress  BYTES      true   NULL               ·  {}
 
 query TTBTTT
 SHOW COLUMNS FROM system.settings
 ----
-name         STRING     false  NULL   ·  {"primary"}
-value        STRING     false  NULL   ·  {}
-lastUpdated  TIMESTAMP  false  now()  ·  {}
-valueType    STRING     true   NULL   ·  {}
+name         STRING     false  NULL               ·  {"primary"}
+value        STRING     false  NULL               ·  {}
+lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {}
+valueType    STRING     true   NULL               ·  {}
 
 query TTBTTT
 SHOW COLUMNS FROM system.role_members
