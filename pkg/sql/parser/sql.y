@@ -5466,21 +5466,10 @@ index_hints_param_list:
   {
     a := $1.indexHints()
     b := $3.indexHints()
-    if a.NoIndexJoin && b.NoIndexJoin {
-       sqllex.Error("NO_INDEX_JOIN specified multiple times")
-       return 1
+    if err := a.CombineWith(b); err != nil {
+      sqllex.Error(err.Error())
+      return 1
     }
-    if (a.Index != "" || a.IndexID != 0) && (b.Index != "" || b.IndexID != 0) {
-       sqllex.Error("FORCE_INDEX specified multiple times")
-       return 1
-    }
-    // At this point either a or b contains "no information"
-    // (the empty string for Index and the value 0 for IndexID).
-    // Using the addition operator automatically selects the non-zero
-    // value, avoiding a conditional branch.
-    a.Index = a.Index + b.Index
-    a.IndexID = a.IndexID + b.IndexID
-    a.NoIndexJoin = a.NoIndexJoin || b.NoIndexJoin
     $$.val = a
   }
 
