@@ -85,6 +85,7 @@ SELECT * FROM a JOIN b ON false
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan a

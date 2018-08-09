@@ -325,6 +325,7 @@ SELECT * FROM a WHERE x IN (NULL)
 scan a
  ├── columns: x:1(int) y:2(int)
  ├── constraint: /3: contradiction
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── prune: (1,2)
  └── interesting orderings: ()

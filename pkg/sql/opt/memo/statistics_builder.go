@@ -348,17 +348,12 @@ func (sb *statisticsBuilder) colStatMetadata(
 
 func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
-
-	def := ev.Private().(*ScanOpDef)
-
-	// Short cut if there is a contradiction.
-	if def.Constraint != nil && def.Constraint.IsContradiction() {
-		s.RowCount = 0
-		s.Selectivity = 0
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
 		return
 	}
 
+	def := ev.Private().(*ScanOpDef)
 	if def.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
@@ -381,17 +376,7 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 	// -------------------
 	inputStats := sb.makeTableStatistics(def.Table, ev.Metadata())
 	sb.applySelectivity(inputStats.RowCount, s)
-
-	// Cap number of rows at limit, if it exists.
-	if def.HardLimit > 0 && float64(def.HardLimit) < s.RowCount {
-		s.RowCount = float64(def.HardLimit)
-
-		// At this point we only have single-column stats on columns that were
-		// constrained by the filter.
-		for _, colStat := range s.ColStats {
-			colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
-		}
-	}
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -417,12 +402,16 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 
 func (sb *statisticsBuilder) buildVirtualScan(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	def := ev.Private().(*VirtualScanOpDef)
 	inputStats := sb.makeTableStatistics(def.Table, ev.Metadata())
 
 	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatVirtualScan(
@@ -437,21 +426,14 @@ func (sb *statisticsBuilder) colStatVirtualScan(
 
 func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
-
-	filter := ev.Child(1)
-
-	// Shortcut if the filter is false or there is a contradiction.
-	// (True filters are removed by normalization).
-	constraintSet := filter.Logical().Scalar.Constraints
-	if filter.Operator() == opt.FalseOp || constraintSet == constraint.Contradiction {
-		s.RowCount = 0
-		s.Selectivity = 0
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
 		return
 	}
 
 	// Update stats based on filter conditions.
 
+	filter := ev.Child(1)
 	equivGroups := sb.getEquivalencyGroups(ev, relProps, &filter.Logical().Scalar.FuncDeps)
 
 	// Calculate distinct counts for constrained columns
@@ -473,6 +455,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// -------------------
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	sb.applySelectivity(inputStats.RowCount, s)
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -490,11 +473,15 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 
 func (sb *statisticsBuilder) buildProject(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 
 	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -547,7 +534,10 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *pro
 
 func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
 	rightStats := &ev.childGroup(1).logical.Relational.Stats
@@ -670,6 +660,8 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
 		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -750,11 +742,15 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 
 func (sb *statisticsBuilder) buildIndexJoin(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 
 	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
 }
 
 // +----------+
@@ -763,7 +759,10 @@ func (sb *statisticsBuilder) buildIndexJoin(ev ExprView, relProps *props.Relatio
 
 func (sb *statisticsBuilder) buildGroupBy(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	groupingColSet := ev.Private().(*GroupByDef).GroupingCols
 
@@ -776,6 +775,8 @@ func (sb *statisticsBuilder) buildGroupBy(ev ExprView, relProps *props.Relationa
 		colStat := sb.copyColStatFromChild(groupingColSet, ev, relProps)
 		s.RowCount = colStat.DistinctCount
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -808,7 +809,10 @@ func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet, ev ExprView) *pro
 
 func (sb *statisticsBuilder) buildSetOp(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
 	rightStats := &ev.childGroup(1).logical.Relational.Stats
@@ -835,6 +839,8 @@ func (sb *statisticsBuilder) buildSetOp(ev ExprView, relProps *props.Relational)
 		colStat := sb.colStatSetOpImpl(outputCols, ev, relProps)
 		s.RowCount = colStat.DistinctCount
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatSetOp(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -877,9 +883,13 @@ func (sb *statisticsBuilder) colStatSetOpImpl(
 // buildValues builds the statistics for a VALUES expression.
 func (sb *statisticsBuilder) buildValues(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	s.RowCount = float64(ev.ChildCount())
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -918,7 +928,10 @@ func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet, ev ExprView) *prop
 
 func (sb *statisticsBuilder) buildLimit(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	limit := ev.Child(1)
@@ -934,6 +947,8 @@ func (sb *statisticsBuilder) buildLimit(ev ExprView, relProps *props.Relational)
 			s.Selectivity = s.RowCount / inputStats.RowCount
 		}
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -953,7 +968,10 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props
 
 func (sb *statisticsBuilder) buildOffset(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	offset := ev.Child(1)
@@ -971,6 +989,8 @@ func (sb *statisticsBuilder) buildOffset(ev ExprView, relProps *props.Relational
 		}
 		s.Selectivity = s.RowCount / inputStats.RowCount
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -990,9 +1010,13 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *prop
 
 func (sb *statisticsBuilder) buildMax1Row(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	s.RowCount = 1
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatMax1Row(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -1007,11 +1031,15 @@ func (sb *statisticsBuilder) colStatMax1Row(colSet opt.ColSet, ev ExprView) *pro
 
 func (sb *statisticsBuilder) buildRowNumber(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 
 	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatRowNumber(
@@ -1040,7 +1068,10 @@ func (sb *statisticsBuilder) colStatRowNumber(
 
 func (sb *statisticsBuilder) buildZip(ev ExprView, relProps *props.Relational) {
 	s := &relProps.Stats
-	s.Init()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
@@ -1059,6 +1090,8 @@ func (sb *statisticsBuilder) buildZip(ev ExprView, relProps *props.Relational) {
 		// A scalar function generates one row.
 		s.RowCount = 1
 	}
+
+	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
@@ -1236,6 +1269,24 @@ func translateColSet(colSetIn opt.ColSet, from opt.ColList, to opt.ColList) opt.
 	}
 
 	return colSetOut
+}
+
+func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational) {
+	s := &relProps.Stats
+	// The row count should be between the min and max cardinality.
+	if s.RowCount > float64(relProps.Cardinality.Max) && relProps.Cardinality.Max != math.MaxUint32 {
+		s.RowCount = float64(relProps.Cardinality.Max)
+	} else if s.RowCount < float64(relProps.Cardinality.Min) {
+		s.RowCount = float64(relProps.Cardinality.Min)
+	}
+
+	// The distinct counts should be no larger than the row count.
+	for _, colStat := range s.ColStats {
+		colStat.DistinctCount = min(colStat.DistinctCount, s.RowCount)
+	}
+	for _, colStat := range s.MultiColStats {
+		colStat.DistinctCount = min(colStat.DistinctCount, s.RowCount)
+	}
 }
 
 func min(a float64, b float64) float64 {

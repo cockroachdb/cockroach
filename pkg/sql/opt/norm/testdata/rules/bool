@@ -204,6 +204,7 @@ SELECT * FROM a WHERE false OR false
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -258,6 +259,7 @@ SELECT * FROM a WHERE Null
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -266,6 +268,7 @@ SELECT * FROM a INNER JOIN b ON NULL
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) z:7(int)
+ ├── cardinality: [0 - 0]
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -284,6 +287,7 @@ SELECT * FROM a WHERE i=1 AND Null
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -343,6 +347,7 @@ SELECT * FROM a WHERE NOT(i=1) AND NOT(i<>1) AND NOT(i>1) AND NOT(i>=1) AND NOT(
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -365,6 +370,7 @@ WHERE NOT(i IN (1,2)) AND NOT(i NOT IN (3,4)) AND NOT(i IS NULL) AND NOT(i IS NO
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -526,6 +532,7 @@ SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 5 OR i < 10 OR f > 1))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a

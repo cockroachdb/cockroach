@@ -88,10 +88,16 @@ func (s *Statistics) String() string {
 }
 
 // Init initializes the data members of Statistics.
-func (s *Statistics) Init() {
-	s.Selectivity = 1
+func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	s.ColStats = make(map[opt.ColumnID]*ColumnStatistic)
 	s.MultiColStats = make(map[string]*ColumnStatistic)
+	if relProps.Cardinality.IsZero() {
+		s.RowCount = 0
+		s.Selectivity = 0
+		return true
+	}
+	s.Selectivity = 1
+	return false
 }
 
 // ColumnStatistic is a collection of statistics that applies to a particular

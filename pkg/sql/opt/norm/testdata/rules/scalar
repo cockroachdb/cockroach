@@ -388,7 +388,8 @@ select
                 ├── fd: ()-->(13)
                 ├── scan a
                 │    ├── columns: a.s:10(string)
-                │    └── constraint: /7: contradiction
+                │    ├── constraint: /7: contradiction
+                │    └── cardinality: [0 - 0]
                 └── aggregations [outer=(10)]
                      └── max [type=string, outer=(10)]
                           └── variable: a.s [type=string, outer=(10)]
