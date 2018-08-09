@@ -50,8 +50,11 @@ func jitter(avgInterval time.Duration) time.Duration {
 }
 
 // GRPCTransportFactory during race builds wraps the implementation and
-// intercepts all BatchRequests, reading them in a tight loop. This allows the
-// race detector to catch any mutations of a batch passed to the transport.
+// intercepts all BatchRequests, reading them asynchronously in a tight loop.
+// This allows the race detector to catch any mutations of a batch passed to the
+// transport. The dealio is that batches passed to the transport are immutable -
+// neither the client nor the server are allowed to mutate anything and this
+// transport makes sure they don't. See client.Sender() for more.
 func GRPCTransportFactory(
 	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
