@@ -31,8 +31,8 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope *scope) {
-	leftScope := b.buildTable(join.Left, inScope)
-	rightScope := b.buildTable(join.Right, inScope)
+	leftScope := b.buildTable(join.Left, nil /* indexFlags */, inScope)
+	rightScope := b.buildTable(join.Right, nil /* indexFlags */, inScope)
 
 	// Check that the same table name is not used on both sides.
 	leftTables := make(map[string]struct{})

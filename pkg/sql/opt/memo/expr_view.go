@@ -355,6 +355,14 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if def.HardLimit > 0 {
 			tp.Childf("limit: %d", def.HardLimit)
 		}
+		if !def.Flags.Empty() {
+			if def.Flags.NoIndexJoin {
+				tp.Childf("flags: no-index-join")
+			} else if def.Flags.ForceIndex {
+				idx := ev.Metadata().Table(def.Table).Index(def.Flags.Index)
+				tp.Childf("flags: force-index=%s", idx.IdxName())
+			}
+		}
 
 	case opt.LookupJoinOp:
 		def := ev.Private().(*LookupJoinDef)
