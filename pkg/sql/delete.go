@@ -493,12 +493,9 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode, interleavedFas
 		return err
 	}
 	if interleavedFastPath {
-
 		for i, span := range scan.spans {
-			if span.EndKey.Compare(span.EndKey.PrefixEnd()) == -1 {
-				span.EndKey = span.EndKey.PrefixEnd()
-				scan.spans[i] = span
-			}
+			span.EndKey = span.EndKey.PrefixEnd()
+			scan.spans[i] = span
 		}
 	}
 	var err error
