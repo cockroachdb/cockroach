@@ -43,6 +43,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: (problem) => problem.quiescent_equals_ticking_range_ids.length,
   },
   {
+    title: "Raft log too large",
+    extract: (problem) => problem.raft_log_too_large_range_ids.length,
+  },
+  {
     title: "Total",
     extract: (problem) => {
       return problem.unavailable_range_ids.length +
@@ -50,7 +54,8 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.no_lease_range_ids.length +
         problem.raft_leader_not_lease_holder_range_ids.length +
         problem.underreplicated_range_ids.length +
-        problem.quiescent_equals_ticking_range_ids.length;
+        problem.quiescent_equals_ticking_range_ids.length +
+        problem.raft_log_too_large_range_ids.length;
     },
   },
   { title: "Error", extract: (problem) => problem.error_message },
