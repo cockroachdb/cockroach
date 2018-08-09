@@ -506,3 +506,30 @@ render     ·         ·                   ("array")  ·
  └── scan  ·         ·                   (a)        ·
 ·          table     t@primary           ·          ·
 ·          spans     ALL                 ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 1 > ANY ARRAY[a + 1, 2, 3] FROM t
+----
+render     ·         ·                           ("?column?")  ·
+ │         render 0  1 > ANY ARRAY[a + 1, 2, 3]  ·             ·
+ └── scan  ·         ·                           (a)           ·
+·          table     t@primary                   ·             ·
+·          spans     ALL                         ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
+----
+render     ·         ·                  ("?column?")  ·
+ │         render 0  1 = ANY (1, 2, 3)  ·             ·
+ └── scan  ·         ·                  ()            ·
+·          table     t@primary          ·             ·
+·          spans     ALL                ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
+----
+render     ·         ·           ("?column?")  ·
+ │         render 0  1 = ANY ()  ·             ·
+ └── scan  ·         ·           ()            ·
+·          table     t@primary   ·             ·
+·          spans     ALL         ·             ·

@@ -341,6 +341,18 @@ SELECT k FROM t WHERE k = ANY ARRAY[2,4]
 2
 4
 
+query I rowsort
+SELECT k FROM t WHERE k > ANY ARRAY[2,4]
+----
+3
+4
+5
+
+query I
+SELECT k FROM t WHERE k < ALL ARRAY[2,4]
+----
+1
+
 # Undocumented - bounds should be allowed, as in Postgres
 statement ok
 CREATE TABLE boundedtable (b INT[10], c INT ARRAY[10])

@@ -886,7 +886,7 @@ SELECT ARRAY(SELECT 1, 2)
 error (42601): subquery must return only one column, found 2
 
 build
-SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC);
+SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
 ----
 project
  ├── columns: array:3(tuple{int}[])
@@ -915,3 +915,78 @@ project
            │              └── array-agg [type=int[]]
            │                   └── variable: column1 [type=int]
            └── array: [type=int[]]
+
+build-scalar
+1 = ANY ARRAY[1, 2, 3]
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 > ANY ARRAY[1, 2, 3]
+----
+any-scalar: gt [type=bool]
+ ├── const: 1 [type=int]
+ └── array: [type=int[]]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+1 = ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: ne [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 > ALL ARRAY[1, 2, 3]
+----
+not [type=bool]
+ └── any-scalar: le [type=bool]
+      ├── const: 1 [type=int]
+      └── array: [type=int[]]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
+
+build-scalar
+1 = ANY (1, 2, 3)
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 1 [type=int]
+      ├── const: 2 [type=int]
+      └── const: 3 [type=int]
+
+build-scalar
+'foo' = ANY ('foo', 'bar', 'baz')
+----
+any-scalar: eq [type=bool]
+ ├── const: 'foo' [type=string]
+ └── tuple [type=tuple{string, string, string}]
+      ├── const: 'foo' [type=string]
+      ├── const: 'bar' [type=string]
+      └── const: 'baz' [type=string]
+
+
+build-scalar
+1 = ANY ()
+----
+any-scalar: eq [type=bool]
+ ├── const: 1 [type=int]
+ └── tuple [type=tuple{}]
+
+build
+SELECT 1 > ALL ARRAY['foo']
+----
+error (22023): unsupported comparison operator: 1 > ALL ARRAY['foo']: could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax
