@@ -37,10 +37,10 @@ var planInterleavedJoins = settings.RegisterBoolSetting(
 )
 
 func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
-	planCtx *planningCtx, n *joinNode,
-) (plan physicalPlan, ok bool, err error) {
+	planCtx *PlanningCtx, n *joinNode,
+) (plan PhysicalPlan, ok bool, err error) {
 	if !useInterleavedJoin(n) {
-		return physicalPlan{}, false, nil
+		return PhysicalPlan{}, false, nil
 	}
 
 	leftScan, leftOk := n.left.plan.(*scanNode)
@@ -49,7 +49,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We know they are scan nodes from useInterleaveJoin, but we add
 	// this check to prevent future panics.
 	if !leftOk || !rightOk {
-		return physicalPlan{}, false, pgerror.NewErrorf(
+		return PhysicalPlan{}, false, pgerror.NewErrorf(
 			pgerror.CodeInternalError,
 			"left and right children of join node must be scan nodes to execute an interleaved join",
 		)
@@ -58,7 +58,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We iterate through each table and collate their metadata for
 	// the InterleavedReaderJoinerSpec.
 	tables := make([]distsqlrun.InterleavedReaderJoinerSpec_Table, 2)
-	plans := make([]physicalPlan, 2)
+	plans := make([]PhysicalPlan, 2)
 	var totalLimitHint int64
 	for i, t := range []struct {
 		scan      *scanNode
@@ -79,10 +79,10 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		// onCond and columns.
 		var err error
 		if plans[i], err = dsp.createTableReaders(planCtx, t.scan, nil); err != nil {
-			return physicalPlan{}, false, err
+			return PhysicalPlan{}, false, err
 		}
 
-		eqCols := eqCols(t.eqIndices, plans[i].planToStreamColMap)
+		eqCols := eqCols(t.eqIndices, plans[i].PlanToStreamColMap)
 		ordering := distsqlOrdering(n.mergeJoinOrdering, eqCols)
 
 		// Doesn't matter which processor we choose since the metadata
@@ -111,10 +111,10 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 	joinType := n.joinType
 
-	post, joinToStreamColMap := joinOutColumns(n, plans[0].planToStreamColMap, plans[1].planToStreamColMap)
-	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, plans[0].planToStreamColMap, plans[1].planToStreamColMap)
+	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
+	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
 	if err != nil {
-		return physicalPlan{}, false, err
+		return PhysicalPlan{}, false, err
 	}
 
 	ancestor, descendant := n.interleavedNodes()
@@ -122,11 +122,11 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We partition each set of spans to their respective nodes.
 	ancsPartitions, err := dsp.partitionSpans(planCtx, ancestor.spans)
 	if err != nil {
-		return physicalPlan{}, false, err
+		return PhysicalPlan{}, false, err
 	}
 	descPartitions, err := dsp.partitionSpans(planCtx, descendant.spans)
 	if err != nil {
-		return physicalPlan{}, false, err
+		return PhysicalPlan{}, false, err
 	}
 
 	// We want to ensure that all child spans with a given interleave
@@ -146,7 +146,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// partitioned to node 2 and 3, then we need to move the child spans
 	// to node 1 where the PK1 = 1 parent row is read.
 	if descPartitions, err = alignInterleavedSpans(n, ancsPartitions, descPartitions); err != nil {
-		return physicalPlan{}, false, err
+		return PhysicalPlan{}, false, err
 	}
 
 	// Figure out which nodes we need to schedule a processor on.
@@ -231,13 +231,13 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		plan.ResultRouters[i] = distsqlplan.ProcessorIdx(i)
 	}
 
-	plan.planToStreamColMap = joinToStreamColMap
+	plan.PlanToStreamColMap = joinToStreamColMap
 	plan.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
 	if err != nil {
-		return physicalPlan{}, false, err
+		return PhysicalPlan{}, false, err
 	}
 
-	plan.SetMergeOrdering(dsp.convertOrdering(n.props, plan.planToStreamColMap))
+	plan.SetMergeOrdering(dsp.convertOrdering(n.props, plan.PlanToStreamColMap))
 	return plan, true, nil
 }
 
