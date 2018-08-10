@@ -2019,6 +2019,25 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	return repl
 }
 
+// lookupPrecedingReplica finds the replica in this store that immediately
+// precedes the specified key without containing it. It returns nil if no such
+// replica exists. It ignores replica placeholders.
+//
+// Concretely, when key represents a key within replica R,
+// lookupPrecedingReplica returns the replica that immediately precedes R in
+// replicasByKey.
+func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var repl *Replica
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
+		var ok bool
+		repl, ok = item.(*Replica)
+		return !ok // keep iterating if not a *Replica
+	})
+	return repl
+}
+
 // getOverlappingKeyRangeLocked returns a KeyRange from the Store overlapping the given
 // descriptor (or nil if no such KeyRange exists).
 func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) KeyRange {
@@ -2339,6 +2358,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	}
 
 	copyDesc := *origDesc
+	copyDesc.IncrementGeneration()
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
@@ -2427,12 +2447,15 @@ func (s *Store) MergeRange(
 		leftRepl.writeStats.resetRequestCounts()
 	}
 
-	// TODO(benesch): drain the RHS txn wait queue.
+	// Clear the wait queue to redirect the queued transactions to the
+	// left-hand replica, if necessary.
+	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
 	// Update the end key of the subsuming range.
 	copy := *leftDesc
+	copy.IncrementGeneration()
 	copy.EndKey = updatedEndKey
 	return leftRepl.setDesc(&copy)
 }
@@ -3350,6 +3373,9 @@ func (s *Store) processRaftRequestWithReplica(
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
 // the request's specified replica. This snapshot can be preemptive or not. If
 // not, the function makes sure to handle any updated Raft Ready state.
+//
+// TODO(benesch): handle snapshots that widen EndKey. These can occur if this
+// replica was behind when the range committed a merge.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot,
 ) *roachpb.Error {

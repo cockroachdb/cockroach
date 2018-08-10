@@ -210,47 +210,8 @@ func (rgcq *replicaGCQueue) process(
 	}
 	replyDesc := rs[0]
 
-	if currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
-		// We are no longer a member of this range; clean up our local data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "destroying local data")
-		}
-		nextReplicaID := replyDesc.NextReplicaID
-		if desc.RangeID != replyDesc.RangeID {
-			// The range this replica belonged to has been subsumed by its left-hand
-			// neighbor. replyDesc thus represents the subsuming range, whose
-			// NextReplicaID is irrelevant. We don't have the last NextReplicaID for
-			// the subsumed range, nor can we obtain it, but that's OK: we can just be
-			// conservative and use the maximum possible replica ID.
-			//
-			// store.RemoveReplica will write a tombstone using this maximum possible
-			// replica ID, which would normally be problematic, as it would prevent
-			// this store from ever having a new replica of the removed range. In this
-			// case, however, it's copacetic, as subsumed ranges _can't_ have new
-			// replicas.
-			nextReplicaID = math.MaxInt32
-		}
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
-			return err
-		}
-	} else if desc.RangeID != replyDesc.RangeID {
-		// If we get a different range ID back, then the range has been merged
-		// away. But currentMember is true, so we are still a member of the
-		// subsuming range. Shut down raft processing for the former range
-		// and delete any remaining metadata, but do not delete the data.
-		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "removing merged range")
-		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
-			DestroyData: false,
-		}); err != nil {
-			return err
-		}
-	} else {
+	currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID())
+	if desc.RangeID == replyDesc.RangeID && currentMember {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
 		//
@@ -264,8 +225,73 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
-	}
+	} else if desc.RangeID == replyDesc.RangeID {
+		// We are no longer a member of this range, but the range still exists.
+		// Clean up our local data.
+		rgcq.metrics.RemoveReplicaCount.Inc(1)
+		if log.V(1) {
+			log.Infof(ctx, "destroying local data")
+		}
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			return err
+		}
+	} else if currentMember {
+		// This store is a current member of a different range that overlaps with
+		// this one. This situation can only happen when we are a current member
+		// of the range that subsumed this one, but our replica of the subsuming
+		// range has not yet applied the merge trigger. This replica must be
+		// preserved so it can be subsumed.
+		if log.V(1) {
+			log.Infof(ctx, "range merged away; allowing merge trigger on LHS to subsume it")
+		}
+	} else {
+		// This case is tricky. This range has been merged away, and this store is
+		// not a member of the current range. It is likely that we can GC this
+		// replica, but we need to be careful. If this store has a replica of the
+		// subsuming range that has not yet applied the merge trigger, we must not
+		// GC this replica.
+		//
+		// We can't just ask our local left neighbor whether it has an unapplied
+		// merge, as if it's a slow follower it might not have learned about the
+		// merge yet! What we can do, though, is check whether the generation of
+		// our local left neighbor matches the generation of its meta2 descriptor.
+		// If it is generationally up-to-date, it has applied all splits and
+		// merges, and it is thus safe to remove this replica.
+		leftRepl := repl.store.lookupPrecedingReplica(desc.StartKey)
+		if leftRepl != nil {
+			leftDesc := leftRepl.Desc()
+			rs, _, err := client.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), leftDesc.StartKey.AsRawKey(),
+				roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+			if err != nil {
+				return err
+			}
+			if len(rs) != 1 {
+				return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
+			}
+			if leftReplyDesc := rs[0]; !leftDesc.Equal(leftReplyDesc) {
+				if log.V(1) {
+					log.Infof(ctx, "left neighbor not up-to-date; cannot safely GC range yet")
+				}
+				return nil
+			}
+		}
 
+		// We don't have the last NextReplicaID for the subsumed range, nor can we
+		// obtain it, but that's OK: we can just be conservative and use the maximum
+		// possible replica ID. store.RemoveReplica will write a tombstone using
+		// this maximum possible replica ID, which would normally be problematic, as
+		// it would prevent this store from ever having a new replica of the removed
+		// range. In this case, however, it's copacetic, as subsumed ranges _can't_
+		// have new replicas.
+		const nextReplicaID = math.MaxInt32
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

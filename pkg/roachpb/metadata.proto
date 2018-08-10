@@ -92,6 +92,16 @@ message RangeDescriptor {
   // next_replica_id is a counter used to generate replica IDs.
   optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
+
+  // generation is incremented on every split and every merge, i.e., whenever
+  // the end_key of this range changes. It is initialized to zero when the range
+  // is first created.
+  //
+  // Note that the generation counter is not incremented by versions of
+  // Cockroach prior to v2.1. To maintain backwards compatibility with these old
+  // versions of Cockroach, we cannot enable the gogoproto.nullable option, as
+  // we need to be able to encode this mesage with the generation field unset.
+  optional int64 generation = 6;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize

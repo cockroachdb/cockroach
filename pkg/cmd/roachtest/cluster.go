@@ -823,6 +823,15 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 	}
 }
 
+// Reformat the disk on the specified node.
+func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...string) {
+	err := execCmd(ctx, c.l,
+		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 // Install a package in a node
 func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
 	err := execCmd(ctx, c.l,

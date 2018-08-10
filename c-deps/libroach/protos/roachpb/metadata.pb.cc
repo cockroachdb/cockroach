@@ -1210,6 +1210,7 @@ const int RangeDescriptor::kStartKeyFieldNumber;
 const int RangeDescriptor::kEndKeyFieldNumber;
 const int RangeDescriptor::kReplicasFieldNumber;
 const int RangeDescriptor::kNextReplicaIdFieldNumber;
+const int RangeDescriptor::kGenerationFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeDescriptor::RangeDescriptor()
@@ -1282,7 +1283,7 @@ void RangeDescriptor::Clear() {
       end_key_.ClearNonDefaultToEmptyNoArena();
     }
   }
-  if (cached_has_bits & 12u) {
+  if (cached_has_bits & 28u) {
     ::memset(&range_id_, 0, static_cast<size_t>(
         reinterpret_cast<char*>(&next_replica_id_) -
         reinterpret_cast<char*>(&range_id_)) + sizeof(next_replica_id_));
@@ -1366,6 +1367,20 @@ bool RangeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      // optional int64 generation = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(48u /* 48 & 0xFF */)) {
+          set_has_generation();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &generation_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1415,8 +1430,13 @@ void RangeDescriptor::SerializeWithCachedSizes(
       output);
   }
 
-  if (cached_has_bits & 0x00000008u) {
+  if (cached_has_bits & 0x00000010u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(5, this->next_replica_id(), output);
+  }
+
+  // optional int64 generation = 6;
+  if (cached_has_bits & 0x00000008u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->generation(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -1440,7 +1460,7 @@ size_t RangeDescriptor::ByteSizeLong() const {
     }
   }
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 31u) {
     if (has_start_key()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
@@ -1457,6 +1477,13 @@ size_t RangeDescriptor::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->range_id());
+    }
+
+    // optional int64 generation = 6;
+    if (has_generation()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->generation());
     }
 
     if (has_next_replica_id()) {
@@ -1485,7 +1512,7 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
 
   replicas_.MergeFrom(from.replicas_);
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 15u) {
+  if (cached_has_bits & 31u) {
     if (cached_has_bits & 0x00000001u) {
       set_has_start_key();
       start_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.start_key_);
@@ -1498,6 +1525,9 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
       range_id_ = from.range_id_;
     }
     if (cached_has_bits & 0x00000008u) {
+      generation_ = from.generation_;
+    }
+    if (cached_has_bits & 0x00000010u) {
       next_replica_id_ = from.next_replica_id_;
     }
     _has_bits_[0] |= cached_has_bits;
@@ -1527,6 +1557,7 @@ void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
   end_key_.Swap(&other->end_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(range_id_, other->range_id_);
+  swap(generation_, other->generation_);
   swap(next_replica_id_, other->next_replica_id_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);

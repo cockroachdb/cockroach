@@ -744,6 +744,13 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int64 range_id() const;
   void set_range_id(::google::protobuf::int64 value);
 
+  // optional int64 generation = 6;
+  bool has_generation() const;
+  void clear_generation();
+  static const int kGenerationFieldNumber = 6;
+  ::google::protobuf::int64 generation() const;
+  void set_generation(::google::protobuf::int64 value);
+
   bool has_next_replica_id() const;
   void clear_next_replica_id();
   static const int kNextReplicaIdFieldNumber = 5;
@@ -760,6 +767,8 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   void clear_has_end_key();
   void set_has_next_replica_id();
   void clear_has_next_replica_id();
+  void set_has_generation();
+  void clear_has_generation();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -768,6 +777,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::google::protobuf::int64 range_id_;
+  ::google::protobuf::int64 generation_;
   ::google::protobuf::int32 next_replica_id_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
@@ -2433,13 +2443,13 @@ RangeDescriptor::replicas() const {
 }
 
 inline bool RangeDescriptor::has_next_replica_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void RangeDescriptor::set_has_next_replica_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void RangeDescriptor::clear_has_next_replica_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void RangeDescriptor::clear_next_replica_id() {
   next_replica_id_ = 0;
@@ -2453,6 +2463,30 @@ inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value
   set_has_next_replica_id();
   next_replica_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.next_replica_id)
+}
+
+// optional int64 generation = 6;
+inline bool RangeDescriptor::has_generation() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void RangeDescriptor::set_has_generation() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void RangeDescriptor::clear_has_generation() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void RangeDescriptor::clear_generation() {
+  generation_ = GOOGLE_LONGLONG(0);
+  clear_has_generation();
+}
+inline ::google::protobuf::int64 RangeDescriptor::generation() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.generation)
+  return generation_;
+}
+inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
+  set_has_generation();
+  generation_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
 }
 
 // -------------------------------------------------------------------
