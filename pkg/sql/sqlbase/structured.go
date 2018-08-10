@@ -2230,6 +2230,20 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 	return 0, false
 }
 
+// NumericPrecisionRadix returns implicit precision radix of numeric
+// data types. Returns false if the data type is not numeric.
+func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
+	switch c.SemanticType {
+	case ColumnType_INT:
+		return 2, true
+	case ColumnType_FLOAT:
+		return 2, true
+	case ColumnType_DECIMAL:
+		return 10, true
+	}
+	return 0, false
+}
+
 // NumericScale returns the declared or implicit precision of exact numeric
 // data types. Returns false if the data type is not an exact numeric, or if the
 // scale of the exact numeric type is not bounded.
