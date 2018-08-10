@@ -1695,7 +1695,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	return mode
 }
 
-// evalCtx creates an extendedEvalCtx corresponding to the current state of the
+// evalCtx creates an ExtendedEvalCtx corresponding to the current state of the
 // session.
 //
 // p is the planner that the EvalCtx will link to. Note that the planner also

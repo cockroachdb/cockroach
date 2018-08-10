@@ -57,7 +57,7 @@ func PlanAndRunExport(
 	out distsqlrun.ProcessorCoreUnion,
 	resultRows *RowResultWriter,
 ) error {
-	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 	p, err := dsp.createPlanForNode(&planCtx, in)
 	if err != nil {
 		return errors.Wrap(err, "constructing distSQL plan")
@@ -67,14 +67,14 @@ func PlanAndRunExport(
 		out, distsqlrun.PostProcessSpec{}, ExportPlanResultTypes, distsqlrun.Ordering{},
 	)
 
-	// Overwrite planToStreamColMap (used by recv below) to reflect the output of
+	// Overwrite PlanToStreamColMap (used by recv below) to reflect the output of
 	// the non-grouping stage we've added above. That stage outputs produces
 	// columns filename/rows/bytes.
-	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(ExportPlanResultTypes))
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
 	dsp.FinalizePlan(&planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
 		execCfg.RangeDescriptorCache, execCfg.LeaseHolderCache, txn, func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
@@ -179,7 +179,7 @@ func LoadCSV(
 
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.newPlanningCtx(ctx, evalCtx, nil /* txn */)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
 
 	resp, err := phs.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
@@ -188,12 +188,12 @@ func LoadCSV(
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range resp.Nodes {
-		if err := dsp.checkNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
+		if err := dsp.CheckNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
 			continue
 		}
 	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
-	for nodeID := range planCtx.nodeAddresses {
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
+	for nodeID := range planCtx.NodeAddresses {
 		nodes = append(nodes, nodeID)
 	}
 	// Shuffle node order so that multiple IMPORTs done in parallel will not
@@ -344,7 +344,7 @@ func LoadCSV(
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
-	p := physicalPlan{}
+	p := PhysicalPlan{}
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
@@ -383,7 +383,7 @@ func LoadCSV(
 
 	// The SST Writer returns 5 columns: name of the file, size of the file,
 	// checksum, start key, end key.
-	p.planToStreamColMap = []int{0, 1, 2, 3, 4}
+	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
 	p.ResultTypes = []sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
 		{SemanticType: sqlbase.ColumnType_INT},
@@ -448,7 +448,7 @@ func LoadCSV(
 
 	dsp.FinalizePlan(&planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		resultRows,
 		tree.Rows,
@@ -476,7 +476,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	from []string,
 	splitSize int64,
 	oversample int64,
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
 ) ([][]byte, error) {
@@ -500,7 +500,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		return nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
 	}
 
-	var p physicalPlan
+	var p PhysicalPlan
 	stageID := p.NewStageID()
 
 	for _, cs := range csvSpecs {
@@ -530,7 +530,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	}
 
 	// We only need the key during sorting.
-	p.planToStreamColMap = []int{0, 1}
+	p.PlanToStreamColMap = []int{0, 1}
 	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	kvOrdering := distsqlrun.Ordering{
@@ -588,7 +588,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
 	dsp.FinalizePlan(planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		tree.Rows,

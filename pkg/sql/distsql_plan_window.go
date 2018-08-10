@@ -29,11 +29,11 @@ type windowPlanState struct {
 	infos   []*windowFuncInfo
 	n       *windowNode
 	evalCtx *tree.EvalContext
-	plan    *physicalPlan
+	plan    *PhysicalPlan
 }
 
 func createWindowPlanState(
-	n *windowNode, evalCtx *tree.EvalContext, plan *physicalPlan,
+	n *windowNode, evalCtx *tree.EvalContext, plan *PhysicalPlan,
 ) *windowPlanState {
 	infos := make([]*windowFuncInfo, 0, len(n.funcs))
 	for _, holder := range n.funcs {
@@ -325,10 +325,10 @@ func (s *windowPlanState) addRenderingIfNecessary() error {
 		}
 		renderTypes = append(renderTypes, outputType)
 	}
-	if err := s.plan.AddRendering(renderExprs, s.evalCtx, s.plan.planToStreamColMap, renderTypes); err != nil {
+	if err := s.plan.AddRendering(renderExprs, s.evalCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {
 		return err
 	}
-	s.plan.planToStreamColMap = identityMap(s.plan.planToStreamColMap, len(renderTypes))
+	s.plan.PlanToStreamColMap = identityMap(s.plan.PlanToStreamColMap, len(renderTypes))
 	return nil
 }
 

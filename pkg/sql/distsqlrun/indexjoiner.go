@@ -31,7 +31,7 @@ const indexJoinerBatchSize = 100
 // primary index of the same table, `desc`, to retrieve columns which are not
 // stored in the secondary index.
 type indexJoiner struct {
-	processorBase
+	ProcessorBase
 
 	input RowSource
 	desc  sqlbase.TableDescriptor
@@ -77,7 +77,7 @@ func newIndexJoiner(
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
-	if err := ij.init(
+	if err := ij.Init(
 		ij,
 		post,
 		ij.desc.ColumnTypes(),
@@ -85,10 +85,10 @@ func newIndexJoiner(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
-			inputsToDrain: []RowSource{ij.input},
-			trailingMetaCallback: func() []ProducerMetadata {
-				ij.internalClose()
+		ProcStateOpts{
+			InputsToDrain: []RowSource{ij.input},
+			TrailingMetaCallback: func() []ProducerMetadata {
+				ij.InternalClose()
 				if meta := getTxnCoordMeta(ij.flowCtx.txn); meta != nil {
 					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
@@ -126,19 +126,19 @@ func newIndexJoiner(
 func (ij *indexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
 	ij.fetcherInput.Start(ctx)
-	return ij.startInternal(ctx, indexJoinerProcName)
+	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
 // Next is part of the RowSource interface.
 func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for ij.state == stateRunning {
+	for ij.State == StateRunning {
 		if !ij.fetcherReady {
 			// Retrieve a batch of rows from the input.
 			for len(ij.spans) < ij.batchSize {
 				row, meta := ij.input.Next()
 				if meta != nil {
 					if meta.Err != nil {
-						ij.moveToDraining(nil /* err */)
+						ij.MoveToDraining(nil /* err */)
 					}
 					return nil, meta
 				}
@@ -147,31 +147,31 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 				span, err := ij.generateSpan(row)
 				if err != nil {
-					ij.moveToDraining(err)
-					return nil, ij.drainHelper()
+					ij.MoveToDraining(err)
+					return nil, ij.DrainHelper()
 				}
 				ij.spans = append(ij.spans, span)
 			}
 			if len(ij.spans) == 0 {
 				// All done.
-				ij.moveToDraining(nil /* err */)
-				return nil, ij.drainHelper()
+				ij.MoveToDraining(nil /* err */)
+				return nil, ij.DrainHelper()
 			}
 			// Scan the primary index for this batch.
 			err := ij.fetcher.StartScan(
-				ij.ctx, ij.flowCtx.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
+				ij.Ctx, ij.flowCtx.txn, ij.spans, false /* limitBatches */, 0, /* limitHint */
 				ij.flowCtx.traceKV)
 			if err != nil {
-				ij.moveToDraining(err)
-				return nil, ij.drainHelper()
+				ij.MoveToDraining(err)
+				return nil, ij.DrainHelper()
 			}
 			ij.fetcherReady = true
 			ij.spans = ij.spans[:0]
 		}
 		row, meta := ij.fetcherInput.Next()
 		if meta != nil {
-			ij.moveToDraining(scrub.UnwrapScrubError(meta.Err))
-			return nil, ij.drainHelper()
+			ij.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
+			return nil, ij.DrainHelper()
 		}
 		if row == nil {
 			// Done with this batch.
@@ -180,18 +180,18 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return outRow, nil
 		}
 	}
-	return nil, ij.drainHelper()
+	return nil, ij.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (ij *indexJoiner) ConsumerDone() {
-	ij.moveToDraining(nil /* err */)
+	ij.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (ij *indexJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ij.internalClose()
+	ij.InternalClose()
 }
 
 func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
@@ -228,7 +228,7 @@ func (ij *indexJoiner) outputStatsToTrace() {
 		InputStats:       is,
 		IndexLookupStats: ils,
 	}
-	if sp := opentracing.SpanFromContext(ij.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
 }

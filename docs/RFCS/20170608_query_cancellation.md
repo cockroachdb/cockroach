@@ -91,7 +91,7 @@ Example output of `SHOW QUERIES` with query ID (see the `id` column):
 ```sql
 root@:26257/> SELECT node_id, id, query FROM [SHOW CLUSTER QUERIES];
 +---------+----------------------------------+--------------------------------------------------------------------+
-| node_id | id                               | query                                                              | 
+| node_id | id                               | query                                                              |
 +---------+----------------------------------+--------------------------------------------------------------------+
 | 1       | 2834b4f8a230ce2394e4f12a8c9236c1 | SHOW CLUSTER QUERIES                                               |
 | 2       | 827f91ab89c3e72d10154fbec8293de1 | INSERT INTO Students VALUES ('Robert'); DROP TABLE Students; --')  |
@@ -147,7 +147,7 @@ Session 2 (DB admin wishing to cancel the query above):
 ```sql
 root@:26257/> SELECT node_id, id, query FROM [SHOW CLUSTER QUERIES];
 +---------+----------------------------------+-----------------------------------------------------------+
-| node_id | id                               | query                                                     | 
+| node_id | id                               | query                                                     |
 +---------+----------------------------------+-----------------------------------------------------------+
 | 1       | 2834b4f8a230ce2394e4f12a8c9236c1 | SHOW CLUSTER QUERIES                                      |
 | 2       | 827f91ab89c3e72d10154fbec8293de1 | SELECT * FROM students WHERE long_bio LIKE '%ips%or';     |
@@ -192,7 +192,7 @@ some processors (eg. hash joiner, sorter) do a lot of processing before they emi
 processors will manually check for context cancellation after every 1000 or so iterations, and error out
 if it is canceled.
 
-The final row receiver, a `distSQLReceiver` which is the `syncFlowConsumer` on the gateway
+The final row receiver, a `DistSQLReceiver` which is the `syncFlowConsumer` on the gateway
 node's flow, does not have any `FlowStream` calls associated with it. So to ensure processors
 on the gateway node get a `ConsumerClosed` when they push rows, the `syncFlowConsumer` will be closed
 by manually pushing an error to it in the cancellation code.
@@ -238,7 +238,7 @@ SELECT pg_cancel_backend(<query-id>);
 
 Supporting this syntax was considered for compatibility reasons but decided against - since
 functions should ideally not have side-effects, and also because postgres' query IDs are `int32`s
-which would be hard to reconcile with our larger query IDs. 
+which would be hard to reconcile with our larger query IDs.
 
 # Unresolved questions
 

@@ -502,7 +502,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 			rw := &errOnlyResultWriter{}
-			recv := makeDistSQLReceiver(
+			recv := MakeDistSQLReceiver(
 				ctx,
 				rw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
@@ -514,7 +514,7 @@ func (sc *SchemaChanger) distBackfill(
 				},
 				evalCtx.Tracing,
 			)
-			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)

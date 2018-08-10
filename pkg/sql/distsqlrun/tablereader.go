@@ -32,7 +32,7 @@ import (
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	processorBase
+	ProcessorBase
 
 	spans     roachpb.Spans
 	limitHint int64
@@ -70,7 +70,7 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.init(
+	if err := tr.Init(
 		tr,
 		post,
 		types,
@@ -78,13 +78,13 @@ func newTableReader(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
+		ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
 			// after it had previously returned an error.
-			inputsToDrain:        nil,
-			trailingMetaCallback: tr.generateTrailingMeta,
+			InputsToDrain:        nil,
+			TrailingMetaCallback: tr.generateTrailingMeta,
 		},
 	); err != nil {
 		return nil, err
@@ -175,14 +175,14 @@ func initRowFetcher(
 
 func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(tr.ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
 	if meta := getTxnCoordMeta(tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
-	tr.internalClose()
+	tr.InternalClose()
 	return trailingMeta
 }
 
@@ -196,7 +196,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	// and a span. The underlying fetcher inherits the proc's span, but not the
 	// log tag.
 	fetcherCtx := ctx
-	ctx = tr.startInternal(ctx, tableReaderProcName)
+	ctx = tr.StartInternal(ctx, tableReaderProcName)
 	if procSpan := opentracing.SpanFromContext(ctx); procSpan != nil {
 		fetcherCtx = opentracing.ContextWithSpan(fetcherCtx, procSpan)
 	}
@@ -207,21 +207,21 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
 		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
-		tr.moveToDraining(err)
+		tr.MoveToDraining(err)
 	}
 	return ctx
 }
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for tr.state == stateRunning {
+	for tr.State == StateRunning {
 		row, meta := tr.input.Next()
 
 		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			tr.moveToDraining(nil /* err */)
+			tr.MoveToDraining(nil /* err */)
 			break
 		}
 
@@ -229,18 +229,18 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return outRow, nil
 		}
 	}
-	return nil, tr.drainHelper()
+	return nil, tr.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (tr *tableReader) ConsumerDone() {
-	tr.moveToDraining(nil /* err */)
+	tr.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	tr.internalClose()
+	tr.InternalClose()
 }
 
 var _ DistSQLSpanStats = &TableReaderStats{}
@@ -264,7 +264,7 @@ func (tr *tableReader) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(tr.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
 	}
 }

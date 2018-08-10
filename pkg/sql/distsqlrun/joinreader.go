@@ -58,8 +58,8 @@ type joinReader struct {
 	joinerBase
 
 	// runningState represents the state of the joinReader. This is in addition to
-	// processorBase.state - the runningState is only relevant when
-	// processorBase.state == stateRunning.
+	// ProcessorBase.State - the runningState is only relevant when
+	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
 
 	desc      sqlbase.TableDescriptor
@@ -152,10 +152,10 @@ func newJoinReader(
 		0, /* numMergedColumns */
 		post,
 		output,
-		procStateOpts{
-			inputsToDrain: []RowSource{jr.input},
-			trailingMetaCallback: func() []ProducerMetadata {
-				jr.internalClose()
+		ProcStateOpts{
+			InputsToDrain: []RowSource{jr.input},
+			TrailingMetaCallback: func() []ProducerMetadata {
+				jr.InternalClose()
 				if meta := getTxnCoordMeta(jr.flowCtx.txn); meta != nil {
 					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
@@ -322,7 +322,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	//   output columns, perform a second lookup on the primary index.
 	// - Join the index rows with the corresponding input rows and buffer the
 	//   results in jr.toEmit.
-	for jr.state == stateRunning {
+	for jr.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *ProducerMetadata
 		switch jr.runningState {
@@ -335,13 +335,13 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		case jrEmittingRows:
 			jr.runningState, row, meta = jr.emitRow()
 		default:
-			log.Fatalf(jr.ctx, "unsupported state: %d", jr.runningState)
+			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
 		}
 		if row != nil || meta != nil {
 			return row, meta
 		}
 	}
-	return nil, jr.drainHelper()
+	return nil, jr.DrainHelper()
 }
 
 // readInput reads the next batch of input rows and starts an index scan.
@@ -351,7 +351,7 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		row, meta := jr.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
-				jr.moveToDraining(nil /* err */)
+				jr.MoveToDraining(nil /* err */)
 				return jrStateUnknown, meta
 			}
 			return jrReadingInput, meta
@@ -364,8 +364,8 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 
 	if len(jr.inputRows) == 0 {
 		// We're done.
-		jr.moveToDraining(nil)
-		return jrStateUnknown, jr.drainHelper()
+		jr.MoveToDraining(nil)
+		return jrStateUnknown, jr.DrainHelper()
 	}
 
 	// If this is an outer join, track emitted rows so we can emit unmatched rows
@@ -387,8 +387,8 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		}
 		key, err := jr.generateKey(inputRow)
 		if err != nil {
-			jr.moveToDraining(err)
-			return jrStateUnknown, jr.drainHelper()
+			jr.MoveToDraining(err)
+			return jrStateUnknown, jr.DrainHelper()
 		}
 		if jr.keyToInputRowIndices[key.String()] == nil {
 			spans = append(spans, roachpb.Span{Key: key, EndKey: key.PrefixEnd()})
@@ -401,11 +401,11 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 		return jrCollectingUnmatched, nil
 	}
 	err := jr.fetcher.StartScan(
-		jr.ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
+		jr.Ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
 		jr.flowCtx.traceKV)
 	if err != nil {
-		jr.moveToDraining(err)
-		return jrStateUnknown, jr.drainHelper()
+		jr.MoveToDraining(err)
+		return jrStateUnknown, jr.DrainHelper()
 	}
 
 	return jrPerformingLookup, nil
@@ -427,8 +427,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 		key := jr.fetcher.IndexKeyString(len(jr.lookupCols))
 		indexRow, meta := jr.fetcherInput.Next()
 		if meta != nil {
-			jr.moveToDraining(scrub.UnwrapScrubError(meta.Err))
-			return jrStateUnknown, jr.drainHelper()
+			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
+			return jrStateUnknown, jr.DrainHelper()
 		}
 		if indexRow == nil {
 			// Done with this input batch.
@@ -447,10 +447,10 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 		for i := range lookupRows {
 			secondaryIndexRows[i] = lookupRows[i].row
 		}
-		primaryRows, err := jr.primaryLookup(jr.ctx, jr.flowCtx.txn, secondaryIndexRows)
+		primaryRows, err := jr.primaryLookup(jr.Ctx, jr.flowCtx.txn, secondaryIndexRows)
 		if err != nil {
-			jr.moveToDraining(err)
-			return jrStateUnknown, jr.drainHelper()
+			jr.MoveToDraining(err)
+			return jrStateUnknown, jr.DrainHelper()
 		}
 		for i := range primaryRows {
 			lookupRows[i].row = primaryRows[i]
@@ -464,8 +464,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 			// Apply index filter.
 			res, err := jr.indexFilter.evalFilter(lookupRow.row)
 			if err != nil {
-				jr.moveToDraining(err)
-				return jrStateUnknown, jr.drainHelper()
+				jr.MoveToDraining(err)
+				return jrStateUnknown, jr.DrainHelper()
 			}
 			if !res {
 				continue
@@ -474,8 +474,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
 			renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
 			if err != nil {
-				jr.moveToDraining(err)
-				return jrStateUnknown, jr.drainHelper()
+				jr.MoveToDraining(err)
+				return jrStateUnknown, jr.DrainHelper()
 			}
 			if renderedRow != nil {
 				if row := jr.processRowHelper(renderedRow); row != nil {
@@ -619,18 +619,18 @@ func (jr *joinReader) Start(ctx context.Context) context.Context {
 		jr.primaryFetcherInput.Start(ctx)
 	}
 	jr.runningState = jrReadingInput
-	return jr.startInternal(ctx, joinReaderProcName)
+	return jr.StartInternal(ctx, joinReaderProcName)
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (jr *joinReader) ConsumerDone() {
-	jr.moveToDraining(nil /* err */)
+	jr.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (jr *joinReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	jr.internalClose()
+	jr.InternalClose()
 }
 
 var _ DistSQLSpanStats = &JoinReaderStats{}
@@ -688,7 +688,7 @@ func (jr *joinReader) outputStatsToTrace() {
 		}
 		jrs.PrimaryIndexLookupStats = &eils
 	}
-	if sp := opentracing.SpanFromContext(jr.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
 }
