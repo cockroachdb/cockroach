@@ -111,7 +111,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			},
 			params.extendedEvalCtx.Tracing,
 		)
-		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx)
+		distSQLPlanner.Run(
+			&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		spans = params.extendedEvalCtx.Tracing.getRecording()
 		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {

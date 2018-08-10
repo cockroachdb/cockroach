@@ -455,6 +455,20 @@ func (w *WindowerSpec) summary() (string, []string) {
 	return "Windower", details
 }
 
+// summary implements the diagramCellType interface.
+func (s *ChangeAggregatorSpec) summary() (string, []string) {
+	var details []string
+	for _, watch := range s.Watches {
+		details = append(details, watch.Span.String())
+	}
+	return "ChangeAggregator", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *ChangeFrontierSpec) summary() (string, []string) {
+	return "ChangeFrontier", []string{}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

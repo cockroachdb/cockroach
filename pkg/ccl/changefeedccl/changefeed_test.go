@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -379,7 +378,6 @@ func TestChangefeedComputedColumn(t *testing.T) {
 
 func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
