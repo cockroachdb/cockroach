@@ -111,8 +111,8 @@ var statusNodeCmd = &cobra.Command{
 	Use:   "status [<node id>]",
 	Short: "shows the status of a node or all nodes",
 	Long: `
-	If a node ID is specified, this will show the status for the corresponding node. If no node ID
-	is specified, this will display the status for all nodes in the cluster.
+If a node ID is specified, this will show the status for the corresponding node. If no node ID
+is specified, this will display the status for all nodes in the cluster.
 	`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runStatusNode),
@@ -150,8 +150,13 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 	}
 
 	baseQuery := joinUsingID(
-		[]string{
-			"SELECT node_id AS id, address, tag AS build, started_at, updated_at from crdb_internal.kv_node_status",
+		[]string{`
+SELECT node_id AS id,
+       address,
+       build_tag AS build,
+       started_at,
+       updated_at
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`,
 			maybeAddActiveNodesFilter(
 				`SELECT node_id AS id,
                 CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
@@ -183,14 +188,12 @@ SELECT node_id AS id,
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
-	decommissionQuery := joinUsingID(
-		[]string{
-			`SELECT node_id AS id, sum((metrics->>'replicas')::DECIMAL)::INT AS gossiped_replicas
-       FROM crdb_internal.kv_store_status GROUP BY node_id`,
-			`SELECT node_id AS id, decommissioning AS is_decommissioning, draining AS is_draining
-       FROM crdb_internal.gossip_liveness`,
-		},
-	)
+	decommissionQuery := `
+SELECT node_id AS id,
+       decommissioning AS is_decommissioning,
+       draining AS is_draining,
+       ranges AS gossiped_replicas
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach node status")
 	if err != nil {
