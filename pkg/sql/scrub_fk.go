@@ -109,7 +109,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		o.colIDToRowIdx[id] = i
 	}
 
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, plan)
 	if err != nil {
 		return err

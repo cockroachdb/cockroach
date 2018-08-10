@@ -106,7 +106,7 @@ func (dsp *DistSQLPlanner) Exec(ctx context.Context, localPlanner interface{}, s
 		return nil
 	})
 	execCfg := p.ExecCfg()
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
 		stmt.StatementType(),
