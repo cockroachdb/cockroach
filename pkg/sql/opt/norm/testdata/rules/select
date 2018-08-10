@@ -89,12 +89,11 @@ scan a
 opt
 SELECT * FROM a WHERE False
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 # --------------------------------------------------
 # EliminateSelect
@@ -113,32 +112,36 @@ scan a
 opt
 SELECT * FROM (SELECT * FROM a WHERE False) WHERE s='foo'
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
+select
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── values
+ │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-5)
+ └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i<5) WHERE s='foo'
@@ -1143,3 +1146,25 @@ project
       │    └── fd: (1)-->(2)
       └── filters [type=bool, outer=(1,2)]
            └── (b.i + b.k) IS NOT NULL [type=bool, outer=(1,2)]
+
+# --------------------------------------------------
+# DetectSelectContradiction
+# --------------------------------------------------
+
+opt
+SELECT k FROM b WHERE false
+----
+values
+ ├── columns: k:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt
+SELECT k FROM b WHERE i > 2 AND i < 1
+----
+values
+ ├── columns: k:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
