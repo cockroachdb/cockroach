@@ -505,9 +505,15 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		fn := aggregations.Child(i)
 		name, overload := memo.FindAggregateOverload(fn)
 
+		distinct := false
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
 			child := fn.Child(j)
+
+			if child.Operator() == opt.AggDistinctOp {
+				distinct = true
+				child = child.Child(0)
+			}
 			if child.Operator() != opt.VariableOp {
 				return execPlan{}, errors.Errorf("only VariableOp args supported")
 			}
@@ -518,6 +524,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		aggInfos[i] = exec.AggInfo{
 			FuncName:   name,
 			Builtin:    overload,
+			Distinct:   distinct,
 			ResultType: fn.Logical().Scalar.Type,
 			ArgCols:    argIdx,
 		}

@@ -791,6 +791,113 @@ scalar-group-by
            └── variable: column5 [type=tuple{int AS k, int AS v, int AS w, string AS s}]
 
 build
+SELECT count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv
+----
+scalar-group-by
+ ├── columns: count:5(int) count:6(int) count:6(int)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      ├── count [type=int]
+      │    └── agg-distinct [type=int]
+      │         └── variable: kv.k [type=int]
+      └── count [type=int]
+           └── agg-distinct [type=int]
+                └── variable: kv.v [type=int]
+
+build
+SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
+----
+group-by
+ ├── columns: upper:5(string) count:6(int) count:7(int) count:7(int)
+ ├── grouping columns: column5:5(string)
+ ├── project
+ │    ├── columns: column5:5(string) k:1(int!null) v:2(int)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── function: upper [type=string]
+ │              └── variable: kv.s [type=string]
+ └── aggregations
+      ├── count [type=int]
+      │    └── agg-distinct [type=int]
+      │         └── variable: kv.k [type=int]
+      └── count [type=int]
+           └── agg-distinct [type=int]
+                └── variable: kv.v [type=int]
+
+build
+SELECT count((k, v)) FROM kv
+----
+scalar-group-by
+ ├── columns: count:6(int)
+ ├── project
+ │    ├── columns: column5:5(tuple{int, int})
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── tuple [type=tuple{int, int}]
+ │              ├── variable: kv.k [type=int]
+ │              └── variable: kv.v [type=int]
+ └── aggregations
+      └── count [type=int]
+           └── variable: column5 [type=tuple{int, int}]
+
+build
+SELECT count(DISTINCT (k, v)) FROM kv
+----
+scalar-group-by
+ ├── columns: count:6(int)
+ ├── project
+ │    ├── columns: column5:5(tuple{int, int})
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── tuple [type=tuple{int, int}]
+ │              ├── variable: kv.k [type=int]
+ │              └── variable: kv.v [type=int]
+ └── aggregations
+      └── count [type=int]
+           └── agg-distinct [type=tuple{int, int}]
+                └── variable: column5 [type=tuple{int, int}]
+
+build
+SELECT count(DISTINCT (k, (v))) FROM kv
+----
+scalar-group-by
+ ├── columns: count:6(int)
+ ├── project
+ │    ├── columns: column5:5(tuple{int, int})
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── projections
+ │         └── tuple [type=tuple{int, int}]
+ │              ├── variable: kv.k [type=int]
+ │              └── variable: kv.v [type=int]
+ └── aggregations
+      └── count [type=int]
+           └── agg-distinct [type=tuple{int, int}]
+                └── variable: column5 [type=tuple{int, int}]
+
+build
+SELECT count(*) FROM kv a, kv b
+----
+scalar-group-by
+ ├── columns: count:9(int)
+ ├── project
+ │    └── inner-join
+ │         ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) kv.k:5(int!null) kv.v:6(int) kv.w:7(int) kv.s:8(string)
+ │         ├── scan kv
+ │         │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │         ├── scan kv
+ │         │    └── columns: kv.k:5(int!null) kv.v:6(int) kv.w:7(int) kv.s:8(string)
+ │         └── true [type=bool]
+ └── aggregations
+      └── count-rows [type=int]
+
+build
 SELECT count((k, v)) FROM kv LIMIT 1
 ----
 limit
@@ -1035,6 +1142,29 @@ scalar-group-by
       │    └── variable: column5 [type=decimal]
       └── sum [type=decimal]
            └── variable: column7 [type=decimal]
+
+build
+SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
+----
+scalar-group-by
+ ├── columns: avg:5(decimal) avg:6(decimal) sum:7(decimal) sum:8(decimal)
+ ├── project
+ │    ├── columns: k:1(int!null) v:2(int)
+ │    └── scan kv
+ │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      ├── avg [type=decimal]
+      │    └── agg-distinct [type=int]
+      │         └── variable: kv.k [type=int]
+      ├── avg [type=decimal]
+      │    └── agg-distinct [type=int]
+      │         └── variable: kv.v [type=int]
+      ├── sum [type=decimal]
+      │    └── agg-distinct [type=int]
+      │         └── variable: kv.k [type=int]
+      └── sum [type=decimal]
+           └── agg-distinct [type=int]
+                └── variable: kv.v [type=int]
 
 build
 SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv
@@ -2448,7 +2578,16 @@ project
 build
 SELECT sum(DISTINCT abc.d) FROM abc
 ----
-error (0A000): aggregates with DISTINCT are not supported yet
+scalar-group-by
+ ├── columns: sum:5(decimal)
+ ├── project
+ │    ├── columns: d:4(decimal)
+ │    └── scan abc
+ │         └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ └── aggregations
+      └── sum [type=decimal]
+           └── agg-distinct [type=decimal]
+                └── variable: abc.d [type=decimal]
 
 build
 SELECT sum(abc.d) FILTER (WHERE abc.d > 0) FROM abc

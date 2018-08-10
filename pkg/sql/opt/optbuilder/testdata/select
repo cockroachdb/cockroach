@@ -557,7 +557,7 @@ offset
 build
 SELECT * FROM xyzw@foo
 ----
-error (0A000): index hints are not supported
+error (0A000): index flags are not supported
 
 exec-ddl
 CREATE TABLE boolean_table (

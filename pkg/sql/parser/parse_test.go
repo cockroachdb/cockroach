@@ -582,7 +582,6 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@primary`},
 		{`SELECT 'a' FROM t@like`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
-		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT BOOL 'foo'`},
@@ -854,9 +853,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [123(1, 2, 3) AS t]`},
 		{`SELECT * FROM [123() AS t]`},
 		{`SELECT * FROM t@[123]`},
-		{`SELECT * FROM t@{FORCE_INDEX=[123],NO_INDEX_JOIN}`},
 		{`SELECT * FROM [123 AS t]@[456]`},
-		{`SELECT * FROM [123 AS t]@{FORCE_INDEX=[456],NO_INDEX_JOIN}`},
 
 		{`SELECT (1 + 2).*`},
 		{`SELECT (1 + 2).col`},
@@ -1084,8 +1081,6 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT[])`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
-		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
-			`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=[123]}`, `SELECT 'a' FROM t@[123]`},
 		{`SELECT 'a' FROM [123 AS t]@{FORCE_INDEX=[456]}`, `SELECT 'a' FROM [123 AS t]@[456]`},
@@ -1857,10 +1852,10 @@ SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
 `,
 		},
 		{
-			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}`,
-			`FORCE_INDEX specified multiple times at or near "baz"
-SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}
-                                                             ^
+			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
+			`FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "no_index_join"
+SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
+                                   ^
 `,
 		},
 		{
@@ -1868,13 +1863,6 @@ SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN,FORCE_INDEX=baz}
 			`NO_INDEX_JOIN specified multiple times at or near "no_index_join"
 SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
                                  ^
-`,
-		},
-		{
-			`SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}`,
-			`NO_INDEX_JOIN specified multiple times at or near "no_index_join"
-SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
-                                                 ^
 `,
 		},
 		{

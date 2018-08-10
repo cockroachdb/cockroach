@@ -14,15 +14,19 @@ TABLE abc
  └── INDEX primary
       └── a string not null
 
+# --------------------------------------------------
+# ReplaceMinWithLimit
+# --------------------------------------------------
+
 opt
-select max(a) FROM abc
+SELECT min(a) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5(string)
+ ├── columns: min:5(string)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── scan abc,rev
+ ├── scan abc
  │    ├── columns: a:1(string!null)
  │    ├── limit: 1
  │    ├── key: ()
@@ -31,58 +35,9 @@ scalar-group-by
       └── const-agg [type=string, outer=(1)]
            └── variable: abc.a [type=string, outer=(1)]
 
+# Verify the rule still fires even if DISTINCT is used.
 opt
-select max(b) FROM abc
-----
-scalar-group-by
- ├── columns: max:5(float)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(5)
- ├── scan abc
- │    └── columns: b:2(float)
- └── aggregations [outer=(2)]
-      └── max [type=float, outer=(2)]
-           └── variable: abc.b [type=float, outer=(2)]
-
-memo
-select max(b) from abc
-----
-memo (optimized)
- ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: max:5]"
- │         ├── best: (scalar-group-by G9 G2 cols=())
- │         └── cost: 1060.01
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=-2)
- │    └── ""
- │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
- │         └── cost: 1119.22
- ├── G4: (aggregations G8)
- ├── G5: (max G12)
- ├── G6: (select G9 G10)
- │    ├── ""
- │    │    ├── best: (select G9 G10)
- │    │    └── cost: 1060.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G6)
- │         └── cost: 1119.21
- ├── G7: (const 1)
- ├── G8: (const-agg G12)
- ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(2))
- │    │    └── cost: 1050.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G9)
- │         └── cost: 1259.32
- ├── G10: (filters G11)
- ├── G11: (is-not G12 G13)
- ├── G12: (variable abc.b)
- └── G13: (null)
-
-opt
-SELECT min(a) FROM abc
+SELECT min(DISTINCT a) FROM abc
 ----
 scalar-group-by
  ├── columns: min:5(string)
@@ -626,3 +581,93 @@ memo (optimized)
  ├── G11: (is-not G12 G13)
  ├── G12: (variable abc.b)
  └── G13: (null)
+
+# --------------------------------------------------
+# ReplaceMaxWithLimit
+# --------------------------------------------------
+
+opt
+select max(a) FROM abc
+----
+scalar-group-by
+ ├── columns: max:5(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc,rev
+ │    ├── columns: a:1(string!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── const-agg [type=string, outer=(1)]
+           └── variable: abc.a [type=string, outer=(1)]
+
+# Verify the rule still fires even if DISTINCT is used.
+opt
+select max(DISTINCT a) FROM abc
+----
+scalar-group-by
+ ├── columns: max:5(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc,rev
+ │    ├── columns: a:1(string!null)
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations [outer=(1)]
+      └── const-agg [type=string, outer=(1)]
+           └── variable: abc.a [type=string, outer=(1)]
+
+opt
+select max(b) FROM abc
+----
+scalar-group-by
+ ├── columns: max:5(float)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan abc
+ │    └── columns: b:2(float)
+ └── aggregations [outer=(2)]
+      └── max [type=float, outer=(2)]
+           └── variable: abc.b [type=float, outer=(2)]
+
+memo
+select max(b) from abc
+----
+memo (optimized)
+ ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
+ │    └── "[presentation: max:5]"
+ │         ├── best: (scalar-group-by G9 G2 cols=())
+ │         └── cost: 1060.01
+ ├── G2: (aggregations G5)
+ ├── G3: (limit G6 G7 ordering=-2)
+ │    └── ""
+ │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
+ │         └── cost: 1119.22
+ ├── G4: (aggregations G8)
+ ├── G5: (max G12)
+ ├── G6: (select G9 G10)
+ │    ├── ""
+ │    │    ├── best: (select G9 G10)
+ │    │    └── cost: 1060.00
+ │    └── "[ordering: -2]"
+ │         ├── best: (sort G6)
+ │         └── cost: 1119.21
+ ├── G7: (const 1)
+ ├── G8: (const-agg G12)
+ ├── G9: (scan abc,cols=(2)) (scan abc,rev,cols=(2))
+ │    ├── ""
+ │    │    ├── best: (scan abc,cols=(2))
+ │    │    └── cost: 1050.00
+ │    └── "[ordering: -2]"
+ │         ├── best: (sort G9)
+ │         └── cost: 1259.32
+ ├── G10: (filters G11)
+ ├── G11: (is-not G12 G13)
+ ├── G12: (variable abc.b)
+ └── G13: (null)
+

@@ -144,8 +144,8 @@ func (u *sqlSymUnion) tablePatterns() tree.TablePatterns {
 func (u *sqlSymUnion) normalizableTableNames() tree.NormalizableTableNames {
     return u.val.(tree.NormalizableTableNames)
 }
-func (u *sqlSymUnion) indexHints() *tree.IndexHints {
-    return u.val.(*tree.IndexHints)
+func (u *sqlSymUnion) indexFlags() *tree.IndexFlags {
+    return u.val.(*tree.IndexFlags)
 }
 func (u *sqlSymUnion) arraySubscript() *tree.ArraySubscript {
     return u.val.(*tree.ArraySubscript)
@@ -853,9 +853,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> where_clause
 %type <*tree.ArraySubscript> array_subscript
 %type <tree.Expr> opt_slice_bound
-%type <*tree.IndexHints> opt_index_hints
-%type <*tree.IndexHints> index_hints_param
-%type <*tree.IndexHints> index_hints_param_list
+%type <*tree.IndexFlags> opt_index_flags
+%type <*tree.IndexFlags> index_flags_param
+%type <*tree.IndexFlags> index_flags_param_list
 %type <tree.Expr> a_expr b_expr c_expr d_expr
 %type <tree.Expr> substr_from substr_for
 %type <tree.Expr> in_expr
@@ -5440,66 +5440,55 @@ from_list:
     $$.val = append($1.tblExprs(), $3.tblExpr())
   }
 
-index_hints_param:
+index_flags_param:
   FORCE_INDEX '=' index_name
   {
-     $$.val = &tree.IndexHints{Index: tree.UnrestrictedName($3)}
+     $$.val = &tree.IndexFlags{Index: tree.UnrestrictedName($3)}
   }
 | FORCE_INDEX '=' '[' iconst64 ']'
   {
     /* SKIP DOC */
-    $$.val = &tree.IndexHints{IndexID: tree.IndexID($4.int64())}
+    $$.val = &tree.IndexFlags{IndexID: tree.IndexID($4.int64())}
   }
 |
   NO_INDEX_JOIN
   {
-     $$.val = &tree.IndexHints{NoIndexJoin: true}
+     $$.val = &tree.IndexFlags{NoIndexJoin: true}
   }
 
-index_hints_param_list:
-  index_hints_param
+index_flags_param_list:
+  index_flags_param
   {
-    $$.val = $1.indexHints()
+    $$.val = $1.indexFlags()
   }
 |
-  index_hints_param_list ',' index_hints_param
+  index_flags_param_list ',' index_flags_param
   {
-    a := $1.indexHints()
-    b := $3.indexHints()
-    if a.NoIndexJoin && b.NoIndexJoin {
-       sqllex.Error("NO_INDEX_JOIN specified multiple times")
-       return 1
+    a := $1.indexFlags()
+    b := $3.indexFlags()
+    if err := a.CombineWith(b); err != nil {
+      sqllex.Error(err.Error())
+      return 1
     }
-    if (a.Index != "" || a.IndexID != 0) && (b.Index != "" || b.IndexID != 0) {
-       sqllex.Error("FORCE_INDEX specified multiple times")
-       return 1
-    }
-    // At this point either a or b contains "no information"
-    // (the empty string for Index and the value 0 for IndexID).
-    // Using the addition operator automatically selects the non-zero
-    // value, avoiding a conditional branch.
-    a.Index = a.Index + b.Index
-    a.IndexID = a.IndexID + b.IndexID
-    a.NoIndexJoin = a.NoIndexJoin || b.NoIndexJoin
     $$.val = a
   }
 
-opt_index_hints:
+opt_index_flags:
   '@' index_name
   {
-    $$.val = &tree.IndexHints{Index: tree.UnrestrictedName($2)}
+    $$.val = &tree.IndexFlags{Index: tree.UnrestrictedName($2)}
   }
 | '@' '[' iconst64 ']'
   {
-    $$.val = &tree.IndexHints{IndexID: tree.IndexID($3.int64())}
+    $$.val = &tree.IndexFlags{IndexID: tree.IndexID($3.int64())}
   }
-| '@' '{' index_hints_param_list '}'
+| '@' '{' index_flags_param_list '}'
   {
-    $$.val = $3.indexHints()
+    $$.val = $3.indexFlags()
   }
 | /* EMPTY */
   {
-    $$.val = (*tree.IndexHints)(nil)
+    $$.val = (*tree.IndexFlags)(nil)
   }
 
 // %Help: <SOURCE> - define a data source for SELECT
@@ -5518,33 +5507,42 @@ opt_index_hints:
 //   '[' EXPLAIN ... ']'
 //   '[' SHOW ... ']'
 //
-// Index hints:
+// Index flags:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
-  '[' iconst64 opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
+  '[' iconst64 opt_tableref_col_list alias_clause ']' opt_index_flags opt_ordinality opt_alias_clause
   {
     /* SKIP DOC */
     $$.val = &tree.AliasedTableExpr{
-                 Expr: &tree.TableRef{
-                    TableID: $2.int64(),
-                    Columns: $3.tableRefCols(),
-                    As: $4.aliasClause(),
-                 },
-                 Hints: $6.indexHints(),
-                 Ordinality: $7.bool(),
-                 As: $8.aliasClause(),
-             }
+        Expr: &tree.TableRef{
+           TableID: $2.int64(),
+           Columns: $3.tableRefCols(),
+           As:      $4.aliasClause(),
+        },
+        IndexFlags: $6.indexFlags(),
+        Ordinality: $7.bool(),
+        As:         $8.aliasClause(),
+    }
   }
-| relation_expr opt_index_hints opt_ordinality opt_alias_clause
+| relation_expr opt_index_flags opt_ordinality opt_alias_clause
   {
-    $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
+    $$.val = &tree.AliasedTableExpr{
+      Expr:       $1.newNormalizableTableNameFromUnresolvedName(),
+      IndexFlags: $2.indexFlags(),
+      Ordinality: $3.bool(),
+      As:         $4.aliasClause(),
+    }
   }
 | select_with_parens opt_ordinality opt_alias_clause
   {
-    $$.val = &tree.AliasedTableExpr{Expr: &tree.Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
+    $$.val = &tree.AliasedTableExpr{
+      Expr:       &tree.Subquery{Select: $1.selectStmt()},
+      Ordinality: $2.bool(),
+      As:         $3.aliasClause(),
+    }
   }
 | LATERAL select_with_parens opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
 | joined_table

@@ -212,11 +212,15 @@ define AntiJoinApply {
 # GroupBy computes aggregate functions over groups of input rows. Input rows
 # that are equal on the grouping columns are grouped together. The set of
 # computed aggregate functions is described by the Aggregations field (which is
-# always an Aggregations operator). The arguments of the aggregate functions are
-# columns from the input. If the set of input rows is empty, then the output of
-# the GroupBy operator will also be empty. If the grouping columns are empty,
-# then all input rows form a single group. GroupBy is used for queries with
-# aggregate functions, HAVING clauses and/or GROUP BY expressions.
+# always an Aggregations operator).
+#
+# The arguments of the aggregate functions are columns from the input
+# (i.e. Variables), possibly wrapped in aggregate modifiers like AggDistinct.
+#
+# If the set of input rows is empty, then the output of the GroupBy operator
+# will also be empty. If the grouping columns are empty, then all input rows
+# form a single group. GroupBy is used for queries with aggregate functions,
+# HAVING clauses and/or GROUP BY expressions.
 #
 # The Def private contains an ordering; this ordering is used to determine
 # intra-group ordering and is only useful if there is an order-dependent

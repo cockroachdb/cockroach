@@ -227,6 +227,7 @@ type ColumnOrdinalSet = util.FastIntSet
 type AggInfo struct {
 	FuncName   string
 	Builtin    *tree.Overload
+	Distinct   bool
 	ResultType types.T
 	ArgCols    []ColumnOrdinal
 }
