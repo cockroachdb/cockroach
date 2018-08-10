@@ -94,7 +94,7 @@ func (c *CustomFuncs) CanPruneCols(target memo.GroupID, neededCols opt.ColSet) b
 		pruneCols = DerivePruneCols(ev)
 	}
 
-	return !pruneCols.Difference(neededCols).Empty()
+	return !pruneCols.SubsetOf(neededCols)
 }
 
 // PruneCols creates an expression that discards any outputs columns of the

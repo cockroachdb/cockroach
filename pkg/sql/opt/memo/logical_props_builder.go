@@ -1132,7 +1132,7 @@ func (b *logicalPropsBuilder) makeTableFuncDep(
 	var allCols opt.ColSet
 	tab := md.Table(tabID)
 	for i := 0; i < tab.ColumnCount(); i++ {
-		allCols.Add(int(md.TableColumn(tabID, i)))
+		allCols.Add(int(tabID.ColumnID(i)))
 	}
 
 	fd = &props.FuncDepSet{}
@@ -1148,8 +1148,7 @@ func (b *logicalPropsBuilder) makeTableFuncDep(
 		// strict key. See the comment for opt.Index.LaxKeyColumnCount.
 		for col := 0; col < index.LaxKeyColumnCount(); col++ {
 			ord := index.Column(col).Ordinal
-			colID := md.TableColumn(tabID, ord)
-			keyCols.Add(int(colID))
+			keyCols.Add(int(tabID.ColumnID(ord)))
 		}
 		if index.LaxKeyColumnCount() < index.KeyColumnCount() {
 			// This case only occurs for a UNIQUE index having a NULL-able column.
@@ -1229,8 +1228,7 @@ func (b *logicalPropsBuilder) tableNotNullCols(md *opt.Metadata, tabID opt.Table
 	tab := md.Table(tabID)
 	for i := 0; i < tab.ColumnCount(); i++ {
 		if !tab.Column(i).IsNullable() {
-			colID := md.TableColumn(tabID, i)
-			cs.Add(int(colID))
+			cs.Add(int(tabID.ColumnID(i)))
 		}
 	}
 	return cs

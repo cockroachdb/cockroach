@@ -82,18 +82,13 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	md := c.e.mem.Metadata()
 	tab := md.Table(scanOpDef.Table)
 
-	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
-	pkCols := make(opt.ColList, primaryIndex.KeyColumnCount())
-	for i := range pkCols {
-		pkCols[i] = md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)
-	}
-
 	// Add a reverse index scan memo group for the primary index.
 	newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: 0, Cols: scanOpDef.Cols, Reverse: true}
 	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
 	c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
+	var pkCols opt.ColList
 	for i := 1; i < tab.IndexCount(); i++ {
 		if tab.Index(i).IsInverted() {
 			// Ignore inverted indexes.
@@ -114,6 +109,13 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 		} else {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
+			if pkCols == nil {
+				primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
+				pkCols = make(opt.ColList, primaryIndex.KeyColumnCount())
+				for i := range pkCols {
+					pkCols[i] = scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)
+				}
+			}
 
 			// We scan whatever columns we need which are available from the index,
 			// plus the PK columns. The main reason is to allow pushing of filters as
@@ -174,7 +176,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
 	var pkColSet opt.ColSet
 	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-		pkColSet.Add(int(md.TableColumn(scanOpDef.Table, primaryIndex.Column(i).Ordinal)))
+		pkColSet.Add(int(scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)))
 	}
 
 	// Iterate over all inverted indexes (index 0 is the primary index and is
@@ -260,7 +262,7 @@ func (c *CustomFuncs) constrainedScanOpDef(
 	var notNullCols opt.ColSet
 	for i := range columns {
 		col := index.Column(i)
-		colID := md.TableColumn(scanOpDef.Table, col.Ordinal)
+		colID := scanOpDef.Table.ColumnID(col.Ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
 		if !col.Column.IsNullable() {
 			notNullCols.Add(int(colID))
@@ -560,7 +562,7 @@ func (c *CustomFuncs) CanUseLookupJoin(
 
 	// Check if the first column in the index has an equality constraint.
 	idx := md.Table(scanDef.Table).Index(scanDef.Index)
-	firstCol := md.TableColumn(scanDef.Table, idx.Column(0).Ordinal)
+	firstCol := scanDef.Table.ColumnID(idx.Column(0).Ordinal)
 	for i := range rightEq {
 		if rightEq[i] == firstCol {
 			return true
@@ -592,7 +594,7 @@ func (c *CustomFuncs) ConstructLookupJoin(
 		LookupCols: scanDef.Cols,
 	}
 	for i := 0; i < numIndexCols; i++ {
-		idxCol := md.TableColumn(scanDef.Table, idx.Column(i).Ordinal)
+		idxCol := scanDef.Table.ColumnID(idx.Column(i).Ordinal)
 		found := -1
 		for j := range rightEq {
 			if rightEq[j] == idxCol {
@@ -669,7 +671,7 @@ func (c *CustomFuncs) HoistIndexJoinDef(
 		LookupCols: indexJoinDef.Cols.Difference(inputCols),
 	}
 	for i := 0; i < numPKCols; i++ {
-		lookupJoinDef.KeyCols[i] = md.TableColumn(indexJoinDef.Table, pkIndex.Column(i).Ordinal)
+		lookupJoinDef.KeyCols[i] = indexJoinDef.Table.ColumnID(pkIndex.Column(i).Ordinal)
 		if !inputCols.Contains(int(lookupJoinDef.KeyCols[i])) {
 			panic("index join input doesn't have PK")
 		}
