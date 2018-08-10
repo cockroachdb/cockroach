@@ -50,10 +50,6 @@ type coster struct {
 	mem *memo.Memo
 }
 
-func newCoster(mem *memo.Memo) *coster {
-	return &coster{mem: mem}
-}
-
 const (
 	// These costs have been copied from the Postgres optimizer:
 	// https://github.com/postgres/postgres/blob/master/src/include/optimizer/cost.h

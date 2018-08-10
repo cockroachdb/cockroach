@@ -362,7 +362,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		idxCols := make(opt.ColList, len(def.KeyCols))
 		idx := ev.mem.metadata.Table(def.Table).Index(def.Index)
 		for i := range idxCols {
-			idxCols[i] = ev.mem.metadata.TableColumn(def.Table, idx.Column(i).Ordinal)
+			idxCols[i] = def.Table.ColumnID(idx.Column(i).Ordinal)
 		}
 		tp.Childf("key columns: %v = %v", def.KeyCols, idxCols)
 	}

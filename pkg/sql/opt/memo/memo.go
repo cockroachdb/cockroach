@@ -119,11 +119,6 @@ type Memo struct {
 	// expression to indicate that it did not originate from the memo.
 	groups []group
 
-	// Intern the set of unique physical properties used by expressions in the
-	// memo, since there are so many duplicates.
-	physPropsMap map[string]PhysicalPropsID
-	physProps    []props.Physical
-
 	// Some memoExprs have a variable number of children. The Expr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
 	// listStorage. Note that ListID 0 is invalid in order to indicate an
@@ -146,19 +141,11 @@ func New() *Memo {
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
 	m := &Memo{
-		metadata:     opt.NewMetadata(),
-		exprMap:      make(map[Fingerprint]GroupID),
-		groups:       make([]group, 1),
-		physPropsMap: make(map[string]PhysicalPropsID),
-		physProps:    make([]props.Physical, 1, 2),
+		metadata: opt.NewMetadata(),
+		exprMap:  make(map[Fingerprint]GroupID),
+		groups:   make([]group, 1),
 	}
 
-	// Intern physical properties that require nothing of operator.
-	physProps := props.Physical{}
-	m.physProps = append(m.physProps, physProps)
-	m.physPropsMap[physProps.Fingerprint()] = MinPhysPropsID
-
-	m.listStorage.init()
 	m.privateStorage.init()
 	return m
 }
@@ -353,20 +340,20 @@ func (m *Memo) LookupList(id ListID) []GroupID {
 // If the same list was added previously, then this method is a no-op and
 // returns the same ID as did the previous call.
 func (m *Memo) InternPhysicalProps(physical *props.Physical) PhysicalPropsID {
-	fingerprint := physical.Fingerprint()
-	id, ok := m.physPropsMap[fingerprint]
-	if !ok {
-		id = PhysicalPropsID(len(m.physProps))
-		m.physProps = append(m.physProps, *physical)
-		m.physPropsMap[fingerprint] = id
+	// Special case physical properties that require nothing of operator.
+	if !physical.Defined() {
+		return MinPhysPropsID
 	}
-	return id
+	return PhysicalPropsID(m.privateStorage.internPhysProps(physical))
 }
 
 // LookupPhysicalProps returns the set of physical props that was earlier
 // interned in the memo by a call to InternPhysicalProps.
 func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *props.Physical {
-	return &m.physProps[id]
+	if id == MinPhysPropsID {
+		return &props.MinPhysProps
+	}
+	return m.privateStorage.lookup(PrivateID(id)).(*props.Physical)
 }
 
 // LookupPrivate returns a private value that was earlier interned in the memo

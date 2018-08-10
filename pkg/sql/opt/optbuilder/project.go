@@ -85,35 +85,60 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 	inScope.replaceSRFs = true
 
 	for _, e := range selects {
-		// Pre-normalize any VarName so the work is not done twice below.
-		if err := e.NormalizeTopLevelVarName(); err != nil {
-			panic(builderError{err})
-		}
-
-		// Special handling for "*", "<table>.*" and "(Expr).*".
-		if v, ok := e.Expr.(tree.VarName); ok {
-			switch v.(type) {
-			case tree.UnqualifiedStar, *tree.AllColumnsSelector, *tree.TupleStar:
-				if e.As != "" {
-					panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
-						"%q cannot be aliased", tree.ErrString(v))})
-				}
-
-				labels, exprs := b.expandStar(e.Expr, inScope)
-				for i, e := range exprs {
-					b.buildScalarProjection(e, labels[i], inScope, outScope)
-				}
-				continue
+		// Start with fast path, looking for simple column reference.
+		texpr := b.resolveColRef(e.Expr, inScope)
+		if texpr == nil {
+			// Fall back to slow path. Pre-normalize any VarName so the work is
+			// not done twice below.
+			if err := e.NormalizeTopLevelVarName(); err != nil {
+				panic(builderError{err})
 			}
+
+			// Special handling for "*", "<table>.*" and "(Expr).*".
+			if v, ok := e.Expr.(tree.VarName); ok {
+				switch v.(type) {
+				case tree.UnqualifiedStar, *tree.AllColumnsSelector, *tree.TupleStar:
+					if e.As != "" {
+						panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+							"%q cannot be aliased", tree.ErrString(v))})
+					}
+
+					labels, exprs := b.expandStar(e.Expr, inScope)
+					for i, e := range exprs {
+						b.buildScalarProjection(e, labels[i], inScope, outScope)
+					}
+					continue
+				}
+			}
+
+			texpr = inScope.resolveType(e.Expr, types.Any)
 		}
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
 		label := b.getColName(e)
-		texpr := inScope.resolveType(e.Expr, types.Any)
 		b.buildScalarProjection(texpr, label, inScope, outScope)
 	}
+}
+
+// resolveColRef looks for the common case of a standalone column reference
+// expression, like this:
+//
+//   SELECT ..., c, ... FROM ...
+//
+// It resolves the column name to a scopeColumn and returns it as a TypedExpr.
+func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
+	unresolved, ok := e.(*tree.UnresolvedName)
+	if ok && !unresolved.Star && unresolved.NumParts == 1 {
+		colName := unresolved.Parts[0]
+		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
+		if err != nil {
+			panic(builderError{err})
+		}
+		return srcMeta.(tree.TypedExpr)
+	}
+	return nil
 }
 
 // getColName returns the output column name for a projection expression.

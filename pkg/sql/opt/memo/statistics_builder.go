@@ -1014,9 +1014,8 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 func (sb *statisticsBuilder) colSetFromTableStatistic(
 	stat opt.TableStatistic, tableID opt.TableID,
 ) (cols opt.ColSet) {
-	md := sb.ev.Metadata()
 	for i := 0; i < stat.ColumnCount(); i++ {
-		cols.Add(int(md.TableColumn(tableID, stat.ColumnOrdinal(i))))
+		cols.Add(int(tableID.ColumnID(stat.ColumnOrdinal(i))))
 	}
 	return cols
 }

@@ -65,7 +65,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		}
 
 		tab := b.resolveTable(tn)
-		return b.buildScan(tab, tn, inScope)
+		return b.buildScan(tab, tn, nil /* ordinals */, inScope)
 
 	case *tree.ParenTableExpr:
 		return b.buildTable(source.Expr, inScope)
@@ -90,7 +90,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 	case *tree.TableRef:
 		tab := b.resolveTableRef(source)
-		outScope = b.buildScanWithTableRef(tab, tab.TabName(), inScope, source)
+		outScope = b.buildScanFromTableRef(tab, source, inScope)
 		b.renameSource(source.As, outScope)
 		return outScope
 
@@ -145,104 +145,88 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	}
 }
 
-// buildScanWithTableRef adds support for numeric references in queries.
+// buildScanFromTableRef adds support for numeric references in queries.
 // For example:
 // SELECT * FROM [53 as t]; (table reference)
 // SELECT * FROM [53(1) as t]; (+columnar reference)
 // SELECT * FROM [53(1) as t]@1; (+index reference)
 // Note, the query SELECT * FROM [53() as t] is unsupported. Column lists must
 // be non-empty
-func (b *Builder) buildScanWithTableRef(
-	tab opt.Table, tn *tree.TableName, inScope *scope, ref *tree.TableRef,
+func (b *Builder) buildScanFromTableRef(
+	tab opt.Table, ref *tree.TableRef, inScope *scope,
 ) (outScope *scope) {
-
 	if ref.Columns != nil && len(ref.Columns) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"an explicit list of column IDs must include at least one column")})
 	}
-	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
-	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
 
-	var colsToAdd []int
 	// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
 	// (all columns). whereas an array of length 0 means 'zero columns'.
 	// Lists of zero columns are not supported and will throw an error."
 	// The error for lists of zero columns is thrown in the caller function
-	// for buildScanWithTableRef.
-	if ref.Columns == nil {
-		for i := 0; i < tab.ColumnCount(); i++ {
-			colsToAdd = append(colsToAdd, i)
-		}
-	} else {
-		for _, c := range ref.Columns {
-			ordinalCol, err := tab.LookupColumnOrdinal(uint32(c))
+	// for buildScanFromTableRef.
+	var ordinals []int
+	if ref.Columns != nil {
+		ordinals = make([]int, len(ref.Columns))
+		for i, c := range ref.Columns {
+			ord, err := tab.LookupColumnOrdinal(uint32(c))
 			if err != nil {
 				panic(builderError{err})
 			}
-			colsToAdd = append(colsToAdd, ordinalCol)
+			ordinals[i] = ord
 		}
 	}
-	var tabCols opt.ColSet
-	outScope = inScope.push()
-	for _, i := range colsToAdd {
-		col := tab.Column(i)
-		colID := b.factory.Metadata().TableColumn(tabID, i)
-		name := tree.Name(col.ColName())
-		colProps := scopeColumn{
-			id:       colID,
-			origName: name,
-			name:     name,
-			table:    *tn,
-			typ:      col.DatumType(),
-			hidden:   col.IsHidden(),
-		}
-		tabCols.Add(int(colID))
-		b.colMap = append(b.colMap, colProps)
-		outScope.cols = append(outScope.cols, colProps)
-	}
-	if tab.IsVirtualTable() {
-		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabCols}
-		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
-	} else {
-		def := memo.ScanOpDef{Table: tabID, Cols: tabCols}
-		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
-	}
-	return outScope
+	return b.buildScan(tab, tab.TabName(), ordinals, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
-// given table with the given table name.
+// given table with the given table name. If the ordinals slice is not nil, then
+// only columns with ordinals in that list are projected by the scan. Otherwise,
+// all columns from the table are projected.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (outScope *scope) {
-	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
-	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
+func (b *Builder) buildScan(
+	tab opt.Table, tn *tree.TableName, ordinals []int, inScope *scope,
+) (outScope *scope) {
+	md := b.factory.Metadata()
 
-	var tabCols opt.ColSet
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabID := md.AddTableWithName(tab, tabName)
+
+	colCount := len(ordinals)
+	if colCount == 0 {
+		colCount = tab.ColumnCount()
+	}
+
+	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	for i := 0; i < tab.ColumnCount(); i++ {
-		col := tab.Column(i)
-		colID := b.factory.Metadata().TableColumn(tabID, i)
+	outScope.cols = make([]scopeColumn, 0, colCount)
+	for i := 0; i < colCount; i++ {
+		ord := i
+		if ordinals != nil {
+			ord = ordinals[i]
+		}
+
+		col := tab.Column(ord)
+		colID := tabID.ColumnID(ord)
+		tabColIDs.Add(int(colID))
 		name := tree.Name(col.ColName())
-		colProps := scopeColumn{
+		outScope.cols = append(outScope.cols, scopeColumn{
 			id:       colID,
 			origName: name,
 			name:     name,
 			table:    *tn,
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden(),
-		}
-		tabCols.Add(int(colID))
-		b.colMap = append(b.colMap, colProps)
-		outScope.cols = append(outScope.cols, colProps)
+		})
 	}
 
 	if tab.IsVirtualTable() {
-		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabCols}
+		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabColIDs}
 		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
 	} else {
-		def := memo.ScanOpDef{Table: tabID, Cols: tabCols}
+		def := memo.ScanOpDef{Table: tabID, Cols: tabColIDs}
 		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
 	}
 	return outScope
