@@ -151,6 +151,10 @@ type TxnSender interface {
 	// timestamp.
 	CommitTimestamp() hlc.Timestamp
 
+	// CommitTimestampFixed returns true if the commit timestamp has
+	// been fixed to the start timestamp and cannot be pushed forward.
+	CommitTimestampFixed() bool
+
 	// IsSerializablePushAndRefreshNotPossible returns true if the transaction is
 	// serializable, its timestamp has been pushed and there's no chance that
 	// refreshing the read spans will succeed later (thus allowing the transaction
@@ -270,6 +274,11 @@ func (m *MockTransactionalSender) OrigTimestamp() hlc.Timestamp {
 // CommitTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
 	return m.txn.OrigTimestamp
+}
+
+// CommitTimestampFixed is part of the TxnSender interface.
+func (m *MockTransactionalSender) CommitTimestampFixed() bool {
+	panic("unimplemented")
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.
