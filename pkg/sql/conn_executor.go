@@ -1038,6 +1038,8 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
+	pinfo := &tree.PlaceholderInfo{}
+
 	var draining bool
 	for {
 		ex.curStmt = nil
@@ -1098,7 +1100,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
 			ex.curStmt = portal.Stmt.Statement
 
-			pinfo := &tree.PlaceholderInfo{
+			*pinfo = tree.PlaceholderInfo{
 				TypeHints: portal.Stmt.TypeHints,
 				Types:     portal.Stmt.Types,
 				Values:    portal.Qargs,
