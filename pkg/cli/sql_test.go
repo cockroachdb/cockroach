@@ -17,55 +17,29 @@ package cli
 import (
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestSQLLex tests the usage of the lexer in the sql subcommand.
-func TestSQLLex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
+// Example_sql_lex tests the usage of the lexer in the sql subcommand.
+func Example_sql_lex() {
+	c := newCLITest(cliTestParams{insecure: true})
 	defer c.cleanup()
 
-	pgurl, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
-	defer cleanup()
-
-	conn := makeSQLConn(pgurl.String())
+	conn := makeSQLConn(fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
+		security.RootUser, c.ServingAddr()))
 	defer conn.Close()
 
-	tests := []struct {
-		in     string
-		expect string
-	}{
-		{
-			in: `
+	tests := []string{`
 select '
 \?
 ;
 ';
 `,
-			expect: `+----------+
-| ?column? |
-+----------+
-|          |
-|          |
-| \?       |
-|          |
-| ;        |
-|          |
-|          |
-+----------+
-(1 row)
-`,
-		},
-		{
-			in: `
+		`
 select ''''
 ;
 
@@ -73,35 +47,8 @@ select '''
 ;
 ''';
 `,
-			expect: `+----------+
-| ?column? |
-+----------+
-| '        |
-+----------+
-(1 row)
-+----------+
-| ?column? |
-+----------+
-| '        |
-|          |
-| ;        |
-|          |
-| '        |
-+----------+
-(1 row)
-`,
-		},
-		{
-			in: `select 1 as "1";
+		`select 1 as "1";
 -- just a comment without final semicolon`,
-			expect: `+---+
-| 1 |
-+---+
-| 1 |
-+---+
-(1 row)
-`,
-		},
 	}
 
 	setCLIDefaultsForTests()
@@ -110,7 +57,8 @@ select '''
 	// So open a dummy file.
 	f, err := ioutil.TempFile("", "input")
 	if err != nil {
-		t.Fatal(err)
+		fmt.Fprintln(stderr, err)
+		return
 	}
 	// Get the name and close it.
 	fname := f.Name()
@@ -127,37 +75,55 @@ select '''
 		stdin = os.Stdin
 	}()
 
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			// Populate the test input.
-			if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := f.WriteString(test.in); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
-			// Make it available for reading.
-			if f, err = os.Open(fname); err != nil {
-				t.Fatal(err)
-			}
-			// Override the standard input for runInteractive().
-			stdin = f
+	for _, test := range tests {
+		// Populate the test input.
+		if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		if _, err := f.WriteString(test); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		f.Close()
+		// Make it available for reading.
+		if f, err = os.Open(fname); err != nil {
+			fmt.Fprintln(stderr, err)
+			return
+		}
+		// Override the standard input for runInteractive().
+		stdin = f
 
-			out, err := captureOutput(func() {
-				err := runInteractive(conn)
-				if err != nil {
-					t.Fatal(err)
-				}
-			})
+		redirectOutput(func() {
+			err := runInteractive(conn)
 			if err != nil {
-				t.Fatal(err)
-			}
-			if out != test.expect {
-				t.Fatalf("%s:\nexpected: %s\ngot: %s", test.in, test.expect, out)
+				fmt.Fprintln(stderr, err)
 			}
 		})
 	}
+
+	// Output:
+	// ?column?
+	// +----------+
+	//
+	//   \?
+	//   ;
+	//
+	// (1 row)
+	//   ?column?
+	// +----------+
+	//   '
+	// (1 row)
+	//   ?column?
+	// +----------+
+	//   '
+	//   ;
+	//   '
+	// (1 row)
+	//   1
+	// +---+
+	//   1
+	// (1 row)
 }
 
 func TestIsEndOfStatement(t *testing.T) {
