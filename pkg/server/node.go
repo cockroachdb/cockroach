@@ -383,6 +383,8 @@ func (n *Node) onClusterVersionChange(cv cluster.ClusterVersion) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
+// A callback can be optionally provided that will be invoked once this node's
+// NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
@@ -390,6 +392,7 @@ func (n *Node) start(
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 	cv cluster.ClusterVersion,
+	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
 	n.storeCfg.Settings.Version.OnChange(n.onClusterVersionChange)
 	if err := n.storeCfg.Settings.InitializeVersion(cv); err != nil {
@@ -430,6 +433,12 @@ func (n *Node) start(
 		Attrs:         attrs,
 		Locality:      locality,
 		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
+	}
+	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
+	// ensure that other components (currently the DistSQLPlanner) are initialized
+	// before store startup continues.
+	if nodeDescriptorCallback != nil {
+		nodeDescriptorCallback(n.Descriptor)
 	}
 
 	// Gossip the node descriptor to make this node addressable by node ID.

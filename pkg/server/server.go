@@ -1438,6 +1438,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
+		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err
 	}
@@ -1449,8 +1450,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		},
 		time.NewTicker,
 	)
-
-	s.execCfg.DistSQLPlanner.SetNodeDesc(s.node.Descriptor)
 
 	// Cluster ID should have been determined by this point.
 	if s.rpcContext.ClusterID.Get() == uuid.Nil {
