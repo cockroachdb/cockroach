@@ -881,77 +881,56 @@ project
       ├── prune: (1,2,11)
       └── interesting orderings: (+2,+1)
 
-# TODO(andyk): re-enable when we support COUNT DISTINCT.
-#opt format=show-all
-#SELECT count(DISTINCT s_i_id)
-#FROM order_line
-#JOIN stock
-#ON s_i_id=ol_i_id AND s_w_id=ol_w_id
-#WHERE ol_w_id = 10
-#    AND ol_d_id = 100
-#    AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
-#    AND s_quantity < 15
-#----
-
-# Rewrite the query so that it is supported.
 opt format=show-all
-SELECT count(*)
-FROM
-(
-  SELECT DISTINCT s_i_id
-  FROM order_line
-  JOIN stock
-  ON s_i_id=ol_i_id AND s_w_id=ol_w_id
-  WHERE ol_w_id = 10
+SELECT count(DISTINCT s_i_id)
+FROM order_line
+JOIN stock
+ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+WHERE ol_w_id = 10
     AND ol_d_id = 100
     AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
     AND s_quantity < 15
-)
 ----
 scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.0100267868
+ ├── cost: 0.0100267051
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
- ├── distinct-on
- │    ├── columns: stock.s_i_id:11(int!null)
- │    ├── grouping columns: stock.s_i_id:11(int!null)
- │    ├── stats: [rows=4.0816376e-06, distinct(11)=4.0816376e-06]
- │    ├── cost: 2.67459551e-05
- │    ├── key: (11)
- │    └── inner-join (lookup stock)
- │         ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null) stock.s_i_id:11(int!null) stock.s_w_id:12(int!null) stock.s_quantity:13(int!null)
- │         ├── key columns: [3 5] = [12 11]
- │         ├── stats: [rows=4.73185689e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06, distinct(11)=4.0816376e-06, distinct(12)=4.08163265e-06]
- │         ├── cost: 2.66578201e-05
- │         ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
- │         ├── interesting orderings: (+3,+2,-1)
- │         ├── scan order_line
- │         │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null)
- │         │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
- │         │    ├── stats: [rows=4.08163265e-06, distinct(1)=4.08163265e-06, distinct(2)=4.08163265e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06]
- │         │    ├── cost: 4.65306122e-06
- │         │    ├── fd: ()-->(2,3)
- │         │    ├── prune: (5)
- │         │    └── interesting orderings: (+3,+2,-1)
- │         └── filters [type=bool, outer=(3,5,11-13), constraints=(/3: (/NULL - ]; /5: (/NULL - ]; /11: (/NULL - ]; /12: [/10 - /10]; /13: (/NULL - /14]), fd=()-->(3,12), (5)==(11), (11)==(5), (3)==(12), (12)==(3)]
- │              ├── eq [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ])]
- │              │    ├── variable: stock.s_i_id [type=int, outer=(11)]
- │              │    └── variable: order_line.ol_i_id [type=int, outer=(5)]
- │              ├── eq [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ])]
- │              │    ├── variable: stock.s_w_id [type=int, outer=(12)]
- │              │    └── variable: order_line.ol_w_id [type=int, outer=(3)]
- │              ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight)]
- │              │    ├── variable: stock.s_w_id [type=int, outer=(12)]
- │              │    └── const: 10 [type=int]
- │              └── lt [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
- │                   ├── variable: stock.s_quantity [type=int, outer=(13)]
- │                   └── const: 15 [type=int]
- └── aggregations
-      └── count-rows [type=int]
+ ├── inner-join (lookup stock)
+ │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null) stock.s_i_id:11(int!null) stock.s_w_id:12(int!null) stock.s_quantity:13(int!null)
+ │    ├── key columns: [3 5] = [12 11]
+ │    ├── stats: [rows=4.73185689e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06, distinct(11)=4.0816376e-06, distinct(12)=4.08163265e-06]
+ │    ├── cost: 2.66578201e-05
+ │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
+ │    ├── interesting orderings: (+3,+2,-1)
+ │    ├── scan order_line
+ │    │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null)
+ │    │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
+ │    │    ├── stats: [rows=4.08163265e-06, distinct(1)=4.08163265e-06, distinct(2)=4.08163265e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06]
+ │    │    ├── cost: 4.65306122e-06
+ │    │    ├── fd: ()-->(2,3)
+ │    │    ├── prune: (5)
+ │    │    └── interesting orderings: (+3,+2,-1)
+ │    └── filters [type=bool, outer=(3,5,11-13), constraints=(/3: (/NULL - ]; /5: (/NULL - ]; /11: (/NULL - ]; /12: [/10 - /10]; /13: (/NULL - /14]), fd=()-->(3,12), (5)==(11), (11)==(5), (3)==(12), (12)==(3)]
+ │         ├── eq [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ])]
+ │         │    ├── variable: stock.s_i_id [type=int, outer=(11)]
+ │         │    └── variable: order_line.ol_i_id [type=int, outer=(5)]
+ │         ├── eq [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ])]
+ │         │    ├── variable: stock.s_w_id [type=int, outer=(12)]
+ │         │    └── variable: order_line.ol_w_id [type=int, outer=(3)]
+ │         ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight)]
+ │         │    ├── variable: stock.s_w_id [type=int, outer=(12)]
+ │         │    └── const: 10 [type=int]
+ │         └── lt [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
+ │              ├── variable: stock.s_quantity [type=int, outer=(13)]
+ │              └── const: 15 [type=int]
+ └── aggregations [outer=(11)]
+      └── count [type=int, outer=(11)]
+           └── agg-distinct [type=int, outer=(11)]
+                └── variable: stock.s_i_id [type=int, outer=(11)]
 
 # --------------------------------------------------
 # Consistency Queries

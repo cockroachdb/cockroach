@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -37,9 +38,10 @@ type optCatalog struct {
 
 	statsCache *stats.TableStatisticsCache
 
-	// wrappers is a cache of table wrappers that's used to satisfy repeated
-	// calls to the FindTable method for the same table.
-	wrappers map[*sqlbase.TableDescriptor]*optTable
+	// dataSources is a cache of table and view objects that's used to satisfy
+	// repeated calls for the same data source. The same underlying descriptor
+	// will always return the same data source wrapper object.
+	dataSources map[*sqlbase.TableDescriptor]opt.DataSource
 }
 
 var _ opt.Catalog = &optCatalog{}
@@ -50,25 +52,31 @@ func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver Logi
 	oc.statsCache = statsCache
 }
 
-// FindTableByID is part of the Catalog interface.
-func (oc *optCatalog) FindTableByID(ctx context.Context, tableID int64) (opt.Table, error) {
-	// FindTableByID skips the descriptor cache. This is unlike the heuristic planner
-	// which attempts to get the table from a cache unless forced to skip the cache.
-	// See sql/data_source.go:getTableDescByID() for original implementation.
+// ResolveDataSource is part of the opt.Catalog interface.
+func (oc *optCatalog) ResolveDataSource(
+	ctx context.Context, name *tree.TableName,
+) (opt.DataSource, error) {
+	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /* required */, anyDescType)
+	if err != nil {
+		return nil, err
+	}
+	return oc.newDataSource(desc, name)
+}
 
-	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(tableID))
+// ResolveDataSourceByID is part of the opt.Catalog interface.
+func (oc *optCatalog) ResolveDataSourceByID(
+	ctx context.Context, dataSourceID int64,
+) (opt.DataSource, error) {
+	// ResolveDataSourceByID skips the descriptor cache. This is unlike the
+	// heuristic planner which attempts to get the table from a cache unless
+	// forced to skip the cache. See sql/data_source.go:getTableDescByID() for
+	// original implementation.
+	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(dataSourceID))
 
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
-			return nil, sqlbase.NewUndefinedRelationError(
-				&tree.TableRef{TableID: tableID})
+			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: dataSourceID})
 		}
-		return nil, err
-	}
-
-	// TODO(madhavsuresh, knz): The way privileges are being checked is not satisfactory
-	// for future features. Privilege checking needs to be cleaned up.
-	if err := oc.resolver.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
@@ -81,46 +89,130 @@ func (oc *optCatalog) FindTableByID(ctx context.Context, tableID int64) (opt.Tab
 		return nil, err
 	}
 
-	if oc.wrappers == nil {
-		oc.wrappers = make(map[*sqlbase.TableDescriptor]*optTable)
-	}
-	wrapper, ok := oc.wrappers[desc]
-	if !ok {
-		tbName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-		wrapper = newOptTable(&tbName, oc.statsCache, desc)
-		oc.wrappers[desc] = wrapper
-	}
-	return wrapper, nil
+	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
+	return oc.newDataSource(desc, &name)
 }
 
-// FindTable is part of the opt.Catalog interface.
-func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
-	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /*required*/, requireTableDesc)
-	if err != nil {
-		return nil, err
+// newDataSource returns a data source wrapper for the given table descriptor.
+// The wrapper might come from the cache, or it may be created now.
+func (oc *optCatalog) newDataSource(
+	desc *sqlbase.TableDescriptor, name *tree.TableName,
+) (opt.DataSource, error) {
+	// Check to see if there's already a data source wrapper for this descriptor.
+	if oc.dataSources == nil {
+		oc.dataSources = make(map[*sqlbase.TableDescriptor]opt.DataSource)
+	} else {
+		if ds, ok := oc.dataSources[desc]; ok {
+			return ds, nil
+		}
 	}
 
-	// TODO(madhavsuresh, knz): The way privileges are being checked is not satisfactory
-	// for future features. Privilege checking needs to be cleaned up.
-	if err := oc.resolver.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-		return nil, err
+	// Create wrapper for the data source now.
+	var ds opt.DataSource
+	switch {
+	case desc.IsTable():
+		ds = newOptTable(oc, desc, name, oc.statsCache)
+	case desc.IsView():
+		ds = newOptView(oc, desc, name)
+	case desc.IsSequence():
+		ds = newOptSequence(oc, desc, name)
+	default:
+		panic(fmt.Sprintf("unexpected table descriptor: %+v", desc))
 	}
 
-	// Check to see if there's already a wrapper for this table descriptor.
-	if oc.wrappers == nil {
-		oc.wrappers = make(map[*sqlbase.TableDescriptor]*optTable)
-	}
-	wrapper, ok := oc.wrappers[desc]
-	if !ok {
-		wrapper = newOptTable(name, oc.statsCache, desc)
-		oc.wrappers[desc] = wrapper
-	}
-	return wrapper, nil
+	oc.dataSources[desc] = ds
+	return ds, nil
+}
+
+// optView is a wrapper around sqlbase.TableDescriptor that implements the
+// opt.DataSource and opt.View interfaces.
+type optView struct {
+	cat  *optCatalog
+	desc *sqlbase.TableDescriptor
+
+	// name is the fully qualified, fully resolved, fully normalized name of
+	// the view.
+	name tree.TableName
+}
+
+var _ opt.View = &optView{}
+
+func newOptView(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName) *optView {
+	ov := &optView{cat: cat, desc: desc, name: *name}
+
+	// The opt.View interface requires that view names be fully qualified.
+	ov.name.ExplicitSchema = true
+	ov.name.ExplicitCatalog = true
+
+	return ov
+}
+
+// Name is part of the opt.View interface.
+func (ov *optView) Name() *tree.TableName {
+	return &ov.name
+}
+
+// CheckPrivilege is part of the opt.DataSource interface.
+func (ov *optView) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return ov.cat.resolver.CheckPrivilege(ctx, ov.desc, priv)
+}
+
+// Query is part of the opt.View interface.
+func (ov *optView) Query() string {
+	return ov.desc.ViewQuery
+}
+
+// ColumnNameCount is part of the opt.View interface.
+func (ov *optView) ColumnNameCount() int {
+	return len(ov.desc.Columns)
+}
+
+// ColumnName is part of the opt.View interface.
+func (ov *optView) ColumnName(i int) tree.Name {
+	return tree.Name(ov.desc.Columns[i].Name)
+}
+
+// optSequence is a wrapper around sqlbase.TableDescriptor that implements the
+// opt.DataSource interface.
+//
+// TODO(andyk): This should implement opt.Sequence once we have it.
+type optSequence struct {
+	cat  *optCatalog
+	desc *sqlbase.TableDescriptor
+
+	// name is the fully qualified, fully resolved, fully normalized name of the
+	// sequence.
+	name tree.TableName
+}
+
+var _ opt.DataSource = &optSequence{}
+
+func newOptSequence(
+	cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName,
+) *optSequence {
+	ot := &optSequence{cat: cat, desc: desc, name: *name}
+
+	// The opt.Sequence interface requires that table names be fully qualified.
+	ot.name.ExplicitSchema = true
+	ot.name.ExplicitCatalog = true
+
+	return ot
+}
+
+// Name is part of the opt.DataSource interface.
+func (ot *optSequence) Name() *tree.TableName {
+	return &ot.name
+}
+
+// CheckPrivilege is part of the opt.DataSource interface.
+func (ot *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
 }
 
 // optTable is a wrapper around sqlbase.TableDescriptor that caches index
 // wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
+	cat  *optCatalog
 	desc *sqlbase.TableDescriptor
 
 	// name is the fully qualified, fully resolved, fully normalized name of the
@@ -148,28 +240,31 @@ type optTable struct {
 var _ opt.Table = &optTable{}
 
 func newOptTable(
-	name *tree.TableName, statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor,
+	cat *optCatalog,
+	desc *sqlbase.TableDescriptor,
+	name *tree.TableName,
+	statsCache *stats.TableStatisticsCache,
 ) *optTable {
-	ot := &optTable{name: *name}
+	ot := &optTable{cat: cat, desc: desc, name: *name, statsCache: statsCache}
 
 	// The opt.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
-	ot.init(statsCache, desc)
+	ot.primary.init(ot, &desc.PrimaryIndex)
+	ot.statsCache = statsCache
+
 	return ot
 }
 
-// init allows the optTable wrapper to be inlined.
-func (ot *optTable) init(statsCache *stats.TableStatisticsCache, desc *sqlbase.TableDescriptor) {
-	ot.desc = desc
-	ot.primary.init(ot, &desc.PrimaryIndex)
-	ot.statsCache = statsCache
+// Name is part of the opt.DataSource interface.
+func (ot *optTable) Name() *tree.TableName {
+	return &ot.name
 }
 
-// TabName is part of the opt.Table interface.
-func (ot *optTable) TabName() *tree.TableName {
-	return &ot.name
+// CheckPrivilege is part of the opt.DataSource interface.
+func (ot *optTable) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
 }
 
 // IsVirtualTable is part of the opt.Table interface.

@@ -92,8 +92,8 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	}
 
 	mem := New()
-	tab := catalog.Table("sel")
-	tabID := mem.metadata.AddTableWithName(tab, tab.TabName().String())
+	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
+	tabID := mem.metadata.AddTableWithName(tab, tab.Name().String())
 
 	// Test that applyConstraintSet correctly updates the statistics from
 	// constraint set cs, and selectivity is calculated correctly.
