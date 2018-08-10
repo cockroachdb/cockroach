@@ -409,7 +409,7 @@ func parseCertificate(ci *CertInfo) error {
 	}
 
 	certs := make([]*x509.Certificate, len(derCerts))
-	var latest time.Time
+	var expires time.Time
 	for i, c := range derCerts {
 		x509Cert, err := x509.ParseCertificate(c.Bytes)
 		if err != nil {
@@ -419,14 +419,15 @@ func parseCertificate(ci *CertInfo) error {
 		if err := validateCockroachCertificate(ci, x509Cert); err != nil {
 			return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
 		}
-		if x509Cert.NotAfter.After(latest) {
-			latest = x509Cert.NotAfter
+		if i == 0 {
+			// The first certificate is the effective one; use its expiration time.
+			expires = x509Cert.NotAfter
 		}
 		certs[i] = x509Cert
 	}
 
 	ci.ParsedCertificates = certs
-	ci.ExpirationTime = latest
+	ci.ExpirationTime = expires
 	return nil
 }
 
