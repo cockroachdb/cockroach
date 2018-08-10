@@ -39,6 +39,7 @@ add_library(roach
   mvcc.cc
   options.cc
   snapshot.cc
+  sst_dump.cc
   timebound.cc
   utils.cc
   protos/roachpb/data.pb.cc

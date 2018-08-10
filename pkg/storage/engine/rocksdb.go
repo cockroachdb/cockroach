@@ -2714,6 +2714,24 @@ func RunLDB(args []string) {
 	C.DBRunLDB(C.int(len(argv)), &argv[0])
 }
 
+// RunSSTDump runs RocksDB's sst_dump command-line tool. The passed
+// command-line arguments should not include argv[0].
+func RunSSTDump(args []string) {
+	// Prepend "sst_dump" as argv[0].
+	args = append([]string{"sst_dump"}, args...)
+	argv := make([]*C.char, len(args))
+	for i := range args {
+		argv[i] = C.CString(args[i])
+	}
+	defer func() {
+		for i := range argv {
+			C.free(unsafe.Pointer(argv[i]))
+		}
+	}()
+
+	C.DBRunSSTDump(C.int(len(argv)), &argv[0])
+}
+
 // GetAuxiliaryDir returns the auxiliary storage path for this engine.
 func (r *RocksDB) GetAuxiliaryDir() string {
 	return r.auxDir
