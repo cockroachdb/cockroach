@@ -137,7 +137,7 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	}
 	log.VEventf(ctx, 2, "processed %d rows in %d chunks", row, nChunks)
 	return WriteResumeSpan(ctx,
-		b.flowCtx.clientDB,
+		b.flowCtx.ClientDB,
 		b.spec.Table.ID,
 		work,
 		resume,
