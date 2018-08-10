@@ -209,20 +209,20 @@ func render(
 	return r.doneRows(w, nRows)
 }
 
-type prettyReporter struct {
+type asciiTableReporter struct {
 	table *tablewriter.Table
 	buf   bytes.Buffer
 	w     *tabwriter.Writer
 }
 
-func newPrettyReporter() *prettyReporter {
-	n := &prettyReporter{}
+func newASCIITableReporter() *asciiTableReporter {
+	n := &asciiTableReporter{}
 	// 4-wide columns, 1 character minimum width.
 	n.w = tabwriter.NewWriter(&n.buf, 4, 0, 1, ' ', 0)
 	return n
 }
 
-func (p *prettyReporter) describe(w io.Writer, cols []string) error {
+func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 	if len(cols) > 0 {
 		// Ensure that tabs are converted to spaces and newlines are
 		// doubled so they can be recognized in the output.
@@ -237,7 +237,8 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		// Initialize tablewriter and set column names as the header row.
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
-		p.table.SetAutoWrapText(true)
+		p.table.SetAutoWrapText(false)
+		p.table.SetBorder(false)
 		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
 		// This width is sufficient to show a "standard text line width"
@@ -251,12 +252,12 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *prettyReporter) beforeFirstRow(w io.Writer, iter rowStrIter) error {
+func (p *asciiTableReporter) beforeFirstRow(w io.Writer, iter rowStrIter) error {
 	p.table.SetColumnAlignment(iter.Align())
 	return nil
 }
 
-func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
+func (p *asciiTableReporter) iter(_ io.Writer, _ int, row []string) error {
 	if p.table == nil {
 		return nil
 	}
@@ -271,7 +272,7 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 	return nil
 }
 
-func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
+func (p *asciiTableReporter) doneRows(w io.Writer, seenRows int) error {
 	if p.table != nil {
 		p.table.Render()
 	} else {
@@ -283,7 +284,7 @@ func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
 	return nil
 }
 
-func (p *prettyReporter) doneNoRows(_ io.Writer) error { return nil }
+func (p *asciiTableReporter) doneNoRows(_ io.Writer) error { return nil }
 
 type csvReporter struct {
 	csvWriter *csv.Writer
@@ -515,8 +516,8 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 
 func makeReporter() (rowReporter, error) {
 	switch cliCtx.tableDisplayFormat {
-	case tableDisplayPretty:
-		return newPrettyReporter(), nil
+	case tableDisplayTable:
+		return newASCIITableReporter(), nil
 
 	case tableDisplayTSV:
 		fallthrough

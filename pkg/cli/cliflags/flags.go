@@ -283,9 +283,8 @@ shell. This flag may be specified multiple times.`,
 		Name: "format",
 		Description: `
 Selects how to display table rows in results. Possible values: tsv,
-csv, pretty, records, sql, raw, html. If left unspecified, defaults to
-tsv for non-interactive sessions and pretty for interactive
-sessions.`,
+csv, table, records, sql, raw, html. If left unspecified, defaults to
+tsv for non-interactive sessions and table for interactive sessions.`,
 	}
 
 	Join = FlagInfo{
