@@ -155,14 +155,14 @@ func (w *worker) run(ctx context.Context) error {
 		time.Sleep(time.Duration(t.keyingTime) * time.Second)
 	}
 
+	// Run transactions with a background context because we don't want to
+	// cancel them when the context expires. Instead, let them finish normally
+	// but don't account for them in the histogram.
 	start := timeutil.Now()
-	if _, err := t.run(ctx, w.config, w.db, warehouseID); err != nil {
-		// If the context was canceled or expired, the worker should still
-		// wait out the rest of its think time.
-		if errors.Cause(err) != ctx.Err() {
-			return errors.Wrapf(err, "error in %s", t.name)
-		}
-	} else {
+	if _, err := t.run(context.Background(), w.config, w.db, warehouseID); err != nil {
+		return errors.Wrapf(err, "error in %s", t.name)
+	}
+	if ctx.Err() == nil {
 		w.hists.Get(t.name).Record(timeutil.Since(start))
 	}
 
