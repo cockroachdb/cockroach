@@ -35,12 +35,12 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	pb := projectionsBuilder{f: f}
 
 	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
+	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
 	ax := a.ColumnID(0)
 	ay := a.ColumnID(1)
 	aCols := util.MakeFastIntSet(int(ax), int(ay))
 
-	a2 := f.Metadata().AddTable(cat.Table("a"))
+	a2 := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
 	a2x := a2.ColumnID(0)
 	a2y := a2.ColumnID(1)
 	a2Cols := util.MakeFastIntSet(int(a2x), int(a2y))
@@ -121,7 +121,7 @@ func TestSimplifyFilters(t *testing.T) {
 	f := NewFactory(&evalCtx)
 
 	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
+	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
 	ax := a.ColumnID(0)
 
 	variable := f.ConstructVariable(f.InternColumnID(ax))

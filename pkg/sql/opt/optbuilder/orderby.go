@@ -18,8 +18,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // buildOrderBy builds an Ordering physical property from the ORDER BY clause.
@@ -101,7 +103,10 @@ func (b *Builder) buildOrderByIndex(
 		panic(builderError{err})
 	}
 
-	tab := b.resolveTable(tn)
+	tab, ok := b.resolveDataSource(tn, privilege.SELECT).(opt.Table)
+	if !ok {
+		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+	}
 
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
@@ -118,7 +123,7 @@ func (b *Builder) buildOrderByIndex(
 			panic(err)
 		}
 
-		colItem := tree.NewColumnItem(tab.TabName(), tree.Name(col.Column.ColName()))
+		colItem := tree.NewColumnItem(tab.Name(), tree.Name(col.Column.ColName()))
 		expr := inScope.resolveType(colItem, types.Any)
 		b.addExtraColumn(expr, inScope, projectionsScope, orderByScope)
 	}

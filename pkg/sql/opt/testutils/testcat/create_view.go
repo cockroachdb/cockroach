@@ -15,24 +15,31 @@
 package testcat
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// DropTable is a partial implementation of the DROP TABLE statement.
-func (tc *Catalog) DropTable(stmt *tree.DropTable) {
-	for _, ntn := range stmt.Names {
-		tn, err := ntn.Normalize()
-		if err != nil {
-			panic(err)
-		}
-
-		// Update the table name to include catalog and schema if not provided.
-		tc.qualifyTableName(tn)
-
-		// Ensure that table with that name exists.
-		tc.Table(tn)
-
-		// Remove the table from the catalog.
-		delete(tc.dataSources, tn.FQString())
+// CreateView creates a test view from a parsed DDL statement and adds it to the
+// catalog.
+func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
+	tn, err := stmt.Name.Normalize()
+	if err != nil {
+		panic(fmt.Errorf("%s", err))
 	}
+
+	// Update the view name to include catalog and schema if not provided.
+	tc.qualifyTableName(tn)
+
+	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtParsable)
+	stmt.AsSource.Format(&fmtCtx)
+
+	view := &View{ViewName: *tn, QueryText: buf.String(), ColumnNames: stmt.ColumnNames}
+
+	// Add the new view to the catalog.
+	tc.AddView(view)
+
+	return view
 }

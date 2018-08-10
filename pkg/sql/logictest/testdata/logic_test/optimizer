@@ -92,6 +92,9 @@ SELECT job_id FROM crdb_internal.jobs
 ----
 
 statement ok
+CREATE SEQUENCE seq
+
+statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 
 query error pq: unsupported statement: \*tree\.Insert
@@ -101,8 +104,8 @@ INSERT INTO test (k, v) VALUES (5, 50)
 query error pq: aggregates with FILTER are not supported yet
 SELECT count(*) FILTER (WHERE v>10) FROM t
 
-query error pq: views and sequences are not supported
-SELECT * FROM tview
+query error pq: sequences are not supported
+SELECT * FROM seq
 
 statement ok
 SET EXPERIMENTAL_OPT = LOCAL

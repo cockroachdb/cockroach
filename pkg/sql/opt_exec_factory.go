@@ -76,9 +76,18 @@ func (ef *execFactory) ConstructScan(
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
 	}
+
+	// initTable checks that the current user has the correct privilege to access
+	// the table. However, the privilege has already been checked in optbuilder,
+	// and does not need to be rechecked. In fact, it's an error to check the
+	// privilege if the table was originally part of a view, since lower privilege
+	// users might be able to access a view that uses a higher privilege table.
+	ef.planner.skipSelectPrivilegeChecks = true
+	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
 	if err := scan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
+
 	if indexConstraint != nil && indexConstraint.IsContradiction() {
 		return newZeroNode(scan.resultColumns), nil
 	}
@@ -103,7 +112,7 @@ func (ef *execFactory) ConstructScan(
 
 // ConstructVirtualScan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructVirtualScan(table opt.Table) (exec.Node, error) {
-	tn := table.TabName()
+	tn := table.Name()
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

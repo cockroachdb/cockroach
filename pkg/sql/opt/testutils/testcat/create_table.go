@@ -56,7 +56,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(tn)
 
-	tab := &Table{Name: *tn}
+	tab := &Table{TabName: *tn}
 
 	// Assume that every table in the "system" catalog is a virtual table. This
 	// is a simplified assumption for testing purposes.
@@ -115,7 +115,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// We need to keep track of the tableID from numeric references. 53 is a magic
 	// number derived from how CRDB internally stores tables. The first user table
 	// is 53. This magic number is used to have tests look consistent.
-	tab.tableID = sqlbase.ID(len(tc.tables) + 53)
+	tab.tableID = sqlbase.ID(len(tc.dataSources) + 53)
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
 

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,14 +32,14 @@ import (
 
 // Catalog implements the opt.Catalog interface for testing purposes.
 type Catalog struct {
-	tables map[string]*Table
+	dataSources map[string]opt.DataSource
 }
 
 var _ opt.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
 func New() *Catalog {
-	return &Catalog{tables: make(map[string]*Table)}
+	return &Catalog{dataSources: make(map[string]opt.DataSource)}
 }
 
 const (
@@ -46,77 +47,92 @@ const (
 	testDB = "t"
 )
 
-// FindTableByID is part of the opt.Catalog interface.
-func (tc *Catalog) FindTableByID(ctx context.Context, tableID int64) (opt.Table, error) {
-	for _, table := range tc.tables {
-		if int64(table.tableID) == tableID {
-			return table, nil
+// ResolveDataSource is part of the opt.Catalog interface.
+func (tc *Catalog) ResolveDataSource(
+	_ context.Context, name *tree.TableName,
+) (opt.DataSource, error) {
+	// This is a simplified version of tree.TableName.ResolveExisting() from
+	// sql/tree/name_resolution.go.
+	toResolve := *name
+	if name.ExplicitSchema {
+		if name.ExplicitCatalog {
+			// Already 3 parts.
+			return tc.resolveDataSource(&toResolve, name)
+		}
+
+		// Two parts: Try to use the current database, and be satisfied if it's
+		// sufficient to find the object.
+		toResolve.CatalogName = testDB
+		if tab, err := tc.resolveDataSource(&toResolve, name); err == nil {
+			return tab, nil
+		}
+
+		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
+		// instead.
+		toResolve.CatalogName = name.SchemaName
+		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.ExplicitCatalog = true
+		return tc.resolveDataSource(&toResolve, name)
+	}
+
+	// This is a naked data source name. Use the current database.
+	toResolve.CatalogName = tree.Name(testDB)
+	toResolve.SchemaName = tree.PublicSchemaName
+	return tc.resolveDataSource(&toResolve, name)
+}
+
+// ResolveDataSourceByID is part of the opt.Catalog interface.
+func (tc *Catalog) ResolveDataSourceByID(
+	ctx context.Context, tableID int64,
+) (opt.DataSource, error) {
+	for _, ds := range tc.dataSources {
+		if tab, ok := ds.(*Table); ok && int64(tab.tableID) == tableID {
+			return ds, nil
 		}
 	}
 	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
 		"relation [%d] does not exist", tableID)
 }
 
-// FindTable is part of the opt.Catalog interface.
-func (tc *Catalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
-	// This is a simplified version of tree.TableName.ResolveExisting() from
-	// sql/tree/name_resolution.go.
-	toFind := *name
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
-			// Already 3 parts.
-			return tc.findTable(&toFind, name)
-		}
-
-		// Two parts: Try to use the current database, and be satisfied if it's
-		// sufficient to find the object.
-		toFind.CatalogName = testDB
-		if tab, err := tc.findTable(&toFind, name); err == nil {
-			return tab, nil
-		}
-
-		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
-		// instead.
-		toFind.CatalogName = name.SchemaName
-		toFind.SchemaName = tree.PublicSchemaName
-		toFind.ExplicitCatalog = true
-		return tc.findTable(&toFind, name)
-	}
-
-	// This is a naked table name. Use the current database.
-	toFind.CatalogName = tree.Name(testDB)
-	toFind.SchemaName = tree.PublicSchemaName
-	return tc.findTable(&toFind, name)
-}
-
-// findTable checks if the table `toFind` exists among the tables in this
-// Catalog. If it does, findTable updates `name` to match `toFind`, and
-// returns the corresponding table. Otherwise, it returns an error.
-func (tc *Catalog) findTable(toFind, name *tree.TableName) (opt.Table, error) {
-	if table, ok := tc.tables[toFind.FQString()]; ok {
-		*name = *toFind
+// resolveDataSource checks if `toResolve` exists among the data sources in this
+// Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
+// and returns the corresponding data source. Otherwise, it returns an error.
+func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (opt.DataSource, error) {
+	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
+		*name = *toResolve
 		return table, nil
 	}
-	return nil, fmt.Errorf("table %q not found", tree.ErrString(name))
+	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
 }
 
 // Table returns the test table that was previously added with the given name.
-func (tc *Catalog) Table(name string) *Table {
-	tn := tree.MakeUnqualifiedTableName(tree.Name(name))
-	tab, err := tc.FindTable(context.TODO(), &tn)
+func (tc *Catalog) Table(name *tree.TableName) *Table {
+	ds, err := tc.ResolveDataSource(context.TODO(), name)
 	if err != nil {
-		panic(fmt.Errorf("table %q is not in the test catalog", tree.ErrString((*tree.Name)(&name))))
+		panic(err)
 	}
-	return tab.(*Table)
+	if tab, ok := ds.(*Table); ok {
+		return tab
+	}
+	panic(fmt.Errorf("\"%q\" is not a table", tree.ErrString(name)))
 }
 
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
-	fq := tab.Name.FQString()
-	if _, ok := tc.tables[fq]; ok {
-		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.Name)))
+	fq := tab.TabName.FQString()
+	if _, ok := tc.dataSources[fq]; ok {
+		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.TabName)))
 	}
-	tc.tables[fq] = tab
+	tc.dataSources[fq] = tab
+}
+
+// AddView adds the given test view to the catalog.
+func (tc *Catalog) AddView(view *View) {
+	fq := view.ViewName.FQString()
+	if _, ok := tc.dataSources[fq]; ok {
+		panic(fmt.Errorf("view %q already exists", tree.ErrString(&view.ViewName)))
+	}
+	tc.dataSources[fq] = view
 }
 
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
@@ -136,6 +152,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		tab := tc.CreateTable(stmt)
 		return tab.String(), nil
 
+	case *tree.CreateView:
+		view := tc.CreateView(stmt)
+		return view.String(), nil
+
 	case *tree.AlterTable:
 		tc.AlterTable(stmt)
 		return "", nil
@@ -145,7 +165,7 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	default:
-		return "", fmt.Errorf("expected CREATE TABLE or ALTER TABLE statement but found: %v", stmt)
+		return "", fmt.Errorf("unsupported statement: %v", stmt)
 	}
 }
 
@@ -180,14 +200,55 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	name.SchemaName = tree.PublicSchemaName
 }
 
+// View implements the opt.View interface for testing purposes.
+type View struct {
+	ViewName    tree.TableName
+	QueryText   string
+	ColumnNames tree.NameList
+}
+
+var _ opt.View = &View{}
+
+func (tv *View) String() string {
+	tp := treeprinter.New()
+	opt.FormatCatalogView(tv, tp)
+	return tp.String()
+}
+
+// Name is part of the opt.View interface.
+func (tv *View) Name() *tree.TableName {
+	return &tv.ViewName
+}
+
+// CheckPrivilege is part of the opt.DataSource interface.
+func (tv *View) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return nil
+}
+
+// Query is part of the opt.View interface.
+func (tv *View) Query() string {
+	return tv.QueryText
+}
+
+// ColumnNameCount is part of the opt.View interface.
+func (tv *View) ColumnNameCount() int {
+	return len(tv.ColumnNames)
+}
+
+// ColumnName is part of the opt.View interface.
+func (tv *View) ColumnName(i int) tree.Name {
+	return tv.ColumnNames[i]
+}
+
 // Table implements the opt.Table interface for testing purposes.
 type Table struct {
-	Name      tree.TableName
-	tableID   sqlbase.ID
+	TabName   tree.TableName
 	Columns   []*Column
 	Indexes   []*Index
 	Stats     TableStats
 	IsVirtual bool
+
+	tableID sqlbase.ID
 }
 
 var _ opt.Table = &Table{}
@@ -198,9 +259,14 @@ func (tt *Table) String() string {
 	return tp.String()
 }
 
-// TabName is part of the opt.Table interface.
-func (tt *Table) TabName() *tree.TableName {
-	return &tt.Name
+// Name is part of the opt.Table interface.
+func (tt *Table) Name() *tree.TableName {
+	return &tt.TabName
+}
+
+// CheckPrivilege is part of the opt.DataSource interface.
+func (tt *Table) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return nil
 }
 
 // IsVirtualTable is part of the opt.Table interface.
@@ -257,7 +323,7 @@ func (tt *Table) FindOrdinal(name string) int {
 	panic(fmt.Sprintf(
 		"cannot find column %q in table %q",
 		tree.ErrString((*tree.Name)(&name)),
-		tree.ErrString(&tt.Name),
+		tree.ErrString(&tt.TabName),
 	))
 }
 
