@@ -115,11 +115,11 @@ const (
 // windowFn.argIdxStart : windowFn.argIdxStart+windowFn.argCount,
 // so it can both add (when argCount = 0) and remove (when argCount > 1) columns.
 type windower struct {
-	processorBase
+	ProcessorBase
 
 	// runningState represents the state of the windower. This is in addition to
-	// processorBase.state - the runningState is only relevant when
-	// processorBase.state == stateRunning.
+	// ProcessorBase.State - the runningState is only relevant when
+	// ProcessorBase.State == StateRunning.
 	runningState windowerState
 	input        RowSource
 	inputDone    bool
@@ -170,7 +170,7 @@ func newWindower(
 	}
 	w.inputTypes = input.OutputTypes()
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := newMonitor(ctx, flowCtx.EvalCtx.Mon, "windower-mem")
+	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "windower-mem")
 	w.accumulationAcc = memMonitor.MakeBoundAccount()
 	w.decodingAcc = memMonitor.MakeBoundAccount()
 	w.resultsAcc = memMonitor.MakeBoundAccount()
@@ -223,7 +223,7 @@ func newWindower(
 	w.outputTypes = append(w.outputTypes, w.inputTypes[inputColIdx:]...)
 	w.outputRow = make(sqlbase.EncDatumRow, len(w.outputTypes))
 
-	if err := w.init(
+	if err := w.Init(
 		w,
 		post,
 		w.outputTypes,
@@ -231,8 +231,8 @@ func newWindower(
 		processorID,
 		output,
 		memMonitor,
-		procStateOpts{inputsToDrain: []RowSource{w.input},
-			trailingMetaCallback: func() []ProducerMetadata {
+		ProcStateOpts{InputsToDrain: []RowSource{w.input},
+			TrailingMetaCallback: func() []ProducerMetadata {
 				w.close()
 				return nil
 			}},
@@ -246,7 +246,7 @@ func newWindower(
 // Start is part of the RowSource interface.
 func (w *windower) Start(ctx context.Context) context.Context {
 	w.input.Start(ctx)
-	ctx = w.startInternal(ctx, windowerProcName)
+	ctx = w.StartInternal(ctx, windowerProcName)
 	w.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	w.runningState = windowerAccumulating
 	return ctx
@@ -254,7 +254,7 @@ func (w *windower) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for w.state == stateRunning {
+	for w.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *ProducerMetadata
 		switch w.runningState {
@@ -263,7 +263,7 @@ func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		case windowerEmittingRows:
 			w.runningState, row, meta = w.emitRow()
 		default:
-			log.Fatalf(w.ctx, "unsupported state: %d", w.runningState)
+			log.Fatalf(w.Ctx, "unsupported state: %d", w.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -271,12 +271,12 @@ func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return row, meta
 	}
-	return nil, w.drainHelper()
+	return nil, w.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (w *windower) ConsumerDone() {
-	w.moveToDraining(nil /* err */)
+	w.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -287,12 +287,12 @@ func (w *windower) ConsumerClosed() {
 
 func (w *windower) close() {
 	// Need to close the mem accounting while the context is still valid.
-	w.accumulationAcc.Close(w.ctx)
-	w.decodingAcc.Close(w.ctx)
-	w.resultsAcc.Close(w.ctx)
-	w.partitionsAcc.Close(w.ctx)
-	w.internalClose()
-	w.memMonitor.Stop(w.ctx)
+	w.accumulationAcc.Close(w.Ctx)
+	w.decodingAcc.Close(w.Ctx)
+	w.resultsAcc.Close(w.Ctx)
+	w.partitionsAcc.Close(w.Ctx)
+	w.InternalClose()
+	w.MemMonitor.Stop(w.Ctx)
 }
 
 // accumulateRows continually reads rows from the input and accumulates them
@@ -305,19 +305,19 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 			if meta.Err != nil {
 				// We want to send the whole meta (below) rather than just the err,
 				// so we pass nil as an argument.
-				w.moveToDraining(nil /* err */)
+				w.MoveToDraining(nil /* err */)
 				return windowerStateUnknown, nil, meta
 			}
 			return windowerAccumulating, nil, meta
 		}
 		if row == nil {
-			log.VEvent(w.ctx, 1, "accumulation complete")
+			log.VEvent(w.Ctx, 1, "accumulation complete")
 			w.inputDone = true
 			break
 		}
 
-		if err := w.accumulationAcc.Grow(w.ctx, int64(row.Size())); err != nil {
-			w.moveToDraining(err)
+		if err := w.accumulationAcc.Grow(w.Ctx, int64(row.Size())); err != nil {
+			w.MoveToDraining(err)
 			return windowerStateUnknown, nil, nil
 		}
 		if len(w.partitionBy) == 0 {
@@ -353,7 +353,7 @@ func (w *windower) decodePartitions() error {
 				if err := encRow[i].EnsureDecoded(&w.inputTypes[i], &w.datumAlloc); err != nil {
 					return err
 				}
-				if err := w.decodingAcc.Grow(w.ctx, int64(encRow[i].Datum.Size())); err != nil {
+				if err := w.decodingAcc.Grow(w.Ctx, int64(encRow[i].Datum.Size())); err != nil {
 					return err
 				}
 			}
@@ -372,17 +372,17 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 	if w.inputDone {
 		for !w.populated {
 			if err := w.cancelChecker.Check(); err != nil {
-				w.moveToDraining(err)
+				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, nil
 			}
 
 			if err := w.decodePartitions(); err != nil {
-				w.moveToDraining(err)
+				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, nil
 			}
 
-			if err := w.computeWindowFunctions(w.ctx, w.evalCtx); err != nil {
-				w.moveToDraining(err)
+			if err := w.computeWindowFunctions(w.Ctx, w.evalCtx); err != nil {
+				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, nil
 			}
 			w.populated = true
@@ -392,11 +392,11 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 			return windowerEmittingRows, w.processRowHelper(w.outputRow), nil
 		}
 
-		w.moveToDraining(nil /* err */)
+		w.MoveToDraining(nil /* err */)
 		return windowerStateUnknown, nil, nil
 	}
 
-	w.moveToDraining(errors.Errorf("unexpected: emitRow() is called on a windower before all input rows are accumulated"))
+	w.MoveToDraining(errors.Errorf("unexpected: emitRow() is called on a windower before all input rows are accumulated"))
 	return windowerStateUnknown, nil, nil
 }
 
@@ -410,13 +410,13 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.EvalContext) error {
 	var peerGrouper peerGroupChecker
 	usage := sliceOfRowsSliceOverhead + sizeOfSliceOfRows*int64(len(w.windowFns))
-	if err := w.resultsAcc.Grow(w.ctx, usage); err != nil {
+	if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
 		return err
 	}
 	w.windowValues = make([][][]tree.Datum, len(w.windowFns))
 
 	usage = indexedRowsStructSliceOverhead + sizeOfIndexedRowsStruct*int64(len(w.encodedPartitions))
-	if err := w.partitionsAcc.Grow(w.ctx, usage); err != nil {
+	if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 		return err
 	}
 	partitions := make([]indexedRows, len(w.encodedPartitions))
@@ -430,7 +430,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		w.buckets = append(w.buckets, bucket)
 		w.bucketToPartitionIdx = append(w.bucketToPartitionIdx, partitionIdx)
 		usage = indexedRowStructSliceOverhead + sizeOfIndexedRowStruct*int64(len(encodedPartition))
-		if err := w.partitionsAcc.Grow(w.ctx, usage); err != nil {
+		if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 			return err
 		}
 		rows := make([]indexedRow, 0, len(encodedPartition))
@@ -445,7 +445,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	// to the index of another window function f2 with the same ORDER BY
 	// clause such that f2 will have been processed before f1.
 	usage = sliceOfIndexedRowsSliceOverhead + sizeOfSliceOfIndexedRows*int64(len(w.windowFns))
-	if err := w.partitionsAcc.Grow(w.ctx, usage); err != nil {
+	if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 		return err
 	}
 	sortedPartitionsCache := make([][]indexedRows, len(w.windowFns))
@@ -470,7 +470,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 	for windowFnIdx, windowFn := range w.windowFns {
 		usage = rowSliceOverhead + sizeOfRow*int64(len(w.encodedPartitions))
-		if err := w.resultsAcc.Grow(w.ctx, usage); err != nil {
+		if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
 			return err
 		}
 		w.windowValues[windowFnIdx] = make([][]tree.Datum, len(w.encodedPartitions))
@@ -502,7 +502,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 
 			partition := partitions[partitionIdx]
 			usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
-			if err := w.resultsAcc.Grow(w.ctx, usage); err != nil {
+			if err := w.resultsAcc.Grow(w.Ctx, usage); err != nil {
 				return err
 			}
 			w.windowValues[windowFnIdx][partitionIdx] = make([]tree.Datum, partition.Len())
@@ -531,14 +531,14 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						// so we cache copies of all sorted partitions.
 						if sortedPartitionsCache[windowFnIdx] == nil {
 							usage = indexedRowsStructSliceOverhead + sizeOfIndexedRowsStruct*int64(len(partitions))
-							if err := w.partitionsAcc.Grow(w.ctx, usage); err != nil {
+							if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 								return err
 							}
 							sortedPartitionsCache[windowFnIdx] = make([]indexedRows, len(partitions))
 						}
 						// TODO(yuzefovich): figure out how to avoid making this deep copy.
 						usage = indexedRowStructSliceOverhead + sizeOfIndexedRowStruct*int64(partition.Len())
-						if err := w.partitionsAcc.Grow(w.ctx, usage); err != nil {
+						if err := w.partitionsAcc.Grow(w.Ctx, usage); err != nil {
 							return err
 						}
 						sortedPartitionsCache[windowFnIdx][partitionIdx] = partition.makeCopy()
@@ -756,12 +756,12 @@ func (w *windower) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(w.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(w.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&WindowerStats{
 				InputStats:      is,
-				MaxAllocatedMem: w.memMonitor.MaximumBytes(),
+				MaxAllocatedMem: w.MemMonitor.MaximumBytes(),
 			},
 		)
 	}

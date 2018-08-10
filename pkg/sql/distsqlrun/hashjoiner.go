@@ -167,9 +167,9 @@ func newHashJoiner(
 		uint32(numMergedColumns),
 		post,
 		output,
-		procStateOpts{
-			inputsToDrain: []RowSource{h.leftSource, h.rightSource},
-			trailingMetaCallback: func() []ProducerMetadata {
+		ProcStateOpts{
+			InputsToDrain: []RowSource{h.leftSource, h.rightSource},
+			TrailingMetaCallback: func() []ProducerMetadata {
 				h.close()
 				return nil
 			},
@@ -192,14 +192,14 @@ func newHashJoiner(
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, flowCtx.EvalCtx.Mon)
 		limitedMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		h.memMonitor = &limitedMon
-		h.diskMonitor = newMonitor(ctx, flowCtx.diskMonitor, "hashjoiner-disk")
+		h.MemMonitor = &limitedMon
+		h.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "hashjoiner-disk")
 		// Override initialBufferSize to be half of this processor's memory
 		// limit. We consume up to h.initialBufferSize bytes from each input
 		// stream.
 		h.initialBufferSize = limit / 2
 	} else {
-		h.memMonitor = newMonitor(ctx, flowCtx.EvalCtx.Mon, "hashjoiner-mem")
+		h.MemMonitor = NewMonitor(ctx, flowCtx.EvalCtx.Mon, "hashjoiner-mem")
 	}
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
@@ -210,10 +210,10 @@ func newHashJoiner(
 	}
 
 	h.rows[leftSide].initWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.memMonitor,
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.MemMonitor,
 	)
 	h.rows[rightSide].initWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.memMonitor,
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.MemMonitor,
 	)
 
 	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {
@@ -227,7 +227,7 @@ func newHashJoiner(
 func (h *hashJoiner) Start(ctx context.Context) context.Context {
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
-	ctx = h.startInternal(ctx, hashJoinerProcName)
+	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	h.runningState = hjBuilding
 	return ctx
@@ -235,7 +235,7 @@ func (h *hashJoiner) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for h.state == stateRunning {
+	for h.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *ProducerMetadata
 		switch h.runningState {
@@ -250,7 +250,7 @@ func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		case hjEmittingUnmatched:
 			h.runningState, row, meta = h.emitUnmatched()
 		default:
-			log.Fatalf(h.ctx, "unsupported state: %d", h.runningState)
+			log.Fatalf(h.Ctx, "unsupported state: %d", h.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -263,12 +263,12 @@ func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return outRow, nil
 		}
 	}
-	return nil, h.drainHelper()
+	return nil, h.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (h *hashJoiner) ConsumerDone() {
-	h.moveToDraining(nil /* err */)
+	h.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -285,8 +285,8 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 	) (hashJoinerState, sqlbase.EncDatumRow, *ProducerMetadata) {
 		h.storedSide = side
 		if err := h.initStoredRows(); err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 		return hjConsumingStoredSide, nil, nil
 	}
@@ -302,7 +302,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 		if leftUsage >= h.initialBufferSize && rightUsage >= h.initialBufferSize {
 			// Both sides have reached the buffer size limit. Move on to storing and
 			// fully consuming the right side.
-			log.VEventf(h.ctx, 1, "buffer phase found no short stream with buffer size %d", h.initialBufferSize)
+			log.VEventf(h.Ctx, 1, "buffer phase found no short stream with buffer size %d", h.initialBufferSize)
 			return setStoredSideTransition(rightSide)
 		}
 
@@ -313,11 +313,11 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 
 		row, meta, emitDirectly, err := h.receiveNext(side)
 		if err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		} else if meta != nil {
 			if meta.Err != nil {
-				h.moveToDraining(nil /* err */)
+				h.MoveToDraining(nil /* err */)
 				return hjStateUnknown, nil, meta
 			}
 			return hjBuilding, nil, meta
@@ -332,8 +332,8 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 				(h.joinType == sqlbase.InnerJoin ||
 					(h.joinType == sqlbase.LeftOuterJoin && side == leftSide) ||
 					(h.joinType == sqlbase.RightOuterJoin && side == rightSide)) {
-				h.moveToDraining(nil /* err */)
-				return hjStateUnknown, nil, h.drainHelper()
+				h.MoveToDraining(nil /* err */)
+				return hjStateUnknown, nil, h.DrainHelper()
 			}
 			// We could skip hjConsumingStoredSide and move straight to
 			// hjReadingProbeSide apart from the fact that hjConsumingStoredSide
@@ -343,11 +343,11 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 		}
 
 		// Add the row to the correct container.
-		if err := h.rows[side].AddRow(h.ctx, row); err != nil {
+		if err := h.rows[side].AddRow(h.Ctx, row); err != nil {
 			// If this error is a memory limit error, move to hjConsumingStoredSide.
 			h.storedSide = side
 			if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-				addErr := h.storedRows.AddRow(h.ctx, row)
+				addErr := h.storedRows.AddRow(h.Ctx, row)
 				if addErr == nil {
 					return hjConsumingStoredSide, nil, nil
 				}
@@ -355,8 +355,8 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 			} else if spillErr != nil {
 				err = errors.Wrap(err, spillErr.Error())
 			}
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 	}
 }
@@ -369,11 +369,11 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 	for {
 		row, meta, emitDirectly, err := h.receiveNext(side)
 		if err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		} else if meta != nil {
 			if meta.Err != nil {
-				h.moveToDraining(nil /* err */)
+				h.MoveToDraining(nil /* err */)
 				return hjStateUnknown, nil, meta
 			}
 			return hjConsumingStoredSide, nil, meta
@@ -387,7 +387,7 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 			if rc, ok := h.storedRows.(*hashMemRowContainer); ok {
 				err = h.maybeMakeMemErr("reserving mark memory")
 				if err == nil {
-					err = rc.reserveMarkMemoryMaybe(h.ctx)
+					err = rc.reserveMarkMemoryMaybe(h.Ctx)
 				}
 				if err != nil {
 					if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
@@ -395,8 +395,8 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 					} else if spillErr != nil {
 						err = errors.Wrap(err, spillErr.Error())
 					}
-					h.moveToDraining(err)
-					return hjStateUnknown, nil, h.drainHelper()
+					h.MoveToDraining(err)
+					return hjStateUnknown, nil, h.DrainHelper()
 				}
 			}
 			return hjReadingProbeSide, nil, nil
@@ -404,20 +404,20 @@ func (h *hashJoiner) consumeStoredSide() (hashJoinerState, sqlbase.EncDatumRow, 
 
 		err = h.maybeMakeMemErr("consuming stored side")
 		if err == nil {
-			err = h.storedRows.AddRow(h.ctx, row)
+			err = h.storedRows.AddRow(h.Ctx, row)
 		}
 		if err != nil {
 			if spilled, spillErr := h.maybeSpillToDisk(err); spilled {
-				if err := h.storedRows.AddRow(h.ctx, row); err != nil {
-					h.moveToDraining(err)
-					return hjStateUnknown, nil, h.drainHelper()
+				if err := h.storedRows.AddRow(h.Ctx, row); err != nil {
+					h.MoveToDraining(err)
+					return hjStateUnknown, nil, h.DrainHelper()
 				}
 				continue
 			} else if spillErr != nil {
 				err = errors.Wrap(err, spillErr.Error())
 			}
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 
 	}
@@ -437,11 +437,11 @@ func (h *hashJoiner) readProbeSide() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 		var err error
 		row, meta, emitDirectly, err = h.receiveNext(side)
 		if err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		} else if meta != nil {
 			if meta.Err != nil {
-				h.moveToDraining(nil /* err */)
+				h.MoveToDraining(nil /* err */)
 				return hjStateUnknown, nil, meta
 			}
 			return hjReadingProbeSide, nil, meta
@@ -454,13 +454,13 @@ func (h *hashJoiner) readProbeSide() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 			// if unmatched rows on the stored side need to be emitted, otherwise
 			// finish.
 			if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
-				i := h.storedRows.NewUnmarkedIterator(h.ctx)
+				i := h.storedRows.NewUnmarkedIterator(h.Ctx)
 				i.Rewind()
 				h.emittingUnmatchedState.iter = i
 				return hjEmittingUnmatched, nil, nil
 			}
-			h.moveToDraining(nil /* err */)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(nil /* err */)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 	}
 
@@ -469,16 +469,16 @@ func (h *hashJoiner) readProbeSide() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 	h.probingRowState.row = row
 	h.probingRowState.matched = false
 	if h.probingRowState.iter == nil {
-		i, err := h.storedRows.NewBucketIterator(h.ctx, row, h.eqCols[side])
+		i, err := h.storedRows.NewBucketIterator(h.Ctx, row, h.eqCols[side])
 		if err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 		h.probingRowState.iter = i
 	} else {
-		if err := h.probingRowState.iter.Reset(h.ctx, row); err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+		if err := h.probingRowState.iter.Reset(h.Ctx, row); err != nil {
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 	}
 	h.probingRowState.iter.Rewind()
@@ -488,8 +488,8 @@ func (h *hashJoiner) readProbeSide() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	i := h.probingRowState.iter
 	if ok, err := i.Valid(); err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	} else if !ok {
 		// In this case we have reached the end of the matching bucket. Check if any
 		// rows passed the ON condition. If they did, move back to
@@ -507,15 +507,15 @@ func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *Producer
 	}
 
 	if err := h.cancelChecker.Check(); err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 
 	row := h.probingRowState.row
 	otherRow, err := i.Row()
 	if err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 	defer i.Next()
 
@@ -526,8 +526,8 @@ func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *Producer
 		renderedRow, err = h.render(otherRow, row)
 	}
 	if err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 
 	// If the ON condition failed, renderedRow is nil.
@@ -548,7 +548,7 @@ func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *Producer
 		// (Note: an alternative is to remove the entry from the stored
 		// side, but our containers do not support that today).
 		// TODO(peter): figure out a way to reduce this special casing below.
-		if i.IsMarked(h.ctx) {
+		if i.IsMarked(h.Ctx) {
 			switch h.joinType {
 			case sqlbase.LeftSemiJoin:
 				shouldEmit = false
@@ -561,9 +561,9 @@ func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *Producer
 				h.probingRowState.matched = false
 				return hjProbingRow, nil, nil
 			}
-		} else if err := i.Mark(h.ctx, true); err != nil {
-			h.moveToDraining(err)
-			return hjStateUnknown, nil, h.drainHelper()
+		} else if err := i.Mark(h.Ctx, true); err != nil {
+			h.MoveToDraining(err)
+			return hjStateUnknown, nil, h.DrainHelper()
 		}
 	}
 	nextState := hjProbingRow
@@ -584,23 +584,23 @@ func (h *hashJoiner) probeRow() (hashJoinerState, sqlbase.EncDatumRow, *Producer
 func (h *hashJoiner) emitUnmatched() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	i := h.emittingUnmatchedState.iter
 	if ok, err := i.Valid(); err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	} else if !ok {
 		// Done.
-		h.moveToDraining(nil /* err */)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(nil /* err */)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 
 	if err := h.cancelChecker.Check(); err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 
 	row, err := i.Row()
 	if err != nil {
-		h.moveToDraining(err)
-		return hjStateUnknown, nil, h.drainHelper()
+		h.MoveToDraining(err)
+		return hjStateUnknown, nil, h.DrainHelper()
 	}
 	defer i.Next()
 
@@ -608,11 +608,11 @@ func (h *hashJoiner) emitUnmatched() (hashJoinerState, sqlbase.EncDatumRow, *Pro
 }
 
 func (h *hashJoiner) close() {
-	if h.internalClose() {
-		h.rows[leftSide].Close(h.ctx)
-		h.rows[rightSide].Close(h.ctx)
+	if h.InternalClose() {
+		h.rows[leftSide].Close(h.Ctx)
+		h.rows[rightSide].Close(h.Ctx)
 		if h.storedRows != nil {
-			h.storedRows.Close(h.ctx)
+			h.storedRows.Close(h.Ctx)
 		}
 		if h.probingRowState.iter != nil {
 			h.probingRowState.iter.Close()
@@ -620,9 +620,9 @@ func (h *hashJoiner) close() {
 		if h.emittingUnmatchedState.iter != nil {
 			h.emittingUnmatchedState.iter.Close()
 		}
-		h.memMonitor.Stop(h.ctx)
+		h.MemMonitor.Stop(h.Ctx)
 		if h.diskMonitor != nil {
-			h.diskMonitor.Stop(h.ctx)
+			h.diskMonitor.Stop(h.Ctx)
 		}
 	}
 }
@@ -688,7 +688,7 @@ func (h *hashJoiner) shouldEmitUnmatched(
 func (h *hashJoiner) initStoredRows() error {
 	storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
 	err := storedMemRows.Init(
-		h.ctx,
+		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
@@ -698,7 +698,7 @@ func (h *hashJoiner) initStoredRows() error {
 		err = h.maybeMakeMemErr("initializing mem rows")
 		// Close the container on an artificial error.
 		if err != nil {
-			storedMemRows.Close(h.ctx)
+			storedMemRows.Close(h.Ctx)
 		}
 	}
 	if err != nil {
@@ -737,7 +737,7 @@ func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 
 	storedDiskRows := makeHashDiskRowContainer(h.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
-		h.ctx,
+		h.Ctx,
 		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
@@ -747,12 +747,12 @@ func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 	}
 
 	if h.storedRows != nil {
-		h.storedRows.Close(h.ctx)
+		h.storedRows.Close(h.Ctx)
 	}
 	h.storedRows = &storedDiskRows
 
 	// Transfer rows from memory.
-	i := h.rows[h.storedSide].NewFinalIterator(h.ctx)
+	i := h.rows[h.storedSide].NewFinalIterator(h.Ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
 		if err := h.cancelChecker.Check(); err != nil {
@@ -767,7 +767,7 @@ func (h *hashJoiner) maybeSpillToDisk(err error) (bool, error) {
 		if err != nil {
 			return false, newDiskSpillErr(err.Error())
 		}
-		if err := storedDiskRows.AddRow(h.ctx, memRow); err != nil {
+		if err := storedDiskRows.AddRow(h.Ctx, memRow); err != nil {
 			return false, newDiskSpillErr(err.Error())
 		}
 	}
@@ -831,14 +831,14 @@ func (h *hashJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(h.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(h.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&HashJoinerStats{
 				LeftInputStats:   lis,
 				RightInputStats:  ris,
 				StoredSide:       h.storedSide.String(),
-				MaxAllocatedMem:  h.memMonitor.MaximumBytes(),
+				MaxAllocatedMem:  h.MemMonitor.MaximumBytes(),
 				MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
 			},
 		)

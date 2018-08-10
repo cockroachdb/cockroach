@@ -23,7 +23,7 @@ import (
 )
 
 type metadataTestReceiver struct {
-	processorBase
+	ProcessorBase
 	input RowSource
 
 	// trailingErrMeta stores the error metadata received from the input. We
@@ -60,7 +60,7 @@ func newMetadataTestReceiver(
 		senders:   senders,
 		rowCounts: make(map[string]rowNumCounter),
 	}
-	if err := mtr.init(
+	if err := mtr.Init(
 		mtr,
 		post,
 		input.OutputTypes(),
@@ -68,16 +68,16 @@ func newMetadataTestReceiver(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
-			inputsToDrain: []RowSource{input},
-			trailingMetaCallback: func() []ProducerMetadata {
+		ProcStateOpts{
+			InputsToDrain: []RowSource{input},
+			TrailingMetaCallback: func() []ProducerMetadata {
 				var trailingMeta []ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {
 						trailingMeta = append(trailingMeta, *meta)
 					}
 				}
-				mtr.internalClose()
+				mtr.InternalClose()
 				return trailingMeta
 			},
 		},
@@ -140,24 +140,24 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
 // Start is part of the RowSource interface.
 func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 	mtr.input.Start(ctx)
-	return mtr.startInternal(ctx, metadataTestReceiverProcName)
+	return mtr.StartInternal(ctx, metadataTestReceiverProcName)
 }
 
 // Next is part of the RowSource interface.
 //
 // This implementation doesn't follow the usual patterns of other processors; it
-// makes more limited use of the processorBase's facilities because it needs to
+// makes more limited use of the ProcessorBase's facilities because it needs to
 // inspect metadata while draining.
 func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
-		if mtr.state == stateTrailingMeta {
+		if mtr.State == stateTrailingMeta {
 			if meta := mtr.popTrailingMeta(); meta != nil {
 				return nil, meta
 			}
 			// If there's no more trailingMeta, we've moved to stateExhausted, and we
 			// might return some trailingErrMeta below.
 		}
-		if mtr.state == stateExhausted {
+		if mtr.State == stateExhausted {
 			if len(mtr.trailingErrMeta) > 0 {
 				meta := mtr.trailingErrMeta[0]
 				mtr.trailingErrMeta = mtr.trailingErrMeta[1:]
@@ -195,7 +195,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 			}
 			if meta.Err != nil {
 				// Keep track of the err in trailingErrMeta, which will be returned
-				// after everything else (including processorBase.trailingMeta).
+				// after everything else (including ProcessorBase.trailingMeta).
 				mtr.trailingErrMeta = append(mtr.trailingErrMeta, *meta)
 				continue
 			}
@@ -208,28 +208,28 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 			continue
 		}
 
-		// We don't use processorBase.processRowHelper() here because we need
+		// We don't use ProcessorBase.processRowHelper() here because we need
 		// special handling for errors: this proc never starts draining in order for
 		// it to be as unintrusive as possible.
-		outRow, ok, err := mtr.out.ProcessRow(mtr.ctx, row)
+		outRow, ok, err := mtr.out.ProcessRow(mtr.Ctx, row)
 		if err != nil {
 			mtr.trailingMeta = append(mtr.trailingMeta, ProducerMetadata{Err: err})
 			continue
 		}
 		if outRow == nil {
 			if !ok {
-				mtr.moveToDraining(nil /* err */)
+				mtr.MoveToDraining(nil /* err */)
 			}
 			continue
 		}
 
 		// Swallow rows if we're draining.
-		if mtr.state == stateDraining {
+		if mtr.State == stateDraining {
 			continue
 		}
 
 		if !ok {
-			mtr.moveToDraining(nil /* err */)
+			mtr.MoveToDraining(nil /* err */)
 		}
 
 		return outRow, nil
@@ -244,5 +244,5 @@ func (mtr *metadataTestReceiver) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (mtr *metadataTestReceiver) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	mtr.internalClose()
+	mtr.InternalClose()
 }

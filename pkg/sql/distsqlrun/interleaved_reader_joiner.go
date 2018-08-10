@@ -53,8 +53,8 @@ type interleavedReaderJoiner struct {
 	joinerBase
 
 	// runningState represents the state of the processor. This is in addition to
-	// processorBase.state - the runningState is only relevant when
-	// processorBase.state == stateRunning.
+	// ProcessorBase.State - the runningState is only relevant when
+	// ProcessorBase.State == StateRunning.
 	runningState irjState
 
 	// Each tableInfo contains the output helper (for intermediate
@@ -84,12 +84,12 @@ type interleavedReaderJoiner struct {
 
 func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
 	irj.runningState = irjReading
-	ctx = irj.startInternal(ctx, interleavedReaderJoinerProcName)
+	ctx = irj.StartInternal(ctx, interleavedReaderJoinerProcName)
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := irj.fetcher.StartScan(
-		irj.ctx, irj.flowCtx.txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
+		irj.Ctx, irj.flowCtx.txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
 	); err != nil {
-		irj.moveToDraining(err)
+		irj.MoveToDraining(err)
 	}
 	return ctx
 }
@@ -101,7 +101,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetada
 	// state phase that outputs either 1 or 0 rows on every call, or a special
 	// unmatched child phase that outputs a child row that doesn't match the last
 	// seen ancestor if the join type calls for it.
-	for irj.state == stateRunning {
+	for irj.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *ProducerMetadata
 		switch irj.runningState {
@@ -113,13 +113,13 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetada
 			irj.unmatchedChild = nil
 			irj.runningState = irjReading
 		default:
-			log.Fatalf(irj.ctx, "unsupported state: %d", irj.runningState)
+			log.Fatalf(irj.Ctx, "unsupported state: %d", irj.runningState)
 		}
 		if row != nil || meta != nil {
 			return row, meta
 		}
 	}
-	return nil, irj.drainHelper()
+	return nil, irj.DrainHelper()
 }
 
 // findTable returns the tableInfo for the given table and index descriptor,
@@ -148,33 +148,33 @@ func (irj *interleavedReaderJoiner) findTable(
 // requests the next row from its backing kv fetcher, determines whether its an
 // ancestor or child row, and conditionally merges and outputs a result.
 func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *ProducerMetadata) {
-	row, desc, index, err := irj.fetcher.NextRow(irj.ctx)
+	row, desc, index, err := irj.fetcher.NextRow(irj.Ctx)
 	if err != nil {
-		irj.moveToDraining(scrub.UnwrapScrubError(err))
-		return irjStateUnknown, nil, irj.drainHelper()
+		irj.MoveToDraining(scrub.UnwrapScrubError(err))
+		return irjStateUnknown, nil, irj.DrainHelper()
 	}
 	if row == nil {
 		// All done - just finish maybe emitting our last ancestor.
 		lastAncestor := irj.maybeUnmatchedAncestor()
-		irj.moveToDraining(nil)
+		irj.MoveToDraining(nil)
 		return irjReading, lastAncestor, nil
 	}
 
 	// Lookup the helper that belongs to this row.
 	tInfo, isAncestorRow, err := irj.findTable(desc, index)
 	if err != nil {
-		irj.moveToDraining(err)
-		return irjStateUnknown, nil, irj.drainHelper()
+		irj.MoveToDraining(err)
+		return irjStateUnknown, nil, irj.DrainHelper()
 	}
 
 	// We post-process the intermediate row from either table.
-	tableRow, ok, err := tInfo.post.ProcessRow(irj.ctx, row)
+	tableRow, ok, err := tInfo.post.ProcessRow(irj.Ctx, row)
 	if err != nil {
-		irj.moveToDraining(err)
-		return irjStateUnknown, nil, irj.drainHelper()
+		irj.MoveToDraining(err)
+		return irjStateUnknown, nil, irj.DrainHelper()
 	}
 	if !ok {
-		irj.moveToDraining(nil)
+		irj.MoveToDraining(nil)
 	}
 
 	// Row was filtered out.
@@ -220,8 +220,8 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 		irj.flowCtx.EvalCtx,
 	)
 	if err != nil {
-		irj.moveToDraining(err)
-		return irjStateUnknown, nil, irj.drainHelper()
+		irj.MoveToDraining(err)
+		return irjStateUnknown, nil, irj.DrainHelper()
 	}
 
 	// The child row match the most recent ancestorRow on the
@@ -230,8 +230,8 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 	if cmp == 0 {
 		renderedRow, err := irj.render(lrow, rrow)
 		if err != nil {
-			irj.moveToDraining(err)
-			return irjStateUnknown, nil, irj.drainHelper()
+			irj.MoveToDraining(err)
+			return irjStateUnknown, nil, irj.DrainHelper()
 		}
 		if renderedRow != nil {
 			irj.ancestorJoined = true
@@ -260,12 +260,12 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 }
 
 func (irj *interleavedReaderJoiner) ConsumerDone() {
-	irj.moveToDraining(nil /* err */)
+	irj.MoveToDraining(nil /* err */)
 }
 
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	irj.internalClose()
+	irj.InternalClose()
 }
 
 var _ Processor = &interleavedReaderJoiner{}
@@ -379,9 +379,9 @@ func newInterleavedReaderJoiner(
 		0,   /*numMergedColumns*/
 		post,
 		output,
-		procStateOpts{
-			inputsToDrain:        []RowSource{},
-			trailingMetaCallback: irj.generateTrailingMeta,
+		ProcStateOpts{
+			InputsToDrain:        []RowSource{},
+			TrailingMetaCallback: irj.generateTrailingMeta,
 		},
 	); err != nil {
 		return nil, err
@@ -422,14 +422,14 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 
 func (irj *interleavedReaderJoiner) generateTrailingMeta() []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(irj.ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
+	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
 	if meta := getTxnCoordMeta(irj.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
-	irj.internalClose()
+	irj.InternalClose()
 	return trailingMeta
 }
 

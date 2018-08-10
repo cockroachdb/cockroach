@@ -22,7 +22,7 @@ import (
 
 // metadataTestSender intersperses a metadata record after every row.
 type metadataTestSender struct {
-	processorBase
+	ProcessorBase
 	input RowSource
 	id    string
 
@@ -46,7 +46,7 @@ func newMetadataTestSender(
 	id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
-	if err := mts.init(
+	if err := mts.Init(
 		mts,
 		post,
 		input.OutputTypes(),
@@ -54,10 +54,10 @@ func newMetadataTestSender(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{
-			inputsToDrain: []RowSource{mts.input},
-			trailingMetaCallback: func() []ProducerMetadata {
-				mts.internalClose()
+		ProcStateOpts{
+			InputsToDrain: []RowSource{mts.input},
+			TrailingMetaCallback: func() []ProducerMetadata {
+				mts.InternalClose()
 				// Send a final record with LastMsg set.
 				meta := ProducerMetadata{
 					RowNum: &RemoteProducerMetadata_RowNum{
@@ -78,7 +78,7 @@ func newMetadataTestSender(
 // Start is part of the RowSource interface.
 func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
 	mts.input.Start(ctx)
-	return mts.startInternal(ctx, metadataTestSenderProcName)
+	return mts.StartInternal(ctx, metadataTestSenderProcName)
 }
 
 // Next is part of the RowSource interface.
@@ -96,7 +96,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 
-	for mts.state == stateRunning {
+	for mts.State == StateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
 			// Other processors will start draining when they get an error meta from
@@ -105,7 +105,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return nil, meta
 		}
 		if row == nil {
-			mts.moveToDraining(nil /* err */)
+			mts.MoveToDraining(nil /* err */)
 			break
 		}
 
@@ -114,16 +114,16 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return outRow, nil
 		}
 	}
-	return nil, mts.drainHelper()
+	return nil, mts.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerDone() {
-	mts.moveToDraining(nil /* err */)
+	mts.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	mts.internalClose()
+	mts.InternalClose()
 }

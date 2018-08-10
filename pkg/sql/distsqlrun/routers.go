@@ -248,9 +248,9 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbas
 		if rb.statsCollectionEnabled {
 			// Start private monitors for stats collection.
 			memoryMonitorName := fmt.Sprintf("router-stat-mem-%d", rb.outputs[i].streamID)
-			memoryMonitor = newMonitor(ctx, memoryMonitor, memoryMonitorName)
+			memoryMonitor = NewMonitor(ctx, memoryMonitor, memoryMonitorName)
 			diskMonitorName := fmt.Sprintf("router-stat-disk-%d", rb.outputs[i].streamID)
-			diskMonitor = newMonitor(ctx, diskMonitor, diskMonitorName)
+			diskMonitor = NewMonitor(ctx, diskMonitor, diskMonitorName)
 		}
 
 		rb.outputs[i].mu.rowContainer.init(
