@@ -614,6 +614,12 @@ TABLE abc
       ├── a int not null
       └── c int not null
 
+exec-ddl
+CREATE VIEW abcview AS SELECT * FROM abc
+----
+VIEW abcview
+ └── SELECT * FROM abc
+
 build
 SELECT d FROM abc ORDER BY lower(d)
 ----
@@ -780,7 +786,12 @@ sort
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
-error: table "a" not found
+error: no data source matches prefix: "a"
+
+build
+SELECT a FROM abcview ORDER BY INDEX abcview@bc
+----
+error (42809): "abcview" is not a table
 
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -970,7 +981,7 @@ error (42P01): no data source matches prefix: t.public.abcd
 build
 SELECT a FROM abcd AS foo ORDER BY INDEX foo@abc DESC
 ----
-error: table "foo" not found
+error: no data source matches prefix: "foo"
 
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@bcd

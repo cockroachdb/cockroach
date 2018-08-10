@@ -1,5 +1,8 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+# NOTE: Keep this table at the beginning of the file to ensure that its numeric
+#       reference is 53 (the numeric reference of the first table). If the
+#       numbering scheme in cockroach changes, this test will break.
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT)
 
@@ -273,6 +276,27 @@ SELECT * FROM v6
 3 97
 
 user root
+
+# Ensure that views work over tables identified by numeric reference.
+statement ok
+CREATE VIEW num_ref_view AS SELECT a, b FROM [53 AS t]
+
+statement ok
+GRANT SELECT ON num_ref_view TO testuser
+
+user testuser
+
+query II rowsort
+SELECT * FROM num_ref_view
+----
+1 99
+2 98
+3 97
+
+user root
+
+statement ok
+DROP VIEW num_ref_view
 
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1
