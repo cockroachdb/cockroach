@@ -19,14 +19,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
-// buildTable builds a set of memo groups that represent the given table
+// buildDataSource builds a set of memo groups that represent the given table
 // expression. For example, if the tree.TableExpr consists of a single table,
 // the resulting set of memo groups will consist of a single group with a
 // scanOp operator. Joins will result in the construction of several groups,
@@ -36,7 +38,7 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *scope) {
+func (b *Builder) buildDataSource(texpr tree.TableExpr, inScope *scope) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
@@ -44,7 +46,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 			panic(unimplementedf("index flags are not supported"))
 		}
 
-		outScope = b.buildTable(source.Expr, inScope)
+		outScope = b.buildDataSource(source.Expr, inScope)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality("ordinality", outScope)
@@ -64,11 +66,18 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 			panic(builderError{err})
 		}
 
-		tab := b.resolveTable(tn)
-		return b.buildScan(tab, tn, nil /* ordinals */, inScope)
+		ds := b.resolveDataSource(tn, privilege.SELECT)
+		switch t := ds.(type) {
+		case opt.Table:
+			return b.buildScan(t, tn, nil /* ordinals */, inScope)
+		case opt.View:
+			return b.buildView(t, inScope)
+		default:
+			panic(unimplementedf("sequences are not supported"))
+		}
 
 	case *tree.ParenTableExpr:
-		return b.buildTable(source.Expr, inScope)
+		return b.buildDataSource(source.Expr, inScope)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
@@ -89,14 +98,68 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		return outScope
 
 	case *tree.TableRef:
-		tab := b.resolveTableRef(source)
-		outScope = b.buildScanFromTableRef(tab, source, inScope)
+		ds := b.resolveDataSourceRef(source, privilege.SELECT)
+		switch t := ds.(type) {
+		case opt.Table:
+			outScope = b.buildScanFromTableRef(t, source, inScope)
+		default:
+			panic(unimplementedf("view and sequence numeric refs are not supported"))
+		}
 		b.renameSource(source.As, outScope)
 		return outScope
 
 	default:
 		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
 	}
+}
+
+// buildView parses the view query text and builds it as a Select expression.
+func (b *Builder) buildView(view opt.View, inScope *scope) (outScope *scope) {
+	// Cache the AST so that multiple references won't need to reparse.
+	if b.views == nil {
+		b.views = make(map[opt.View]*tree.Select)
+	}
+
+	// Check whether view has already been parsed, and if not, parse now.
+	sel, ok := b.views[view]
+	if !ok {
+		stmt, err := parser.ParseOne(view.Query())
+		if err != nil {
+			wrapped := errors.Wrapf(err, "failed to parse underlying query from view %q", view.Name())
+			panic(builderError{wrapped})
+		}
+
+		sel, ok = stmt.(*tree.Select)
+		if !ok {
+			panic("expected SELECT statement")
+		}
+
+		b.views[view] = sel
+	}
+
+	// When building the view, we don't want to check for the SELECT privilege
+	// on the underlying tables, just on the view itself. Checking on the
+	// underlying tables as well would defeat the purpose of having separate
+	// SELECT privileges on the view, which is intended to allow for exposing
+	// some subset of a restricted table's data to less privileged users.
+	if !b.skipSelectPrivilegeChecks {
+		b.skipSelectPrivilegeChecks = true
+		defer func() { b.skipSelectPrivilegeChecks = false }()
+	}
+
+	outScope = b.buildSelect(sel, &scope{builder: b})
+
+	// Update data source name to be the name of the view. And if view columns
+	// are specified, then update names of output columns.
+	hasCols := view.ColumnNameCount() > 0
+	for i := range outScope.cols {
+		outScope.cols[i].table = *view.Name()
+		if hasCols {
+			outScope.cols[i].name = view.ColumnName(i)
+		}
+	}
+
+	return outScope
 }
 
 // renameSource applies an AS clause to the columns in scope.
@@ -176,7 +239,7 @@ func (b *Builder) buildScanFromTableRef(
 			ordinals[i] = ord
 		}
 	}
-	return b.buildScan(tab, tab.TabName(), ordinals, inScope)
+	return b.buildScan(tab, tab.Name(), ordinals, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -384,7 +447,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	colsAdded := 0
 
 	for _, table := range from.Tables {
-		tableScope := b.buildTable(table, inScope)
+		tableScope := b.buildDataSource(table, inScope)
 
 		if outScope == nil {
 			outScope = tableScope

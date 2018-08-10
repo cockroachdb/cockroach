@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -35,6 +36,93 @@ type ColumnName string
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
 const PrimaryIndex = 0
+
+// Catalog is an interface to a database catalog, exposing only the information
+// needed by the query optimizer.
+type Catalog interface {
+	// ResolveDataSource locates a data source with the given name and returns it.
+	// If no such data source exists, then ResolveDataSource returns an error. As
+	// a side effect, the name parameter is updated to be fully qualified if it
+	// was not before (i.e. to include catalog and schema names).
+	ResolveDataSource(ctx context.Context, name *tree.TableName) (DataSource, error)
+
+	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
+	// locates a data source by its unique identifier in the database. This id
+	// is stable as long as the data source exists.
+	ResolveDataSourceByID(ctx context.Context, dataSourceID int64) (DataSource, error)
+}
+
+// DataSource is an interface to a database object that provides rows, like a
+// table, a view, or a sequence.
+type DataSource interface {
+	// Name returns the fully normalized, fully qualified, and fully resolved
+	// name of the data source. The ExplicitCatalog and ExplicitSchema fields
+	// will always be true, since all parts of the name are always specified.
+	Name() *tree.TableName
+
+	// CheckPrivilege verifies that the current user has the given privilege on
+	// this data source. If not, then CheckPrivilege returns an error.
+	CheckPrivilege(ctx context.Context, priv privilege.Kind) error
+}
+
+// Table is an interface to a database table, exposing only the information
+// needed by the query optimizer.
+type Table interface {
+	DataSource
+
+	// IsVirtualTable returns true if this table is a special system table that
+	// constructs its rows "on the fly" when it's queried. An example is the
+	// information_schema tables.
+	IsVirtualTable() bool
+
+	// ColumnCount returns the number of columns in the table.
+	ColumnCount() int
+
+	// Column returns a Column interface to the column at the ith ordinal
+	// position within the table, where i < ColumnCount.
+	Column(i int) Column
+
+	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
+	// Note that this takes the internal column ID, and has no relation to
+	// ColumnIDs in the optimizer.
+	LookupColumnOrdinal(colID uint32) (int, error)
+
+	// IndexCount returns the number of indexes defined on this table. This
+	// includes the primary index, so the count is always >= 1.
+	IndexCount() int
+
+	// Index returns the ith index, where i < IndexCount. The table's primary
+	// index is always the 0th index, and is always present (use the
+	// opt.PrimaryIndex to select it). The primary index corresponds to the
+	// table's primary key. If a primary key was not explicitly specified, then
+	// the system implicitly creates one based on a hidden rowid column.
+	Index(i int) Index
+
+	// StatisticCount returns the number of statistics available for the table.
+	StatisticCount() int
+
+	// Statistic returns the ith statistic, where i < StatisticCount.
+	Statistic(i int) TableStatistic
+}
+
+// View is an interface to a database view, exposing only the information needed
+// by the query optimizer.
+type View interface {
+	DataSource
+
+	// Query returns the SQL text that specifies the SELECT query that constitutes
+	// this view.
+	Query() string
+
+	// ColumnNameCount returns the number of column names specified in the view.
+	// If zero, then the columns are not aliased. Otherwise, it will match the
+	// number of columns in the view.
+	ColumnNameCount() int
+
+	// ColumnNames returns the name of the column at the ith ordinal position
+	// within the view, where i < ColumnNameCount.
+	ColumnName(i int) tree.Name
+}
 
 // Column is an interface to a table column, exposing only the information
 // needed by the query optimizer.
@@ -175,65 +263,10 @@ type TableStatistic interface {
 	// TODO(radu): add Histogram().
 }
 
-// Table is an interface to a database table, exposing only the information
-// needed by the query optimizer.
-type Table interface {
-	// TabName returns the fully normalized, fully qualified, and fully resolved
-	// name of the table. The ExplicitCatalog and ExplicitSchema fields will
-	// always be true, since both names are always specified.
-	TabName() *tree.TableName
-
-	// IsVirtualTable returns true if this table is a special system table that
-	// constructs its rows "on the fly" when it's queried. An example is the
-	// information_schema tables.
-	IsVirtualTable() bool
-
-	// ColumnCount returns the number of columns in the table.
-	ColumnCount() int
-
-	// Column returns a Column interface to the column at the ith ordinal
-	// position within the table, where i < ColumnCount.
-	Column(i int) Column
-
-	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
-	// Note that this takes the internal column ID, and has no relation to
-	// ColumnIDs in the optimizer.
-	LookupColumnOrdinal(colID uint32) (int, error)
-
-	// IndexCount returns the number of indexes defined on this table. This
-	// includes the primary index, so the count is always >= 1.
-	IndexCount() int
-
-	// Index returns the ith index, where i < IndexCount. The table's primary
-	// index is always the 0th index, and is always present (use the
-	// opt.PrimaryIndex to select it). The primary index corresponds to the
-	// table's primary key. If a primary key was not explicitly specified, then
-	// the system implicitly creates one based on a hidden rowid column.
-	Index(i int) Index
-
-	// StatisticCount returns the number of statistics available for the table.
-	StatisticCount() int
-
-	// Statistic returns the ith statistic, where i < StatisticCount.
-	Statistic(i int) TableStatistic
-}
-
-// Catalog is an interface to a database catalog, exposing only the information
-// needed by the query optimizer.
-type Catalog interface {
-	// FindTable returns a Table interface for the database table matching the
-	// given table name.  Returns an error if the table does not exist.
-	FindTable(ctx context.Context, name *tree.TableName) (Table, error)
-
-	// FindTableByID returns a Table interface for the database table
-	// matching the given table ID. Returns an error if the table does not exist.
-	FindTableByID(ctx context.Context, tableID int64) (Table, error)
-}
-
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
 func FormatCatalogTable(tab Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tab.TabName().TableName)
+	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer
 	for i := 0; i < tab.ColumnCount(); i++ {
@@ -288,4 +321,24 @@ func formatColumn(col Column, buf *bytes.Buffer) {
 	if col.IsHidden() {
 		fmt.Fprintf(buf, " (hidden)")
 	}
+}
+
+// FormatCatalogView nicely formats a catalog view using a treeprinter for
+// debugging and testing.
+func FormatCatalogView(view View, tp treeprinter.Node) {
+	var buf bytes.Buffer
+	if view.ColumnNameCount() > 0 {
+		buf.WriteString(" (")
+		for i := 0; i < view.ColumnNameCount(); i++ {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(string(view.ColumnName(i)))
+		}
+		buf.WriteString(")")
+	}
+
+	child := tp.Childf("VIEW %s%s", view.Name().TableName, buf.String())
+
+	child.Child(view.Query())
 }

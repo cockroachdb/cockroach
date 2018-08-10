@@ -73,7 +73,7 @@ func TestMetadataTables(t *testing.T) {
 
 	// Add a table reference to the metadata.
 	a := &testcat.Table{}
-	a.Name = tree.MakeUnqualifiedTableName(tree.Name("a"))
+	a.TabName = tree.MakeUnqualifiedTableName(tree.Name("a"))
 	x := &testcat.Column{Name: "x"}
 	y := &testcat.Column{Name: "y"}
 	a.Columns = append(a.Columns, x, y)
@@ -100,7 +100,7 @@ func TestMetadataTables(t *testing.T) {
 
 	// Add a table reference without a name to the metadata.
 	b := &testcat.Table{}
-	b.Name = tree.MakeUnqualifiedTableName(tree.Name("b"))
+	b.TabName = tree.MakeUnqualifiedTableName(tree.Name("b"))
 	b.Columns = append(b.Columns, &testcat.Column{Name: "x"})
 
 	otherTabID := md.AddTable(b)
@@ -130,7 +130,7 @@ func TestIndexColumns(t *testing.T) {
 	}
 
 	md := opt.NewMetadata()
-	a := md.AddTable(cat.Table("a"))
+	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
 
 	k := int(a.ColumnID(0))
 	i := int(a.ColumnID(1))
