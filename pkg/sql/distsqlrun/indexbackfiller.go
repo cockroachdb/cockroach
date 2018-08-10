@@ -89,7 +89,7 @@ func (ib *indexBackfiller) runChunk(
 
 	var key roachpb.Key
 	transactionalChunk := func(ctx context.Context) error {
-		return ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			// TODO(knz): do KV tracing in DistSQL processors.
 			var err error
 			key, err = ib.RunIndexBackfillChunk(
@@ -111,7 +111,7 @@ func (ib *indexBackfiller) runChunk(
 	*/
 
 	var entries []sqlbase.IndexEntry
-	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		// TODO(knz): do KV tracing in DistSQL processors.
@@ -124,7 +124,7 @@ func (ib *indexBackfiller) runChunk(
 
 	retried := false
 	// Write the new index values.
-	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		batch := txn.NewBatch()
 
 		for _, entry := range entries {

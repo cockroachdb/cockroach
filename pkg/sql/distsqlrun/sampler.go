@@ -40,7 +40,7 @@ type sketchInfo struct {
 // statistics (including cardinality estimation sketch data). See SamplerSpec
 // for more details.
 type samplerProcessor struct {
-	processorBase
+	ProcessorBase
 
 	flowCtx  *FlowCtx
 	input    RowSource
@@ -126,10 +126,10 @@ func newSamplerProcessor(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 	s.outTypes = outTypes
 
-	if err := s.init(
+	if err := s.Init(
 		nil, post, outTypes, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use processorBase to drain
-		procStateOpts{},
+		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
+		ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -147,14 +147,14 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	s.input.Start(ctx)
-	s.startInternal(ctx, samplerProcName)
+	s.StartInternal(ctx, samplerProcName)
 	defer tracing.FinishSpan(s.span)
 
-	earlyExit, err := s.mainLoop(s.ctx)
+	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		DrainAndClose(s.ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		DrainAndClose(s.Ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		s.pushTrailingMeta(s.ctx)
+		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}

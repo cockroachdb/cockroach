@@ -102,16 +102,16 @@ func (dsp *DistSQLPlanner) initRunners() {
 // txn is the transaction in which the plan will run. If nil, the different
 // processors are expected to manage their own internal transactions.
 //
-// All errors encountered are reported to the distSQLReceiver's resultWriter.
+// All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
-// distSQLReceiver.commErr. That can be tested to see if a client session needs
+// DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
 func (dsp *DistSQLPlanner) Run(
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	txn *client.Txn,
-	plan *physicalPlan,
-	recv *distSQLReceiver,
+	plan *PhysicalPlan,
+	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
 ) {
 	ctx := planCtx.ctx
@@ -146,7 +146,7 @@ func (dsp *DistSQLPlanner) Run(
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.ResultTypes
-	recv.resultToStreamColMap = plan.planToStreamColMap
+	recv.resultToStreamColMap = plan.PlanToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
@@ -238,13 +238,13 @@ func (dsp *DistSQLPlanner) Run(
 	flow.Cleanup(ctx)
 }
 
-// distSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
+// DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
 //
-// distSQLReceiver also update the RangeDescriptorCache and the LeaseholderCache
+// DistSQLReceiver also update the RangeDescriptorCache and the LeaseholderCache
 // in response to DistSQL metadata about misplanned ranges.
-type distSQLReceiver struct {
+type DistSQLReceiver struct {
 	ctx context.Context
 
 	// resultWriter is the interface which we send results to.
@@ -261,7 +261,7 @@ type distSQLReceiver struct {
 
 	// commErr keeps track of the error received from interacting with the
 	// resultWriter. This represents a "communication error" and as such is unlike
-	// query execution errors: when the distSQLReceiver is used within a SQL
+	// query execution errors: when the DistSQLReceiver is used within a SQL
 	// session, such errors mean that we have to bail on the session.
 	// Query execution errors are reported to the resultWriter. For some client's
 	// convenience, communication errors are also reported to the resultWriter.
@@ -286,7 +286,7 @@ type distSQLReceiver struct {
 	cleanup    func()
 
 	// The transaction in which the flow producing data for this
-	// receiver runs. The distSQLReceiver updates the transaction in
+	// receiver runs. The DistSQLReceiver updates the transaction in
 	// response to RetryableTxnError's and when distributed processors
 	// pass back TxnCoordMeta objects via ProducerMetas. Nil if no
 	// transaction should be updated on errors (i.e. if the flow overall
@@ -305,7 +305,7 @@ type errWrap struct {
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
-// distSQLReceiver. It's implemented by RowResultWriter.
+// DistSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
@@ -337,9 +337,9 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
-var _ distsqlrun.RowReceiver = &distSQLReceiver{}
+var _ distsqlrun.RowReceiver = &DistSQLReceiver{}
 
-// makeDistSQLReceiver creates a distSQLReceiver.
+// MakeDistSQLReceiver creates a DistSQLReceiver.
 //
 // ctx is the Context that the receiver will use throughput its
 // lifetime. resultWriter is the container where the results will be
@@ -347,7 +347,7 @@ var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 //
 // txn is the transaction in which the producer flow runs; it will be updated
 // on errors. Nil if the flow overall doesn't run in a transaction.
-func makeDistSQLReceiver(
+func MakeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
 	stmtType tree.StatementType,
@@ -356,9 +356,9 @@ func makeDistSQLReceiver(
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 	tracing *SessionTracing,
-) *distSQLReceiver {
+) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
-	r := &distSQLReceiver{
+	r := &DistSQLReceiver{
 		ctx:          consumeCtx,
 		cleanup:      cleanup,
 		resultWriter: resultWriter,
@@ -390,12 +390,12 @@ func makeDistSQLReceiver(
 // SetError provides a convenient way for a client to pass in an error, thus
 // pretending that a query execution error happened. The error is passed along
 // to the resultWriter.
-func (r *distSQLReceiver) SetError(err error) {
+func (r *DistSQLReceiver) SetError(err error) {
 	r.resultWriter.SetError(err)
 }
 
 // Push is part of the RowReceiver interface.
-func (r *distSQLReceiver) Push(
+func (r *DistSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
 	if meta != nil {
@@ -497,7 +497,7 @@ func (r *distSQLReceiver) Push(
 }
 
 // ProducerDone is part of the RowReceiver interface.
-func (r *distSQLReceiver) ProducerDone() {
+func (r *DistSQLReceiver) ProducerDone() {
 	if r.txn != nil {
 		r.txn.OnCurrentIncarnationFinish(nil)
 	}
@@ -515,7 +515,7 @@ func (r *distSQLReceiver) ProducerDone() {
 // information that someone else has populated because there's no timing info
 // anywhere. We also may fail to remove stale info from the LeaseHolderCache if
 // the ids of the ranges that we get are different than the ids in that cache.
-func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) error {
+func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.RangeInfo) error {
 	// Update the RangeDescriptorCache.
 	rngDescs := make([]roachpb.RangeDescriptor, len(ranges))
 	for i, ri := range ranges {
@@ -535,17 +535,17 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
-// All errors encountered are reported to the distSQLReceiver's resultWriter.
+// All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
-// distSQLReceiver.commErr. That can be tested to see if a client session needs
+// DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
-	ctx context.Context, p *planner, recv *distSQLReceiver, distribute bool,
+	ctx context.Context, p *planner, recv *DistSQLReceiver, distribute bool,
 ) {
 	evalCtx := p.ExtendedEvalContext()
 	txn := p.txn
-	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 	planCtx.isLocal = !distribute
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
@@ -556,7 +556,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	if len(p.curPlan.subqueryPlans) != 0 {
 		err := p.curPlan.evalSubqueries(runParams{
 			ctx:             planCtx.ctx,
-			extendedEvalCtx: planCtx.extendedEvalCtx,
+			extendedEvalCtx: planCtx.ExtendedEvalCtx,
 			p:               p,
 		})
 

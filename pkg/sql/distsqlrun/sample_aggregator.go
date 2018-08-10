@@ -31,7 +31,7 @@ import (
 // A sample aggregator processor aggregates results from multiple sampler
 // processors. See SampleAggregatorSpec for more details.
 type sampleAggregator struct {
-	processorBase
+	ProcessorBase
 
 	input   RowSource
 	inTypes []sqlbase.ColumnType
@@ -101,10 +101,10 @@ func newSampleAggregator(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	if err := s.init(
+	if err := s.Init(
 		nil, post, []sqlbase.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
-		// this proc doesn't implement RowSource and doesn't use processorBase to drain
-		procStateOpts{},
+		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
+		ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
@@ -122,14 +122,14 @@ func (s *sampleAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	s.input.Start(ctx)
-	s.startInternal(ctx, sampleAggregatorProcName)
+	s.StartInternal(ctx, sampleAggregatorProcName)
 	defer tracing.FinishSpan(s.span)
 
-	earlyExit, err := s.mainLoop(s.ctx)
+	earlyExit, err := s.mainLoop(s.Ctx)
 	if err != nil {
-		DrainAndClose(s.ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		DrainAndClose(s.Ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		s.pushTrailingMeta(s.ctx)
+		s.pushTrailingMeta(s.Ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
@@ -209,7 +209,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return s.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
@@ -237,7 +237,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 
 			if err := stats.InsertNewStat(
 				ctx,
-				s.flowCtx.gossip,
+				s.flowCtx.Gossip,
 				s.flowCtx.executor,
 				txn,
 				s.tableID,

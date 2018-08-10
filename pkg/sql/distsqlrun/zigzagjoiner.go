@@ -287,7 +287,7 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		procStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -316,7 +316,7 @@ func newZigzagJoiner(
 
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
-	ctx = z.startInternal(ctx, zigzagJoinerProcName)
+	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.flowCtx.NewEvalCtx()
 	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
@@ -417,7 +417,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 
 func (z *zigzagJoiner) close() {
 	if !z.closed {
-		log.VEventf(z.ctx, 2, "exiting zigzag joiner run")
+		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
 }
 
@@ -430,7 +430,7 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 	if !z.closed {
 		if err != nil {
 			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(z.ctx); trace != nil {
+		} else if trace := getTraceData(z.Ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
@@ -832,7 +832,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		curInfo := z.infos[z.side]
 		// Fetch initial batch.
 		err := curInfo.fetcher.StartScan(
-			z.ctx,
+			z.Ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
@@ -840,10 +840,10 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			z.flowCtx.traceKV,
 		)
 		if err != nil {
-			log.Errorf(z.ctx, "scan error: %s", err)
+			log.Errorf(z.Ctx, "scan error: %s", err)
 			return nil, z.producerMeta(err)
 		}
-		fetchedRow, err := z.fetchRow(z.ctx)
+		fetchedRow, err := z.fetchRow(z.Ctx)
 		if err != nil {
 			err = scrub.UnwrapScrubError(err)
 			return nil, z.producerMeta(err)
@@ -858,12 +858,12 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
-		row, meta := z.nextRow(z.ctx, txn)
+		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			z.moveToDraining(nil /* err */)
+			z.MoveToDraining(nil /* err */)
 			break
 		}
 
@@ -873,7 +873,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return outRow, nil
 	}
-	return nil, z.drainHelper()
+	return nil, z.DrainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.

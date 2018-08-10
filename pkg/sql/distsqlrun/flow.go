@@ -79,16 +79,16 @@ type FlowCtx struct {
 	// TODO(bdarnell): remove rpcCtx after 2.1.
 	rpcCtx     *rpc.Context
 	nodeDialer *nodedialer.Dialer
-	// gossip is used by the sample aggregator to notify nodes of a new statistic.
-	gossip *gossip.Gossip
+	// Gossip is used by the sample aggregator to notify nodes of a new statistic.
+	Gossip *gossip.Gossip
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a
 	// higher-level txn (like backfills).
 	txn *client.Txn
-	// clientDB is a handle to the cluster. Used for performing requests outside
+	// ClientDB is a handle to the cluster. Used for performing requests outside
 	// of the transaction in which the flow's query is running.
-	clientDB *client.DB
+	ClientDB *client.DB
 
 	// Executor can be used to run "internal queries". Note that Flows also have
 	// access to an executor in the EvalContext. That one is "session bound"

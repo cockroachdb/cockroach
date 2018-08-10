@@ -25,7 +25,7 @@ import (
 // projectSetProcessor is the physical processor implementation of
 // projectSetNode.
 type projectSetProcessor struct {
-	processorBase
+	ProcessorBase
 
 	input RowSource
 	spec  *ProjectSetSpec
@@ -81,7 +81,7 @@ func newProjectSetProcessor(
 		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
 		done:        make([]bool, len(spec.Exprs)),
 	}
-	if err := ps.init(
+	if err := ps.Init(
 		ps,
 		post,
 		outputTypes,
@@ -89,7 +89,7 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		procStateOpts{inputsToDrain: []RowSource{ps.input}},
+		ProcStateOpts{InputsToDrain: []RowSource{ps.input}},
 	); err != nil {
 		return nil, err
 	}
@@ -99,14 +99,14 @@ func newProjectSetProcessor(
 // Start is part of the RowSource interface.
 func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 	ps.input.Start(ctx)
-	ctx = ps.startInternal(ctx, projectSetProcName)
+	ctx = ps.StartInternal(ctx, projectSetProcName)
 
 	// Initialize exprHelpers.
 	for i, expr := range ps.spec.Exprs {
 		var helper exprHelper
 		err := helper.init(expr, ps.input.OutputTypes(), ps.evalCtx)
 		if err != nil {
-			ps.moveToDraining(err)
+			ps.MoveToDraining(err)
 			return ctx
 		}
 		if tFunc, ok := helper.expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
@@ -212,24 +212,24 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 
 // Next is part of the RowSource interface.
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for ps.state == stateRunning {
+	for ps.State == StateRunning {
 		// Start of a new row of input?
 		if !ps.inputRowReady {
 			// Read the row from the source.
 			row, meta, err := ps.nextInputRow()
 			if meta != nil {
 				if meta.Err != nil {
-					ps.moveToDraining(nil /* err */)
+					ps.MoveToDraining(nil /* err */)
 				}
 				return nil, meta
 			}
 			if err != nil {
-				ps.moveToDraining(err)
-				return nil, ps.drainHelper()
+				ps.MoveToDraining(err)
+				return nil, ps.DrainHelper()
 			}
 			if row == nil {
-				ps.moveToDraining(nil /* err */)
-				return nil, ps.drainHelper()
+				ps.MoveToDraining(nil /* err */)
+				return nil, ps.DrainHelper()
 			}
 
 			// Keep the values for later.
@@ -240,8 +240,8 @@ func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// Try to find some data on the generator side.
 		newValAvail, err := ps.nextGeneratorValues()
 		if err != nil {
-			ps.moveToDraining(err)
-			return nil, ps.drainHelper()
+			ps.MoveToDraining(err)
+			return nil, ps.DrainHelper()
 		}
 		if newValAvail {
 			if outRow := ps.processRowHelper(ps.rowBuffer); outRow != nil {
@@ -253,7 +253,7 @@ func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			ps.inputRowReady = false
 		}
 	}
-	return nil, ps.drainHelper()
+	return nil, ps.DrainHelper()
 }
 
 func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncDatum {
@@ -264,11 +264,11 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncD
 
 // ConsumerDone is part of the RowSource interface.
 func (ps *projectSetProcessor) ConsumerDone() {
-	ps.moveToDraining(nil /* err */)
+	ps.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (ps *projectSetProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ps.internalClose()
+	ps.InternalClose()
 }

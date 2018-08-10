@@ -208,7 +208,7 @@ func TestPlanningDuringSplits(t *testing.T) {
 	wg.Wait()
 }
 
-// Test that distSQLReceiver uses inbound metadata to update the
+// Test that DistSQLReceiver uses inbound metadata to update the
 // RangeDescriptorCache and the LeaseHolderCache.
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -217,7 +217,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kv.NewRangeDescriptorCache(st, nil /* db */, size)
 	leaseCache := kv.NewLeaseHolderCache(size)
-	r := makeDistSQLReceiver(
+	r := MakeDistSQLReceiver(
 		context.TODO(), nil /* resultWriter */, tree.Rows,
 		rangeCache, leaseCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
 
@@ -775,7 +775,7 @@ func TestPartitionSpans(t *testing.T) {
 				},
 			}
 
-			planCtx := dsp.newPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
+			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -951,7 +951,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				},
 			}
 
-			planCtx := dsp.newPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
+			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
 			partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
@@ -1042,7 +1042,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		},
 	}
 
-	planCtx := dsp.newPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
+	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
 	partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

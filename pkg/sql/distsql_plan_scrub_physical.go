@@ -28,24 +28,24 @@ import (
 // TableReaders will only emit errors encountered during scanning
 // instead of row data. The plan is finalized.
 func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	n *scanNode,
 	desc sqlbase.TableDescriptor,
 	indexDesc sqlbase.IndexDescriptor,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
-) (physicalPlan, error) {
+) (PhysicalPlan, error) {
 	spec, _, err := initTableReaderSpec(n, planCtx.EvalContext(), nil /* indexVarMap */)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
 	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	var p physicalPlan
+	var p PhysicalPlan
 	stageID := p.NewStageID()
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
@@ -71,7 +71,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 
 	// Set the plan's result types to be ScrubTypes.
 	p.ResultTypes = distsqlrun.ScrubTypes
-	p.planToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
 
 	dsp.FinalizePlan(planCtx, &p)
 	return p, nil

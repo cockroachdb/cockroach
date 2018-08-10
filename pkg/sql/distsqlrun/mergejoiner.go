@@ -84,9 +84,9 @@ func newMergeJoiner(
 	if err := m.joinerBase.init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
-		procStateOpts{
-			inputsToDrain: []RowSource{leftSource, rightSource},
-			trailingMetaCallback: func() []ProducerMetadata {
+		ProcStateOpts{
+			InputsToDrain: []RowSource{leftSource, rightSource},
+			TrailingMetaCallback: func() []ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -95,7 +95,7 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.memMonitor = newMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+	m.MemMonitor = NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
@@ -104,7 +104,7 @@ func newMergeJoiner(
 		m.rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
-		m.memMonitor,
+		m.MemMonitor,
 	)
 	if err != nil {
 		return nil, err
@@ -116,23 +116,23 @@ func newMergeJoiner(
 // Start is part of the RowSource interface.
 func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 	m.streamMerger.start(ctx)
-	ctx = m.startInternal(ctx, mergeJoinerProcName)
+	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	return ctx
 }
 
 // Next is part of the Processor interface.
 func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for m.state == stateRunning {
+	for m.State == StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
 			if meta.Err != nil {
-				m.moveToDraining(nil /* err */)
+				m.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
-			m.moveToDraining(nil /* err */)
+			m.MoveToDraining(nil /* err */)
 			break
 		}
 
@@ -140,7 +140,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return outRow, nil
 		}
 	}
-	return nil, m.drainHelper()
+	return nil, m.DrainHelper()
 }
 
 func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -242,14 +242,14 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (m *mergeJoiner) ConsumerDone() {
-	m.moveToDraining(nil /* err */)
+	m.MoveToDraining(nil /* err */)
 }
 
 func (m *mergeJoiner) close() {
-	if m.internalClose() {
+	if m.InternalClose() {
 		ctx := m.evalCtx.Ctx()
 		m.streamMerger.close(ctx)
-		m.memMonitor.Stop(ctx)
+		m.MemMonitor.Stop(ctx)
 	}
 }
 
@@ -296,13 +296,13 @@ func (m *mergeJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	if sp := opentracing.SpanFromContext(m.ctx); sp != nil {
+	if sp := opentracing.SpanFromContext(m.Ctx); sp != nil {
 		tracing.SetSpanStats(
 			sp,
 			&MergeJoinerStats{
 				LeftInputStats:  lis,
 				RightInputStats: ris,
-				MaxAllocatedMem: m.memMonitor.MaximumBytes(),
+				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
 			},
 		)
 	}

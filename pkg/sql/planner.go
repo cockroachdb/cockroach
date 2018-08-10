@@ -36,8 +36,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
-// the sql package.
+// extendedEvalContext extends tree.EvalContext with fields that are needed for
+// distsql planning.
 type extendedEvalContext struct {
 	tree.EvalContext
 
