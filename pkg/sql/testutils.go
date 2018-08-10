@@ -93,7 +93,9 @@ func (r *StmtBufReader) SeekToNextBatch() error {
 // Exec is a test utility function that takes a localPlanner (of type
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
-func (dsp *DistSQLPlanner) Exec(ctx context.Context, localPlanner interface{}, sql string) error {
+func (dsp *DistSQLPlanner) Exec(
+	ctx context.Context, localPlanner interface{}, sql string, distribute bool,
+) error {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		return err
@@ -119,7 +121,7 @@ func (dsp *DistSQLPlanner) Exec(ctx context.Context, localPlanner interface{}, s
 		p.ExtendedEvalContext().Tracing,
 	)
 	dsp.PlanAndRun(
-		ctx, p, recv, true, /* distribute */
+		ctx, p, recv, distribute,
 	)
 	return nil
 }
