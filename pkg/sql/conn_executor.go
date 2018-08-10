@@ -1054,8 +1054,10 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			}
 			return err
 		}
-		ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
-			ex.machine.CurState(), pos, cmd)
+		if log.ExpensiveLogEnabled(ex.Ctx(), 2) || ex.eventLog != nil {
+			ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
+				ex.machine.CurState(), pos, cmd)
+		}
 
 		var ev fsm.Event
 		var payload fsm.EventPayload
@@ -1097,7 +1099,9 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				res = ex.clientComm.CreateErrorResult(pos)
 				break
 			}
-			log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
+			if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
+				log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
+			}
 			ex.curStmt = portal.Stmt.Statement
 
 			*pinfo = tree.PlaceholderInfo{
@@ -2005,7 +2009,9 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 // sessionEventf logs a message to the session event log (if any).
 func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
-	log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, format, args...)
+	if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
+		log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, format, args...)
+	}
 	if ex.eventLog != nil {
 		ex.eventLog.Printf(format, args...)
 	}
