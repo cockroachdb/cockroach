@@ -191,6 +191,12 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 				if forwardClockJumpEnabled {
 					// Forward jump check is enabled. Start the ticker
 					ticker = tickerFn(refreshPhysicalNowItvl)
+
+					// Fetch the clock once before we start enforcing forward
+					// jumps. Otherwise the gap between the previous call to
+					// Now() and the time of the first tick would look like a
+					// forward jump.
+					c.PhysicalNow()
 				}
 				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
 			case <-ticker.C:
