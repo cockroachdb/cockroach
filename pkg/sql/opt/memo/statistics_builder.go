@@ -448,11 +448,12 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// Update stats based on filter conditions.
 
 	filter := ev.Child(1)
-	equivGroups := sb.getEquivalencyGroups(ev, relProps, &filter.Logical().Scalar.FuncDeps)
+	filterFD := &filter.Logical().Scalar.FuncDeps
+	equivReps := filterFD.EquivReps()
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, equivGroups, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, equivReps, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -462,7 +463,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// Calculate selectivity
 	// ---------------------
 	s.Selectivity = sb.selectivityFromDistinctCounts(constrainedCols, ev, relProps)
-	s.Selectivity *= sb.selectivityFromEquivalencies(equivGroups, ev, relProps)
+	s.Selectivity *= sb.selectivityFromEquivalencies(equivReps, filterFD, ev, relProps)
 	s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 
 	// Calculate row count
@@ -599,11 +600,12 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 
 	leftProps := ev.Child(0).Logical().Relational
 	rightProps := ev.Child(1).Logical().Relational
-	equivGroups := sb.getEquivalencyGroups(ev, relProps, &on.Logical().Scalar.FuncDeps)
+	filterFD := &on.Logical().Scalar.FuncDeps
+	equivReps := filterFD.EquivReps()
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, equivGroups, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, equivReps, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -616,7 +618,7 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 	// Calculate selectivity
 	// ---------------------
 	s.Selectivity = sb.selectivityFromDistinctCounts(constrainedCols, ev, relProps)
-	s.Selectivity *= sb.selectivityFromEquivalencies(equivGroups, ev, relProps)
+	s.Selectivity *= sb.selectivityFromEquivalencies(equivReps, filterFD, ev, relProps)
 	s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
 
 	// Calculate row count
@@ -1294,7 +1296,7 @@ const (
 // See applyEquivalencies and selectivityFromEquivalencies for details.
 //
 func (sb *statisticsBuilder) applyFilter(
-	filter ExprView, equivGroups []opt.ColSet, ev ExprView, relProps *props.Relational,
+	filter ExprView, equivReps opt.ColSet, ev ExprView, relProps *props.Relational,
 ) (numUnappliedConstraints int, constrainedCols opt.ColSet) {
 	constraintSet := filter.Logical().Scalar.Constraints
 	tight := filter.Logical().Scalar.TightConstraints
@@ -1335,7 +1337,8 @@ func (sb *statisticsBuilder) applyFilter(
 		}
 	}
 
-	sb.applyEquivalencies(equivGroups, ev, relProps)
+	filterFD := &filter.Logical().Scalar.FuncDeps
+	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 	return numUnappliedConstraints, constrainedCols
 }
 
@@ -1490,11 +1493,12 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(
-	equivGroups []opt.ColSet, ev ExprView, relProps *props.Relational,
+	equivReps opt.ColSet, filterFD *props.FuncDepSet, ev ExprView, relProps *props.Relational,
 ) {
-	for _, equivGroup := range equivGroups {
+	equivReps.ForEach(func(i int) {
+		equivGroup := filterFD.ComputeEquivGroup(opt.ColumnID(i))
 		sb.updateDistinctCountsFromEquivalency(equivGroup, ev, relProps)
-	}
+	})
 }
 
 func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
@@ -1590,12 +1594,13 @@ func (sb *statisticsBuilder) selectivityFromDistinctCount(
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalencies(
-	equivGroups []opt.ColSet, ev ExprView, relProps *props.Relational,
+	equivReps opt.ColSet, filterFD *props.FuncDepSet, ev ExprView, relProps *props.Relational,
 ) (selectivity float64) {
 	selectivity = 1.0
-	for _, equivGroup := range equivGroups {
+	equivReps.ForEach(func(i int) {
+		equivGroup := filterFD.ComputeEquivGroup(opt.ColumnID(i))
 		selectivity *= sb.selectivityFromEquivalency(equivGroup, ev, relProps)
-	}
+	})
 	return selectivity
 }
 
@@ -1727,23 +1732,4 @@ func (sb *statisticsBuilder) isEqualityWithTwoVars(cond ExprView) bool {
 		}
 	}
 	return false
-}
-
-func (sb *statisticsBuilder) getEquivalencyGroups(
-	ev ExprView, relProps *props.Relational, filterFD *props.FuncDepSet,
-) []opt.ColSet {
-	cols := relProps.OutputCols
-	var seen opt.ColSet
-	var equivGroups []opt.ColSet
-	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
-		if seen.Contains(i) {
-			continue
-		}
-		equivGroup := filterFD.ComputeEquivClosure(util.MakeFastIntSet(i))
-		seen.UnionWith(equivGroup)
-		if equivGroup.Len() > 1 {
-			equivGroups = append(equivGroups, equivGroup)
-		}
-	}
-	return equivGroups
 }
