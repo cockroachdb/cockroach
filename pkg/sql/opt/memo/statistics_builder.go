@@ -897,11 +897,11 @@ func (sb *statisticsBuilder) buildValues(ev ExprView, relProps *props.Relational
 }
 
 func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
+	s := &ev.Logical().Relational.Stats
 	if ev.ChildCount() == 0 {
-		return nil
+		return sb.makeColStat(colSet, s)
 	}
 
-	s := &ev.Logical().Relational.Stats
 	colList := ev.Private().(opt.ColList)
 
 	// Determine distinct count from the number of distinct memo groups. Use a
