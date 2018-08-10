@@ -57,6 +57,31 @@ ALTER TABLE b INJECT STATISTICS '[
 ]'
 ----
 
+norm
+SELECT * FROM a WHERE true
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=4000]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+norm
+SELECT * FROM a WHERE false
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=4000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── false [type=bool]
+
 # Distinct values calculation with constraints.
 norm
 SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
@@ -140,6 +165,7 @@ SELECT * FROM a WHERE x > 5 AND x < 0
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -243,27 +269,32 @@ SELECT pk FROM tab0 WHERE
 ----
 project
  ├── columns: pk:1(int!null)
+ ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: (1)
  └── select
       ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:27(bool)
+      ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
       ├── key: (1)
       ├── fd: (1)-->(2,27)
       ├── project
       │    ├── columns: case:27(bool) tab0.pk:1(int!null) tab0.col0:2(int)
+      │    ├── cardinality: [0 - 0]
       │    ├── stats: [rows=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,27)
       │    ├── group-by
       │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:26(bool)
       │    │    ├── grouping columns: tab0.pk:1(int!null)
-      │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    ├── cardinality: [0 - 0]
+      │    │    ├── stats: [rows=0]
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,26)
       │    │    ├── right-join
       │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:19(int) case:24(bool) notnull:25(bool)
-      │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    ├── stats: [rows=0]
       │    │    │    ├── fd: (1)-->(2,24), (19)~~>(25)
       │    │    │    ├── project
       │    │    │    │    ├── columns: notnull:25(bool) tab0.col3:19(int)
@@ -278,23 +309,27 @@ project
       │    │    │    │              └── null [type=unknown]
       │    │    │    ├── select
       │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) case:24(bool)
-      │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    │    ├── stats: [rows=0]
       │    │    │    │    ├── key: (1)
       │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: case:24(bool) tab0.pk:1(int!null) tab0.col0:2(int)
-      │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    │    │    ├── stats: [rows=0]
       │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    ├── fd: (1)-->(2,24)
       │    │    │    │    │    ├── group-by
       │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) bool_or:23(bool)
       │    │    │    │    │    │    ├── grouping columns: tab0.pk:1(int!null)
-      │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    │    │    │    ├── stats: [rows=0]
       │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    ├── fd: (1)-->(2,23)
       │    │    │    │    │    │    ├── right-join
       │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int) tab0.col3:12(int) notnull:22(bool)
-      │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    │    │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    │    │    │    │    ├── stats: [rows=0]
       │    │    │    │    │    │    │    ├── fd: (1)-->(2), (12)~~>(22)
       │    │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    │    ├── columns: notnull:22(bool) tab0.col3:12(int)
@@ -309,12 +344,13 @@ project
       │    │    │    │    │    │    │    │              └── null [type=unknown]
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=0, distinct(1)=0]
+      │    │    │    │    │    │    │    │    ├── cardinality: [0 - 0]
+      │    │    │    │    │    │    │    │    ├── stats: [rows=0]
       │    │    │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    │    │    ├── fd: (1)-->(2)
       │    │    │    │    │    │    │    │    ├── scan tab0
       │    │    │    │    │    │    │    │    │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
-      │    │    │    │    │    │    │    │    │    ├── stats: [rows=1000, distinct(1)=1000]
+      │    │    │    │    │    │    │    │    │    ├── stats: [rows=1000]
       │    │    │    │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    │    │    │    └── fd: (1)-->(2)
       │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
@@ -582,8 +618,6 @@ ALTER TABLE customers INJECT STATISTICS '[
 # This series of tests demonstrates that the selectivity
 # contribution for a pair of (determinant, dependent) FDs is the
 # selectivity of the determinant.
-# After the join we expect cardinality 1111111,
-# then we expect selectivity 1/400 on the filter.
 # 1/2 join-subquery-selectivityFromReducedCols tests
 
 build
@@ -592,30 +626,30 @@ WHERE name='andy'
 ----
 select
  ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- ├── stats: [rows=2222.22222, distinct(2)=1]
+ ├── stats: [rows=2.31299908, distinct(2)=1]
  ├── fd: ()-->(2), (1)-->(3), (1)==(6), (6)==(1)
  ├── project
  │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- │    ├── stats: [rows=1111111.11, distinct(2)=500]
+ │    ├── stats: [rows=1000, distinct(2)=432.339125]
  │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
  │    └── select
  │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
- │         ├── stats: [rows=1111111.11, distinct(2)=500]
+ │         ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125, distinct(6)=700]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
  │         ├── inner-join
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    ├── stats: [rows=10000000, distinct(2)=500]
+ │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=700]
  │         │    ├── key: (1,8)
  │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
  │         │    ├── scan customers
  │         │    │    ├── columns: id:1(int!null) name:2(string) state:3(string)
- │         │    │    ├── stats: [rows=10000, distinct(2)=500]
+ │         │    │    ├── stats: [rows=10000, distinct(1)=10000, distinct(2)=500]
  │         │    │    ├── key: (1)
  │         │    │    └── fd: (1)-->(2,3)
  │         │    ├── scan order_history
  │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=700]
  │         │    │    ├── key: (8)
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── true [type=bool]
@@ -636,8 +670,6 @@ select
 # This series of tests demonstrates that the selectivity
 # contribution for a pair of (determinant, dependent) FDs is the
 # selectivity of the determinant.
-# After the join we expect cardinality 1111111,
-# then we expect selectivity 1/600 on the filter.
 # 2/2 join-subquery-selectivityFromReducedCols tests
 
 build
@@ -646,20 +678,20 @@ WHERE id = 1 AND name='andy'
 ----
 select
  ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- ├── stats: [rows=111.111111, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=1.42857143, distinct(1)=1, distinct(2)=1]
  ├── fd: ()-->(1-3,6), (1)==(6), (6)==(1)
  ├── project
  │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- │    ├── stats: [rows=1111111.11, distinct(1)=10000, distinct(2)=500]
+ │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125]
  │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
  │    └── select
  │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
- │         ├── stats: [rows=1111111.11, distinct(1)=10000, distinct(2)=500]
+ │         ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125, distinct(6)=700]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
  │         ├── inner-join
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500]
+ │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=700]
  │         │    ├── key: (1,8)
  │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
  │         │    ├── scan customers
@@ -669,7 +701,7 @@ select
  │         │    │    └── fd: (1)-->(2,3)
  │         │    ├── scan order_history
  │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    │    ├── stats: [rows=1000]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=700]
  │         │    │    ├── key: (8)
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── true [type=bool]
@@ -685,3 +717,90 @@ select
            └── eq [type=bool, outer=(2), constraints=(/2: [/'andy' - /'andy']; tight)]
                 ├── variable: customers.name [type=string, outer=(2)]
                 └── const: 'andy' [type=string]
+
+# Test equality conditions where all have distinct count 1.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND item_id = customer_id AND customer_id = 5
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
+ ├── stats: [rows=0.00204081633, distinct(1)=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── fd: ()-->(1-3), (1)==(2,3), (2)==(1,3), (3)==(1,2)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700, distinct(3)=700]
+ └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/5 - /5]), fd=()-->(1-3), (1)==(2,3), (2)==(1,3), (3)==(1,2)]
+      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── variable: order_history.order_id [type=int, outer=(1)]
+      ├── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── variable: order_history.customer_id [type=int, outer=(3)]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+           ├── variable: order_history.customer_id [type=int, outer=(3)]
+           └── const: 5 [type=int]
+
+# Test equality condition with another condition on one of the attributes.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND item_id < 5 AND item_id > 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
+ ├── stats: [rows=0.158730159, distinct(1)=0.158730159, distinct(2)=0.158730159]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: [/1 - /4]), fd=(1)==(2), (2)==(1)]
+      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── variable: order_history.order_id [type=int, outer=(1)]
+      ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+           ├── variable: order_history.item_id [type=int, outer=(2)]
+           └── const: 0 [type=int]
+
+# Test equality condition with another condition on a different attribute.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND customer_id < 5 AND customer_id > 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
+ ├── stats: [rows=0.158730159, distinct(1)=0.158730159, distinct(2)=0.158730159]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/1 - /4]), fd=(1)==(2), (2)==(1)]
+      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── variable: order_history.order_id [type=int, outer=(1)]
+      ├── lt [type=bool, outer=(3), constraints=(/3: (/NULL - /4]; tight)]
+      │    ├── variable: order_history.customer_id [type=int, outer=(3)]
+      │    └── const: 5 [type=int]
+      └── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+           ├── variable: order_history.customer_id [type=int, outer=(3)]
+           └── const: 0 [type=int]
+
+# Test equality condition with another filter condition without a constraint.
+norm
+SELECT * FROM order_history WHERE item_id = order_id AND customer_id % 2 = 0
+----
+select
+ ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
+ ├── stats: [rows=0.476190476, distinct(1)=0.476190476, distinct(2)=0.476190476]
+ ├── fd: (1)==(2), (2)==(1)
+ ├── scan order_history
+ │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── variable: order_history.item_id [type=int, outer=(2)]
+      │    └── variable: order_history.order_id [type=int, outer=(1)]
+      └── eq [type=bool, outer=(3)]
+           ├── mod [type=int, outer=(3)]
+           │    ├── variable: order_history.customer_id [type=int, outer=(3)]
+           │    └── const: 2 [type=int]
+           └── const: 0 [type=int]

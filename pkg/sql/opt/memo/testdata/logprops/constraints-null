@@ -15,7 +15,8 @@ SELECT * FROM t WHERE a = NULL
 scan t
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── constraint: /4: contradiction
- ├── stats: [rows=333.333333]
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
  ├── prune: (1-3)
  └── interesting orderings: ()
 
@@ -25,7 +26,8 @@ SELECT * FROM t WHERE a < NULL
 scan t
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── constraint: /4: contradiction
- ├── stats: [rows=333.333333]
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
  ├── prune: (1-3)
  └── interesting orderings: ()
 
@@ -71,13 +73,13 @@ SELECT * FROM t WHERE b IS NULL AND c IS NULL
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
- ├── stats: [rows=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── stats: [rows=0.714285714, distinct(2)=0.714285714, distinct(3)=0.714285714]
  ├── fd: ()-->(2,3)
  ├── prune: (1)
  ├── interesting orderings: ()
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
+ │    ├── stats: [rows=1000, distinct(2)=2, distinct(3)=700]
  │    ├── prune: (1-3)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight), fd=()-->(2,3)]
@@ -187,12 +189,12 @@ SELECT * FROM xy WHERE x = y
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=111.111111]
+ ├── stats: [rows=1.42857143, distinct(1)=1.42857143, distinct(2)=1.42857143]
  ├── fd: (1)==(2), (2)==(1)
  ├── interesting orderings: ()
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
  │    ├── prune: (1,2)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]

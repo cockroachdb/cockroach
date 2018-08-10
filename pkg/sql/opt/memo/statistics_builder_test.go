@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -35,74 +36,108 @@ import (
 func TestGetStatsFromConstraint(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	// Test that applyConstraintSet correctly updates the statistics for integer
-	// columns 1, 2, and 3 from constraint set cs.
-	statsFunc123 := func(cs *constraint.Set, expectedStats string, expectedSelectivity float64) {
-		t.Helper()
-
-		// Single column stats.
-		singleColStats := make(map[opt.ColumnID]*props.ColumnStatistic, 3)
-		cols := util.MakeFastIntSet(1)
-		singleColStats[opt.ColumnID(1)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
-		cols = util.MakeFastIntSet(2)
-		singleColStats[opt.ColumnID(2)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
-		cols = util.MakeFastIntSet(3)
-		singleColStats[opt.ColumnID(3)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 500}
-
-		// Multi column stats.
-		multiColStats := make(map[string]*props.ColumnStatistic, 1)
-		cols = util.MakeFastIntSet(1, 2, 3)
-		key := keyBuffer{}
-		key.writeColSet(cols)
-		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 9900}
-
-		inputStatsBuilder := statisticsBuilder{props: &props.Relational{FuncDeps: props.FuncDepSet{}}, s: &props.Statistics{
-			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
-		}}
-		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
-		if isContradiction {
-			sb.s.Selectivity = 0
-		}
-		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
-		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
-		sb.applySelectivity(inputStatsBuilder.s.RowCount)
-		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
+	catalog := testcat.New()
+	if _, err := catalog.ExecuteDDL(
+		"CREATE TABLE sel (a INT, b INT, c INT, d STRING, e STRING)",
+	); err != nil {
+		t.Fatal(err)
 	}
 
-	// Test that applyConstraintSet correctly updates the statistics for string
-	// columns 4 and 5 from constraint set cs.
-	statsFunc45 := func(cs *constraint.Set, expectedStats string, expectedSelectivity float64) {
+	if _, err := catalog.ExecuteDDL(
+		`ALTER TABLE sel INJECT STATISTICS '[
+		{
+			"columns": ["a"],
+			"created_at": "2018-01-01 1:00:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 500
+		},
+		{
+			"columns": ["b"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 500
+		},
+		{
+			"columns": ["c"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 500
+		},
+		{
+			"columns": ["a","b","c"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 9900
+		},
+		{
+			"columns": ["d"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 10
+		},
+		{
+			"columns": ["e"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 10
+		},
+		{
+			"columns": ["d","e"],
+			"created_at": "2018-01-01 1:30:00.00000+00:00",
+			"row_count": 10000000000,
+			"distinct_count": 100
+		}
+	]'`); err != nil {
+		t.Fatal(err)
+	}
+
+	mem := New()
+	tab := catalog.Table("sel")
+	tabID := mem.metadata.AddTableWithName(tab, tab.TabName().String())
+
+	// Test that applyConstraintSet correctly updates the statistics from
+	// constraint set cs, and selectivity is calculated correctly.
+	statsFunc := func(cs *constraint.Set, expectedStats string, expectedSelectivity float64) {
 		t.Helper()
 
-		// Single column stats.
-		singleColStats := make(map[opt.ColumnID]*props.ColumnStatistic, 2)
-		cols := util.MakeFastIntSet(4)
-		singleColStats[opt.ColumnID(4)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 10}
-		cols = util.MakeFastIntSet(5)
-		singleColStats[opt.ColumnID(5)] = &props.ColumnStatistic{Cols: cols, DistinctCount: 10}
-
-		// Multi column stats.
-		multiColStats := make(map[string]*props.ColumnStatistic, 1)
-		cols = util.MakeFastIntSet(4, 5)
-		key := keyBuffer{}
-		key.writeColSet(cols)
-		multiColStats[key.String()] = &props.ColumnStatistic{Cols: cols, DistinctCount: 100}
-
-		inputStatsBuilder := statisticsBuilder{props: &props.Relational{FuncDeps: props.FuncDepSet{}}, s: &props.Statistics{
-			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
-		}}
-		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &props.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
-		numUnappliedConstraints, isContradiction := sb.applyConstraintSet(cs, &inputStatsBuilder)
-		if isContradiction {
-			sb.s.Selectivity = 0
+		var cols opt.ColSet
+		for i := 0; i < tab.ColumnCount(); i++ {
+			cols.Add(int(tabID.ColumnID(i)))
 		}
-		sb.s.Selectivity *= sb.selectivityFromDistinctCounts(&inputStatsBuilder)
-		sb.s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
-		sb.applySelectivity(inputStatsBuilder.s.RowCount)
-		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
+
+		sb := &statisticsBuilder{}
+		sb.init(&evalCtx, &keyBuffer{})
+
+		// Make the scan.
+		def := &ScanOpDef{Table: tabID, Cols: cols}
+		scan := MakeScanExpr(mem.InternScanOpDef(def))
+		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan))
+
+		// Make the filter.
+		filter := MakeTrueExpr()
+		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter))
+
+		// Make the select.
+		sel := MakeSelectExpr(scanGroup, filterGroup)
+		selGroup := mem.newGroup(Expr(sel))
+		ev := MakeNormExprView(mem, selGroup.id)
+		relProps := &props.Relational{Cardinality: props.AnyCardinality}
+		s := &relProps.Stats
+		s.Init(relProps)
+
+		// Calculate distinct counts.
+		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)
+
+		// Calculate selectivity.
+		s.Selectivity *= sb.selectivityFromDistinctCounts(cols, ev, relProps)
+		s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
+
+		// Calculate row count.
+		inputRows := mem.GroupProperties(scanGroup).Relational.Stats.RowCount
+		sb.applySelectivity(inputRows, s)
+
+		// Check if the statistics match the expected value.
+		testStats(t, s, expectedStats, expectedSelectivity)
 	}
 
 	c1 := constraint.ParseConstraint(&evalCtx, "/1: [/2 - /5] [/8 - /10]")
@@ -125,77 +160,77 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	keyCtx45 := constraint.MakeKeyContext(&columns45, &evalCtx)
 
 	cs1 := constraint.SingleConstraint(&c1)
-	statsFunc123(
+	statsFunc(
 		cs1,
 		"[rows=140000000, distinct(1)=7]",
 		7.0/500,
 	)
 
 	cs2 := constraint.SingleConstraint(&c2)
-	statsFunc123(
+	statsFunc(
 		cs2,
 		"[rows=3.33333333e+09]",
 		1.0/3,
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
-	statsFunc123(
+	statsFunc(
 		cs3,
 		"[rows=20000000, distinct(3)=1]",
 		1.0/500,
 	)
 
 	cs12 := constraint.SingleConstraint(&c12)
-	statsFunc123(
+	statsFunc(
 		cs12,
 		"[rows=20000000, distinct(1)=1]",
 		1.0/500,
 	)
 
 	cs123 := constraint.SingleConstraint(&c123)
-	statsFunc123(
+	statsFunc(
 		cs123,
 		"[rows=400, distinct(1)=1, distinct(2)=1, distinct(3)=5]",
 		5.0/125000000,
 	)
 
 	cs32 := constraint.SingleConstraint(&c32)
-	statsFunc123(
+	statsFunc(
 		cs32,
 		"[rows=80000, distinct(2)=2, distinct(3)=1]",
 		2.0/250000,
 	)
 
 	cs321 := constraint.SingleConstraint(&c321)
-	statsFunc123(
+	statsFunc(
 		cs321,
 		"[rows=160000, distinct(2)=2, distinct(3)=2]",
 		4.0/250000,
 	)
 
 	cs312 := constraint.SingleConstraint(&c312)
-	statsFunc123(
+	statsFunc(
 		cs312,
 		"[rows=2240, distinct(1)=2, distinct(2)=7, distinct(3)=2]",
 		28.0/125000000,
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
-	statsFunc123(
+	statsFunc(
 		cs,
 		"[rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
 		1.0/125000000,
 	)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
-	statsFunc123(
+	statsFunc(
 		cs,
 		"[rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
 		1.0/125000000,
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
-	statsFunc45(
+	statsFunc(
 		cs45,
 		"[rows=1e+09, distinct(4)=1]",
 		1.0/10,
@@ -230,20 +265,16 @@ func TestTranslateColSet(t *testing.T) {
 }
 
 func testStats(
-	t *testing.T,
-	sb *statisticsBuilder,
-	selectivity float64,
-	expectedStats string,
-	expectedSelectivity float64,
+	t *testing.T, s *props.Statistics, expectedStats string, expectedSelectivity float64,
 ) {
 	t.Helper()
 
-	actual := sb.s.String()
+	actual := s.String()
 	if actual != expectedStats {
 		t.Fatalf("\nexpected: %s\nactual  : %s", expectedStats, actual)
 	}
 
-	if selectivity != expectedSelectivity {
-		t.Fatalf("\nexpected: %f\nactual  : %f", expectedSelectivity, selectivity)
+	if s.Selectivity != expectedSelectivity {
+		t.Fatalf("\nexpected: %f\nactual  : %f", expectedSelectivity, s.Selectivity)
 	}
 }

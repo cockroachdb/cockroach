@@ -158,18 +158,20 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Cardinality
 	// -----------
-	// Don't bother setting cardinality from scan's HardLimit or Constraint,
-	// since those are created by exploration patterns and won't ever be the
-	// basis for the logical props on a newly created memo group.
+	// Don't bother setting cardinality from scan's HardLimit, since that is
+	// created by exploration patterns and won't ever be the basis for the
+	// logical props on a newly created memo group.
 	relational.Cardinality = props.AnyCardinality
-	if relational.FuncDeps.HasMax1Row() {
+	if def.Constraint != nil && def.Constraint.IsContradiction() {
+		relational.Cardinality = props.ZeroCardinality
+	} else if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
 	}
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildScan(def)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildScan(ev, relational)
 
 	return logical
 }
@@ -204,8 +206,8 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildVirtualScan(def)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildVirtualScan(ev, relational)
 
 	return logical
 }
@@ -216,6 +218,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	inputProps := ev.childGroup(0).logical.Relational
 	filterProps := ev.childGroup(1).logical.Scalar
+	filter := ev.Child(1)
 
 	// Output Columns
 	// --------------
@@ -257,14 +260,16 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	// -----------
 	// Select filter can filter any or all rows.
 	relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
-	if relational.FuncDeps.HasMax1Row() {
+	if filter.Operator() == opt.FalseOp || filterProps.Constraints == constraint.Contradiction {
+		relational.Cardinality = props.ZeroCardinality
+	} else if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
 	}
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildSelect(ev.Child(1), &inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildSelect(ev, relational)
 
 	return logical
 }
@@ -353,8 +358,8 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildProject(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildProject(ev, relational)
 
 	return logical
 }
@@ -514,8 +519,8 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildJoin(ev, relational)
 
 	return logical
 }
@@ -559,8 +564,8 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildIndexJoin(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildIndexJoin(ev, relational)
 
 	return logical
 }
@@ -622,8 +627,8 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildGroupBy(&inputProps.Stats, groupingColSet)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildGroupBy(ev, relational)
 
 	return logical
 }
@@ -680,8 +685,8 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildSetOp(ev, relational)
 
 	return logical
 }
@@ -721,8 +726,8 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildValues()
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildValues(ev, relational)
 
 	return logical
 }
@@ -852,8 +857,8 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildLimit(limit, &inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildLimit(ev, relational)
 
 	return logical
 }
@@ -907,8 +912,8 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildOffset(offset, &inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildOffset(ev, relational)
 
 	return logical
 }
@@ -946,8 +951,8 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildMax1Row(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildMax1Row(ev, relational)
 
 	return logical
 }
@@ -995,8 +1000,8 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildRowNumber(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildRowNumber(ev, relational)
 
 	return logical
 }
@@ -1032,8 +1037,8 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &relational.Stats, relational, ev, &keyBuffer{})
-	b.sb.buildZip()
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.buildZip(ev, relational)
 
 	return logical
 }
@@ -1175,6 +1180,18 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	// Other join types can return up to cross product of rows.
 	card = left.Product(right)
 
+	// Apply filter to cardinality.
+	filter := ev.Child(2)
+	if filter.Operator() != opt.TrueOp {
+		contradiction := filter.Operator() == opt.FalseOp ||
+			filter.Logical().Scalar.Constraints == constraint.Contradiction
+		if contradiction {
+			card = props.ZeroCardinality
+		} else {
+			card = card.AsLowAs(0)
+		}
+	}
+
 	// Outer joins return minimum number of rows, depending on type.
 	switch ev.Operator() {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
@@ -1184,12 +1201,12 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
 		card = card.AtLeast(right.Min)
 	}
-
-	// Apply filter to cardinality.
-	if ev.Child(2).Operator() == opt.TrueOp {
-		return card
+	switch ev.Operator() {
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AsHighAs(left.Min + right.Min)
 	}
-	return card.AsLowAs(0)
+
+	return card
 }
 
 func (b *logicalPropsBuilder) makeSetCardinality(

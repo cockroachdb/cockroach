@@ -41,21 +41,21 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000, distinct(1)=700, distinct(5)=700]
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── prune: (2-4,6,7)
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
@@ -114,21 +114,21 @@ SELECT * FROM xysd WHERE (SELECT v FROM uv WHERE (SELECT n FROM mn WHERE n=v)=x)
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=1]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:6(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=1, distinct(1)=1, distinct(6)=1]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
       ├── prune: (2-4)
       ├── interesting orderings: (+1) (-3,+4,+1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=1000]
+      │    ├── stats: [rows=1000, distinct(1)=1000]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    ├── prune: (1-4)
@@ -137,18 +137,18 @@ project
       │    ├── columns: v:6(int!null)
       │    ├── outer: (1)
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=1]
+      │    ├── stats: [rows=1, distinct(6)=1]
       │    ├── key: ()
       │    ├── fd: ()-->(6)
       │    └── project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1)
-      │         ├── stats: [rows=100]
+      │         ├── stats: [rows=1000]
       │         ├── prune: (6)
       │         └── inner-join-apply
       │              ├── columns: v:6(int!null) n:9(int!null)
       │              ├── outer: (1)
-      │              ├── stats: [rows=100]
+      │              ├── stats: [rows=1000, distinct(1)=1, distinct(9)=1]
       │              ├── fd: ()-->(9)
       │              ├── interesting orderings: ()
       │              ├── scan uv
@@ -160,13 +160,13 @@ project
       │              │    ├── columns: n:9(int!null)
       │              │    ├── outer: (6)
       │              │    ├── cardinality: [0 - 1]
-      │              │    ├── stats: [rows=1]
+      │              │    ├── stats: [rows=1, distinct(9)=1]
       │              │    ├── key: ()
       │              │    ├── fd: ()-->(9)
       │              │    └── select
       │              │         ├── columns: n:9(int!null)
       │              │         ├── outer: (6)
-      │              │         ├── stats: [rows=111.111111]
+      │              │         ├── stats: [rows=1, distinct(6)=1, distinct(9)=1]
       │              │         ├── fd: ()-->(9)
       │              │         ├── interesting orderings: (+9)
       │              │         ├── scan mn@secondary
@@ -196,21 +196,21 @@ SELECT * FROM xysd WHERE (SELECT v FROM uv WHERE (SELECT m FROM mn WHERE m=y)=x)
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=1]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── inner-join-apply
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) v:6(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=1, distinct(1)=1, distinct(6)=1]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(6), (6)==(1)
       ├── prune: (3,4)
       ├── interesting orderings: (+1) (-3,+4,+1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=1000]
+      │    ├── stats: [rows=1000, distinct(1)=1000]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    ├── prune: (1-4)
@@ -219,18 +219,18 @@ project
       │    ├── columns: v:6(int!null)
       │    ├── outer: (1,2)
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=1]
+      │    ├── stats: [rows=1, distinct(6)=1]
       │    ├── key: ()
       │    ├── fd: ()-->(6)
       │    └── project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1,2)
-      │         ├── stats: [rows=100000]
+      │         ├── stats: [rows=1000]
       │         ├── prune: (6)
       │         └── inner-join
       │              ├── columns: v:6(int!null) m:8(int!null)
       │              ├── outer: (1,2)
-      │              ├── stats: [rows=100000]
+      │              ├── stats: [rows=1000, distinct(1)=1, distinct(2)=1, distinct(8)=1]
       │              ├── fd: ()-->(8)
       │              ├── prune: (6)
       │              ├── interesting orderings: () (+8)
@@ -241,7 +241,7 @@ project
       │              │    └── interesting orderings: ()
       │              ├── scan mn
       │              │    ├── columns: m:8(int!null)
-      │              │    ├── stats: [rows=1000]
+      │              │    ├── stats: [rows=1000, distinct(8)=1000]
       │              │    ├── key: (8)
       │              │    ├── prune: (8)
       │              │    └── interesting orderings: (+8)
@@ -263,7 +263,7 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000, distinct(5)=700]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── prune: (2-4,6,7)
@@ -271,14 +271,14 @@ left-join
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
@@ -331,12 +331,12 @@ project
       │    │    └── select
       │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=111.111111]
+      │    │         ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
       │    │         ├── fd: ()-->(5)
       │    │         ├── interesting orderings: ()
       │    │         ├── scan uv
       │    │         │    ├── columns: u:5(int)
-      │    │         │    ├── stats: [rows=1000]
+      │    │         │    ├── stats: [rows=1000, distinct(5)=700]
       │    │         │    ├── prune: (5)
       │    │         │    └── interesting orderings: ()
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -355,7 +355,7 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
 right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000, distinct(1)=700]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── prune: (2-4,6,7)
@@ -363,14 +363,14 @@ right-join
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
@@ -430,18 +430,18 @@ right-join
  │         │    │    └── offset
  │         │    │         ├── columns: uv.u:8(int!null)
  │         │    │         ├── outer: (1)
- │         │    │         ├── stats: [rows=110.111111]
+ │         │    │         ├── stats: [rows=0.428571429]
  │         │    │         ├── fd: ()-->(8)
  │         │    │         ├── interesting orderings: ()
  │         │    │         ├── select
  │         │    │         │    ├── columns: uv.u:8(int!null)
  │         │    │         │    ├── outer: (1)
- │         │    │         │    ├── stats: [rows=111.111111]
+ │         │    │         │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(8)=1]
  │         │    │         │    ├── fd: ()-->(8)
  │         │    │         │    ├── interesting orderings: ()
  │         │    │         │    ├── scan uv
  │         │    │         │    │    ├── columns: uv.u:8(int)
- │         │    │         │    │    ├── stats: [rows=1000]
+ │         │    │         │    │    ├── stats: [rows=1000, distinct(8)=700]
  │         │    │         │    │    ├── prune: (8)
  │         │    │         │    │    └── interesting orderings: ()
  │         │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
@@ -467,7 +467,7 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── prune: (2-4,6,7)
@@ -475,14 +475,14 @@ full-join
  ├── interesting orderings: (+1) (-3,+4,+1) (+7)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── prune: (5-7)
@@ -498,13 +498,13 @@ SELECT * FROM xysd FULL JOIN uv ON (SELECT u FROM uv WHERE u=x OFFSET 1) IS NULL
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-6)
  ├── interesting orderings: (+1) (-3,+4,+1)
  └── full-join-apply
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
-      ├── stats: [rows=100000]
+      ├── stats: [rows=1000000]
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (2-6)
       ├── reject-nulls: (1-6,8)
@@ -519,7 +519,7 @@ project
       ├── left-join
       │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
       │    ├── outer: (1)
-      │    ├── stats: [rows=1000]
+      │    ├── stats: [rows=1000, distinct(8)=1]
       │    ├── fd: ()~~>(8)
       │    ├── prune: (5,6)
       │    ├── reject-nulls: (8)
@@ -533,24 +533,24 @@ project
       │    │    ├── columns: uv.u:8(int!null)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
-      │    │    ├── stats: [rows=1]
+      │    │    ├── stats: [rows=1, distinct(8)=1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(8)
       │    │    └── offset
       │    │         ├── columns: uv.u:8(int!null)
       │    │         ├── outer: (1)
-      │    │         ├── stats: [rows=110.111111]
+      │    │         ├── stats: [rows=0.428571429]
       │    │         ├── fd: ()-->(8)
       │    │         ├── interesting orderings: ()
       │    │         ├── select
       │    │         │    ├── columns: uv.u:8(int!null)
       │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=111.111111]
+      │    │         │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(8)=1]
       │    │         │    ├── fd: ()-->(8)
       │    │         │    ├── interesting orderings: ()
       │    │         │    ├── scan uv
       │    │         │    │    ├── columns: uv.u:8(int)
-      │    │         │    │    ├── stats: [rows=1000]
+      │    │         │    │    ├── stats: [rows=1000, distinct(8)=700]
       │    │         │    │    ├── prune: (8)
       │    │         │    │    └── interesting orderings: ()
       │    │         │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
@@ -570,7 +570,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 ----
 semi-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -584,7 +584,7 @@ semi-join
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── prune: (5,6)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -598,7 +598,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111.111]
+ ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -613,20 +613,20 @@ semi-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110.111111]
+ │    ├── stats: [rows=0.428571429]
  │    ├── fd: ()-->(6)
  │    ├── prune: (5)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(6)=1]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(6)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -642,7 +642,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE EXISTS(SELECT * FROM mn W
 ----
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100000000]
+ ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -657,7 +657,7 @@ semi-join-apply
  ├── semi-join
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=100000]
+ │    ├── stats: [rows=1000]
  │    ├── fd: ()-->(6)
  │    ├── prune: (5)
  │    ├── interesting orderings: ()
@@ -668,7 +668,7 @@ semi-join-apply
  │    │    └── interesting orderings: ()
  │    ├── scan mn
  │    │    ├── columns: m:8(int!null) n:9(int)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(8)=1000]
  │    │    ├── key: (8)
  │    │    ├── fd: (8)-->(9), (9)~~>(8)
  │    │    ├── prune: (8,9)
@@ -688,7 +688,7 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE x=u)
 ----
 anti-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -702,7 +702,7 @@ anti-join
  │    └── interesting orderings: (+1) (-3,+4,+1)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=700]
  │    ├── prune: (5,6)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -716,7 +716,7 @@ SELECT * FROM xysd WHERE NOT EXISTS(SELECT * FROM uv WHERE v=x OFFSET 1)
 ----
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=110111.111]
+ ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -731,20 +731,20 @@ anti-join-apply
  ├── offset
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
- │    ├── stats: [rows=110.111111]
+ │    ├── stats: [rows=0.428571429]
  │    ├── fd: ()-->(6)
  │    ├── prune: (5)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(6)=1]
  │    │    ├── fd: ()-->(6)
  │    │    ├── prune: (5)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(6)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -838,7 +838,7 @@ select
                 ├── columns: x:5(int) y:6(int)
                 ├── outer: (1-3)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=0.1]
+                ├── stats: [rows=0.333333333]
                 ├── key: ()
                 ├── fd: ()-->(5,6)
                 ├── prune: (6)
@@ -885,7 +885,7 @@ SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHER
 semi-join
  ├── columns: cnt:5(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1000]
+ ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── select
@@ -912,7 +912,7 @@ semi-join
  │              └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:6(int) v:7(int!null)
- │    ├── stats: [rows=1000, distinct(5)=700]
+ │    ├── stats: [rows=1000]
  │    ├── prune: (6,7)
  │    └── interesting orderings: ()
  └── true [type=bool]
@@ -924,7 +924,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE EXISTS(SELECT * FROM uv WHERE 
 semi-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
- ├── stats: [rows=50]
+ ├── stats: [rows=10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -941,20 +941,20 @@ semi-join-apply
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5]
+ │    ├── stats: [rows=1.42857143]
  │    ├── fd: ()-->(5)
  │    ├── prune: (6)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(5)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -971,7 +971,7 @@ SELECT * FROM (SELECT * FROM (VALUES (1))) WHERE NOT EXISTS(SELECT * FROM uv WHE
 anti-join
  ├── columns: column1:1(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=100]
+ ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1)
  ├── values
@@ -985,7 +985,7 @@ anti-join
  │         └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:2(int) v:3(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(2)=700]
  │    ├── prune: (2,3)
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
@@ -1000,7 +1000,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE NOT EXISTS(SELECT * FROM uv WH
 anti-join-apply
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
- ├── stats: [rows=50]
+ ├── stats: [rows=10]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (2-4)
@@ -1017,20 +1017,20 @@ anti-join-apply
  │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5]
+ │    ├── stats: [rows=1.42857143]
  │    ├── fd: ()-->(5)
  │    ├── prune: (6)
  │    ├── interesting orderings: ()
  │    ├── select
  │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=111.111111]
+ │    │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(5)=1]
  │    │    ├── fd: ()-->(5)
  │    │    ├── prune: (6)
  │    │    ├── interesting orderings: ()
  │    │    ├── scan uv
  │    │    │    ├── columns: u:5(int) v:6(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(5)=700]
  │    │    │    ├── prune: (5,6)
  │    │    │    └── interesting orderings: ()
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -1047,7 +1047,7 @@ SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
 inner-join
  ├── columns: column1:1(int) u:2(int) v:3(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4]
+ ├── stats: [rows=1.33333333]
  ├── prune: (1-3)
  ├── values
  │    ├── columns: column1:1(int)
@@ -1084,8 +1084,8 @@ SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON Tru
 ----
 left-join
  ├── columns: column1:1(int) u:2(int) v:3(int)
- ├── cardinality: [0 - 6]
- ├── stats: [rows=0.6]
+ ├── cardinality: [3 - 6]
+ ├── stats: [rows=3]
  ├── prune: (1-3)
  ├── reject-nulls: (2,3)
  ├── values
@@ -1125,8 +1125,8 @@ SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON Tr
 ----
 right-join
  ├── columns: u:1(int) v:2(int) column1:4(int)
- ├── cardinality: [0 - 6]
- ├── stats: [rows=0.6]
+ ├── cardinality: [3 - 6]
+ ├── stats: [rows=3]
  ├── prune: (1,2,4)
  ├── reject-nulls: (1,2)
  ├── limit
@@ -1166,8 +1166,8 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON T
 ----
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
- ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4]
+ ├── cardinality: [2 - 4]
+ ├── stats: [rows=2.66666667]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
  ├── values
@@ -1197,8 +1197,8 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a
 ----
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
- ├── cardinality: [0 - 4]
- ├── stats: [rows=0.4]
+ ├── cardinality: [2 - 4]
+ ├── stats: [rows=4]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
  ├── values
@@ -1228,7 +1228,8 @@ SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
 ----
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
- ├── stats: [rows=200]
+ ├── cardinality: [2 - ]
+ ├── stats: [rows=1000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-5)
  ├── reject-nulls: (1-5)
@@ -1259,7 +1260,7 @@ SELECT * FROM (SELECT * FROM xysd LIMIT 1) FULL JOIN (SELECT * FROM xysd LIMIT 1
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.1]
+ ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── prune: (1-8)
@@ -1306,7 +1307,7 @@ SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT N
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
- ├── stats: [rows=70000]
+ ├── stats: [rows=233333.333]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
  ├── prune: (1-4,8)
@@ -1351,7 +1352,7 @@ SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
- ├── stats: [rows=30777.1544]
+ ├── stats: [rows=102590.515]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
  ├── prune: (1-4,8)
@@ -1405,7 +1406,7 @@ SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) RIGHT JOIN xysd ON u IS NOT 
 ----
 right-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
- ├── stats: [rows=70000]
+ ├── stats: [rows=233333.333]
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
  ├── prune: (4-8)
@@ -1450,7 +1451,7 @@ SELECT * FROM (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) RIGHT JO
 ----
 right-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
- ├── stats: [rows=30777.1544]
+ ├── stats: [rows=102590.515]
  ├── key: (1,5)
  ├── fd: (1)-->(4), (5)-->(6-8), (7,8)~~>(5,6)
  ├── prune: (4-8)
@@ -1504,7 +1505,7 @@ SELECT * FROM xysd FULL JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT N
 ----
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) sum:8(decimal)
- ├── stats: [rows=70000]
+ ├── stats: [rows=233333.333]
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
  ├── prune: (1-4,8)
@@ -1549,7 +1550,7 @@ SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) FULL JOIN xysd ON u IS NOT N
 ----
 full-join
  ├── columns: u:1(int) sum:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
- ├── stats: [rows=70000]
+ ├── stats: [rows=233333.333]
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
  ├── prune: (4-8)

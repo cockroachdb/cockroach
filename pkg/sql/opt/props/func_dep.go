@@ -1122,6 +1122,28 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	f.ensureKeyClosure(allCols)
 }
 
+// EquivReps returns one "representative" column from each equivalency group in
+// the FD set. ComputeEquivGroup can be called to obtain the remaining columns
+// from each equivalency group.
+func (f *FuncDepSet) EquivReps() opt.ColSet {
+	var reps opt.ColSet
+
+	// Equivalence closures are already maintained for every column.
+	for i := 0; i < len(f.deps); i++ {
+		fd := &f.deps[i]
+		if fd.equiv && !fd.to.Intersects(reps) {
+			reps.UnionWith(fd.from)
+		}
+	}
+	return reps
+}
+
+// ComputeEquivGroup returns the group of columns that are equivalent to the
+// given column. See ComputeEquivClosure for more details.
+func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
+	return f.ComputeEquivClosure(util.MakeFastIntSet(int(rep)))
+}
+
 // ensureKeyClosure checks whether the closure for this FD set's key (if there
 // is one) includes the given columns. If not, then it adds a strict dependency
 // so that the key determines the columns.

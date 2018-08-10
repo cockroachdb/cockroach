@@ -92,6 +92,7 @@ SELECT * FROM a WHERE False
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -115,6 +116,7 @@ SELECT * FROM (SELECT * FROM a WHERE False) WHERE s='foo'
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -124,6 +126,7 @@ SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -133,6 +136,7 @@ SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
+ ├── cardinality: [0 - 0]
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
@@ -751,6 +755,7 @@ SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── cardinality: [0 - 0]
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
