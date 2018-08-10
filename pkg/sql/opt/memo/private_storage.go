@@ -78,6 +78,12 @@ func (ps *privateStorage) init() {
 	ps.privates = make([]interface{}, 1)
 }
 
+func (ps *privateStorage) reset() {
+	ps.privatesMap = make(map[privateKey]PrivateID)
+	ps.privates = ps.privates[:1]
+	ps.privates[0] = nil
+}
+
 // lookup returns a private value previously interned by privateStorage.
 func (ps *privateStorage) lookup(id PrivateID) interface{} {
 	return ps.privates[id]

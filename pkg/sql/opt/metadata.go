@@ -158,6 +158,11 @@ func NewMetadata() *Metadata {
 	return &Metadata{}
 }
 
+func (md *Metadata) Reset() {
+	md.cols = md.cols[:0]
+	md.tables = md.tables[:0]
+}
+
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {

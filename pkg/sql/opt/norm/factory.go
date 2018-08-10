@@ -113,6 +113,12 @@ func NewFactory(evalCtx *tree.EvalContext) *Factory {
 	return f
 }
 
+func (f *Factory) Reset(evalCtx *tree.EvalContext) {
+	f.mem.Reset()
+	f.evalCtx = evalCtx
+	f.ruleCycles = make(map[memo.Fingerprint]bool)
+}
+
 // DisableOptimizations disables all transformation rules. The unaltered input
 // expression tree becomes the output expression tree (because no transforms
 // are applied).
