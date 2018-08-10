@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -43,20 +45,28 @@ func BenchmarkFlowSetup(b *testing.B) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		planner, cleanup := sql.NewInternalPlanner(
-			"test",
-			client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
-			security.RootUser,
-			&sql.MemoryMetrics{},
-			&execCfg,
-		)
-		defer cleanup()
-		for pb.Next() {
-			if err := dsp.Exec(context.Background(), planner, "SELECT * FROM b.test"); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
+	for _, distribute := range []bool{true, false} {
+		b.Run(fmt.Sprintf("distribute=%t", distribute), func(b *testing.B) {
+			b.RunParallel(func(pb *testing.PB) {
+				planner, cleanup := sql.NewInternalPlanner(
+					"test",
+					client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+					security.RootUser,
+					&sql.MemoryMetrics{},
+					&execCfg,
+				)
+				defer cleanup()
+				for pb.Next() {
+					if err := dsp.Exec(
+						context.Background(),
+						planner,
+						"SELECT k FROM b.test WHERE k=1",
+						distribute,
+					); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		})
+	}
 }
