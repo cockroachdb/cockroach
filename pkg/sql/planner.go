@@ -516,7 +516,7 @@ func (p *planner) prepareForDistSQLSupportCheck() {
 // optimizerMode setting. If it is run, it will return true. If it returns false
 // and no error is returned, it is safe to fallback to a non-optimizer plan.
 func (p *planner) optionallyUseOptimizer(
-	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
+	ctx context.Context, sd sessiondata.SessionData, stmt *Statement,
 ) (bool, error) {
 	if sd.OptimizerMode == sessiondata.OptimizerOff {
 		log.VEvent(ctx, 1, "optimizer disabled")
@@ -554,7 +554,7 @@ type sqlStatsCollector interface {
 
 	// RecordStatement record stats for one statement.
 	RecordStatement(
-		stmt Statement,
+		stmt *Statement,
 		distSQLUsed bool,
 		optUsed bool,
 		automaticRetryCount int,

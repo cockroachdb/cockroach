@@ -63,7 +63,7 @@ var errSavepointNotUsed = pgerror.NewErrorf(
 // pos: The position of stmt.
 func (ex *connExecutor) execStmt(
 	ctx context.Context,
-	stmt Statement,
+	stmt *Statement,
 	res RestrictedCommandResult,
 	pinfo *tree.PlaceholderInfo,
 	pos CmdPos,
@@ -122,7 +122,7 @@ func (ex *connExecutor) execStmt(
 //
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
+	ctx context.Context, stmt *Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ex.incrementStmtCounter(stmt)
 	os := ex.machine.CurState().(stateOpen)
@@ -279,7 +279,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 		}
-		if _, err := ex.addPreparedStmt(ctx, name, Statement{AST: s.Statement}, typeHints); err != nil {
+		if _, err := ex.addPreparedStmt(ctx, name, &Statement{AST: s.Statement}, typeHints); err != nil {
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil
@@ -367,7 +367,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	p.stmt = &stmt
+	p.stmt = stmt
 
 	// TODO(andrei): Ideally we'd like to fork off a context for each individual
 	// statement. But the heartbeat loop in TxnCoordSender currently assumes that
@@ -437,7 +437,7 @@ func (ex *connExecutor) execStmtInOpenState(
 // independent from parallel execution. If neither of these cases are true, the
 // method synchronizes parallel execution by letting it drain before returning.
 func (ex *connExecutor) maybeSynchronizeParallelStmts(
-	ctx context.Context, stmt Statement,
+	ctx context.Context, stmt *Statement,
 ) (parallelize bool, _ error) {
 	parallelize = IsStmtParallelized(stmt)
 	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
@@ -598,7 +598,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // queries, so this method can only be used with local SQL.
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context,
-	stmt Statement,
+	stmt *Statement,
 	planner *planner,
 	queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
@@ -719,7 +719,7 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) {
 // expected that the caller will inspect res and react to query errors by
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
-	ctx context.Context, stmt Statement, planner *planner, res RestrictedCommandResult,
+	ctx context.Context, stmt *Statement, planner *planner, res RestrictedCommandResult,
 ) error {
 
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
@@ -816,7 +816,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
-func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt Statement) bool {
+func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
 	pgerr, ok := err.(*pgerror.Error)
 	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
 		// We only fallback on "feature not supported" errors.
@@ -965,7 +965,7 @@ func (ex *connExecutor) forEachRow(params runParams, p planNode, f func(tree.Dat
 // the cursor is not advanced. This means that the statement will run again in
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
-	ctx context.Context, stmt Statement,
+	ctx context.Context, stmt *Statement,
 ) (fsm.Event, fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
@@ -1008,7 +1008,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, stmt *Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
 	_, inRestartWait := ex.machine.CurState().(stateRestartWait)
 
@@ -1098,7 +1098,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 // CommitWait.
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
-	stmt Statement, res RestrictedCommandResult,
+	stmt *Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
 	ex.incrementStmtCounter(stmt)
 	switch stmt.AST.(type) {
@@ -1120,7 +1120,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 //
 // If an error is returned, the connection needs to stop processing queries.
 func (ex *connExecutor) runObserverStatement(
-	ctx context.Context, stmt Statement, res RestrictedCommandResult,
+	ctx context.Context, stmt *Statement, res RestrictedCommandResult,
 ) error {
 	switch sqlStmt := stmt.AST.(type) {
 	case *tree.ShowTransactionStatus:
@@ -1296,7 +1296,7 @@ func (ex *connExecutor) handleAutoCommit(
 	return ev, payload
 }
 
-func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
+func (ex *connExecutor) incrementStmtCounter(stmt *Statement) {
 	if !ex.stmtCounterDisabled {
 		ex.server.StatementCounters.incrementCount(stmt.AST)
 	}

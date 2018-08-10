@@ -58,7 +58,7 @@ type planMaker interface {
 	// iterating using curPlan.plan.Next() and curPlan.plan.Values() in
 	// order to retrieve matching rows. Finally, the plan must be closed
 	// with curPlan.close().
-	makePlan(ctx context.Context, stmt Statement) error
+	makePlan(ctx context.Context, stmt *Statement) error
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
@@ -294,7 +294,7 @@ type planTop struct {
 //
 // After makePlan(), the caller should be careful to also call
 // p.curPlan.Close().
-func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
+func (p *planner) makePlan(ctx context.Context, stmt *Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{AST: stmt.AST}
 
@@ -356,7 +356,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
-func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+func (p *planner) makeOptimizerPlan(ctx context.Context, stmt *Statement) error {
 	// Ensure that p.curPlan is populated in case an error occurs early,
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}

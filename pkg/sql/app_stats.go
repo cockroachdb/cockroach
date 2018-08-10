@@ -96,7 +96,7 @@ func (s stmtKey) flags() string {
 }
 
 func (a *appStats) recordStatement(
-	stmt Statement,
+	stmt *Statement,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
@@ -162,7 +162,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 	return s
 }
 
-func anonymizeStmt(stmt Statement) string {
+func anonymizeStmt(stmt *Statement) string {
 	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 

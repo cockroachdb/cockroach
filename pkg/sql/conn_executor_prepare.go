@@ -53,7 +53,7 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	ps, err := ex.addPreparedStmt(
-		ctx, parseCmd.Name, Statement{AST: parseCmd.Stmt}, parseCmd.TypeHints,
+		ctx, parseCmd.Name, &Statement{AST: parseCmd.Stmt}, parseCmd.TypeHints,
 	)
 	if err != nil {
 		return retErr(err)
@@ -112,7 +112,7 @@ func (ex *connExecutor) execPrepare(
 //
 // placeholderHints are used to assist in inferring placeholder types.
 func (ex *connExecutor) addPreparedStmt(
-	ctx context.Context, name string, stmt Statement, placeholderHints tree.PlaceholderTypes,
+	ctx context.Context, name string, stmt *Statement, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
 		panic(fmt.Sprintf("prepared statement already exists: %q", name))
@@ -142,7 +142,7 @@ func (ex *connExecutor) addPreparedStmt(
 // The PreparedStatement is returned (or nil if there are no results). The
 // returned PreparedStatement needs to be close()d once its no longer in use.
 func (ex *connExecutor) prepare(
-	ctx context.Context, stmt Statement, placeholderHints tree.PlaceholderTypes,
+	ctx context.Context, stmt *Statement, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	if placeholderHints == nil {
 		placeholderHints = make(tree.PlaceholderTypes)

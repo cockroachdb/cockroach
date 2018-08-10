@@ -1627,7 +1627,7 @@ func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
 
 // RecordStatement is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) RecordStatement(
-	stmt Statement,
+	stmt *Statement,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,

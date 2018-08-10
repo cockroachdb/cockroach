@@ -1078,7 +1078,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
 			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */, pos)
+			ev, payload, err = ex.execStmt(ctx, &curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
 			}
@@ -1132,7 +1132,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
 			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo, pos)
+			ev, payload, err = ex.execStmt(ctx, &curStmt, stmtRes, pinfo, pos)
 			if err != nil {
 				return err
 			}
@@ -1886,7 +1886,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 //
 // If an error is returned, it is to be considered a query execution error.
 func (ex *connExecutor) initStatementResult(
-	ctx context.Context, res RestrictedCommandResult, stmt Statement, cols sqlbase.ResultColumns,
+	ctx context.Context, res RestrictedCommandResult, stmt *Statement, cols sqlbase.ResultColumns,
 ) error {
 	for _, c := range cols {
 		if err := checkResultType(c.Typ); err != nil {

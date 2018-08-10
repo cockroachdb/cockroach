@@ -93,7 +93,7 @@ func (EngineMetrics) MetricStruct() {}
 // - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
-	stmt Statement,
+	stmt *Statement,
 	distSQLUsed bool,
 	optUsed bool,
 	automaticRetryCount int,
