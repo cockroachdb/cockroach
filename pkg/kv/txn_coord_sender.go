@@ -957,6 +957,13 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	return tc.mu.txn.OrigTimestamp
 }
 
+// OrigTimestampWasObserved is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) OrigTimestampWasObserved() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.OrigTimestampWasObserved
+}
+
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()

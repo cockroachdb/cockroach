@@ -275,6 +275,12 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.CommitTimestamp()
 }
 
+// OrigTimestampWasObserved returns true if CommitTimestamp() was
+// ever called.
+func (txn *Txn) OrigTimestampWasObserved() bool {
+	return txn.mu.sender.OrigTimestampWasObserved()
+}
+
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {

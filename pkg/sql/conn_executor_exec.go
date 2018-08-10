@@ -479,6 +479,9 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
+	if !txn.OrigTimestampWasObserved() {
+		panic("CommitTimestamp() was not called")
+	}
 
 	// Release leases here for two reasons:
 	// 1. If there are existing leases at version V-2 for a descriptor
