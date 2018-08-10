@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -522,7 +523,7 @@ func (s *Server) newConnExecutor(
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
 		appStats:         s.sqlStats.getStatsForApplication(sd.ApplicationName),
-		planner:          planner{execCfg: s.cfg},
+		planner:          planner{execCfg: s.cfg, opt: xform.NewOptimizer(nil)},
 	}
 	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.tables = TableCollection{
@@ -1781,6 +1782,7 @@ func (ex *connExecutor) newPlanner(
 	ctx context.Context, txn *client.Txn, stmtTS time.Time,
 ) *planner {
 	p := &planner{execCfg: ex.server.cfg}
+	p.opt = xform.NewOptimizer(p.EvalContext())
 	ex.resetPlanner(ctx, p, txn, stmtTS)
 	return p
 }
@@ -1810,6 +1812,8 @@ func (ex *connExecutor) resetPlanner(
 	p.autoCommit = false
 	p.isPreparing = false
 	p.avoidCachedDescriptors = false
+
+	p.opt.Reset(p.EvalContext())
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the

@@ -90,6 +90,13 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 	return o
 }
 
+func (o *Optimizer) Reset(evalCtx *tree.EvalContext) {
+	o.f.Reset(evalCtx)
+	o.stateMap = make(map[optStateKey]*optState)
+	o.evalCtx = evalCtx
+	o.explorer.init(o)
+}
+
 // Factory returns a factory interface that the caller uses to construct an
 // input expression tree. The root of the resulting tree can be passed to the
 // Optimize method in order to find the lowest cost plan.

@@ -150,6 +150,14 @@ func New() *Memo {
 	return m
 }
 
+func (m *Memo) Reset() {
+	m.metadata.Reset()
+	m.exprMap = make(map[Fingerprint]GroupID)
+	m.groups = m.groups[:1]
+	m.groups[0] = group{}
+	m.privateStorage.reset()
+}
+
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
 	return m.metadata
