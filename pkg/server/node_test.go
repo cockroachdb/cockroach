@@ -170,7 +170,8 @@ func createAndStartTestNode(
 		t.Fatal(err)
 	}
 	if err := node.start(context.Background(), addr, bootstrappedEngines, newEngines,
-		roachpb.Attributes{}, locality, cv); err != nil {
+		roachpb.Attributes{}, locality, cv, nil, /*nodeDescriptorCallback */
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -412,6 +413,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	if err := node.start(
 		context.Background(), serverAddr, bootstrappedEngines, newEngines,
 		roachpb.Attributes{}, roachpb.Locality{}, cv,
+		nil, /* nodeDescriptorCallback */
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
