@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -107,6 +109,12 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 	if !reflect.DeepEqual(lhsRepl, rhsRepl) {
 		t.Fatalf("ranges were not merged: %s != %s", lhsRepl, rhsRepl)
+	}
+
+	// The LHS has been split once and merged once, so it should have received
+	// two generation bumps.
+	if e, a := int64(2), lhsRepl.Desc().GetGeneration(); e != a {
+		t.Fatalf("expected LHS to have generation %d, but got %d", e, a)
 	}
 }
 
@@ -203,16 +211,14 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, colocate := range []bool{false, true} {
-		for _, retries := range []int64{0, 3} {
-			t.Run(fmt.Sprintf("colocate=%v/retries=%d", colocate, retries), func(t *testing.T) {
-				mergeWithData(t, colocate, retries)
-			})
-		}
+	for _, retries := range []int64{0, 3} {
+		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
+			mergeWithData(t, retries)
+		})
 	}
 }
 
-func mergeWithData(t *testing.T, colocate bool, retries int64) {
+func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
@@ -240,24 +246,13 @@ func mergeWithData(t *testing.T, colocate bool, retries int64) {
 	mtc = &multiTestContext{storeConfig: &storeCfg}
 
 	var store1, store2 *storage.Store
-	if colocate {
-		mtc.Start(t, 1)
-		store1, store2 = mtc.stores[0], mtc.stores[0]
-	} else {
-		mtc.Start(t, 2)
-		store1, store2 = mtc.stores[0], mtc.stores[1]
-	}
+	mtc.Start(t, 1)
+	store1, store2 = mtc.stores[0], mtc.stores[0]
 	defer mtc.Stop()
 
 	lhsDesc, rhsDesc, pErr := createSplitRanges(ctx, store1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-
-	if !colocate {
-		mtc.replicateRange(rhsDesc.RangeID, 1)
-		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
-		mtc.unreplicateRange(rhsDesc.RangeID, 0)
 	}
 
 	content := []byte("testing!")
@@ -594,21 +589,16 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
-	mtc.Start(t, 2)
+	mtc.Start(t, 1)
 	defer mtc.Stop()
-	store := mtc.stores[0]
+	store := mtc.Store(0)
 
-	// Create two adjacent ranges. The left-hand range has exactly one replica,
-	// on the first store, and the right-hand range has exactly one replica,
-	// on the second store
+	// Create two adjacent ranges.
 	setupReplicas := func() (lhsDesc, rhsDesc *roachpb.RangeDescriptor, err error) {
 		lhsDesc, rhsDesc, err = createSplitRanges(ctx, store)
 		if err != nil {
 			return nil, nil, err
 		}
-		mtc.replicateRange(rhsDesc.RangeID, 1)
-		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
-		mtc.unreplicateRange(rhsDesc.RangeID, 0)
 		return lhsDesc, rhsDesc, nil
 	}
 
@@ -721,7 +711,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Wait for txn2 to realize it conflicts with txn1 and enter its wait queue.
 		{
-			repl, err := mtc.stores[1].GetReplica(rhsDesc.RangeID)
+			repl, err := store.GetReplica(rhsDesc.RangeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -818,14 +808,15 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
-	// Create the ranges to be merged. Put the LHS on only the first store. Put
-	// the RHS on both stores and give the second store the lease. The LHS is
-	// largely irrelevant. What matters is that the RHS exists on two stores so we
-	// can transfer its lease during the merge.
+	// Create the ranges to be merged. Put both ranges on both stores, but give
+	// the second store the lease on the RHS. The LHS is largely irrelevant. What
+	// matters is that the RHS exists on two stores so we can transfer its lease
+	// during the merge.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, mtc.stores[0])
 	if err != nil {
 		t.Fatal(err)
 	}
+	mtc.replicateRange(lhsDesc.RangeID, 1)
 	mtc.replicateRange(rhsDesc.RangeID, 1)
 	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
 
@@ -1060,12 +1051,17 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	rhsRepl1, err := store1.GetReplica(rhsDesc.RangeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store1.ManualReplicaGC(rhsRepl1); err != nil {
-		t.Fatal(err)
+	for _, rangeID := range []roachpb.RangeID{lhsDesc.RangeID, rhsDesc.RangeID} {
+		repl, err := store1.GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store1.ManualReplicaGC(repl); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store1.GetReplica(rangeID); err == nil {
+			t.Fatalf("replica of r%d not gc'd from s1", rangeID)
+		}
 	}
 
 	rhsReplDesc0, ok := rhsDesc.GetReplicaDescriptor(store0.StoreID())
@@ -1148,6 +1144,325 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeAddReplicaRace verifies that an add replica request that
+// occurs concurrently with a merge is aborted.
+//
+// To see why aborting the add replica request is necessary, consider two
+// adjacent and collocated ranges, Q and R. Say the replicate queue decides to
+// rebalance Q onto store S4. It will initiate a ChangeReplicas command that
+// will send S4 a preemptive snapshot, then launch a replica-change transaction
+// to update R's range descriptor with the new replica. Now say the merge queue
+// decides to merge Q and R after the preemptive snapshot of Q has been sent to
+// S4 but before the replica-change transaction has started. The merge can
+// succeed because the ranges are still collocated. (The new replica of Q is
+// only considered added once the replica-change transaction commits.) If the
+// replica-change transaction were to commit, the new replica of Q on S4 would
+// have a snapshot of Q that predated the merge. In order to catch up, it would
+// need to apply the merge trigger, but the merge trigger will explode because
+// S4 does not have a replica of R.
+//
+// To avoid this scenario, ChangeReplicas commands will abort if they discover
+// the range descriptor has changed between when the snapshot is sent and when
+// the replica-change transaction starts.
+//
+// There is a particularly diabolical edge case here. Consider the same
+// situation as above, except that Q and R merge together and then split at
+// exactly the same key, all before the replica-change transaction starts. Q's
+// range descriptor will have the same start key, end key, and next replica ID
+// that it did when the preemptive snapshot started. That is, it will look
+// unchanged! To protect against this, range descriptors contain a generation
+// counter, which is incremented on every split or merge. The presence of this
+// counter means that ChangeReplicas commands can detect and abort if any merges
+// have occurred since the preemptive snapshot, even if the sequence of splits
+// or merges left the keyspan of the range unchanged. This diabolical edge case
+// is tested here.
+func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store0, store1 := mtc.Store(0), mtc.Store(1)
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.transport.Listen(store1.StoreID(), RaftMessageHandlerInterceptor{
+		RaftMessageHandler: store1,
+		handleSnapshotFilter: func(header *storage.SnapshotRequest_Header) {
+			mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+			if _, pErr := client.SendWrapped(ctx, store0.TestSender(), mergeArgs); pErr != nil {
+				// The filter is invoked by a different goroutine, so can't use t.Fatal.
+				t.Error(pErr)
+				return
+			}
+			splitArgs := adminSplitArgs(rhsDesc.StartKey.AsRawKey())
+			if _, pErr := client.SendWrapped(ctx, store0.TestSender(), splitArgs); pErr != nil {
+				// The filter is invoked by a different goroutine, so can't use t.Fatal.
+				t.Error(pErr)
+				return
+			}
+		},
+	})
+
+	err = mtc.replicateRangeNonFatal(lhsDesc.RangeID, 1)
+	if exp := "change replicas of r1 failed: descriptor changed"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected error %q, got %v", exp, err)
+	}
+}
+
+func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cut off communication with store2 before the merge.
+	circuitBreaker2 := mtc.transport.GetCircuitBreaker(store2.Ident.NodeID)
+	circuitBreaker2.Break()
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Verify that store2 won't inadvertently GC the RHS before it's heard about
+	// the merge. This is a tricky case for the replica GC queue, as meta2 will
+	// indicate that the range has been merged away.
+	rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
+		t.Fatalf("non-abandoned rhs replica unexpectedly GC'd before merge")
+	}
+
+	// Restore communication with store2. Give it the lease to force all commands
+	// to be applied, including the merge trigger.
+	circuitBreaker2.Reset()
+	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+}
+
+type slowRaftHandler struct {
+	cond struct {
+		blocked bool
+		sync.Cond
+	}
+	storage.RaftMessageHandler
+}
+
+func newSlowRaftHandler(handler storage.RaftMessageHandler) *slowRaftHandler {
+	h := slowRaftHandler{RaftMessageHandler: handler}
+	h.cond.Cond.L = &syncutil.Mutex{}
+	return &h
+}
+
+func (h *slowRaftHandler) block() {
+	h.cond.L.Lock()
+	defer h.cond.L.Unlock()
+	h.cond.blocked = true
+}
+
+func (h *slowRaftHandler) unblock() {
+	h.cond.L.Lock()
+	defer h.cond.L.Unlock()
+	h.cond.blocked = false
+	h.cond.Broadcast()
+}
+
+func (h *slowRaftHandler) HandleRaftRequest(
+	ctx context.Context,
+	req *storage.RaftMessageRequest,
+	respStream storage.RaftMessageResponseStream,
+) *roachpb.Error {
+	h.cond.L.Lock()
+	for h.cond.blocked {
+		h.cond.Wait()
+	}
+	h.cond.L.Unlock()
+	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for store2 to hear about the split.
+	var rhsRepl2 *storage.Replica
+	testutils.SucceedsSoon(t, func() error {
+		rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID)
+		return err
+	})
+
+	// Queue up all requests destined for store2 before the merge.
+	slowTransport2 := newSlowRaftHandler(store2)
+	mtc.transport.Listen(store2.StoreID(), slowTransport2)
+	slowTransport2.block()
+	defer slowTransport2.unblock() // in case of early t.Fatal
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Remove store2 from the range after the merge. It won't hear about this yet,
+	// but we'll be able to commit the configuration change because we have two
+	// other live members.
+	mtc.unreplicateRange(lhsDesc.RangeID, 2)
+
+	// Verify that store2 won't inadvertently GC the RHS before it's heard about
+	// the merge. This is a particularly tricky case for the replica GC queue, as
+	// meta2 will indicate that the range has been merged away AND that store2 is
+	// not a member of the new range.
+	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
+		t.Fatal("rhs replica on store2 destroyed before lhs applied merge")
+	}
+
+	// Flush store2's queued requests.
+	slowTransport2.unblock()
+
+	// Ensure that the unblocked merge eventually applies and subsumes the RHS.
+	testutils.SucceedsSoon(t, func() error {
+		if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+			return errors.New("rhs not yet destroyed")
+		}
+		return nil
+	})
+}
+
+func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store2 := mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+
+	// Split off three ranges.
+	keys := []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")}
+	for _, key := range keys {
+		splitArgs := adminSplitArgs(key.AsRawKey())
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Wait for store2 to hear about all three splits.
+	var repls []*storage.Replica
+	testutils.SucceedsSoon(t, func() error {
+		repls = nil
+		for _, key := range keys {
+			repl := store2.LookupReplica(key, nil /* end */)
+			if repl == nil || !repl.Desc().StartKey.Equal(key) {
+				return fmt.Errorf("replica for key %q is missing or has wrong start key: %s", key, repl)
+			}
+			repls = append(repls, repl)
+		}
+		return nil
+	})
+
+	// Remove all replicas from store2.
+	for _, repl := range repls {
+		mtc.unreplicateRange(repl.RangeID, 2)
+	}
+
+	// Merge all three ranges together. store2 won't hear about this merge.
+	for i := 0; i < 2; i++ {
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Verify that the abandoned ranges on store2 can only GC'd from left to
+	// right.
+	if err := store2.ManualReplicaGC(repls[2]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
+		t.Fatal("c replica on store2 destroyed before b")
+	}
+	if err := store2.ManualReplicaGC(repls[1]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[1].RangeID); err != nil {
+		t.Fatal("b replica on store2 destroyed before a")
+	}
+	if err := store2.ManualReplicaGC(repls[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[0].RangeID); err == nil {
+		t.Fatal("a replica not destroyed")
+	}
+
+	if err := store2.ManualReplicaGC(repls[2]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
+		t.Fatal("c replica on store2 destroyed before b")
+	}
+	if err := store2.ManualReplicaGC(repls[1]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[1].RangeID); err == nil {
+		t.Fatal("b replica not destroyed")
+	}
+
+	if err := store2.ManualReplicaGC(repls[2]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
+		t.Fatal("c replica not destroyed")
+	}
+}
+
 // TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store
 // containing the RHS of a merge can occur cleanly. This previously triggered
 // a fatal error (#27552).
@@ -1222,17 +1537,17 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#27820")
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
-	sv := &store.ClusterSettings().SV
+	sv := &storeCfg.Settings.SV
 	storage.MergeQueueEnabled.Override(sv, true)
+	var mtc multiTestContext
+	mtc.storeConfig = &storeCfg
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	split := func(t *testing.T, key roachpb.Key) {
 		t.Helper()
@@ -1245,16 +1560,16 @@ func TestMergeQueue(t *testing.T) {
 	split(t, roachpb.Key("a"))
 	split(t, roachpb.Key("b"))
 	split(t, roachpb.Key("c"))
-	lhs := store.LookupReplica(roachpb.RKey("a"), nil)
-	rhs := store.LookupReplica(roachpb.RKey("b"), nil)
-	lhsDesc := lhs.Desc()
-	rhsDesc := rhs.Desc()
+	lhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("a"), nil) }
+	rhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("b"), nil) }
+	lhsDesc := lhs().Desc()
+	rhsDesc := rhs().Desc()
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
 	setThresholds := func(minBytes, maxBytes int64) {
-		lhs.SetByteThresholds(minBytes, maxBytes)
-		rhs.SetByteThresholds(minBytes, maxBytes)
+		lhs().SetByteThresholds(minBytes, maxBytes)
+		rhs().SetByteThresholds(minBytes, maxBytes)
 	}
 
 	defaultZone := config.DefaultZoneConfig()
@@ -1367,6 +1682,15 @@ func TestMergeQueue(t *testing.T) {
 		verifyUnmerged(t)
 
 		setThresholds(200, 400)
+		store.ForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("non-collocated", func(t *testing.T) {
+		reset(t)
+		mtc.replicateRange(rhs().Desc().RangeID, 1)
+		mtc.transferLease(ctx, rhs().Desc().RangeID, 0, 1)
+		mtc.unreplicateRange(rhs().Desc().RangeID, 0)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})

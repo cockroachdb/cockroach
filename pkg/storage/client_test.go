@@ -1022,7 +1022,11 @@ func (m *multiTestContext) changeReplicas(
 		alreadyDoneErr = "unable to remove replica .* which is not present"
 	}
 
-	for {
+	retryOpts := retry.Options{
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+	}
+	for r := retry.Start(retryOpts); r.Next(); {
 		err := m.dbs[0].AdminChangeReplicas(
 			ctx, startKey.AsRawKey(), changeType,
 			[]roachpb.ReplicationTarget{{
