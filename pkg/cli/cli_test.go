@@ -669,6 +669,7 @@ func Example_demo() {
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
 	// captured.
+	defer func() { stderr = log.OrigStderr }()
 	stderr = os.Stdout
 
 	for _, cmd := range testData {
