@@ -36,9 +36,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
-// the sql package.
-type extendedEvalContext struct {
+// ExtendedEvalContext extends tree.EvalContext with fields that are needed for
+// distsql planning.
+type ExtendedEvalContext struct {
 	tree.EvalContext
 
 	SessionMutator *sessionDataMutator
@@ -94,7 +94,7 @@ type planner struct {
 
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
-	extendedEvalCtx extendedEvalContext
+	extendedEvalCtx ExtendedEvalContext
 
 	// sessionDataMutator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
@@ -283,13 +283,13 @@ func internalExtendedEvalCtx(
 	stmtTimestamp time.Time,
 	execCfg *ExecutorConfig,
 	plannerMon *mon.BytesMonitor,
-) extendedEvalContext {
+) ExtendedEvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
 	var statusServer serverpb.StatusServer
 	evalContextTestingKnobs = execCfg.EvalContextTestingKnobs
 	statusServer = execCfg.StatusServer
 
-	return extendedEvalContext{
+	return ExtendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:           txn,
 			SessionData:   sd,
@@ -321,7 +321,7 @@ func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
 
-func (p *planner) ExtendedEvalContext() *extendedEvalContext {
+func (p *planner) ExtendedEvalContext() *ExtendedEvalContext {
 	return &p.extendedEvalCtx
 }
 

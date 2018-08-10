@@ -2442,8 +2442,8 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // NOTE(andrei): EvalContext is dusty; it started as a collection of fields
 // needed by expression evaluation, but it has grown quite large; some of the
 // things in it don't seem to belong in this low-level package (e.g. Planner).
-// In the sql package it is embedded by extendedEvalContext, which adds some
-// more fields from the sql package. Through that extendedEvalContext, this
+// In the sql package it is embedded by ExtendedEvalContext, which adds some
+// more fields from the sql package. Through that ExtendedEvalContext, this
 // struct now generally used by planNodes.
 type EvalContext struct {
 	// Session variables. This is a read-only copy of the values owned by the

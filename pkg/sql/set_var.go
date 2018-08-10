@@ -167,7 +167,7 @@ func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) 
 }
 
 func setTimeZone(
-	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	_ context.Context, m *sessionDataMutator, evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 ) error {
 	if len(values) != 1 {
 		return newSingleArgVarError("timezone")
@@ -229,7 +229,7 @@ func setTimeZone(
 }
 
 func setStmtTimeout(
-	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	_ context.Context, m *sessionDataMutator, evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 ) error {
 	if len(values) != 1 {
 		return newSingleArgVarError("statement_timeout")

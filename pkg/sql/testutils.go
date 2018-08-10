@@ -55,8 +55,8 @@ func CreateTestTableDescriptor(
 	)
 }
 
-func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {
-	return extendedEvalContext{
+func makeTestingExtendedEvalContext(st *cluster.Settings) ExtendedEvalContext {
+	return ExtendedEvalContext{
 		EvalContext: tree.MakeTestingEvalContext(st),
 		Tracing:     &SessionTracing{},
 	}
@@ -106,7 +106,7 @@ func (dsp *DistSQLPlanner) Exec(ctx context.Context, localPlanner interface{}, s
 		return nil
 	})
 	execCfg := p.ExecCfg()
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
 		stmt.StatementType(),

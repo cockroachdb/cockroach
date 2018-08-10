@@ -68,7 +68,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 type PlanHookState interface {
 	SchemaResolver
 	RunParams(ctx context.Context) runParams
-	ExtendedEvalContext() *extendedEvalContext
+	ExtendedEvalContext() *ExtendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner

@@ -57,7 +57,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	recommendation, _ := distSQLPlanner.checkSupportForNode(n.plan)
 
-	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
@@ -99,7 +99,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		})
 		execCfg := params.p.ExecCfg()
 		const stmtType = tree.Rows
-		recv := makeDistSQLReceiver(
+		recv := MakeDistSQLReceiver(
 			planCtx.ctx,
 			rw,
 			stmtType,

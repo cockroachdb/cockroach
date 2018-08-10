@@ -99,7 +99,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 func (sc *SchemaChanger) runBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -397,7 +397,7 @@ func (sc *SchemaChanger) nRanges(
 // MutationFilter.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
@@ -502,7 +502,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 			rw := &errOnlyResultWriter{}
-			recv := makeDistSQLReceiver(
+			recv := MakeDistSQLReceiver(
 				ctx,
 				rw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
@@ -514,7 +514,7 @@ func (sc *SchemaChanger) distBackfill(
 				},
 				evalCtx.Tracing,
 			)
-			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
@@ -536,7 +536,7 @@ func (sc *SchemaChanger) distBackfill(
 
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
@@ -576,7 +576,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {

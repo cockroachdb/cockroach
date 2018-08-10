@@ -341,7 +341,7 @@ func (sc *SchemaChanger) truncateTable(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	table *sqlbase.TableDescriptor,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
@@ -424,7 +424,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 	inSession bool,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	table *sqlbase.TableDescriptor,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 ) (bool, error) {
 	if table.Dropped() {
 		if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -544,7 +544,7 @@ func (sc *SchemaChanger) drainNames(
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
 func (sc *SchemaChanger) exec(
-	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
+	ctx context.Context, inSession bool, evalCtx *ExtendedEvalContext,
 ) error {
 	ctx = log.WithLogTag(ctx, "scExec", "")
 	if log.V(2) {
@@ -658,7 +658,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	ctx context.Context,
 	err error,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
@@ -857,7 +857,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
@@ -1489,13 +1489,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	})
 }
 
-// createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
+// createSchemaChangeEvalCtx creates an ExtendedEvalContext() to be used for backfills.
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extendedEvalContext {
+func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) ExtendedEvalContext {
 	dummyLocation := time.UTC
-	evalCtx := extendedEvalContext{
+	evalCtx := ExtendedEvalContext{
 		Tracing: tracing,
 		EvalContext: tree.EvalContext{
 			SessionData: &sessiondata.SessionData{

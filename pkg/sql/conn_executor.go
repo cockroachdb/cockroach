@@ -1695,7 +1695,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	return mode
 }
 
-// evalCtx creates an extendedEvalCtx corresponding to the current state of the
+// evalCtx creates an ExtendedEvalCtx corresponding to the current state of the
 // session.
 //
 // p is the planner that the EvalCtx will link to. Note that the planner also
@@ -1707,7 +1707,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 // shouldn't be reused across statements.
 func (ex *connExecutor) evalCtx(
 	ctx context.Context, p *planner, stmtTS time.Time,
-) extendedEvalContext {
+) ExtendedEvalContext {
 	txn := ex.state.mu.txn
 
 	scInterface := newSchemaInterface(&ex.extraTxnState.tables, ex.server.cfg.VirtualSchemas)
@@ -1720,7 +1720,7 @@ func (ex *connExecutor) evalCtx(
 		ex.server.cfg.Settings,
 	)
 
-	return extendedEvalContext{
+	return ExtendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Planner:       p,
 			Sequence:      p,

@@ -81,7 +81,7 @@ type runParams struct {
 
 	// extendedEvalCtx groups fields useful for this execution.
 	// Used during local execution and distsql physical planning.
-	extendedEvalCtx *extendedEvalContext
+	extendedEvalCtx *ExtendedEvalContext
 
 	// planner associated with this execution. Only used during local
 	// execution.

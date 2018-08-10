@@ -45,12 +45,12 @@ type sessionVar struct {
 	// Set performs mutations to effect the change desired by SET commands.
 	Set func(
 		ctx context.Context, m *sessionDataMutator,
-		evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 	) error
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
-	Get func(evalCtx *extendedEvalContext) string
+	Get func(evalCtx *ExtendedEvalContext) string
 
 	// Reset performs mutations to effect the change desired by RESET commands.
 	Reset func(m *sessionDataMutator) error
@@ -71,7 +71,7 @@ var varGen = map[string]sessionVar{
 	`application_name`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, `application_name`, values)
 			if err != nil {
@@ -81,7 +81,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.ApplicationName
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -95,7 +95,7 @@ var varGen = map[string]sessionVar{
 	`bytea_output`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, `bytea_output`, values)
 			if err != nil {
@@ -109,7 +109,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.DataConversion.BytesEncodeFormat.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -136,7 +136,7 @@ var varGen = map[string]sessionVar{
 	`database`: {
 		Set: func(
 			ctx context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			dbName, err := getStringVal(&evalCtx.EvalContext, `database`, values)
 			if err != nil {
@@ -158,7 +158,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.Database },
+		Get: func(evalCtx *ExtendedEvalContext) string { return evalCtx.SessionData.Database },
 		Reset: func(m *sessionDataMutator) error {
 			m.SetDatabase(m.defaults.database)
 			return nil
@@ -173,7 +173,7 @@ var varGen = map[string]sessionVar{
 	`default_transaction_isolation`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			// It's unfortunate that clients want us to support both SET
 			// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
@@ -194,7 +194,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.DefaultIsolationLevel.ToLowerCaseString()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -207,7 +207,7 @@ var varGen = map[string]sessionVar{
 	`default_transaction_read_only`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getSingleBool("default_transaction_read_only", evalCtx, values)
 			if err != nil {
@@ -217,7 +217,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultReadOnly)
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -230,7 +230,7 @@ var varGen = map[string]sessionVar{
 	`distsql`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, `distsql`, values)
 			if err != nil {
@@ -244,7 +244,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.DistSQLMode.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -259,7 +259,7 @@ var varGen = map[string]sessionVar{
 	`experimental_force_lookup_join`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getSingleBool("experimental_force_lookup_join", evalCtx, values)
 			if err != nil {
@@ -269,7 +269,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.LookupJoinEnabled)
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -282,7 +282,7 @@ var varGen = map[string]sessionVar{
 	`experimental_force_zigzag_join`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getSingleBool("experimental_force_zigzag_join", evalCtx, values)
 			if err != nil {
@@ -292,7 +292,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.ZigzagJoinEnabled)
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -305,7 +305,7 @@ var varGen = map[string]sessionVar{
 	`experimental_opt`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, `experimental_opt`, values)
 			if err != nil {
@@ -319,7 +319,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.OptimizerMode.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -333,7 +333,7 @@ var varGen = map[string]sessionVar{
 	`extra_float_digits`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getIntVal(&evalCtx.EvalContext, `extra_float_digits`, values)
 			if err != nil {
@@ -349,7 +349,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return fmt.Sprintf("%d", evalCtx.SessionData.DataConversion.ExtraFloatDigits)
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -369,7 +369,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`node_id`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return fmt.Sprintf("%d", evalCtx.NodeID)
 		},
 	},
@@ -377,12 +377,12 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension (inspired by MySQL).
 	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return strconv.FormatBool(evalCtx.SessionData.SafeUpdates)
 		},
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			b, err := getSingleBool("sql_safe_updates", evalCtx, values)
 			if err != nil {
@@ -397,7 +397,7 @@ var varGen = map[string]sessionVar{
 	`search_path`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 			paths := make([]string, len(values))
@@ -411,7 +411,7 @@ var varGen = map[string]sessionVar{
 			m.SetSearchPath(sessiondata.MakeSearchPath(paths))
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.SearchPath.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -430,7 +430,7 @@ var varGen = map[string]sessionVar{
 	// In PG this is a pseudo-function used with SELECT, not SHOW.
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
 	`session_user`: {
-		Get: func(evalCtx *extendedEvalContext) string { return evalCtx.SessionData.User },
+		Get: func(evalCtx *ExtendedEvalContext) string { return evalCtx.SessionData.User },
 	},
 
 	// Supported for PG compatibility only.
@@ -439,7 +439,7 @@ var varGen = map[string]sessionVar{
 
 	`statement_timeout`: {
 		Set: setStmtTimeout,
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.SessionData.StmtTimeout.String()
 		},
 		Reset: func(m *sessionDataMutator) error {
@@ -450,7 +450,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
 	`timezone`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			// If the time zone is a "fixed offset" one, initialized from an offset
 			// and not a standard name, then we use a magic format in the Location's
 			// name. We attempt to parse that here and retrieve the original offset
@@ -472,12 +472,12 @@ var varGen = map[string]sessionVar{
 	// This is not directly documented in PG's docs but does indeed behave this way.
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.Txn.Isolation().ToLowerCaseString()
 		},
 		Set: func(
 			_ context.Context, _ *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, `transaction_isolation`, values)
 			if err != nil {
@@ -496,14 +496,14 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`transaction_priority`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.Txn.UserPriority().String()
 		},
 	},
 
 	// CockroachDB extension.
 	`transaction_status`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return evalCtx.TxnState
 		},
 	},
@@ -512,7 +512,7 @@ var varGen = map[string]sessionVar{
 	`transaction_read_only`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getSingleBool("transaction_read_only", evalCtx, values)
 			if err != nil {
@@ -521,14 +521,14 @@ var varGen = map[string]sessionVar{
 			m.SetReadOnly(bool(*s))
 			return nil
 		},
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.TxnReadOnly)
 		},
 	},
 
 	// CockroachDB extension.
 	`tracing`: {
-		Get: func(evalCtx *extendedEvalContext) string {
+		Get: func(evalCtx *ExtendedEvalContext) string {
 			sessTracing := evalCtx.Tracing
 			if sessTracing.Enabled() {
 				val := "on"
@@ -548,19 +548,19 @@ var varGen = map[string]sessionVar{
 
 func makeReadOnlyVar(value string) sessionVar {
 	return sessionVar{
-		Get: func(_ *extendedEvalContext) string { return value },
+		Get: func(_ *ExtendedEvalContext) string { return value },
 	}
 }
 
 func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) sessionVar {
 	allowedVals := append(extraAllowed, strings.ToLower(displayValue))
 	return sessionVar{
-		Get: func(_ *extendedEvalContext) string {
+		Get: func(_ *ExtendedEvalContext) string {
 			return displayValue
 		},
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+			evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 		) error {
 			s, err := getStringVal(&evalCtx.EvalContext, varName, values)
 			if err != nil {
@@ -589,7 +589,7 @@ var varNames = func() []string {
 }()
 
 func getSingleBool(
-	name string, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	name string, evalCtx *ExtendedEvalContext, values []tree.TypedExpr,
 ) (*tree.DBool, error) {
 	if len(values) != 1 {
 		return nil, newSingleArgVarError(name)
