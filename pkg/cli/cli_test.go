@@ -211,8 +211,12 @@ func (c *cliTest) cleanup() {
 }
 
 func (c cliTest) Run(line string) {
+	redirectOutput(func() { c.runLow(line) })
+}
+
+func (c cliTest) runLow(line string) {
 	a := strings.Fields(line)
-	c.RunWithArgs(a)
+	c.runWithArgsLow(a)
 }
 
 // RunWithCapture runs c and returns a string containing the output of c
@@ -221,14 +225,69 @@ func (c cliTest) Run(line string) {
 // the output of c.
 func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	return captureOutput(func() {
-		c.Run(line)
+		c.runLow(line)
 	})
 }
 
 func (c cliTest) RunWithCaptureArgs(args []string) (string, error) {
 	return captureOutput(func() {
-		c.RunWithArgs(args)
+		c.runWithArgsLow(args)
 	})
+}
+
+// stripWhitespaces removes whitespaces before each newline character.
+func stripWhitespaces(s string) string {
+	start := 0
+	var res strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\n' {
+			continue
+		}
+		end := i
+		for ; end > start && s[end-1] == ' '; end-- {
+		}
+		res.WriteString(s[start:end])
+		res.WriteByte('\n')
+		start = i + 1
+	}
+	end := len(s)
+	for ; end > start && s[end-1] == ' '; end-- {
+	}
+	res.WriteString(s[start:end])
+	return res.String()
+}
+
+func TestStripWhitespaces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testData := []struct {
+		in, out string
+	}{
+		{" ", ""},
+		{" \n", "\n"},
+		{"abc", "abc"},
+		{"abc  ", "abc"},
+		{"abc  \n", "abc\n"},
+		{"abc  \nxyz", "abc\nxyz"},
+	}
+	for _, test := range testData {
+		t.Run(test.in, func(t *testing.T) {
+			res := stripWhitespaces(test.in)
+			if res != test.out {
+				t.Errorf("%q: got %q, expected %q", test.in, res, test.out)
+			}
+		})
+	}
+}
+
+// redirectOutput runs f and prints out either its output, or the
+// error if one was produed.
+func redirectOutput(f func()) {
+	out, err := captureOutput(f)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+	} else {
+		fmt.Print(out)
+	}
 }
 
 // captureOutput runs f and returns a string containing the output and any
@@ -237,12 +296,13 @@ func captureOutput(f func()) (out string, err error) {
 	// Heavily inspired by Go's testing/example.go:runExample().
 
 	// Funnel stdout into a pipe.
-	stdout := os.Stdout
+	stdoutSave, stderrRedirSave := os.Stdout, stderr
 	r, w, err := os.Pipe()
 	if err != nil {
 		return "", err
 	}
 	os.Stdout = w
+	stderr = w
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {
@@ -254,14 +314,16 @@ func captureOutput(f func()) (out string, err error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		r.Close()
-		outC <- captureResult{buf.String(), err}
+		s := stripWhitespaces(buf.String())
+		outC <- captureResult{s, err}
 	}()
 
 	// Clean up and record output in separate function to handle panics.
 	defer func() {
 		// Close pipe and restore normal stdout.
 		w.Close()
-		os.Stdout = stdout
+		os.Stdout = stdoutSave
+		stderr = stderrRedirSave
 		outResult := <-outC
 		out, err = outResult.out, outResult.err
 		if x := recover(); x != nil {
@@ -275,6 +337,10 @@ func captureOutput(f func()) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(origArgs []string) {
+	redirectOutput(func() { c.runWithArgsLow(origArgs) })
+}
+
+func (c cliTest) runWithArgsLow(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -306,6 +372,10 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 }
 
 func (c cliTest) RunWithCAArgs(origArgs []string) {
+	redirectOutput(func() { c.runWithCAArgsLow(origArgs) })
+}
+
+func (c cliTest) runWithCAArgsLow(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -925,6 +995,13 @@ thenshort`,
 	// not much","very very long
 	// thenshort",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0,0,0
+	// sql --format=table -e select * from t.u
+	//   f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85
+	//        |      |      | very very long |   thenshort    |       |     |
+	//        |      |      |    not much    |                |       |     |
+	// +------+------+------+----------------+----------------+-------+-----+-----+
+	//      0 |    0 |    0 |              0 |              0 |     0 |   0 |   0
+	// (1 row)
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------+----------------+----------------+-------+-----+-----+
 	// | f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85 |
@@ -1016,6 +1093,10 @@ func Example_sql_empty_table() {
 	// x
 	// sql --format=csv -e select * from t.norows
 	// x
+	// sql --format=table -e select * from t.norows
+	//   x
+	// +---+
+	// (0 rows)
 	// sql --format=pretty -e select * from t.norows
 	// +---+
 	// | x |
@@ -1047,6 +1128,9 @@ func Example_sql_empty_table() {
 	// # empty
 	// # empty
 	// # empty
+	// sql --format=table -e select * from t.nocols
+	// --
+	// (3 rows)
 	// sql --format=pretty -e select * from t.nocols
 	// --
 	// (3 rows)
@@ -1079,6 +1163,9 @@ func Example_sql_empty_table() {
 	// # no columns
 	// sql --format=csv -e select * from t.nocolsnorows
 	// # no columns
+	// sql --format=table -e select * from t.nocolsnorows
+	// --
+	// (0 rows)
 	// sql --format=pretty -e select * from t.nocolsnorows
 	// --
 	// (0 rows)
@@ -1348,6 +1435,21 @@ func Example_sql_table() {
 	// ܈85,UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313",tabs
+	// sql --format=table -e select * from t.t
+	//            s          |               d
+	// +---------------------+--------------------------------+
+	//   foo                 | printable ASCII
+	//   "foo                | printable ASCII with quotes
+	//   \foo                | printable ASCII with backslash
+	//   foo                 | non-printable ASCII
+	//   bar                 |
+	//   κόσμε               | printable UTF8
+	//   ñ                   | printable UTF8 using escapes
+	//   \x01                | non-printable UTF8 string
+	//   ܈85                 | UTF8 string with RTL char
+	//   a   b         c     | tabs
+	//   12  123123213 12313 |
+	// (9 rows)
 	// sql --format=pretty -e select * from t.t
 	// +---------------------+--------------------------------+
 	// |          s          |               d                |

@@ -210,13 +210,14 @@ func render(
 }
 
 type prettyReporter struct {
-	table *tablewriter.Table
-	buf   bytes.Buffer
-	w     *tabwriter.Writer
+	decorate bool
+	table    *tablewriter.Table
+	buf      bytes.Buffer
+	w        *tabwriter.Writer
 }
 
-func newPrettyReporter() *prettyReporter {
-	n := &prettyReporter{}
+func newPrettyReporter(decorate bool) *prettyReporter {
+	n := &prettyReporter{decorate: decorate}
 	// 4-wide columns, 1 character minimum width.
 	n.w = tabwriter.NewWriter(&n.buf, 4, 0, 1, ' ', 0)
 	return n
@@ -237,7 +238,8 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		// Initialize tablewriter and set column names as the header row.
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
-		p.table.SetAutoWrapText(true)
+		p.table.SetAutoWrapText(p.decorate)
+		p.table.SetBorder(p.decorate)
 		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
 		// This width is sufficient to show a "standard text line width"
@@ -516,7 +518,10 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 func makeReporter() (rowReporter, error) {
 	switch cliCtx.tableDisplayFormat {
 	case tableDisplayPretty:
-		return newPrettyReporter(), nil
+		return newPrettyReporter(true /*decorate*/), nil
+
+	case tableDisplayTable:
+		return newPrettyReporter(false /*decorate*/), nil
 
 	case tableDisplayTSV:
 		fallthrough
