@@ -812,7 +812,7 @@ func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}
-	pb.evalCtx.CtxProvider = tree.FixedCtxProvider{Context: pb.Ctx}
+	pb.evalCtx.Context = pb.Ctx
 	return pb.Ctx
 }
 

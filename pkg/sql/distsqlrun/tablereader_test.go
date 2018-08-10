@@ -334,7 +334,7 @@ func TestLimitScans(t *testing.T) {
 	sp := tracer.StartSpan("root", tracing.Recordable)
 	tracing.StartRecording(sp, tracing.SnowballRecording)
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
-	flowCtx.EvalCtx.CtxProvider = tree.FixedCtxProvider{Context: ctx}
+	flowCtx.EvalCtx.Context = ctx
 
 	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
 	if err != nil {

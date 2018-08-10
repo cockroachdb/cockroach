@@ -296,7 +296,7 @@ func internalExtendedEvalCtx(
 			TxnReadOnly:   *dataMutator.curTxnReadOnly,
 			TxnImplicit:   true,
 			Settings:      execCfg.Settings,
-			CtxProvider:   tree.FixedCtxProvider{Context: ctx},
+			Context:       ctx,
 			Mon:           plannerMon,
 			TestingKnobs:  evalContextTestingKnobs,
 			StmtTimestamp: stmtTimestamp,

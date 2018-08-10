@@ -1732,7 +1732,7 @@ func (ex *connExecutor) evalCtx(
 			TxnReadOnly:      ex.state.readOnly,
 			TxnImplicit:      ex.implicitTxn(),
 			Settings:         ex.server.cfg.Settings,
-			CtxProvider:      ex,
+			Context:          ex.Ctx(),
 			Mon:              ex.state.mon,
 			TestingKnobs:     ex.server.cfg.EvalContextTestingKnobs,
 			TxnTimestamp:     ex.state.sqlTimestamp,

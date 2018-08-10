@@ -187,8 +187,8 @@ func MakeSimpleTableDescriptor(
 
 	semaCtx := tree.SemaContext{}
 	evalCtx := tree.EvalContext{
-		CtxProvider: ctxProvider{ctx},
-		Sequence:    &importSequenceOperators{},
+		Context:  ctx,
+		Sequence: &importSequenceOperators{},
 	}
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	tableDesc, err := sql.MakeTableDesc(
