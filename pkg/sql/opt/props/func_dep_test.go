@@ -194,6 +194,59 @@ func TestFuncDeps_ComputeEquivClosure(t *testing.T) {
 	}
 }
 
+func TestFuncDeps_EquivReps(t *testing.T) {
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd1 := &props.FuncDepSet{}
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 5)
+	fd1.MakeOuter(util.MakeFastIntSet(1, 5), util.MakeFastIntSet())
+	fd1.AddSynthesizedCol(util.MakeFastIntSet(1), 6)
+	fd1.AddEquivalency(1, 2)
+	fd1.AddEquivalency(2, 3)
+	verifyFD(t, fd1, "(1)~~>(5), (1)-->(6), (1)==(2,3), (2)==(1,3), (3)==(1,2)")
+
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (d)==(a)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd2 := &props.FuncDepSet{}
+	fd2.CopyFrom(fd1)
+	fd2.AddEquivalency(1, 4)
+	verifyFD(t, fd2, "(1)~~>(5), (1)-->(6), (1)==(2-4), (2)==(1,3,4), (3)==(1,2,4), (4)==(1-3)")
+
+	// (a)==(b,d)
+	// (b)==(a,c)
+	// (c)==(b)
+	// (d)==(e)
+	// (a)~~>(e)
+	// (a)-->(f)
+	fd3 := &props.FuncDepSet{}
+	fd3.CopyFrom(fd1)
+	fd3.AddEquivalency(4, 5)
+	verifyFD(t, fd3, "(1)~~>(5), (1)-->(6), (1)==(2,3), (2)==(1,3), (3)==(1,2), (4)==(5), (5)==(4)")
+
+	testcases := []struct {
+		fd       *props.FuncDepSet
+		expected opt.ColSet
+	}{
+		{fd: fd1, expected: util.MakeFastIntSet(1)},
+		{fd: fd2, expected: util.MakeFastIntSet(1)},
+		{fd: fd3, expected: util.MakeFastIntSet(1, 4)},
+	}
+
+	for _, tc := range testcases {
+		closure := tc.fd.EquivReps()
+		if !closure.Equals(tc.expected) {
+			t.Errorf("fd: %s, expected: %s, actual: %s", tc.fd, tc.expected, closure)
+		}
+	}
+}
+
 func TestFuncDeps_AddStrictKey(t *testing.T) {
 	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
 	// SELECT DISTINCT ON (p) m, n, p, q FROM mnpq

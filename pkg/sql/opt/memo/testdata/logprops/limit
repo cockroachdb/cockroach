@@ -118,7 +118,7 @@ SELECT * FROM xyzs LIMIT 0
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 0]
- ├── stats: [rows=1000]
+ ├── stats: [rows=0]
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1-4)
