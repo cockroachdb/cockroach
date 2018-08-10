@@ -107,7 +107,9 @@ func (s *tableVersionState) incRefcount() {
 
 func (s *tableVersionState) incRefcountLocked() {
 	s.mu.refcount++
-	log.VEventf(context.TODO(), 2, "tableVersionState.incRef: %s", s.stringLocked())
+	if log.V(2) {
+		log.VEventf(context.TODO(), 2, "tableVersionState.incRef: %s", s.stringLocked())
+	}
 }
 
 // The lease expiration stored in the database is of a different type.
@@ -866,7 +868,9 @@ func (t *tableState) upsertLocked(
 	table.mu.refcount += s.mu.refcount
 	s.mu.refcount = 0
 	s.mu.leased = false
-	log.VEventf(ctx, 2, "replaced lease: %s with %s", s.stringLocked(), table.stringLocked())
+	if log.V(2) {
+		log.VEventf(ctx, 2, "replaced lease: %s with %s", s.stringLocked(), table.stringLocked())
+	}
 	table.mu.Unlock()
 	s.mu.Unlock()
 	t.mu.active.remove(s)
@@ -960,7 +964,9 @@ func (t *tableState) release(
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.mu.refcount--
-		log.VEventf(context.TODO(), 2, "release: %s", s.stringLocked())
+		if log.V(2) {
+			log.VEventf(context.TODO(), 2, "release: %s", s.stringLocked())
+		}
 		if s.mu.refcount < 0 {
 			panic(fmt.Sprintf("negative ref count: %s", s))
 		}
