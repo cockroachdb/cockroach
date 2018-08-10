@@ -152,6 +152,10 @@ type ServerConfig struct {
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
 
+	// LeaseManager is a *sql.LeaseManager. It's stored as an `interface{}` due
+	// to package dependency cycles
+	LeaseManager interface{}
+
 	// A handle to gossip used to broadcast the node's DistSQL version and
 	// draining state.
 	Gossip *gossip.Gossip
@@ -415,6 +419,7 @@ func (ds *ServerImpl) setupFlow(
 		txn:            txn,
 		ClientDB:       ds.DB,
 		executor:       ds.Executor,
+		LeaseManager:   ds.ServerConfig.LeaseManager,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,

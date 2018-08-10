@@ -1062,6 +1062,24 @@ func newProcessor(
 		err := processor.InitWithOutput(post, outputs[0])
 		return processor, err
 	}
+	if core.ChangeAggregator != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewChangeAggregatorProcessor == nil {
+			return nil, errors.New("ChangeAggregator processor unimplemented")
+		}
+		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, outputs[0])
+	}
+	if core.ChangeFrontier != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewChangeFrontierProcessor == nil {
+			return nil, errors.New("ChangeFrontier processor unimplemented")
+		}
+		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
@@ -1088,6 +1106,12 @@ var NewSSTWriterProcessor func(*FlowCtx, int32, SSTWriterSpec, RowSource, RowRec
 
 // NewCSVWriterProcessor is externally implemented.
 var NewCSVWriterProcessor func(*FlowCtx, int32, CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
+
+// NewChangeAggregatorProcessor is externally implemented.
+var NewChangeAggregatorProcessor func(*FlowCtx, int32, ChangeAggregatorSpec, RowReceiver) (Processor, error)
+
+// NewChangeFrontierProcessor is externally implemented.
+var NewChangeFrontierProcessor func(*FlowCtx, int32, ChangeFrontierSpec, RowSource, RowReceiver) (Processor, error)
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).

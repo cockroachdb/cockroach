@@ -562,7 +562,8 @@ func scrubRunDistSQL(
 		p.extendedEvalCtx.Tracing,
 	)
 
-	p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx)
+	p.extendedEvalCtx.DistSQLPlanner.Run(
+		planCtx, p.txn, plan, recv, &p.extendedEvalCtx, nil /* finishedSetupFn */)
 	if rowResultWriter.Err() != nil {
 		return rows, rowResultWriter.Err()
 	} else if rows.Len() == 0 {

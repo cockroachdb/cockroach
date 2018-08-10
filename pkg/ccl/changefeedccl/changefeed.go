@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,113 +65,15 @@ type emitEntry struct {
 	resolved *jobspb.ResolvedSpan
 }
 
-func runChangefeedFlow(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	details jobspb.ChangefeedDetails,
-	progress jobspb.Progress,
-	metrics *Metrics,
-	resultsCh chan<- tree.Datums,
-	progressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
-) error {
-	details, err := validateDetails(details)
-	if err != nil {
-		return err
-	}
-	var highWater hlc.Timestamp
-	if h := progress.GetHighWater(); h != nil {
-		highWater = *h
-	}
-	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, details.Targets, highWater)
-	if err != nil {
-		return err
-	}
-
-	sink, err := getSink(details.SinkURI, resultsCh)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := sink.Close(); err != nil {
-			log.Warningf(ctx, "failed to close changefeed sink: %+v", err)
-		}
-	}()
-
-	if _, ok := sink.(*channelSink); !ok {
-		// For every sink but channelSink (which uses resultsCh to stream the
-		// changes), we abuse the job's results channel to make CREATE
-		// CHANGEFEED wait for this before returning to the user to ensure the
-		// setup went okay. Job resumption doesn't have the same hack, but at
-		// the moment ignores results and so is currently okay. Return nil
-		// instead of anything meaningful so that if we start doing anything
-		// with the results returned by resumed jobs, then it breaks instead of
-		// returning nonsense.
-		resultsCh <- tree.Datums(nil)
-	}
-
-	sink = makeMetricsSink(metrics, sink)
-
-	// The changefeed flow is intentionally structured as a pull model so it's
-	// easy to later make it into a DistSQL processor.
-	//
-	// TODO(dan): Make this into a DistSQL flow.
-	buf := makeBuffer()
-	poller := makePoller(execCfg, details, trackedSpans, highWater, buf)
-	rowsFn := kvsToRows(execCfg, details, buf.Get)
-	emitEntriesFn := emitEntries(details, sink, rowsFn)
-	if err != nil {
-		return err
-	}
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(poller.Run)
-
-	metrics.mu.Lock()
-	metricsID := metrics.mu.id
-	metrics.mu.id++
-	metrics.mu.Unlock()
-	defer func() {
-		metrics.mu.Lock()
-		delete(metrics.mu.resolved, metricsID)
-		metrics.mu.Unlock()
-	}()
-
-	sf := makeSpanFrontier(trackedSpans...)
-	g.GoCtx(func(ctx context.Context) error {
-		for {
-			resolvedSpans, err := emitEntriesFn(ctx)
-			if err != nil {
-				return err
-			}
-			newFrontier := false
-			for _, resolvedSpan := range resolvedSpans {
-				if sf.Forward(resolvedSpan.Span, resolvedSpan.Timestamp) {
-					newFrontier = true
-				}
-			}
-			if newFrontier {
-				metrics.mu.Lock()
-				metrics.mu.resolved[metricsID] = sf.Frontier()
-				metrics.mu.Unlock()
-				if err := emitResolvedTimestamp(ctx, details, sink, progressedFn, sf); err != nil {
-					return err
-				}
-			}
-		}
-	})
-
-	return g.Wait()
-}
-
 // kvsToRows gets changed kvs from a closure and converts them into sql rows. It
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
-	execCfg *sql.ExecutorConfig,
+	leaseManager *sql.LeaseManager,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitEntry, error) {
-	rfCache := newRowFetcherCache(execCfg.LeaseManager)
+	rfCache := newRowFetcherCache(leaseManager)
 
 	var kvs sqlbase.SpanKVFetcher
 	appendEmitEntryForKV := func(
