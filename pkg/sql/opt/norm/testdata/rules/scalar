@@ -386,10 +386,11 @@ select
                 ├── cardinality: [1 - 1]
                 ├── key: ()
                 ├── fd: ()-->(13)
-                ├── scan a
+                ├── values
                 │    ├── columns: a.s:10(string)
-                │    ├── constraint: /7: contradiction
-                │    └── cardinality: [0 - 0]
+                │    ├── cardinality: [0 - 0]
+                │    ├── key: ()
+                │    └── fd: ()-->(10)
                 └── aggregations [outer=(10)]
                      └── max [type=string, outer=(10)]
                           └── variable: a.s [type=string, outer=(10)]

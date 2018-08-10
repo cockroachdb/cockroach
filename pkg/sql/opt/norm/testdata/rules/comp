@@ -271,12 +271,11 @@ WHERE
     null::jsonb ?| ARRAY['foo'] OR '{}' ?| null::string[] OR
     null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
 ----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: contradiction
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── key: ()
+ └── fd: ()-->(1-5)
 
 # --------------------------------------------------
 # FoldIsNull
