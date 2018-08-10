@@ -488,8 +488,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		Metrics: &distSQLMetrics,
 
-		JobRegistry: s.jobRegistry,
-		Gossip:      s.gossip,
+		JobRegistry:  s.jobRegistry,
+		Gossip:       s.gossip,
+		LeaseManager: s.leaseMgr,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)

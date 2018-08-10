@@ -62,7 +62,9 @@ func createBenchmarkChangefeed(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, resultsCh, nil)
+		errCh <- errors.New(`TODO(dan): The distsql PR broke createBenchmarkChangefeed`)
+		var phs sql.PlanHookState
+		errCh <- distChangefeedFlow(ctx, phs, details, progress, resultsCh, nil)
 	}()
 	return func() error {
 		select {

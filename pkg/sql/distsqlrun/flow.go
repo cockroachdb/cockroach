@@ -95,6 +95,10 @@ type FlowCtx struct {
 	// whereas this one isn't.
 	executor sqlutil.InternalExecutor
 
+	// LeaseManager is a *sql.LeaseManager. It's returned as an `interface{}`
+	// due to package dependency cycles
+	LeaseManager interface{}
+
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
 	nodeID       roachpb.NodeID

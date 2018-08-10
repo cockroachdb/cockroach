@@ -44,7 +44,7 @@ const (
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
 
-	sinkSchemeChannel    = ``
+	sinkSchemeBuffer     = ``
 	sinkSchemeKafka      = `kafka`
 	sinkParamTopicPrefix = `topic_prefix`
 )
@@ -186,9 +186,7 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
-			return runChangefeedFlow(
-				ctx, p.ExecCfg(), details, progress, resultsCh, nil, /* progressedFn */
-			)
+			return distChangefeedFlow(ctx, p, details, progress, resultsCh, nil /* progressedFn */)
 		}
 
 		if err := utilccl.CheckEnterpriseEnabled(
@@ -305,12 +303,12 @@ type changefeedResumer struct{}
 func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
-	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
+	phs := planHookState.(sql.PlanHookState)
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	err := runChangefeedFlow(ctx, execCfg, details, progress, startedCh, job.HighWaterProgressed)
+	err := distChangefeedFlow(ctx, phs, details, progress, startedCh, job.HighWaterProgressed)
 	if err != nil {
-		log.Infof(ctx, `CHANGEFEED job %d returning with error: %+v`, *job.ID(), err)
+		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
 	}
 	return err
 }
