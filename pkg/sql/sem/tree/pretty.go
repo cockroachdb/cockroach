@@ -587,10 +587,10 @@ func (node *Subquery) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *AliasedTableExpr) doc(p *PrettyCfg) pretty.Doc {
 	d := p.Doc(node.Expr)
-	if node.Hints != nil {
+	if node.IndexFlags != nil {
 		d = pretty.Concat(
 			d,
-			p.Doc(node.Hints),
+			p.Doc(node.IndexFlags),
 		)
 	}
 	if node.Ordinality {

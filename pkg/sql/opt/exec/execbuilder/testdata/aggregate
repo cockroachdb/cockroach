@@ -174,21 +174,36 @@ group      ·            ·           (count int, sum decimal, max int)  ·
 ·          spans        ALL         ·                                  ·
 
 query TTTTT
+EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
+----
+group      ·            ·                  (count, count, sum, sum, min, min)  ·
+ │         aggregate 0  count(v)           ·                                   ·
+ │         aggregate 1  count(DISTINCT v)  ·                                   ·
+ │         aggregate 2  sum(v)             ·                                   ·
+ │         aggregate 3  sum(DISTINCT v)    ·                                   ·
+ │         aggregate 4  min(v)             ·                                   ·
+ │         aggregate 5  min(v)             ·                                   ·
+ │         scalar       ·                  ·                                   ·
+ └── scan  ·            ·                  (v)                                 ·
+·          table        kv@primary         ·                                   ·
+·          spans        ALL                ·                                   ·
+
+query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-group                ·            ·                                             (count)                                                       ·
- │                   aggregate 0  count(DISTINCT ((k, v, w, s) AS k, v, w, s))  ·                                                             ·
- │                   scalar       ·                                             ·                                                             ·
- └── render          ·            ·                                             ("((k, v, w, s) AS k, v, w, s)")                              ·
-      │              render 0     ((a.k, a.v, a.w, a.s) AS k, v, w, s)          ·                                                             ·
-      └── join       ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
-           │         type         cross                                         ·                                                             ·
-           ├── scan  ·            ·                                             (k, v, w, s)                                                  k!=NULL; key(k)
-           │         table        kv@primary                                    ·                                                             ·
-           │         spans        ALL                                           ·                                                             ·
-           └── scan  ·            ·                                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
-·                    table        kv@primary                                    ·                                                             ·
-·                    spans        ALL                                           ·                                                             ·
+group                ·            ·                             (count)       ·
+ │                   aggregate 0  count(DISTINCT column9)       ·             ·
+ │                   scalar       ·                             ·             ·
+ └── render          ·            ·                             (column9)     ·
+      │              render 0     ((k, v, w, s) AS k, v, w, s)  ·             ·
+      └── join       ·            ·                             (k, v, w, s)  ·
+           │         type         cross                         ·             ·
+           ├── scan  ·            ·                             (k, v, w, s)  ·
+           │         table        kv@primary                    ·             ·
+           │         spans        ALL                           ·             ·
+           └── scan  ·            ·                             ()            ·
+·                    table        kv@primary                    ·             ·
+·                    spans        ALL                           ·             ·
 
 query TTT
 SELECT tree, field, description FROM [

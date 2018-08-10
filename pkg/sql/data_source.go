@@ -100,7 +100,10 @@ func (p *planner) getVirtualDataSource(
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
-	ctx context.Context, src tree.TableExpr, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	src tree.TableExpr,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
@@ -124,7 +127,7 @@ func (p *planner) getDataSource(
 		}
 
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
-		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
+		return p.getPlanForDesc(ctx, desc, tn, indexFlags, colCfg)
 
 	case *tree.RowsFromExpr:
 		return p.getPlanForRowsFrom(ctx, t.Items...)
@@ -160,19 +163,19 @@ func (p *planner) getDataSource(
 		}, nil
 
 	case *tree.ParenTableExpr:
-		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		return p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 
 	case *tree.TableRef:
-		return p.getTableScanByRef(ctx, t, hints, scanVisibility)
+		return p.getTableScanByRef(ctx, t, indexFlags, scanVisibility)
 
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 
-		if t.Hints != nil {
-			hints = t.Hints
+		if t.IndexFlags != nil {
+			indexFlags = t.IndexFlags
 		}
 
-		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		src, err := p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 		if err != nil {
 			return src, err
 		}
@@ -219,7 +222,10 @@ func (p *planner) getTableDescByID(
 }
 
 func (p *planner) getTableScanByRef(
-	ctx context.Context, tref *tree.TableRef, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	tref *tree.TableRef,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
 	if err != nil {
@@ -246,7 +252,7 @@ func (p *planner) getTableScanByRef(
 		addUnwantedAsHidden: true,
 		visibility:          scanVisibility,
 	}
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, colCfg)
+	src, err := p.getPlanForDesc(ctx, desc, &tn, indexFlags, colCfg)
 	if err != nil {
 		return src, err
 	}
@@ -316,7 +322,7 @@ func (p *planner) getPlanForDesc(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	tn *tree.TableName,
-	hints *tree.IndexHints,
+	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) (planDataSource, error) {
 	if desc.IsView() {
@@ -336,7 +342,7 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(ctx, p, desc, hints, colCfg); err != nil {
+	if err := scan.initTable(ctx, p, desc, indexFlags, colCfg); err != nil {
 		return planDataSource{}, err
 	}
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // CanReduceGroupingCols is true if the given GroupBy operator has one or more
@@ -113,4 +114,96 @@ func (c *CustomFuncs) makeAggCols(
 		outColList[i] = opt.ColumnID(id)
 		i++
 	}
+}
+
+// CanRemoveAggDistinctForKeys returns true if the given aggregations contain an
+// aggregation with AggDistinct where the input column together with the
+// grouping columns form a key. In this case, the respective AggDistinct can be
+// removed.
+func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
+	aggs memo.GroupID, def memo.PrivateID, input memo.GroupID,
+) bool {
+	inputFDs := &c.LookupLogical(input).Relational.FuncDeps
+	if _, hasKey := inputFDs.Key(); !hasKey {
+		// Fast-path for the case when the input has no keys.
+		return false
+	}
+
+	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	for _, agg := range aggsElems {
+		if ok, _ := c.hasRemovableAggDistinct(agg, groupingCols, inputFDs); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// RemoveAggDistinctForKeys rewrites aggregations to remove AggDistinct when
+// the input column together with the grouping columns form a key. Returns the
+// new Aggregation expression.
+func (c *CustomFuncs) RemoveAggDistinctForKeys(
+	aggs memo.GroupID, def memo.PrivateID, input memo.GroupID,
+) memo.GroupID {
+	inputFDs := &c.LookupLogical(input).Relational.FuncDeps
+	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
+	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+
+	newAggElems := make([]memo.GroupID, len(aggsElems))
+	for i, agg := range aggsElems {
+		if ok, aggDistinctInput := c.hasRemovableAggDistinct(agg, groupingCols, inputFDs); ok {
+			// Remove AggDistinct. We rely on the fact that AggDistinct must be
+			// directly "under" the Aggregate.
+			// TODO(radu): this will need to be revisited when we add more modifiers.
+			aggExpr := c.f.mem.NormExpr(agg)
+			newAggElems[i] = c.f.DynamicConstruct(
+				aggExpr.Operator(),
+				memo.DynamicOperands{memo.DynamicID(aggDistinctInput)},
+			)
+		} else {
+			newAggElems[i] = agg
+		}
+	}
+
+	return c.f.ConstructAggregations(c.f.InternList(newAggElems), aggsExpr.Cols())
+}
+
+// hasRemovableAggDistinct is called with an aggregation element and returns
+// true if the aggregation has AggDistinct and the grouping columns along with
+// the aggregation input column form a key in the input (in which case
+// AggDistinct can be elided).
+// On success, the input group to AggDistinct is also returned.
+func (c *CustomFuncs) hasRemovableAggDistinct(
+	aggregation memo.GroupID, groupingCols opt.ColSet, inputFDs *props.FuncDepSet,
+) (ok bool, aggDistinctInput memo.GroupID) {
+	aggExpr := c.f.mem.NormExpr(aggregation)
+	if aggExpr.ChildCount() == 1 {
+		argExpr := c.f.mem.NormExpr(aggExpr.ChildGroup(c.f.mem, 0))
+		if argExpr.Operator() == opt.AggDistinctOp {
+			aggDistinctInput := argExpr.ChildGroup(c.f.mem, 0)
+			v := c.f.mem.NormExpr(aggDistinctInput)
+			if v.Operator() == opt.VariableOp {
+				cols := groupingCols.Copy()
+				cols.Add(int(v.Private(c.f.mem).(opt.ColumnID)))
+				if inputFDs.ColsAreStrictKey(cols) {
+					return true, aggDistinctInput
+				}
+			}
+		}
+	}
+	return false, 0
+}
+
+// extractAggInputColumn returns the input ColumnID of an aggregate operator.
+func extractAggInputColumn(ev memo.ExprView) opt.ColumnID {
+	if !ev.IsAggregate() {
+		panic("not an Aggregate")
+	}
+	arg := ev.Child(0)
+	if arg.Operator() == opt.AggDistinctOp {
+		arg = arg.Child(0)
+	}
+	return arg.Private().(opt.ColumnID)
 }

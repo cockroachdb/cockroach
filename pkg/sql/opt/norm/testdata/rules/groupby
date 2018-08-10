@@ -41,6 +41,53 @@ TABLE xy
  └── INDEX primary
       └── x int not null
 
+exec-ddl
+CREATE TABLE abc
+(
+    a INT,
+    b INT,
+    c INT,
+    PRIMARY KEY (a,b,c)
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      └── c int not null
+
+exec-ddl
+CREATE TABLE uvwz
+(
+    u INT NOT NULL,
+    v INT NOT NULL,
+    w INT NOT NULL,
+    z INT NOT NULL,
+
+    UNIQUE INDEX (u,v),
+    UNIQUE INDEX (v,w)
+)
+----
+TABLE uvwz
+ ├── u int not null
+ ├── v int not null
+ ├── w int not null
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX secondary
+ │    ├── u int not null
+ │    ├── v int not null
+ │    └── rowid int not null (hidden) (storing)
+ └── INDEX secondary
+      ├── v int not null
+      ├── w int not null
+      └── rowid int not null (hidden) (storing)
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -254,6 +301,32 @@ group-by
       └── const-agg [type=string, outer=(4)]
            └── variable: a.s [type=string, outer=(4)]
 
+opt
+SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
+----
+group-by
+ ├── columns: k:1(int!null) sum:8(decimal) f:3(float) s:4(string)
+ ├── grouping columns: k:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(3,4,8)
+ ├── inner-join
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    ├── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ │    ├── scan xy
+ │    └── true [type=bool]
+ └── aggregations [outer=(2-4)]
+      ├── sum [type=decimal, outer=(2)]
+      │    └── agg-distinct [type=int, outer=(2)]
+      │         └── variable: a.i [type=int, outer=(2)]
+      ├── const-agg [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      └── const-agg [type=string, outer=(4)]
+           └── variable: a.s [type=string, outer=(4)]
+
 # Eliminated columns are not part of projection.
 opt
 SELECT min(f) FROM a GROUP BY i, s, k
@@ -323,3 +396,129 @@ distinct-on
       │    └── variable: xy.x [type=int, outer=(6)]
       └── const-agg [type=float, outer=(3)]
            └── variable: a.f [type=float, outer=(3)]
+
+# --------------------------------------------------
+# EliminateAggDistinctForKeys
+# --------------------------------------------------
+
+# ScalarGroupBy with key argument. Only the first aggregation can be
+# simplified.
+opt
+SELECT sum(DISTINCT k), sum(DISTINCT i) FROM a
+----
+scalar-group-by
+ ├── columns: sum:6(decimal) sum:7(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── scan a@fi_idx
+ │    ├── columns: k:1(int!null) i:2(int!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── aggregations [outer=(1,2)]
+      ├── sum [type=decimal, outer=(1)]
+      │    └── variable: a.k [type=int, outer=(1)]
+      └── sum [type=decimal, outer=(2)]
+           └── agg-distinct [type=int, outer=(2)]
+                └── variable: a.i [type=int, outer=(2)]
+
+# GroupBy with key argument.
+opt
+SELECT sum(DISTINCT k) FROM a GROUP BY i
+----
+project
+ ├── columns: sum:6(decimal)
+ └── group-by
+      ├── columns: i:2(int!null) sum:6(decimal)
+      ├── grouping columns: i:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(6)
+      ├── scan a@fi_idx
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── aggregations [outer=(1)]
+           └── sum [type=decimal, outer=(1)]
+                └── variable: a.k [type=int, outer=(1)]
+
+# GroupBy with no key.
+opt
+SELECT sum(DISTINCT a) FROM abc GROUP BY b
+----
+project
+ ├── columns: sum:4(decimal)
+ └── group-by
+      ├── columns: b:2(int!null) sum:4(decimal)
+      ├── grouping columns: b:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(4)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int!null)
+      └── aggregations [outer=(1)]
+           └── sum [type=decimal, outer=(1)]
+                └── agg-distinct [type=int, outer=(1)]
+                     └── variable: abc.a [type=int, outer=(1)]
+
+# GroupBy with composite key formed by argument plus grouping columns.
+opt
+SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
+----
+project
+ ├── columns: sum:4(decimal)
+ └── group-by
+      ├── columns: b:2(int!null) c:3(int!null) sum:4(decimal)
+      ├── grouping columns: b:2(int!null) c:3(int!null)
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(4)
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── key: (1-3)
+      └── aggregations [outer=(1)]
+           └── sum [type=decimal, outer=(1)]
+                └── variable: abc.a [type=int, outer=(1)]
+
+# GroupBy with multiple aggregations simplified.
+opt
+SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
+----
+project
+ ├── columns: sum:6(decimal) avg:7(float)
+ └── group-by
+      ├── columns: k:1(int!null) sum:6(decimal) avg:7(float)
+      ├── grouping columns: k:1(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(6,7)
+      ├── scan a@fi_idx
+      │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3), (2,3)~~>(1)
+      └── aggregations [outer=(2,3)]
+           ├── sum [type=decimal, outer=(2)]
+           │    └── variable: a.i [type=int, outer=(2)]
+           └── avg [type=float, outer=(3)]
+                └── variable: a.f [type=float, outer=(3)]
+
+# GroupBy where only some aggregations are simplified (the table has
+# keys u,v and v,w).
+opt
+SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
+----
+project
+ ├── columns: sum:6(decimal) stddev:7(decimal) avg:8(decimal)
+ └── group-by
+      ├── columns: v:2(int!null) sum:6(decimal) stddev:7(decimal) avg:8(decimal)
+      ├── grouping columns: v:2(int!null)
+      ├── key: (2)
+      ├── fd: (2)-->(6-8)
+      ├── scan uvwz
+      │    ├── columns: u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
+      │    ├── key: (2,3)
+      │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
+      └── aggregations [outer=(1,3,4)]
+           ├── sum [type=decimal, outer=(1)]
+           │    └── variable: uvwz.u [type=int, outer=(1)]
+           ├── std-dev [type=decimal, outer=(3)]
+           │    └── variable: uvwz.w [type=int, outer=(3)]
+           └── avg [type=decimal, outer=(4)]
+                └── agg-distinct [type=int, outer=(4)]
+                     └── variable: uvwz.z [type=int, outer=(4)]

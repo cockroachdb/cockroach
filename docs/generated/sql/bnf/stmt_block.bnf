@@ -1710,7 +1710,7 @@ distinct_on_clause ::=
 	'DISTINCT' 'ON' '(' expr_list ')'
 
 table_ref ::=
-	relation_expr opt_index_hints opt_ordinality opt_alias_clause
+	relation_expr opt_index_flags opt_ordinality opt_alias_clause
 	| select_with_parens opt_ordinality opt_alias_clause
 	| joined_table
 	| '(' joined_table ')' opt_ordinality alias_clause
@@ -1915,10 +1915,10 @@ from_list ::=
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
 
-opt_index_hints ::=
+opt_index_flags ::=
 	'@' index_name
 	| '@' '[' iconst64 ']'
-	| '@' '{' index_hints_param_list '}'
+	| '@' '{' index_flags_param_list '}'
 	| 
 
 opt_ordinality ::=
@@ -2058,8 +2058,8 @@ tuple1_unambiguous_values ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
-index_hints_param_list ::=
-	( index_hints_param ) ( ( ',' index_hints_param ) )*
+index_flags_param_list ::=
+	( index_flags_param ) ( ( ',' index_flags_param ) )*
 
 join_type ::=
 	'FULL' join_outer
@@ -2135,7 +2135,7 @@ trim_list ::=
 	| 'FROM' expr_list
 	| expr_list
 
-index_hints_param ::=
+index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
 

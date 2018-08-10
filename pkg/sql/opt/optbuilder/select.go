@@ -40,8 +40,8 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
-		if source.Hints != nil {
-			panic(unimplementedf("index hints are not supported"))
+		if source.IndexFlags != nil {
+			panic(unimplementedf("index flags are not supported"))
 		}
 
 		outScope = b.buildTable(source.Expr, inScope)

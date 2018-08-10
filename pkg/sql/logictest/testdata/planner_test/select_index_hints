@@ -149,19 +149,17 @@ render     ·      ·
 ·          spans  ALL
 
 query TTT
-EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd,NO_INDEX_JOIN} WHERE c = 10
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10
 ----
 render     ·      ·
  └── scan  ·      ·
 ·          table  abcd@bcd
-·          hint   no index join
 ·          spans  ALL
 
 query TTT
-EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary,NO_INDEX_JOIN} WHERE c = 10
+EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary} WHERE c = 10
 ----
 render     ·      ·
  └── scan  ·      ·
 ·          table  abcd@primary
-·          hint   no index join
 ·          spans  ALL
