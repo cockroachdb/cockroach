@@ -108,6 +108,43 @@ func (ex *connExecutor) execStmt(
 	return ev, payload, err
 }
 
+func (ex *connExecutor) queryDone(
+	ctx context.Context,
+	res RestrictedCommandResult,
+	timeoutTicker *time.Timer,
+	doneAfterFunc chan struct{},
+	queryTimedOut bool,
+	queryID ClusterWideID,
+) {
+	if timeoutTicker != nil {
+		if !timeoutTicker.Stop() {
+			// Wait for the timer callback to complete to avoid a data race on
+			// queryTimedOut.
+			<-doneAfterFunc
+		}
+	}
+	ex.rmActiveQuery(queryID)
+
+	// Detect context cancelation and overwrite whatever error might have been
+	// set on the result before. The idea is that once the query's context is
+	// canceled, all sorts of actors can detect the cancelation and set all
+	// sorts of errors on the result. Rather than trying to impose discipline
+	// in that jungle, we just overwrite them all here with an error that's
+	// nicer to look at for the client.
+	if ctx.Err() != nil && res.Err() != nil {
+		if queryTimedOut {
+			res.OverwriteError(sqlbase.QueryTimeoutError)
+		} else {
+			res.OverwriteError(sqlbase.QueryCanceledError)
+		}
+	}
+}
+
+func (ex *connExecutor) makeErrEventWithCurStmt(err error) (fsm.Event, fsm.EventPayload, error) {
+	ev, payload := ex.makeErrEvent(err, ex.curStmt)
+	return ev, payload, nil
+}
+
 // execStmtInOpenState executes one statement in the context of the session's
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -133,37 +170,14 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
-	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
-		if timeoutTicker != nil {
-			if !timeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// queryTimedOut.
-				<-doneAfterFunc
-			}
-		}
-		unregisterFn()
-
-		// Detect context cancelation and overwrite whatever error might have been
-		// set on the result before. The idea is that once the query's context is
-		// canceled, all sorts of actors can detect the cancelation and set all
-		// sorts of errors on the result. Rather than trying to impose discipline
-		// in that jungle, we just overwrite them all here with an error that's
-		// nicer to look at for the client.
-		if ctx.Err() != nil && res.Err() != nil {
-			if queryTimedOut {
-				res.OverwriteError(sqlbase.QueryTimeoutError)
-			} else {
-				res.OverwriteError(sqlbase.QueryCanceledError)
-			}
-		}
-	}
+	ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	var isQueryDone bool
 	// Generally we want to unregister after the auto-commit below. However, in
 	// case we'll execute the statement through the parallel execution queue,
 	// we'll pass the responsibility for unregistering to the queue.
 	defer func() {
-		if queryDone != nil {
-			queryDone(ctx, res)
+		if !isQueryDone {
+			ex.queryDone(ctx, res, timeoutTicker, doneAfterFunc, queryTimedOut, stmt.queryID)
 		}
 	}()
 
@@ -196,23 +210,18 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
-		return ev, payload, nil
-	}
-
 	// Check if the statement should be parallelized. If not, we may need to
 	// synchronize.
 	parallelize, err := ex.maybeSynchronizeParallelStmts(ctx, stmt)
 	if err != nil {
-		return makeErrEvent(err)
+		return ex.makeErrEventWithCurStmt(err)
 	}
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
 		// the NoTxn state.
-		return makeErrEvent(errTransactionInProgress)
+		return ex.makeErrEventWithCurStmt(errTransactionInProgress)
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
@@ -221,10 +230,10 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.ReleaseSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
-			return makeErrEvent(errSavepointNotUsed)
+			return ex.makeErrEventWithCurStmt(errSavepointNotUsed)
 		}
 
 		// ReleaseSavepoint is executed fully here; there's no plan for it.
@@ -239,7 +248,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.Savepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Name); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
 		// started running. The client txn's statement count indicates how many
@@ -247,7 +256,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if ex.state.mu.txn.GetTxnCoordMeta().CommandCount > 0 {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", tree.RestartSavepointName)
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
@@ -255,10 +264,10 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.RollbackToSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		if !os.RetryIntent.Get() {
-			return makeErrEvent(errSavepointNotUsed)
+			return ex.makeErrEventWithCurStmt(errSavepointNotUsed)
 		}
 
 		res.ResetStmtType((*tree.Savepoint)(nil))
@@ -273,14 +282,14 @@ func (ex *connExecutor) execStmtInOpenState(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", name,
 			)
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		typeHints := make(tree.PlaceholderTypes, len(s.Types))
 		for i, t := range s.Types {
 			typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 		}
 		if _, err := ex.addPreparedStmt(ctx, name, Statement{AST: s.Statement}, typeHints); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		return nil, nil, nil
 
@@ -294,12 +303,12 @@ func (ex *connExecutor) execStmtInOpenState(
 				pgerror.CodeInvalidSQLStatementNameError,
 				"prepared statement %q does not exist", name,
 			)
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		var err error
 		pinfo, err = fillInPlaceholders(ps.PreparedStatement, name, s.Params, ex.sessionData.SearchPath)
 		if err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 
 		stmt.AST = ps.Statement
@@ -310,7 +319,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Check again if the statement should be parallelized.
 		parallelize, err = ex.maybeSynchronizeParallelStmts(ctx, stmt)
 		if err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 	}
 
@@ -337,7 +346,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if os.ImplicitTxn.Get() {
 		ts, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
 		if err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		if ts != nil {
 			p.semaCtx.AsOfTimestamp = ts
@@ -351,11 +360,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		// to do that to force p.avoidCachedDescriptors to be set below.
 		ts, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now())
 		if err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		if ts != nil {
 			if *ts != ex.state.mu.txn.OrigTimestamp() {
-				return makeErrEvent(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
+				return ex.makeErrEventWithCurStmt(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
 					"Generally \"as of system time\" cannot be used inside a transaction.",
 					ex.state.mu.txn.OrigTimestamp()))
 			}
@@ -384,17 +393,17 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, queryDone)
-		queryDone = nil
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, timeoutTicker, doneAfterFunc, queryTimedOut)
+		isQueryDone = true
 		if err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 		// Produce mocked out results for the query - the "zero value" of the
 		// statement's result type:
 		// - tree.Rows -> an empty set of rows
 		// - tree.RowsAffected -> zero rows affected
 		if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 	} else {
 		p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
@@ -402,7 +411,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return nil, nil, err
 		}
 		if err := res.Err(); err != nil {
-			return makeErrEvent(err)
+			return ex.makeErrEventWithCurStmt(err)
 		}
 
 		txn := ex.state.mu.txn
@@ -600,7 +609,9 @@ func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context,
 	stmt Statement,
 	planner *planner,
-	queryDone func(context.Context, RestrictedCommandResult),
+	timeoutTicker *time.Timer,
+	doneAfterFunc chan struct{},
+	queryTimedOut bool,
 ) (sqlbase.ResultColumns, error) {
 	params := runParams{
 		ctx:             ctx,
@@ -635,7 +646,7 @@ func (ex *connExecutor) execStmtInParallel(
 	if err := ex.parallelizeQueue.Add(params, func() error {
 		res := &bufferedCommandResult{errOnly: true}
 
-		defer queryDone(ctx, res)
+		defer ex.queryDone(ctx, res, timeoutTicker, doneAfterFunc, queryTimedOut, stmt.queryID)
 
 		defer func() {
 			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
@@ -1233,7 +1244,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
 	queryID ClusterWideID, stmt tree.Statement, cancelFun context.CancelFunc,
-) func() {
+) {
 
 	_, hidden := stmt.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
@@ -1247,18 +1258,19 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.Lock()
 	ex.mu.ActiveQueries[queryID] = qm
 	ex.mu.Unlock()
-	return func() {
-		ex.mu.Lock()
-		_, ok := ex.mu.ActiveQueries[queryID]
-		if !ok {
-			ex.mu.Unlock()
-			panic(fmt.Sprintf("query %d missing from ActiveQueries", queryID))
-		}
-		delete(ex.mu.ActiveQueries, queryID)
-		ex.mu.LastActiveQuery = qm.stmt
+}
 
+func (ex *connExecutor) rmActiveQuery(queryID ClusterWideID) {
+	ex.mu.Lock()
+	qm, ok := ex.mu.ActiveQueries[queryID]
+	if !ok {
 		ex.mu.Unlock()
+		panic(fmt.Sprintf("query %d missing from ActiveQueries", queryID))
 	}
+	delete(ex.mu.ActiveQueries, queryID)
+	ex.mu.LastActiveQuery = qm.stmt
+
+	ex.mu.Unlock()
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed
