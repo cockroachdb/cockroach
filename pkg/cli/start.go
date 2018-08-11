@@ -61,24 +61,47 @@ import (
 // The function takes a filename to write the profile to.
 var jemallocHeapDump func(string) error
 
-// StartCmd starts a node by initializing the stores and joining
+// startCmd starts a node by initializing the stores and joining
 // the cluster.
-var StartCmd = &cobra.Command{
+var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "start a node",
+	Short: "start a node in a multi-node cluster",
 	Long: `
 Start a CockroachDB node, which will export data from one or more
 storage devices, specified via --store flags.
 
-If no cluster exists yet and this is the first node, no additional
-flags are required. If the cluster already exists, and this node is
-uninitialized, specify the --join flag to point to any healthy node
-(or list of nodes) already part of the cluster.
+Specify the --join flag to point to another node or nodes that are
+part of the same cluster. The other nodes do not need to be started
+yet, and if the address of the other nodes to be added are not yet
+known it is legal for the first node to join itself.
+
+If --join is not specified, the cluster will also be initialized.
+THIS BEHAVIOR IS DEPRECATED; consider using 'cockroach init' or
+'cockroach start-single-node' instead.
 `,
-	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
+	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 --join=host:port,[host:port]`,
 	Args:    cobra.NoArgs,
-	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStart)),
+	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStartJoin)),
 }
+
+// startSingleNodeCmd starts a node by initializing the stores.
+var startSingleNodeCmd = &cobra.Command{
+	Use:   "start-single-node",
+	Short: "start a single-node cluster",
+	Long: `
+Start a CockroachDB node, which will export data from one or more
+storage devices, specified via --store flags.
+The cluster will also be automatically initialized with
+replication disabled (replication factor = 1).
+`,
+	Example: `  cockroach start-single-node --insecure --store=attrs=ssd,path=/mnt/ssd1`,
+	Args:    cobra.NoArgs,
+	RunE:    maybeShoutError(MaybeDecorateGRPCError(runStartSingleNode)),
+}
+
+// StartCmds exports startCmd and startSingleNodeCmds so that other
+// packages can add flags to them.
+var StartCmds = []*cobra.Command{startCmd, startSingleNodeCmd}
 
 // maxSizePerProfile is the maximum total size in bytes for profiles per
 // profile type.
@@ -383,6 +406,23 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
+var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockrach start' instead")
+
+func runStartSingleNode(cmd *cobra.Command, args []string) error {
+	joinFlag := cmd.Flags().Lookup(cliflags.Join.Name)
+	if joinFlag.Changed {
+		return errCannotUseJoin
+	}
+	// Now actually set the flag as changed so that the start code
+	// doesn't warn that it was not set.
+	joinFlag.Changed = true
+	return runStart(cmd, args)
+}
+
+func runStartJoin(cmd *cobra.Command, args []string) error {
+	return runStart(cmd, args)
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -450,6 +490,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.SetSeverity(log.Severity_WARNING)
+
+	// Check the --join flag.
+	pf := cmd.Flags()
+	if !pf.Lookup(cliflags.Join.Name).Changed {
+		log.Shout(ctx, log.Severity_WARNING,
+			"running 'cockroach start' without --join is deprecated.\n"+
+				"Consider using 'cockroach start-single-node' or 'cockroach init' instead.")
+	}
 
 	// Now perform additional configuration tweaks specific to the start
 	// command.
@@ -637,12 +685,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
-			// Now inform the user that the server is running and tell the
-			// user about its run-time derived parameters.
+			// Compute the client connection URL.
 			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
 			if err != nil {
 				return err
 			}
+
+			// Now inform the user that the server is running and tell the
+			// user about its run-time derived parameters.
 			var buf bytes.Buffer
 			info := build.GetInfo()
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
