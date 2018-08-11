@@ -479,6 +479,33 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
 	}
+	if !txn.CommitTimestampFixed() {
+		panic("commit timestamp was not fixed")
+	}
+
+	// Release leases here for two reasons:
+	// 1. If there are existing leases at version V-2 for a descriptor
+	// being modified to version V being held the wait loop below that
+	// waits on a cluster wide release of old version leases will hang
+	// until these leases expire.
+	// 2. Once this transaction commits, the schema changers run and
+	// increment the version of the modified descriptors. If one of the
+	// descriptors being modified has a lease being held the schema
+	// changers will stall until the leases expire.
+	//
+	// The above two cases can be satified by releasing leases for both
+	// cases explicitly, but we prefer to call it here and kill two birds
+	// with one stone.
+	//
+	// It is safe to release leases even though the transaction hasn't yet
+	// committed only because the transaction timestamp has been fixed using
+	// CommitTimestamp().
+	//
+	// releaseLeases can fail to release a lease if the server is shutting
+	// down. This is okay because it will result in the two cases mentioned
+	// above simply hanging until the expiration time for the leases.
+	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
+
 	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
 	if err != nil {
 		return err
@@ -509,10 +536,6 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// We cleanup the transaction and create a new transaction wait time
 	// might be extensive and so we'd better get rid of all the intents.
 	txn.CleanupOnError(ctx, retryErr)
-
-	// Release leases held by the current transaction before waiting
-	// on cluster wide releases of old version leases.
-	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
 
 	// Wait until all older version leases have been released or expired.
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {

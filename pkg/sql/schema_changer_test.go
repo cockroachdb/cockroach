@@ -93,7 +93,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ctx := context.TODO()
 
 	// Acquire a lease.
-	lease, err := changer.AcquireLease(ctx, nil)
+	lease, err := changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	if _, err := changer.AcquireLease(ctx, nil); !testutils.IsError(
+	if _, err := changer.AcquireLease(ctx); !testutils.IsError(
 		err, "an outstanding schema change lease exists",
 	) {
 		t.Fatal(err)
@@ -131,12 +131,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Releasing an old lease fails.
-	if err := changer.ReleaseLease(ctx, oldLease, nil); err == nil {
+	if err := changer.ReleaseLease(ctx, oldLease); err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
 
 	// Release lease.
-	if err := changer.ReleaseLease(ctx, lease, nil); err != nil {
+	if err := changer.ReleaseLease(ctx, lease); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,7 +146,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// acquiring the lease succeeds
-	lease, err = changer.AcquireLease(ctx, nil)
+	lease, err = changer.AcquireLease(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func runSchemaChangeWithOperations(
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
 	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg)
-	if l, err := sc.AcquireLease(ctx, nil); err == nil {
+	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
 
@@ -2087,6 +2087,113 @@ CREATE TABLE t.test (
 
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Test a DROP failure on a unique column. The rollback
+// process might not be able to reconstruct the index and thus
+// recreates the column as non-UNIQUE. For now this is considered
+// acceptable.
+func TestSchemaUniqueColumnDropFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	const chunkSize = 200
+	attempts := 0
+	// DROP UNIQUE COLUMN is executed in two steps: drop index and drop column.
+	// Chunked backfill attempts:
+	// attempt 1-5: drop index
+	// attempt 6-7: drop part of the column before hitting a schema
+	// change error.
+	// purge the schema change.
+	const expectedAttempts = 7
+	const maxValue = (expectedAttempts/2+1)*chunkSize + 1
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
+			// Aggressively checkpoint, so that a schema change
+			// failure happens after a checkpoint has been written.
+			WriteCheckpointInterval: time.Nanosecond,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				attempts++
+				// Return a deadline exceeded error while dropping
+				// the column after the index has been dropped.
+				if attempts == expectedAttempts {
+					return errors.New("permanent failure")
+				}
+				return nil
+			},
+		},
+		// Disable backfill migrations so it doesn't interfere with the
+		// backfill in this test.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// A schema change that fails.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v`); !testutils.IsError(err, `permanent failure`) {
+		t.Fatalf("err = %s", err)
+	}
+
+	// The index is not regenerated.
+	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Column v still exists with the default value.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if e := 2; e != len(tableDesc.Columns) {
+		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.Columns), tableDesc.Columns)
+	} else if tableDesc.Columns[0].Name != "k" || tableDesc.Columns[1].Name != "v" {
+		t.Fatalf("columns %+v", tableDesc.Columns)
+	} else if len(tableDesc.Mutations) > 0 {
+		t.Fatalf("mutations %+v", tableDesc.Mutations)
+	}
+
+	rows, err := sqlDB.Query(`SELECT v from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for ; rows.Next(); count++ {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if 23 != v {
+			t.Errorf("e = %d, v = %d", 23, v)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	eCount := maxValue + 1
+	if eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
 

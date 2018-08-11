@@ -203,7 +203,7 @@ func (ie *internalExecutorImpl) initConnEx(
 		// txn committed. But if there is a higher-level txn, they don't get
 		// released.
 		defer func() {
-			if err := ex.resetExtraTxnState(ctx, txnAborted, ex.server.dbCache); err != nil {
+			if err := ex.resetExtraTxnState(ctx, ex.server.dbCache); err != nil {
 				log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 			}
 		}()
