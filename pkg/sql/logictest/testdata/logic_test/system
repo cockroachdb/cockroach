@@ -110,6 +110,7 @@ descID      INT        false  NULL  ·  {"primary"}
 version     INT        false  NULL  ·  {"primary"}
 nodeID      INT        false  NULL  ·  {"primary"}
 expiration  TIMESTAMP  false  NULL  ·  {"primary"}
+epoch       INT        true   NULL  ·  {}
 
 query TTBTTT
 SHOW COLUMNS FROM system.eventlog
