@@ -226,11 +226,6 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	if def.Reverse {
-		ps.keyBuf.WriteByte(1)
-	} else {
-		ps.keyBuf.WriteByte(0)
-	}
 	ps.keyBuf.writeUvarint(uint64(def.Table))
 	ps.keyBuf.writeUvarint(uint64(def.Index))
 
@@ -239,6 +234,11 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	// generated multiple times.
 	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.Constraint))))
 	ps.keyBuf.writeVarint(def.HardLimit)
+	if def.LimitReverse {
+		ps.keyBuf.WriteByte(1)
+	} else {
+		ps.keyBuf.WriteByte(0)
+	}
 	ps.keyBuf.writeColSet(def.Cols)
 
 	typ := (*ScanOpDef)(nil)

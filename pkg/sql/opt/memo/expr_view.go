@@ -353,7 +353,11 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 			tp.Childf("constraint: %s", def.Constraint)
 		}
 		if def.HardLimit > 0 {
-			tp.Childf("limit: %d", def.HardLimit)
+			if def.LimitReverse {
+				tp.Childf("limit: %d (reverse)", def.HardLimit)
+			} else {
+				tp.Childf("limit: %d", def.HardLimit)
+			}
 		}
 
 	case opt.LookupJoinOp:

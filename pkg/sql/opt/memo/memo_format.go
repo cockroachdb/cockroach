@@ -277,9 +277,6 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		} else {
 			fmt.Fprintf(f.buf, " %s@%s", tab.TabName().TableName, tab.Index(t.Index).IdxName())
 		}
-		if t.Reverse {
-			fmt.Fprintf(f.buf, ",rev")
-		}
 		if mode == formatMemo {
 			if tab.ColumnCount() != t.Cols.Len() {
 				fmt.Fprintf(f.buf, ",cols=%s", t.Cols)
@@ -289,6 +286,9 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			}
 			if t.HardLimit > 0 {
 				fmt.Fprintf(f.buf, ",lim=%d", t.HardLimit)
+				if t.LimitReverse {
+					f.buf.WriteString("(rev)")
+				}
 			}
 		}
 

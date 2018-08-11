@@ -83,9 +83,6 @@ type ScanOpDef struct {
 	// opt.Index metadata.
 	Index int
 
-	// Reverse indicates if the Scan is a reverse scan.
-	Reverse bool
-
 	// Cols specifies the set of columns that the scan operator projects. This
 	// may be a subset of the columns that the table/index contains.
 	Cols opt.ColSet
@@ -100,6 +97,10 @@ type ScanOpDef struct {
 	// if more are available. If its value is zero, then the limit is
 	// unknown, and the scan should return all available rows.
 	HardLimit int64
+
+	// LimitReverse is only used when HardLimit is set; if true, then the limit
+	// applies when the scan is in the reverse order.
+	LimitReverse bool
 }
 
 // VirtualScanOpDef defines the value of the Def private field of the
@@ -117,21 +118,48 @@ type VirtualScanOpDef struct {
 }
 
 // CanProvideOrdering returns true if the scan operator returns rows that
-// satisfy the given required ordering.
-func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required *props.OrderingChoice) bool {
-	// Scan naturally orders according to scanned index's key columns.
-	var ordering props.OrderingChoice
-	index := md.Table(s.Table).Index(s.Index)
-	for i := 0; i < index.KeyColumnCount(); i++ {
-		indexCol := index.Column(i)
-		colID := s.Table.ColumnID(indexCol.Ordinal)
-		if s.Reverse {
-			ordering.AppendCol(colID, !indexCol.Descending)
-		} else {
-			ordering.AppendCol(colID, indexCol.Descending)
-		}
+// satisfy the given required ordering; it also returns whether the scan needs
+// to be in reverse order to match the required ordering.
+func (s *ScanOpDef) CanProvideOrdering(
+	md *opt.Metadata, required *props.OrderingChoice,
+) (ok bool, reverse bool) {
+	// Scan naturally orders according to scanned index's key columns. A scan can
+	// be executed either as a forward or as a reverse scan (unless it has a row
+	// limit, in which case the direction is fixed).
+	//
+	// The code below follows the structure of OrderingChoice.Implies. We go
+	// through the columns and determine if the ordering matches with either scan
+	// direction.
+
+	// reverseSet is true when the value of reverse is known.
+	reverse, reverseSet := false, false
+	if s.HardLimit != 0 {
+		reverse, reverseSet = s.LimitReverse, true
 	}
-	return ordering.Implies(required)
+	index := md.Table(s.Table).Index(s.Index)
+	for left, right := 0, 0; right < len(required.Columns); {
+		if left >= index.KeyColumnCount() {
+			return false, false
+		}
+		indexCol := index.Column(left)
+		indexColID := s.Table.ColumnID(indexCol.Ordinal)
+		if required.Optional.Contains(int(indexColID)) {
+			left++
+			continue
+		}
+		reqCol := &required.Columns[right]
+		if !reqCol.Group.Contains(int(indexColID)) {
+			return false, false
+		}
+		if !reverseSet {
+			reverse, reverseSet = (indexCol.Descending != reqCol.Descending), true
+		} else if (indexCol.Descending == reqCol.Descending) == reverse {
+			return false, false
+		}
+		left, right = left+1, right+1
+	}
+	// If reverseSet is false (e.g. required is empty), we prefer forward scan.
+	return true, reverse
 }
 
 // GroupByDef defines the value of the Def private field of the GroupBy and
