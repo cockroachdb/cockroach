@@ -97,6 +97,11 @@ SELECT x FROM test WHERE y = 1/z
 statement ok
 SET CLUSTER SETTING debug.panic_on_failed_assertions = true; RESET CLUSTER SETTING debug.panic_on_failed_assertions
 
+statement ok
+SHOW application_name
+
+statement ok
+SHOW CLUSTER SETTING debug.panic_on_failed_assertions
 
 statement ok
 SET application_name = ''; RESET distsql
@@ -122,6 +127,8 @@ SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  -
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        -
 SET application_name = _                                          -
 SET distsql = "on"                                                -
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           -
+SHOW application_name                                             -
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved, but not the db prefix (#22700)
@@ -146,6 +153,8 @@ SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
 SET application_name = _
 SET distsql = _
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"
+SHOW application_name
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
