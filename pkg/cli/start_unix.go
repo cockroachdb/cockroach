@@ -56,7 +56,9 @@ func handleSignalDuringShutdown(sig os.Signal) {
 var startBackground bool
 
 func init() {
-	BoolFlag(StartCmd.Flags(), &startBackground, cliflags.Background, false)
+	for _, cmd := range StartCmds {
+		BoolFlag(cmd.Flags(), &startBackground, cliflags.Background, false)
+	}
 }
 
 func maybeRerunBackground() (bool, error) {

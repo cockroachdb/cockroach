@@ -43,7 +43,7 @@ end_test
 # Check what happens when attempting to connect securely to an
 # insecure server.
 
-send "$argv start --insecure\r"
+send "$argv start-single-node --insecure\r"
 eexpect "initialized new cluster"
 
 spawn /bin/bash
@@ -73,7 +73,7 @@ interrupt
 interrupt
 eexpect ":/# "
 
-send "$argv start --certs-dir=$certs_dir\r"
+send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir\r"
 eexpect "restarted pre-existing node"
 
 set spawn_id $client_spawn_id

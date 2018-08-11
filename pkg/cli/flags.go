@@ -207,11 +207,13 @@ func init() {
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
 	}
 
-	// Add a pre-run command for `start`.
-	AddPersistentPreRunE(StartCmd, func(cmd *cobra.Command, _ []string) error {
-		extraServerFlagInit()
-		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
-	})
+	// Add a pre-run command for `start` and `start-single-node`.
+	for _, cmd := range StartCmds {
+		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			extraServerFlagInit()
+			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+		})
+	}
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -254,8 +256,8 @@ func init() {
 
 	// Security flags.
 
-	{
-		f := StartCmd.Flags()
+	for _, cmd := range StartCmds {
+		f := cmd.Flags()
 
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
@@ -301,8 +303,15 @@ func init() {
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
-		// Cluster joining flags.
+		// Cluster joining flags. We need to enable this both for 'start'
+		// and 'start-single-node' although the latter does not support
+		// --join, because it delegates its logic to that of 'start', and
+		// 'start' will check that the flag is properly defined and set.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		// However we do hide it from help for 'start-single-node'.
+		if cmd == startSingleNodeCmd {
+			_ = f.MarkHidden(cliflags.Join.Name)
+		}
 
 		// Engine flags.
 		VarFlag(f, cacheSizeValue, cliflags.Cache)
@@ -354,7 +363,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
-		/* StartCmd is covered above */
+		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)

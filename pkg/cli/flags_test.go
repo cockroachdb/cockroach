@@ -63,7 +63,7 @@ func TestCacheFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 	args := []string{"--cache", "100MB"}
 	if err := f.Parse(args); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	// Check absolute values.
 	testCases := []struct {
@@ -128,7 +128,7 @@ func TestClockOffsetFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 	testData := []struct {
 		args     []string
 		expected time.Duration
@@ -155,7 +155,7 @@ func TestServerConnSettings(t *testing.T) {
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 	testData := []struct {
 		args                  []string
 		expectedAddr          string
@@ -279,7 +279,7 @@ func TestHttpHostFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 	testData := []struct {
 		args     []string
 		expected string

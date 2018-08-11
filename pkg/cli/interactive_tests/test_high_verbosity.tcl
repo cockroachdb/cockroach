@@ -2,7 +2,7 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-system "mkfifo pid_fifo || true; $argv start --insecure --verbosity 3 --pid-file=pid_fifo -s=path=logs/db & cat pid_fifo > server_pid"
+system "mkfifo pid_fifo || true; $argv start-single-node --insecure --verbosity 3 --pid-file=pid_fifo -s=path=logs/db & cat pid_fifo > server_pid"
 
 spawn /bin/bash
 send "PS1=':''/# '\r"

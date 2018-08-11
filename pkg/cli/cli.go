@@ -154,7 +154,8 @@ func init() {
 	})
 
 	cockroachCmd.AddCommand(
-		StartCmd,
+		startCmd,
+		startSingleNodeCmd,
 		initCmd,
 		certCmd,
 		quitCmd,

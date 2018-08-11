@@ -31,7 +31,7 @@ import (
 func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string
@@ -76,7 +76,7 @@ func TestInitInsecure(t *testing.T) {
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := StartCmd.Flags()
+	f := startCmd.Flags()
 
 	testCases := []struct {
 		args     []string

@@ -1766,23 +1766,24 @@ func TestFlagUsage(t *testing.T) {
   cockroach [command]
 
 Available Commands:
-  start       start a node
-  init        initialize a cluster
-  cert        create ca, node, and client certs
-  quit        drain and shutdown node
+  start             start a node
+  start-single-node start a single-node cluster
+  init              initialize a cluster
+  cert              create ca, node, and client certs
+  quit              drain and shutdown node
 
-  sql         open a sql shell
-  user        get, set, list and remove users
-  zone        get, set, list and remove zones
-  node        list, inspect or remove nodes
-  dump        dump sql tables
+  sql               open a sql shell
+  user              get, set, list and remove users
+  zone              get, set, list and remove zones
+  node              list, inspect or remove nodes
+  dump              dump sql tables
 
-  demo        open a demo sql shell
-  gen         generate auxiliary files
-  version     output version information
-  debug       debugging commands
-  sqlfmt      format SQL statements
-  help        Help about any command
+  demo              open a demo sql shell
+  gen               generate auxiliary files
+  version           output version information
+  debug             debugging commands
+  sqlfmt            format SQL statements
+  help              Help about any command
 
 Flags:
   -h, --help                             help for cockroach
