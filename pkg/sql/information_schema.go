@@ -248,6 +248,7 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_MAXIMUM_LENGTH INT,
 	CHARACTER_OCTET_LENGTH   INT,
 	NUMERIC_PRECISION        INT,
+	NUMERIC_PRECISION_RADIX  INT,
 	NUMERIC_SCALE            INT,
 	DATETIME_PRECISION       INT,
 	CHARACTER_SET_CATALOG    STRING,
@@ -276,6 +277,7 @@ CREATE TABLE information_schema.columns (
 					characterMaximumLength(column.Type),      // character_maximum_length
 					characterOctetLength(column.Type),        // character_octet_length
 					numericPrecision(column.Type),            // numeric_precision
+					numericPrecisionRadix(column.Type),       // numeric_precision_radix
 					numericScale(column.Type),                // numeric_scale
 					datetimePrecision(column.Type),           // datetime_precision
 					tree.DNull,                               // character_set_catalog
@@ -332,6 +334,10 @@ func characterOctetLength(colType sqlbase.ColumnType) tree.Datum {
 
 func numericPrecision(colType sqlbase.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecision)
+}
+
+func numericPrecisionRadix(colType sqlbase.ColumnType) tree.Datum {
+	return dIntFnOrNull(colType.NumericPrecisionRadix)
 }
 
 func numericScale(colType sqlbase.ColumnType) tree.Datum {

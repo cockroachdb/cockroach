@@ -863,19 +863,19 @@ DROP TABLE char_len
 statement ok
 CREATE TABLE num_prec (a INT, b FLOAT, c FLOAT(23), d DECIMAL, e DECIMAL(12), f DECIMAL(12, 6), g BOOLEAN)
 
-query TTIII colnames
-SELECT table_name, column_name, numeric_precision, numeric_scale, datetime_precision
+query TTIIII colnames
+SELECT table_name, column_name, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'num_prec'
 ----
-table_name  column_name  numeric_precision  numeric_scale  datetime_precision
-num_prec    a            64                 0              NULL
-num_prec    b            53                 NULL           NULL
-num_prec    c            23                 NULL           NULL
-num_prec    d            NULL               NULL           NULL
-num_prec    e            12                 0              NULL
-num_prec    f            12                 6              NULL
-num_prec    g            NULL               NULL           NULL
+table_name  column_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision
+num_prec    a            64                 2                        0              NULL
+num_prec    b            53                 2                        NULL           NULL
+num_prec    c            23                 2                        NULL           NULL
+num_prec    d            NULL               10                       NULL           NULL
+num_prec    e            12                 10                       0              NULL
+num_prec    f            12                 10                       6              NULL
+num_prec    g            NULL               NULL                     NULL           NULL
 
 statement ok
 DROP TABLE num_prec
