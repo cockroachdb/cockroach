@@ -170,7 +170,9 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
 	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
-	if def.Reverse {
+
+	props := c.mem.LookupPhysicalProps(candidate.Required())
+	if _, reverse := def.CanProvideOrdering(c.mem.Metadata(), &props.Ordering); reverse {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
