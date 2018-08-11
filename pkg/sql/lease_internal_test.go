@@ -197,7 +197,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,12 +208,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
 		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
 	correctExpiration := ts.mu.active.data[0].expiration == expiration
+	ts.mu.active.data[0].mu.Lock()
+	correctEpoch := ts.mu.active.data[0].mu.lease.epoch == 1
+	ts.mu.active.data[0].mu.Unlock()
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
 	}
 	if !correctExpiration {
 		t.Fatalf("wrong lease expiration survived purge")
+	}
+	if !correctEpoch {
+		t.Fatalf("wrong lease epoch survived purge")
 	}
 
 	// Test that purgeOldVersions correctly removes a table version
@@ -229,7 +235,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
@@ -670,7 +676,8 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 					LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
 						RemoveOnceDereferenced: true,
 						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
-						LeaseAcquireResultBlockEvent: func(leaseBlockType LeaseAcquireBlockType) {
+						LeaseAcquireResultBlockEvent: func(
+							id sqlbase.ID, leaseBlockType LeaseAcquireBlockType) {
 							if leaseBlockType == LeaseAcquireBlock {
 								if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
 									(count < 2 && !test.isSecondCallAcquireFreshest) {
