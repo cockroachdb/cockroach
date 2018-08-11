@@ -202,28 +202,40 @@ func (sb *statisticsBuilder) colStatFromInput(
 
 	case opt.SelectOp:
 		return sb.colStatFromChild(colSet, ev, 0)
-
-	default:
-		if ev.IsJoin() {
-			// TODO(radu): what if both sides have columns in colSet?
-			intersectsLeft := ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet)
-			intersectsRight := ev.Child(1).Logical().Relational.OutputCols.Intersects(colSet)
-			if intersectsLeft {
-				if intersectsRight {
-					panic(fmt.Sprintf("colSet %v contains both left and right columns", colSet))
-				}
-				return sb.colStatFromChild(colSet, ev, 0)
-			}
-			if intersectsRight {
-				return sb.colStatFromChild(colSet, ev, 1)
-			}
-			// All columns in colSet are outer columns; therefore, we can treat them
-			// as a constant.
-			return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
-		}
-
-		panic(fmt.Sprintf("unsupported operator %s", ev.Operator()))
 	}
+
+	var lookupJoinDef *LookupJoinDef
+	if ev.Operator() == opt.LookupJoinOp {
+		lookupJoinDef = ev.Private().(*LookupJoinDef)
+	}
+
+	if lookupJoinDef != nil || ev.IsJoin() {
+		intersectsLeft := ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet)
+		var intersectsRight bool
+		if lookupJoinDef != nil {
+			intersectsRight = lookupJoinDef.LookupCols.Intersects(colSet)
+		} else {
+			intersectsRight = ev.Child(1).Logical().Relational.OutputCols.Intersects(colSet)
+		}
+		if intersectsLeft {
+			if intersectsRight {
+				// TODO(radu): what if both sides have columns in colSet?
+				panic(fmt.Sprintf("colSet %v contains both left and right columns", colSet))
+			}
+			return sb.colStatFromChild(colSet, ev, 0 /* childIdx */)
+		}
+		if intersectsRight {
+			if lookupJoinDef != nil {
+				return sb.colStatTable(lookupJoinDef.Table, colSet)
+			}
+			return sb.colStatFromChild(colSet, ev, 1 /* childIdx */)
+		}
+		// All columns in colSet are outer columns; therefore, we can treat them
+		// as a constant.
+		return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
+	}
+
+	panic(fmt.Sprintf("unsupported operator %s", ev.Operator()))
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
@@ -261,7 +273,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
-		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
+		opt.LookupJoinOp:
 		return sb.colStatJoin(colSet, ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
@@ -512,7 +525,7 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
+	colStat := sb.copyColStatFromChild(colSet, ev, s)
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	return colStat
 }
@@ -582,37 +595,46 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *pro
 // | Join |
 // +------+
 
-func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildJoin(
+	ev ExprView, relProps *props.Relational, h *joinPropsHelper,
+) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 
-	leftStats := &ev.childGroup(0).logical.Relational.Stats
-	rightStats := &ev.childGroup(1).logical.Relational.Stats
-	on := ev.Child(2)
+	leftProps := ev.childGroup(0).logical.Relational
+	leftStats := &leftProps.Stats
+	var rightStats *props.Statistics
+	if h.lookupJoinDef == nil {
+		rightProps := ev.childGroup(1).logical.Relational
+		rightStats = &rightProps.Stats
+	} else {
+		rightStats = sb.makeTableStatistics(h.lookupJoinDef.Table)
+	}
+	equivReps := h.filterFD.EquivReps()
 
 	// Estimating selectivity for semi-join and anti-join is error-prone.
 	// For now, just propagate stats from the left side.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		s.RowCount = leftStats.RowCount
 		s.Selectivity = 1
 		return
 	}
 
-	// Shortcut if there are no ON conditions.
-	if on.Operator() == opt.TrueOp {
+	// Shortcut if there are no ON conditions. Note that for lookup join, there
+	// are implicit equality conditions on KeyCols.
+	if h.filterIsTrue {
 		s.RowCount = leftStats.RowCount * rightStats.RowCount
 		s.Selectivity = 1
 		return
 	}
 
 	// Shortcut if the ON condition is false or there is a contradiction.
-	constraintSet := on.Logical().Scalar.Constraints
-	if on.Operator() == opt.FalseOp || constraintSet == constraint.Contradiction {
-		switch ev.Operator() {
+	if h.filterIsFalse {
+		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			s.RowCount = 0
 
@@ -632,39 +654,30 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 		return
 	}
 
-	// Update stats based on ON conditions.
-
-	leftProps := ev.Child(0).Logical().Relational
-	rightProps := ev.Child(1).Logical().Relational
-	filterFD := &on.Logical().Scalar.FuncDeps
-	equivReps := filterFD.EquivReps()
-
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(h.filter, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
-	leftCols := constrainedCols.Intersection(leftProps.OutputCols)
-	rightCols := constrainedCols.Intersection(rightProps.OutputCols)
-	leftCols = sb.tryReduceCols(leftCols, s, &leftProps.FuncDeps)
-	rightCols = sb.tryReduceCols(rightCols, s, &rightProps.FuncDeps)
-	constrainedCols = leftCols.Union(rightCols)
+	constrainedCols = sb.tryReduceJoinCols(
+		constrainedCols, s, leftProps.OutputCols, h.rightOutputCols, &leftProps.FuncDeps, &h.rightFD,
+	)
 
 	// Calculate selectivity and row count
 	// -----------------------------------
 	s.RowCount = leftStats.RowCount * rightStats.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
-	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, filterFD, ev, s))
+	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filterFD, ev, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
-	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
+	sb.applyEquivalencies(equivReps, &h.filterFD, ev, relProps)
 
 	// The above calculation is for inner joins. Other joins need to remove stats
 	// that involve outer columns.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Keep only column stats from the right side. The stats from the left side
 		// are not valid.
@@ -673,7 +686,7 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
 		// Keep only column stats from the left side. The stats from the right side
 		// are not valid.
-		s.ColStats.RemoveIntersecting(rightProps.OutputCols)
+		s.ColStats.RemoveIntersecting(h.rightOutputCols)
 
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		// Do not keep any column stats.
@@ -682,7 +695,7 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 
 	// Tweak the row count.
 	innerJoinRowCount := s.RowCount
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// All rows from left side should be in the result.
 		s.RowCount = max(innerJoinRowCount, leftStats.RowCount)
@@ -708,10 +721,17 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
 	rightStats := &ev.childGroup(1).logical.Relational.Stats
 
-	switch ev.Operator() {
+	var lookupJoinDef *LookupJoinDef
+	joinType := ev.Operator()
+	if joinType == opt.LookupJoinOp {
+		lookupJoinDef = ev.Private().(*LookupJoinDef)
+		joinType = lookupJoinDef.JoinType
+	}
+
+	switch joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
-		colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
+		colStat := sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, ev))
 		colStat.ApplySelectivity(s.Selectivity, leftStats.RowCount)
 		return colStat
 
@@ -719,7 +739,12 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		// Column stats come from both sides of join.
 		leftCols := ev.Child(0).Logical().Relational.OutputCols.Copy()
 		leftCols.IntersectionWith(colSet)
-		rightCols := ev.Child(1).Logical().Relational.OutputCols.Copy()
+		var rightCols opt.ColSet
+		if lookupJoinDef == nil {
+			rightCols = ev.Child(1).Logical().Relational.OutputCols.Copy()
+		} else {
+			rightCols = lookupJoinDef.LookupCols.Copy()
+		}
 		rightCols.IntersectionWith(colSet)
 
 		// Join selectivity affects the distinct counts for different columns
@@ -738,22 +763,22 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		var colStat *props.ColumnStatistic
 		inputRowCount := leftStats.RowCount * rightStats.RowCount
 		if rightCols.Empty() {
-			colStat = sb.copyColStatFromChild(leftCols, ev, 0 /* childIdx */, s)
-			switch ev.Operator() {
+			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, ev))
+			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else if leftCols.Empty() {
-			colStat = sb.copyColStatFromChild(rightCols, ev, 1 /* childIdx */, s)
-			switch ev.Operator() {
+			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinRight(colSet, ev))
+			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else {
 			// Make a copy of the input column stats so we don't modify the originals.
-			leftColStat := *sb.colStatFromChild(leftCols, ev, 0 /* childIdx */)
-			rightColStat := *sb.colStatFromChild(rightCols, ev, 1 /* childIdx */)
-			switch ev.Operator() {
+			leftColStat := *sb.colStatFromJoinLeft(leftCols, ev)
+			rightColStat := *sb.colStatFromJoinRight(rightCols, ev)
+			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 				leftColStat.ApplySelectivity(s.Selectivity, inputRowCount)
 				rightColStat.ApplySelectivity(s.Selectivity, inputRowCount)
@@ -774,6 +799,25 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		}
 		return colStat
 	}
+}
+
+// colStatfromJoinLeft returns a column statistic from the left input of a join.
+func (sb *statisticsBuilder) colStatFromJoinLeft(
+	cols opt.ColSet, ev ExprView,
+) *props.ColumnStatistic {
+	return sb.colStatFromChild(cols, ev, 0 /* childIdx */)
+}
+
+// colStatfromJoinRight returns a column statistic from the right input of a
+// join (or the table for a lookup join).
+func (sb *statisticsBuilder) colStatFromJoinRight(
+	cols opt.ColSet, ev ExprView,
+) *props.ColumnStatistic {
+	if ev.Operator() != opt.LookupJoinOp {
+		return sb.colStatFromChild(cols, ev, 1 /* childIdx */)
+	}
+	def := ev.Private().(*LookupJoinDef)
+	return sb.colStatTable(def.Table, cols)
 }
 
 // +------------+
@@ -812,7 +856,7 @@ func (sb *statisticsBuilder) buildGroupBy(ev ExprView, relProps *props.Relationa
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
 		// columns.
-		colStat := sb.copyColStatFromChild(groupingColSet, ev, 0 /* childIdx */, s)
+		colStat := sb.copyColStatFromChild(groupingColSet, ev, s)
 		s.RowCount = colStat.DistinctCount
 	}
 
@@ -840,7 +884,7 @@ func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet, ev ExprView) *pro
 		return colStat
 	}
 
-	return sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
+	return sb.copyColStatFromChild(colSet, ev, s)
 }
 
 // +--------+
@@ -996,7 +1040,7 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
+	colStat := sb.copyColStatFromChild(colSet, ev, s)
 
 	// Scale distinct count based on the selectivity of the limit operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
@@ -1038,7 +1082,7 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *prop
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
+	colStat := sb.copyColStatFromChild(colSet, ev, s)
 
 	// Scale distinct count based on the selectivity of the offset operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
@@ -1156,14 +1200,12 @@ func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, ev ExprView) *props.C
 /////////////////////////////////////////////////
 
 // copyColStatFromChild copies the column statistic for the given colSet from
-// a child of ev into ev. If the child expected to contain the column statistic
-// for colSet is already known, childIdx contains the index of that child.
-// Otherwise, childIdx is -1. colStatFromChild may trigger recursive calls if
-// the requested statistic is not already cached in the child.
+// the first child of ev into ev. colStatFromChild may trigger recursive
+// calls if the requested statistic is not already cached in the child.
 func (sb *statisticsBuilder) copyColStatFromChild(
-	colSet opt.ColSet, ev ExprView, childIdx int, s *props.Statistics,
+	colSet opt.ColSet, ev ExprView, s *props.Statistics,
 ) *props.ColumnStatistic {
-	childColStat := sb.colStatFromChild(colSet, ev, childIdx)
+	childColStat := sb.colStatFromChild(colSet, ev, 0 /* childIdx */)
 	return sb.copyColStat(colSet, s, childColStat)
 }
 
@@ -1657,6 +1699,19 @@ func (sb *statisticsBuilder) tryReduceCols(
 	}
 
 	return reducedCols
+}
+
+// tryReduceJoinCols is used to determine which columns to use for join ON
+// condition selectivity calculation. See tryReduceCols.
+func (sb *statisticsBuilder) tryReduceJoinCols(
+	cols opt.ColSet,
+	s *props.Statistics,
+	leftCols, rightCols opt.ColSet,
+	leftFD, rightFD *props.FuncDepSet,
+) opt.ColSet {
+	leftCols = sb.tryReduceCols(leftCols.Intersection(cols), s, leftFD)
+	rightCols = sb.tryReduceCols(rightCols.Intersection(cols), s, rightFD)
+	return leftCols.Union(rightCols)
 }
 
 func (sb *statisticsBuilder) isEqualityWithTwoVars(cond ExprView) bool {
