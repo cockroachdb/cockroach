@@ -73,7 +73,8 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
-		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
+		opt.LookupJoinOp:
 		logical = b.buildJoinProps(ev)
 
 	case opt.IndexJoinOp:
@@ -138,7 +139,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Not Null Columns
 	// ----------------
 	// Initialize not-NULL columns from the table schema.
-	relational.NotNullCols = b.tableNotNullCols(md, def.Table)
+	relational.NotNullCols = tableNotNullCols(md, def.Table)
 	if def.Constraint != nil {
 		relational.NotNullCols.UnionWith(def.Constraint.ExtractNotNullCols(b.evalCtx))
 	}
@@ -243,7 +244,9 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	//
 	// "y" cannot be null because the SQL equality operator rejects nulls.
 	relational.NotNullCols = inputProps.NotNullCols
-	b.applyNotNullConstraint(relational, filterProps.Constraints)
+	if filterProps.Constraints != nil {
+		b.addNotNullCols(relational, filterProps.Constraints.ExtractNotNullCols(b.evalCtx))
+	}
 
 	// Outer Columns
 	// -------------
@@ -378,37 +381,38 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
+	var h joinPropsHelper
+	h.init(ev, b.evalCtx)
+
 	leftProps := ev.childGroup(0).logical.Relational
-	rightProps := ev.childGroup(1).logical.Relational
-	onProps := ev.childGroup(2).logical.Scalar
 
 	// Output Columns
 	// --------------
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
 	relational.OutputCols = leftProps.OutputCols.Copy()
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.SemiJoinOp, opt.AntiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 
 	default:
-		relational.OutputCols.UnionWith(rightProps.OutputCols)
+		relational.OutputCols.UnionWith(h.rightOutputCols)
 	}
 
 	// Not Null Columns
 	// ----------------
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp, opt.FullJoinApplyOp,
 		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
-		relational.NotNullCols = rightProps.NotNullCols.Copy()
+		relational.NotNullCols = h.rightNotNullCols.Copy()
 	}
 
 	// Right/full outer joins can result in left columns becoming null.
 	// Otherwise, propagate not null setting from left child.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
 
 	default:
@@ -416,9 +420,9 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	}
 
 	// Add not-null constraints from ON predicate for inner and semi-joins.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.InnerJoinOp, opt.SemiJoinApplyOp:
-		b.applyNotNullConstraint(relational, onProps.Constraints)
+		b.addNotNullCols(relational, h.filterNotNullCols)
 	}
 
 	// Outer Columns
@@ -426,18 +430,18 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	// Any outer columns from the filter that are not bound by the input columns
 	// are outer columns for the Join expression, in addition to any outer columns
 	// inherited from the input expressions.
-	inputCols := leftProps.OutputCols.Union(rightProps.OutputCols)
-	if !onProps.OuterCols.SubsetOf(inputCols) {
-		relational.OuterCols = onProps.OuterCols.Difference(inputCols)
+	inputCols := leftProps.OutputCols.Union(h.rightOutputCols)
+	if !h.filterOuterCols.SubsetOf(inputCols) {
+		relational.OuterCols = h.filterOuterCols.Difference(inputCols)
 	}
 	if ev.IsJoinApply() {
 		// Outer columns of right side of apply join can be bound by output
 		// columns of left side of apply join.
-		if !rightProps.OuterCols.SubsetOf(leftProps.OutputCols) {
-			relational.OuterCols.UnionWith(rightProps.OuterCols.Difference(leftProps.OutputCols))
+		if !h.rightOuterCols.SubsetOf(leftProps.OutputCols) {
+			relational.OuterCols.UnionWith(h.rightOuterCols.Difference(leftProps.OutputCols))
 		}
 	} else {
-		relational.OuterCols.UnionWith(rightProps.OuterCols)
+		relational.OuterCols.UnionWith(h.rightOuterCols)
 	}
 	relational.OuterCols.UnionWith(leftProps.OuterCols)
 
@@ -448,11 +452,11 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Anti and semi joins only inherit FDs from left side, since right side
 	// simply acts like a filter.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
 		// Add FDs from the ON predicate, which include equivalent columns and
 		// constant columns. Any outer columns become constants as well.
-		relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+		relational.FuncDeps.AddFrom(&h.filterFD)
 		b.applyOuterColConstants(relational)
 		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 
@@ -471,25 +475,25 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		//   3. For outer joins, add non-matching rows, extended with NULL values
 		//      for the null-supplying side of the join.
 		if ev.IsJoinApply() {
-			relational.FuncDeps.MakeApply(&rightProps.FuncDeps)
+			relational.FuncDeps.MakeApply(&h.rightFD)
 		} else {
-			relational.FuncDeps.MakeProduct(&rightProps.FuncDeps)
+			relational.FuncDeps.MakeProduct(&h.rightFD)
 		}
 
-		notNullCols := leftProps.NotNullCols.Union(rightProps.NotNullCols)
+		notNullCols := leftProps.NotNullCols.Union(h.rightNotNullCols)
 
-		switch ev.Operator() {
+		switch h.joinType {
 		case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 			// Add FDs from the ON predicate, which include equivalent columns and
 			// constant columns.
-			relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+			relational.FuncDeps.AddFrom(&h.filterFD)
 			b.applyOuterColConstants(relational)
 
 		case opt.RightJoinOp, opt.RightJoinApplyOp:
 			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-			relational.FuncDeps.MakeOuter(rightProps.OutputCols, notNullCols)
+			relational.FuncDeps.MakeOuter(h.rightOutputCols, notNullCols)
 
 		case opt.FullJoinOp, opt.FullJoinApplyOp:
 			// Clear the relation's key if all columns are nullable, because
@@ -507,7 +511,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 				relational.FuncDeps.ClearKey()
 			}
 			relational.FuncDeps.MakeOuter(leftProps.OutputCols, notNullCols)
-			relational.FuncDeps.MakeOuter(rightProps.OutputCols, notNullCols)
+			relational.FuncDeps.MakeOuter(h.rightOutputCols, notNullCols)
 		}
 
 		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
@@ -519,10 +523,8 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Cardinality
 	// -----------
-	// Calculate cardinality of each join type.
-	relational.Cardinality = b.makeJoinCardinality(
-		ev, leftProps.Cardinality, rightProps.Cardinality,
-	)
+	// Calculate cardinality, depending on join type.
+	relational.Cardinality = b.makeJoinCardinality(leftProps.Cardinality, &h)
 	if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
 	}
@@ -530,7 +532,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	// Statistics
 	// ----------
 	b.sb.init(b.evalCtx, ev.Metadata())
-	b.sb.buildJoin(ev, relational)
+	b.sb.buildJoin(ev, relational, &h)
 
 	return logical
 }
@@ -551,7 +553,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	// ----------------
 	// Add not-NULL columns from the table schema, and filter out any not-NULL
 	// columns from the input that are not projected by the index join.
-	relational.NotNullCols = b.tableNotNullCols(md, def.Table)
+	relational.NotNullCols = tableNotNullCols(md, def.Table)
 	relational.NotNullCols.IntersectionWith(relational.OutputCols)
 
 	// Outer Columns
@@ -1186,10 +1188,10 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 }
 
 func (b *logicalPropsBuilder) makeJoinCardinality(
-	ev ExprView, left, right props.Cardinality,
+	left props.Cardinality, h *joinPropsHelper,
 ) props.Cardinality {
 	var card props.Cardinality
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Semi/Anti join cardinality never exceeds left input cardinality, and
 		// allows zero rows.
@@ -1197,14 +1199,12 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	}
 
 	// Other join types can return up to cross product of rows.
+	right := h.rightCardinality
 	card = left.Product(right)
 
 	// Apply filter to cardinality.
-	filter := ev.Child(2)
-	if filter.Operator() != opt.TrueOp {
-		contradiction := filter.Operator() == opt.FalseOp ||
-			filter.Logical().Scalar.Constraints == constraint.Contradiction
-		if contradiction {
+	if !h.filterIsTrue {
+		if h.filterIsFalse {
 			card = props.ZeroCardinality
 		} else {
 			card = card.AsLowAs(0)
@@ -1212,15 +1212,15 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 	}
 
 	// Outer joins return minimum number of rows, depending on type.
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
 		card = card.AtLeast(left.Min)
 	}
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
 		card = card.AtLeast(right.Min)
 	}
-	switch ev.Operator() {
+	switch h.joinType {
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		card = card.AsHighAs(left.Min + right.Min)
 	}
@@ -1259,7 +1259,7 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 }
 
 // tableNotNullCols returns the set of not-NULL columns from the given table.
-func (b *logicalPropsBuilder) tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
+func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	cs := opt.ColSet{}
 	tab := md.Table(tabID)
 	for i := 0; i < tab.ColumnCount(); i++ {
@@ -1270,19 +1270,13 @@ func (b *logicalPropsBuilder) tableNotNullCols(md *opt.Metadata, tabID opt.Table
 	return cs
 }
 
-// applyNotNullConstraint extracts the set of not null columns from the given
-// constraint set, if it exists. That set is then combined with the set of not
-// null columns already present in the given relational properties.
-func (b *logicalPropsBuilder) applyNotNullConstraint(
-	relational *props.Relational, constraints *constraint.Set,
-) {
-	if constraints != nil {
-		notNullCols := constraints.ExtractNotNullCols(b.evalCtx)
-		if !notNullCols.Empty() {
-			notNullCols.UnionWith(relational.NotNullCols)
-			notNullCols.IntersectionWith(relational.OutputCols)
-			relational.NotNullCols = notNullCols
-		}
+// addNotNullCols adds not-null cols to the relational properties. The given
+// notNullCols set can be modified.
+func (b *logicalPropsBuilder) addNotNullCols(relational *props.Relational, notNullCols opt.ColSet) {
+	if !notNullCols.SubsetOf(relational.NotNullCols) {
+		notNullCols.UnionWith(relational.NotNullCols)
+		notNullCols.IntersectionWith(relational.OutputCols)
+		relational.NotNullCols = notNullCols
 	}
 }
 
@@ -1317,4 +1311,86 @@ func (b *logicalPropsBuilder) allocScalarProps() *props.Scalar {
 	r := &b.scalarAlloc[0]
 	b.scalarAlloc = b.scalarAlloc[1:]
 	return r
+}
+
+// joinPropsHelper is a helper that calculates and stores properties related to
+// joins that are used internally when deriving logical properties and
+// statistics.
+type joinPropsHelper struct {
+	joinType opt.Operator
+
+	lookupJoinDef *LookupJoinDef
+
+	rightOutputCols  opt.ColSet
+	rightNotNullCols opt.ColSet
+	rightOuterCols   opt.ColSet
+	rightCardinality props.Cardinality
+	rightFD          props.FuncDepSet
+
+	filter ExprView
+	// The following fields are properties of the "filter" (ON condition). For
+	// lookup join, the properties take into account the implicit lookup equalities.
+	filterOuterCols   opt.ColSet
+	filterFD          props.FuncDepSet
+	filterNotNullCols opt.ColSet
+	filterIsTrue      bool
+	filterIsFalse     bool
+}
+
+func (h *joinPropsHelper) init(ev ExprView, evalCtx *tree.EvalContext) {
+	if ev.Operator() != opt.LookupJoinOp {
+		h.joinType = ev.Operator()
+
+		rightProps := ev.childGroup(1).logical.Relational
+		h.rightOutputCols = rightProps.OutputCols
+		h.rightNotNullCols = rightProps.NotNullCols
+		h.rightOuterCols = rightProps.OuterCols
+		h.rightCardinality = rightProps.Cardinality
+		h.rightFD = rightProps.FuncDeps
+
+		h.filter = ev.Child(2)
+		filterProps := h.filter.Logical().Scalar
+		h.filterFD = filterProps.FuncDeps
+		h.filterOuterCols = filterProps.OuterCols
+		if filterProps.Constraints != nil {
+			h.filterNotNullCols = filterProps.Constraints.ExtractNotNullCols(evalCtx)
+		}
+		h.filterIsTrue = (h.filter.Operator() == opt.TrueOp)
+		h.filterIsFalse = (h.filter.Operator() == opt.FalseOp ||
+			filterProps.Constraints == constraint.Contradiction)
+		return
+	}
+
+	md := ev.Metadata()
+	def := ev.Private().(*LookupJoinDef)
+	h.joinType = def.JoinType
+	h.lookupJoinDef = def
+
+	h.rightOutputCols = def.LookupCols
+	h.rightNotNullCols = tableNotNullCols(md, def.Table)
+	h.rightNotNullCols.IntersectionWith(def.LookupCols)
+	h.rightCardinality = props.AnyCardinality
+	h.rightFD.CopyFrom(makeTableFuncDep(md, def.Table))
+	h.rightFD.MakeNotNull(h.rightNotNullCols)
+	h.rightFD.ProjectCols(h.rightOutputCols)
+
+	h.filter = ev.Child(1)
+	filterProps := h.filter.Logical().Scalar
+	h.filterOuterCols = filterProps.OuterCols
+	h.filterFD.CopyFrom(&filterProps.FuncDeps)
+	if filterProps.Constraints != nil {
+		h.filterNotNullCols = filterProps.Constraints.ExtractNotNullCols(evalCtx)
+	}
+	index := md.Table(def.Table).Index(def.Index)
+	// Apply the lookup join equalities.
+	for i, colID := range def.KeyCols {
+		indexColID := def.Table.ColumnID(index.Column(i).Ordinal)
+		h.filterNotNullCols.Add(int(colID))
+		h.filterNotNullCols.Add(int(indexColID))
+		h.filterFD.AddEquivalency(colID, indexColID)
+	}
+	// Lookup join has implicit equalities as part of the ON condition.
+	h.filterIsTrue = false
+	h.filterIsFalse = (h.filter.Operator() == opt.FalseOp ||
+		filterProps.Constraints == constraint.Contradiction)
 }
