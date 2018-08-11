@@ -1,0 +1,254 @@
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
+----
+TABLE abcd
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX secondary
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE small (m INT, n INT)
+----
+TABLE small
+ ├── m int
+ ├── n int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+# We can only test lookup stat generation when using non-covering indexes
+# (that's when we create a group with LookupJoin). We can compare the
+# statistics with the top-level join, they should be in the same ballpark.
+
+opt
+SELECT * FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── stats: [rows=14.2857143, distinct(1)=10, distinct(4)=10]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── stats: [rows=14.2857143, distinct(1)=10, distinct(4)=10]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10]
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── true [type=bool]
+
+# Filter that gets pushed down on both sides, but comes back into the ON
+# condition for the lookup side.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE n > 2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── stats: [rows=4.76190476, distinct(1)=3.33333333, distinct(4)=3.33333333]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── stats: [rows=4.76190476, distinct(1)=3.33333333, distinct(4)=3.33333333]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1(int) n:2(int!null)
+ │    │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333]
+ │    │    ├── scan small
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    └── stats: [rows=10, distinct(1)=10]
+ │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    │         └── n > 2 [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── true [type=bool]
+
+# Filter that applies to the right side and gets pulled back into the ON
+# condition.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── stats: [rows=10.8305443, distinct(1)=10, distinct(4)=10]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── stats: [rows=4.76190476, distinct(1)=4.76190476, distinct(4)=4.76190476]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10]
+ │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/3 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > 2 [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
+ └── true [type=bool]
+
+# Filter that can only be applied after the primary index join.
+opt
+SELECT * FROM small JOIN abcd ON a=m WHERE c>2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── stats: [rows=10.8305443, distinct(1)=10, distinct(4)=10]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── stats: [rows=14.2857143, distinct(1)=10, distinct(4)=10]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10]
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+      └── c > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+
+# Multiple equalities.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── stats: [rows=0.0351902068, distinct(1)=0.0351902068, distinct(2)=0.0351902068, distinct(4)=0.0351902068, distinct(5)=0.0351902068]
+ ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1 2] = [4 5]
+ │    ├── stats: [rows=0.0204081633, distinct(1)=0.0204081633, distinct(2)=0.0204081633, distinct(4)=0.0204081633, distinct(5)=0.0204081633]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ │    ├── scan small
+ │    │    ├── columns: m:1(int) n:2(int)
+ │    │    └── stats: [rows=10, distinct(1)=10, distinct(2)=7]
+ │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b = n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+      └── c > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int not null
+ └── INDEX primary
+      ├── a int not null
+      └── c int not null
+
+exec-ddl
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX e_idx (e) STORING (d))
+----
+TABLE def
+ ├── d int
+ ├── e int not null
+ ├── f int not null
+ ├── INDEX primary
+ │    ├── f int not null
+ │    └── e int not null
+ └── INDEX e_idx
+      ├── e int not null
+      ├── f int not null
+      └── d int (storing)
+
+# Set up the statistics as if the first table is much smaller than the second.
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE def INJECT STATISTICS '[
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+----
+
+# The filter a=f is selective, so we expect a lookup join.
+opt
+SELECT * FROM abc JOIN def ON a = f
+----
+inner-join (lookup def)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
+ ├── key columns: [1] = [6]
+ ├── stats: [rows=100, distinct(1)=100, distinct(6)=100]
+ ├── key: (3,5,6)
+ ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(6), (6)==(1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100]
+ │    ├── key: (1,3)
+ │    └── fd: (1,3)-->(2)
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── a = f [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
+# The filter a=e is not very selective, so we do not expect a lookup join.
+opt
+SELECT * FROM abc JOIN def ON a = e
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
+ ├── stats: [rows=10000, distinct(1)=100, distinct(5)=100]
+ ├── key: (3,5,6)
+ ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(5), (5)==(1)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    ├── stats: [rows=100, distinct(1)=100]
+ │    ├── key: (1,3)
+ │    ├── fd: (1,3)-->(2)
+ │    └── ordering: +1
+ ├── scan def@e_idx
+ │    ├── columns: d:4(int) e:5(int!null) f:6(int!null)
+ │    ├── stats: [rows=10000, distinct(5)=100]
+ │    ├── key: (5,6)
+ │    ├── fd: (5,6)-->(4)
+ │    └── ordering: +5
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +5
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── a = e [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
