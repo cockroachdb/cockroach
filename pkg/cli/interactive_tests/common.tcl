@@ -89,7 +89,7 @@ proc send_eof {} {
 proc start_server {argv} {
     report "BEGIN START SERVER"
     system "mkfifo url_fifo || true;
-            $argv start --insecure --pid-file=server_pid --listening-url-file=url_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 &
+            $argv start-single-node --insecure --pid-file=server_pid --listening-url-file=url_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 &
             cat url_fifo > server_url"
     report "START SERVER DONE"
 }
