@@ -77,6 +77,7 @@ CREATE TABLE system.lease (
   version    INT,
   "nodeID"   INT,
   expiration TIMESTAMP,
+  epoch      INT,
   PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
@@ -408,10 +409,12 @@ var (
 			{Name: "version", ID: 2, Type: colTypeInt},
 			{Name: "nodeID", ID: 3, Type: colTypeInt},
 			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
+			{Name: "epoch", ID: 5, Type: colTypeInt, Nullable: true},
 		},
-		NextColumnID: 5,
+		NextColumnID: 6,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
+			{Name: "fam_5_epoch", ID: 5, ColumnNames: []string{"epoch"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
 		},
 		PrimaryIndex: IndexDescriptor{
 			Name:             "primary",
@@ -421,7 +424,7 @@ var (
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 2, 4, 3},
 		},
-		NextFamilyID:   1,
+		NextFamilyID:   6,
 		NextIndexID:    2,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
 		FormatVersion:  InterleavedFormatVersion,
