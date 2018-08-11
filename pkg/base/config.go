@@ -88,6 +88,15 @@ const (
 	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
+
+	// DefaultTableDescriptorLeaseEpochRefreshInterval is the default
+	// periodicity at which an attempt is made to refresh the LeaseManager
+	// local epoch. A high value will refresh the epoch less frequently
+	// resulting in a newer epoch being discovered later and the older
+	// epoch expiring earlier than it should. A higher value will give
+	// the node lesser time to refresh all leases to a new epoch. A lower
+	// value results in more frequent polling (it's a very cheap operation).
+	DefaultTableDescriptorLeaseEpochRefreshInterval = 10 * time.Second
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -552,16 +561,21 @@ type LeaseManagerConfig struct {
 	// the lease renewal timeout.
 	TableDescriptorLeaseJitterFraction float64
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// TableDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
 	TableDescriptorLeaseRenewalTimeout time.Duration
+
+	// TableDescriptorLeaseEpochRefreshInterval is the default periodicity
+	// at which an attempt is made to refresh the LeaseManager local epoch.
+	TableDescriptorLeaseEpochRefreshInterval time.Duration
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
 func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
-		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
-		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
-		TableDescriptorLeaseRenewalTimeout: DefaultTableDescriptorLeaseRenewalTimeout,
+		TableDescriptorLeaseDuration:             DefaultTableDescriptorLeaseDuration,
+		TableDescriptorLeaseJitterFraction:       DefaultTableDescriptorLeaseJitterFraction,
+		TableDescriptorLeaseRenewalTimeout:       DefaultTableDescriptorLeaseRenewalTimeout,
+		TableDescriptorLeaseEpochRefreshInterval: DefaultTableDescriptorLeaseEpochRefreshInterval,
 	}
 }

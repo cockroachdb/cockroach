@@ -668,9 +668,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.execCfg = &execCfg
 
-	s.leaseMgr.SetExecCfg(&execCfg)
-	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-
 	s.node.InitLogger(&execCfg)
 
 	return s, nil
@@ -1592,6 +1589,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		}
 	}
 
+	{
+		var nodeLiveness sql.NodeLiveness = s.nodeLiveness
+		if testingKnobs := s.cfg.TestingKnobs.SQLLeaseManager; testingKnobs != nil {
+			if leaseMgrKnobs := *testingKnobs.(*sql.LeaseManagerTestingKnobs); leaseMgrKnobs.MockNodeLiveness != nil {
+				nodeLiveness = leaseMgrKnobs.MockNodeLiveness
+			}
+		}
+		s.leaseMgr.Start(s.execCfg, nodeLiveness)
+	}
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to

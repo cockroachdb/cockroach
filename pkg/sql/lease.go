@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,9 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,6 +57,7 @@ type storedTableLease struct {
 	id         sqlbase.ID
 	version    int
 	expiration tree.DTimestamp
+	epoch      int64
 }
 
 // tableVersionState holds the state for a table version. This includes
@@ -149,6 +153,9 @@ type LeaseStore struct {
 	// leaseRenewalTimeout is the time before a lease expires when
 	// acquisition to renew the lease begins.
 	leaseRenewalTimeout time.Duration
+	// epochRefreshInterval is the periodicity at which an attempt is made
+	// to refresh the LeaseManager epoch.
+	epochRefreshInterval time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
 }
@@ -163,7 +170,9 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 // acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped, the error will be errTableDropped.
-func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVersionState, error) {
+func (s LeaseStore) acquire(
+	ctx context.Context, tableID sqlbase.ID, epoch int64,
+) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
@@ -183,6 +192,7 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 			id:         tableDesc.ID,
 			version:    int(tableDesc.Version),
 			expiration: storedLeaseExpiration(expiration),
+			epoch:      epoch,
 		}
 		table = &tableVersionState{
 			TableDescriptor: *tableDesc,
@@ -207,10 +217,18 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 		// general cost of preparing, preparing this statement always requires a
 		// read from the database for the special descriptor of a system table
 		// (#23937).
-		insertLease := fmt.Sprintf(
-			`INSERT INTO system.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-			storedLease.id, storedLease.version, nodeID, &storedLease.expiration,
-		)
+		var insertLease string
+		if epoch > 0 {
+			insertLease = fmt.Sprintf(
+				`INSERT INTO system.lease ("descID", version, "nodeID", expiration, epoch) VALUES (%d, %d, %d, %s, %d)`,
+				storedLease.id, storedLease.version, nodeID, &storedLease.expiration, storedLease.epoch,
+			)
+		} else {
+			insertLease = fmt.Sprintf(
+				`INSERT INTO system.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
+				storedLease.id, storedLease.version, nodeID, &storedLease.expiration,
+			)
+		}
 		count, err := s.execCfg.InternalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
 		if err != nil {
 			return err
@@ -845,7 +863,8 @@ func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sql
 		// Acquire a fresh table lease.
 		didAcquire, err := acquireNodeLease(ctx, m, tableID)
 		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireFreshestBlock)
+			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(
+				tableID, LeaseAcquireFreshestBlock)
 		}
 		if err != nil {
 			return err
@@ -931,7 +950,13 @@ func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
 		}
-		table, err := m.LeaseStore.acquire(ctx, id)
+
+		// Start creating leases with epoch after the cluster has upgraded.
+		var epoch int64
+		if m.execCfg.Settings.Version.IsMinSupported(cluster.VersionWriteEpochBasedTableLeases) {
+			epoch = m.getEpoch()
+		}
+		table, err := m.LeaseStore.acquire(ctx, id, epoch)
 		if err != nil {
 			return nil, err
 		}
@@ -1030,7 +1055,6 @@ func releaseLease(lease *storedTableLease, m *LeaseManager) {
 // If t has no active leases, nothing is done.
 func purgeOldVersions(
 	ctx context.Context,
-	db *client.DB,
 	id sqlbase.ID,
 	dropped bool,
 	minVersion sqlbase.DescriptorVersion,
@@ -1151,7 +1175,7 @@ type LeaseStoreTestingKnobs struct {
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
 	// Called before waiting on a results from a DoChan call of acquireNodeLease
 	// in tableState.acquire() and tableState.acquireFreshestFromStore().
-	LeaseAcquireResultBlockEvent func(leaseBlockType LeaseAcquireBlockType)
+	LeaseAcquireResultBlockEvent func(id sqlbase.ID, leaseBlockType LeaseAcquireBlockType)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
@@ -1170,6 +1194,8 @@ type LeaseManagerTestingKnobs struct {
 	GossipUpdateEvent func(config.SystemConfig)
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
+	// Node liveness mock interface.
+	MockNodeLiveness NodeLiveness
 
 	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
@@ -1279,6 +1305,12 @@ func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey 
 	return tableNameCacheKey{dbID, tableName}
 }
 
+// NodeLiveness is the subset of storage.NodeLiveness's interface needed
+// by sql.
+type NodeLiveness interface {
+	Self() (*storage.Liveness, error)
+}
+
 // LeaseManager manages acquiring and releasing per-table leases. It also
 // handles resolving table names to descriptor IDs. The leases are managed
 // internally with a table descriptor and expiration time exported by the
@@ -1298,7 +1330,11 @@ type LeaseManager struct {
 		tables map[sqlbase.ID]*tableState
 	}
 
-	draining atomic.Value
+	draining     atomic.Value
+	nodeLiveness NodeLiveness
+
+	// Current node liveness epoch. This is updated periodically.
+	epoch int64
 
 	// tableNames is a cache for name -> id mappings. A mapping for the cache
 	// should only be used if we currently have an active lease on the respective
@@ -1313,7 +1349,7 @@ type LeaseManager struct {
 // NewLeaseManager creates a new LeaseManager.
 //
 // execCfg can be nil to help bootstrapping, but then it needs to be set via
-// SetExecCfg before the LeaseManager is used.
+// Start before the LeaseManager is used.
 //
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
@@ -1325,12 +1361,13 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			execCfg:             execCfg,
-			group:               &singleflight.Group{},
-			leaseDuration:       cfg.TableDescriptorLeaseDuration,
-			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
-			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
-			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			execCfg:              execCfg,
+			group:                &singleflight.Group{},
+			leaseDuration:        cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction:  cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout:  cfg.TableDescriptorLeaseRenewalTimeout,
+			epochRefreshInterval: cfg.TableDescriptorLeaseEpochRefreshInterval,
+			testingKnobs:         testingKnobs.LeaseStoreTestingKnobs,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
@@ -1346,9 +1383,17 @@ func NewLeaseManager(
 	return lm
 }
 
-// SetExecCfg has to be called if a nil execCfg was passed to NewLeaseManager.
-func (m *LeaseManager) SetExecCfg(execCfg *ExecutorConfig) {
+// Start has to be called before using the LeaseManager
+func (m *LeaseManager) Start(execCfg *ExecutorConfig, nodeLiveness NodeLiveness) {
 	m.execCfg = execCfg
+	m.SetLiveness(nodeLiveness)
+	m.refreshLeases()
+}
+
+// SetLiveness sets the liveness interface to be used by the LeaseManager.
+func (m *LeaseManager) SetLiveness(nodeLiveness NodeLiveness) {
+	m.nodeLiveness = nodeLiveness
+	m.periodicallyRefreshEpoch()
 }
 
 func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
@@ -1528,7 +1573,8 @@ func (m *LeaseManager) Acquire(
 				return nil, hlc.Timestamp{}, errLease
 			}
 			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
+				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(
+					tableID, LeaseAcquireBlock)
 			}
 
 		case errReadOlderTableVersion:
@@ -1612,11 +1658,12 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 	return t
 }
 
-// RefreshLeases starts a goroutine that refreshes the lease manager
+// refreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.Gossip) {
+func (m *LeaseManager) refreshLeases() {
 	ctx := context.TODO()
-	s.RunWorker(ctx, func(ctx context.Context) {
+	m.stopper.RunWorker(ctx, func(ctx context.Context) {
+		g := m.execCfg.Gossip
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		gossipUpdateC := g.RegisterSystemConfigChannel()
@@ -1655,7 +1702,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 						}
 						// Try to refresh the table lease to one >= this version.
 						if err := purgeOldVersions(
-							ctx, db, table.ID, table.Dropped(), table.Version, m); err != nil {
+							ctx, table.ID, table.Dropped(), table.Version, m); err != nil {
 							log.Warningf(ctx, "error purging leases for table %d(%s): %s",
 								table.ID, table.Name, err)
 						}
@@ -1667,9 +1714,160 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					m.testingKnobs.TestingLeasesRefreshedEvent(cfg)
 				}
 
-			case <-s.ShouldStop():
+			case <-m.stopper.ShouldStop():
 				return
 			}
 		}
 	})
+}
+
+func (m *LeaseManager) getEpoch() int64 {
+	return atomic.LoadInt64(&m.epoch)
+}
+
+// initEpoch initializes the epoch for the node.
+func (m *LeaseManager) initEpoch() {
+	retryOptions := base.DefaultRetryOptions()
+	retryOptions.Closer = m.stopper.ShouldQuiesce()
+	for r := retry.Start(retryOptions); r.Next(); {
+		liveness, err := m.nodeLiveness.Self()
+		if err != nil {
+			if log.V(2) {
+				log.Errorf(context.TODO(), "err = %s", err)
+			}
+			continue
+		}
+		atomic.StoreInt64(&m.epoch, liveness.Epoch)
+		return
+	}
+}
+
+// refreshEpoch refreshes the epoch for the node.
+func (m *LeaseManager) refreshEpoch() {
+	liveness, err := m.nodeLiveness.Self()
+	if err != nil {
+		log.Errorf(context.TODO(), "node epoch was not updated: %s", err)
+		return
+	}
+	atomic.StoreInt64(&m.epoch, liveness.Epoch)
+}
+
+// periodicallyRefreshEpoch is a way to periodically ensure that the node
+// liveness epoch on the current node hasn't moved forward. Whenever the
+// epoch changes all the leases are updated.
+func (m *LeaseManager) periodicallyRefreshEpoch() {
+	m.initEpoch()
+	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		tickDuration := m.epochRefreshInterval
+		ticker := time.NewTicker(tickDuration)
+		tickChan := ticker.C
+		defer ticker.Stop()
+		// Set to true whenever an existing refresh is in progress.
+		needToRefresh := false
+		var done, closer chan struct{}
+
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+
+			case <-tickChan:
+				// Refresh epoch before cluster upgrade, so when the cluster upgrade
+				// is complete this epoch is up to date for the lease acquisition code
+				// path which needs it.
+				oldEpoch := m.getEpoch()
+				m.refreshEpoch()
+				newEpoch := m.getEpoch()
+				// Start refreshing leases after an epoch has changed only
+				// after a cluster upgrade.
+				if !m.execCfg.Settings.Version.IsMinSupported(cluster.VersionWriteEpochBasedTableLeases) {
+					break
+				}
+				if oldEpoch != newEpoch {
+					log.Infof(ctx, "node liveness epoch has changed to %d", newEpoch)
+					// Was their an existing refresh running?
+					if done != nil {
+						// Close older refresh job.
+						if closer != nil {
+							close(closer)
+							closer = nil
+						}
+						needToRefresh = true
+					} else {
+						done, closer = m.refreshAllLeases(ctx)
+					}
+				}
+				// Check to see if a prior refresh has completed.
+				if done != nil {
+					select {
+					case <-done:
+						if needToRefresh {
+							// Schedule another refresh.
+							needToRefresh = false
+							done, closer = m.refreshAllLeases(ctx)
+						} else {
+							done, closer = nil, nil
+						}
+
+					default:
+					}
+				}
+			}
+		}
+	})
+}
+
+// Refresh all the current leases with the latest epoch.
+// Returns a done and closer channel. The done channel can be used to check
+// when the refresh is complete and the closer can be closed to prematurely
+// exit the refresh when a new refresh needs to be scheduled.
+func (m *LeaseManager) refreshAllLeases(ctx context.Context) (chan struct{}, chan struct{}) {
+	done := make(chan struct{})
+	closer := make(chan struct{})
+	if err := m.stopper.RunAsyncTask(ctx, "refresh all table leases", func(ctx context.Context) {
+		defer close(done)
+		// Construct a list of tables needing their leases to be reacquired.
+		// All new tables not on this ids list will have their leases acquired
+		// with the correct or future epoch.
+		m.mu.Lock()
+		ids := make([]sqlbase.ID, 0, len(m.mu.tables))
+		for k := range m.mu.tables {
+			ids = append(ids, k)
+		}
+		m.mu.Unlock()
+		log.Infof(ctx, "trying to refresh leases for: %+v", ids)
+		// Limit the number of concurrent lease refreshes.
+		sem := make(chan struct{}, 50)
+		var wg sync.WaitGroup
+		for i := range ids {
+			id := ids[i]
+			wg.Add(1)
+			if err := m.stopper.RunLimitedAsyncTask(
+				ctx, fmt.Sprintf("refresh table:%d lease", id), sem, true /*wait*/, func(ctx context.Context) {
+					defer wg.Done()
+					select {
+					case <-closer:
+						log.Infof(ctx, "refreshing table: %d prematurely canceled", id)
+						return
+
+					default:
+						if err := m.acquireFreshestFromStore(ctx, id); err != nil {
+							// If acquiring a lease fails here, the system
+							// will continue using a lease with an older epoch.
+							// The epoch will eventually expire and a query
+							// will block until a new lease is acquired.
+							log.Infof(ctx, "refreshing table: %d lease failed: %s", id, err)
+						}
+					}
+				}); err != nil {
+				log.Infof(ctx, "didnt refresh table: %d lease: %s", id, err)
+				wg.Done()
+			}
+		}
+		wg.Wait()
+	}); err != nil {
+		close(done)
+		return nil, nil
+	}
+	return done, closer
 }
