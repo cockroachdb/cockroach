@@ -275,6 +275,12 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	return txn.mu.sender.CommitTimestamp()
 }
 
+// CommitTimestampFixed returns true if the commit timestamp has
+// been fixed to the start timestamp and cannot be pushed forward.
+func (txn *Txn) CommitTimestampFixed() bool {
+	return txn.mu.sender.CommitTimestampFixed()
+}
+
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {
