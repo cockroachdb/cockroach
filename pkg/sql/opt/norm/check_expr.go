@@ -82,6 +82,21 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 				panic(fmt.Sprintf("group-by contains %s", childOp))
 			}
 		}
+
+	case opt.IndexJoinOp:
+		def := ev.Private().(*memo.IndexJoinDef)
+		if def.Cols.Empty() {
+			panic(fmt.Sprintf("index join with no columns"))
+		}
+
+	case opt.LookupJoinOp:
+		def := ev.Private().(*memo.LookupJoinDef)
+		if len(def.KeyCols) == 0 {
+			panic(fmt.Sprintf("lookup join with no key columns"))
+		}
+		if def.LookupCols.Empty() {
+			panic(fmt.Sprintf("lookup join with no lookup columns"))
+		}
 	}
 
 	f.checkExprOrdering(ev)

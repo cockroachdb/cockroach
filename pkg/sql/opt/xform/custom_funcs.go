@@ -46,11 +46,9 @@ func (c *CustomFuncs) Init(e *explorer) {
 //
 // ----------------------------------------------------------------------
 
-// CanGenerateIndexScans returns true if new index Scan operators can be
-// generated, based on the given ScanOpDef. Index scans should only be generated
-// from the original unaltered primary index Scan operator (i.e. unconstrained
-// and not limited).
-func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
+// IsCanonicalScan returns true if the given ScanOpDef is an original unaltered
+// primary index Scan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsCanonicalScan(def memo.PrivateID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	return scanOpDef.Index == opt.PrimaryIndex &&
 		scanOpDef.Constraint == nil &&
@@ -58,10 +56,10 @@ func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
 }
 
 // CanGenerateInvertedIndexScans returns true if new index Scan operators can
-// be generated on inverted indexes. Same as CanGenerateIndexScans, but with
+// be generated on inverted indexes. Same as IsCanonicalScan, but with
 // the additional check that we have at least one inverted index on the table.
 func (c *CustomFuncs) CanGenerateInvertedIndexScans(def memo.PrivateID) bool {
-	if !c.CanGenerateIndexScans(def) {
+	if !c.IsCanonicalScan(def) {
 		return false
 	}
 
@@ -388,8 +386,8 @@ func (c *CustomFuncs) ConstrainIndexJoinScan(
 		// We have a remaining filter. We create the constrained lookup join index
 		// scan in a new group and create a select node in the same group with the
 		// original select.
-		lookupJoin := c.e.f.ConstructIndexJoin(constrainedScan, indexJoinDef)
-		newSelect := memo.MakeSelectExpr(lookupJoin, remainingFilter)
+		indexJoin := c.e.f.ConstructIndexJoin(constrainedScan, indexJoinDef)
+		newSelect := memo.MakeSelectExpr(indexJoin, remainingFilter)
 		c.e.exprs = append(c.e.exprs, memo.Expr(newSelect))
 	}
 	return c.e.exprs
@@ -602,112 +600,197 @@ func (c *CustomFuncs) CanUseLookupJoin(
 	return false
 }
 
-// ConstructLookupJoin creates a lookup join expression.
-func (c *CustomFuncs) ConstructLookupJoin(
+// GenerateLookupJoins looks at the possible indexes and creates lookup join
+// expressions in the current group.
+func (c *CustomFuncs) GenerateLookupJoins(
 	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
 ) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
 	md := c.e.mem.Metadata()
 	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
 	inputProps := c.e.mem.GroupProperties(input).Relational
 	onExpr := memo.MakeNormExprView(c.e.mem, on)
+
 	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanDef.Cols, onExpr)
 	n := len(leftEq)
 	if n == 0 {
 		return nil
 	}
 
-	idx := md.Table(scanDef.Table).Index(scanDef.Index)
-	numIndexCols := idx.LaxKeyColumnCount()
-	lookupJoinDef := memo.LookupJoinDef{
-		JoinType:   joinType,
-		Table:      scanDef.Table,
-		Index:      scanDef.Index,
-		LookupCols: scanDef.Cols,
-	}
-	for i := 0; i < numIndexCols; i++ {
-		idxCol := scanDef.Table.ColumnID(idx.Column(i).Ordinal)
-		found := -1
-		for j := range rightEq {
-			if rightEq[j] == idxCol {
-				found = j
+	tab := md.Table(scanDef.Table)
+	var pkCols opt.ColList
+
+	for i := 0; i < tab.IndexCount(); i++ {
+		if !c.canGenerateLookupJoin(scanDef, rightEq, i) {
+			continue
+		}
+
+		idx := tab.Index(i)
+		lookupJoinDef := memo.LookupJoinDef{
+			JoinType: joinType,
+			Table:    scanDef.Table,
+			Index:    i,
+		}
+
+		// Find the longest prefix of index key columns that are equality columns.
+		numIndexKeyCols := idx.LaxKeyColumnCount()
+		lookupJoinDef.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
+		for j := 0; j < numIndexKeyCols; j++ {
+			idxCol := scanDef.Table.ColumnID(idx.Column(j).Ordinal)
+			eqIdx, ok := opt.FindInColList(rightEq, idxCol)
+			if !ok {
+				break
+			}
+			lookupJoinDef.KeyCols = append(lookupJoinDef.KeyCols, leftEq[eqIdx])
+		}
+
+		// TODO(radu): simplify the ON condition (we can remove the equalities on
+		// KeyCols).
+		lookupJoinOn := on
+
+		indexCols := md.IndexColumns(scanDef.Table, i)
+		if scanDef.Cols.SubsetOf(indexCols) {
+			// The index covers all the columns we need.
+			//
+			//     Join                       LookupJoin(t@idx))
+			//     /   \                           |
+			//    /     \            ->            |
+			//  Input  Scan(t)                   Input
+			//
+			lookupJoinDef.LookupCols = scanDef.Cols
+			lookupJoin := memo.MakeLookupJoinExpr(
+				input,
+				lookupJoinOn,
+				c.e.mem.InternLookupJoinDef(&lookupJoinDef),
+			)
+			c.e.exprs = append(c.e.exprs, memo.Expr(lookupJoin))
+			continue
+		}
+
+		// The index is not covering. We have to generate an index join above the
+		// lookup join. Note that this index join is also a LookupJoin, because an
+		// IndexJoin can only output columns from one table, whereas we also need to
+		// output columns from Left.
+		//
+		//     Join                       LookupJoin(t@primary)
+		//     /   \                           |
+		//    /     \            ->            |
+		//  Input  Scan(t)                LookupJoin(t@idx)
+		//                                     |
+		//                                     |
+		//                                   Input
+		//
+		// For example:
+		//  CREATE TABLE abc (a PRIMARY KEY, b INT, c INT)
+		//  CREATE TABLE xyz (x PRIMARY KEY, y INT, z INT, INDEX (y))
+		//  SELECT * FROM abc JOIN xyz ON a=y
+		//
+		// We want to first join abc with the index on y (which provides columns y, x)
+		// and then use a lookup join to retrieve column z. The "index join" (top
+		// LookupJoin) will produce columns a,b,c,x,y; the lookup columns are just z
+		// (the original index join produced x,y,z).
+		//
+		// Note that the top LookupJoin "sees" column IDs from the table on both
+		// "sides" (in this example x,y on the left and z on the right) but there is
+		// no overlap.
+		//
+		if scanDef.Flags.NoIndexJoin {
+			continue
+		}
+
+		if pkCols == nil {
+			pkIndex := md.Table(scanDef.Table).Index(opt.PrimaryIndex)
+			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
+			for i := range pkCols {
+				pkCols[i] = scanDef.Table.ColumnID(pkIndex.Column(i).Ordinal)
 			}
 		}
-		if found == -1 {
-			break
+
+		// The lower LookupJoin must return all PK columns (they are needed as key
+		// columns for the index join).
+		lookupJoinDef.LookupCols = scanDef.Cols.Intersection(indexCols)
+		for i := range pkCols {
+			lookupJoinDef.LookupCols.Add(int(pkCols[i]))
 		}
-		inputCol := leftEq[found]
-		if lookupJoinDef.KeyCols == nil {
-			lookupJoinDef.KeyCols = make(opt.ColList, 0, numIndexCols)
+
+		var indexJoinOn memo.GroupID
+
+		// onCols are the columns that the ON condition in the (lower) lookup join
+		// can refer to: input columns, or columns available in the index.
+		onCols := indexCols.Union(inputProps.OutputCols)
+		if c.IsBoundBy(lookupJoinOn, onCols) {
+			// The ON condition refers only to the columns available in the index.
+			//
+			// For LeftJoin, both LookupJoins perform a LeftJoin. A null-extended row
+			// from the lower LookupJoin will not have any matches in the top
+			// LookupJoin (it has NULLs on key columns) and will get null-extended
+			// there as well.
+			indexJoinOn = c.e.f.ConstructTrue()
+		} else {
+			// ON has some conditions that are bound by the columns in the index (at
+			// the very least, the equality conditions we used for KeyCols), and some
+			// conditions that refer to other columns. We can put the former in the
+			// lower LookupJoin and the latter in the index join.
+			//
+			// This works for InnerJoin but not for LeftJoin because of a
+			// technicality: if an input (left) row has matches in the lower
+			// LookupJoin but has no matches in the index join, only the columns
+			// looked up by the top index join get NULL-extended.
+			if joinType == opt.LeftJoinOp {
+				// TODO(radu): support LeftJoin, perhaps by looking up all columns and
+				// discarding columns that are already available from the lower
+				// LookupJoin. This requires a projection to avoid having the same
+				// ColumnIDs on both sides of the index join.
+				continue
+			}
+			conditions := c.e.mem.NormExpr(lookupJoinOn).AsFilters().Conditions()
+			lookupJoinOn = c.e.f.ConstructFilters(c.ExtractBoundConditions(conditions, onCols))
+			indexJoinOn = c.e.f.ConstructFilters(c.ExtractUnboundConditions(conditions, onCols))
 		}
-		lookupJoinDef.KeyCols = append(lookupJoinDef.KeyCols, inputCol)
-	}
-	if lookupJoinDef.KeyCols == nil {
-		// CanUseLookupJoin ensures this is not possible.
-		panic("lookup join not possible")
+
+		indexJoinDef := memo.LookupJoinDef{
+			JoinType:   joinType,
+			Table:      scanDef.Table,
+			Index:      opt.PrimaryIndex,
+			KeyCols:    pkCols,
+			LookupCols: scanDef.Cols.Difference(indexCols),
+		}
+
+		// Create the LookupJoin for the index join in the same group.
+		indexJoin := memo.MakeLookupJoinExpr(
+			c.e.f.ConstructLookupJoin(
+				input,
+				lookupJoinOn,
+				c.e.mem.InternLookupJoinDef(&lookupJoinDef),
+			),
+			indexJoinOn,
+			c.e.f.InternLookupJoinDef(&indexJoinDef),
+		)
+		c.e.exprs = append(c.e.exprs, memo.Expr(indexJoin))
 	}
 
-	// Create a lookup join expression in the same group.
-	// TODO(radu): simplify the ON condition (we can remove the equalities on
-	// KeyCols).
-	lookupJoin := memo.MakeLookupJoinExpr(input, on, c.e.mem.InternLookupJoinDef(&lookupJoinDef))
-	c.e.exprs = append(c.e.exprs[:0], memo.Expr(lookupJoin))
 	return c.e.exprs
 }
 
-// HoistIndexJoinDef creates a LookupJoinDef that implements an index join which
-// was hoisted above a join. See the PushJoinThroughIndexJoin rule for more
-// information.
-func (c *CustomFuncs) HoistIndexJoinDef(
-	indexJoinDefID memo.PrivateID, newJoin memo.GroupID, joinType opt.Operator,
-) memo.PrivateID {
-	indexJoinDef := c.e.mem.LookupPrivate(indexJoinDefID).(*memo.IndexJoinDef)
-	inputCols := c.e.mem.GroupProperties(newJoin).Relational.OutputCols
-	md := c.e.mem.Metadata()
-
-	pkIndex := md.Table(indexJoinDef.Table).Index(opt.PrimaryIndex)
-	numPKCols := pkIndex.KeyColumnCount()
-
-	// Create the lookup join expression.
-	//
-	// The key columns are the PK columns.
-	//
-	// The lookup columns are the lookup columns in the original index join,
-	// without any columns that are already available in the lookup join's input
-	// (i.e. newJoin).
-	//
-	// For example:
-	//  CREATE TABLE abc (a PRIMARY KEY, b INT, c INT)
-	//  CREATE TABLE xyz (x PRIMARY KEY, y INT, z INT, INDEX (y))
-	//  SELECT * FROM abc JOIN xyz ON a=y
-	//
-	// We want to first join abc with the index on y (which provides columns y, x)
-	// and then use a lookup join to retrieve column z. The newJoin will thus
-	// produce columns a,b,c,x,y; the lookup columns are just z (the original
-	// index join produced x,y,z).
-	//
-	// Note that the lookup join "sees" column IDs from the table on both "sides"
-	// (in this example x,y on the left and z on the right) but there is no
-	// overlap.
-	//
-	// We support inner and left join. For left join, the lookup join node must
-	// pass-through NULL PKs that come from "outer" (null-extended) rows and
-	// return a row of NULLs. Because we know that all other rows will have a
-	// match in the primary index, we can achieve this by making the lookup join a
-	// left join as well.
-	lookupJoinDef := memo.LookupJoinDef{
-		JoinType:   joinType,
-		Table:      indexJoinDef.Table,
-		Index:      opt.PrimaryIndex,
-		KeyCols:    make(opt.ColList, numPKCols),
-		LookupCols: indexJoinDef.Cols.Difference(inputCols),
+// canGenerateLookupJoin determines if the given index can be used to perform a
+// lookup join with equality constraints on eqCols.
+func (c *CustomFuncs) canGenerateLookupJoin(
+	scanDef *memo.ScanOpDef, eqCols opt.ColList, indexOrdinal int,
+) bool {
+	if scanDef.Flags.ForceIndex && scanDef.Flags.Index != indexOrdinal {
+		// If we are forcing a specific index, don't bother with the others.
+		return false
 	}
-	for i := 0; i < numPKCols; i++ {
-		lookupJoinDef.KeyCols[i] = indexJoinDef.Table.ColumnID(pkIndex.Column(i).Ordinal)
-		if !inputCols.Contains(int(lookupJoinDef.KeyCols[i])) {
-			panic("index join input doesn't have PK")
-		}
+	idx := c.e.mem.Metadata().Table(scanDef.Table).Index(indexOrdinal)
+	if idx.IsInverted() {
+		// Ignore inverted indexes.
+		return false
 	}
-	return c.e.mem.InternLookupJoinDef(&lookupJoinDef)
+
+	// Check if the first column in the index has an equality constraint.
+	firstIdxCol := scanDef.Table.ColumnID(idx.Column(0).Ordinal)
+	_, ok := opt.FindInColList(eqCols, firstIdxCol)
+	return ok
 }
 
 // ----------------------------------------------------------------------

@@ -32,6 +32,17 @@ type ColSet = util.FastIntSet
 // representation as FastIntMap but with a slice for large cases.
 type ColList = []ColumnID
 
+// FindInColList searches for a column in the list and returns its index in the
+// list (if successful).
+func FindInColList(cl ColList, col ColumnID) (idx int, ok bool) {
+	for i := range cl {
+		if cl[i] == col {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 // ColMap provides a 1:1 mapping from one column id to another. It is used by
 // operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap
