@@ -210,6 +210,7 @@ func render(
 }
 
 type asciiTableReporter struct {
+	rows  int
 	table *tablewriter.Table
 	buf   bytes.Buffer
 	w     *tabwriter.Writer
@@ -262,6 +263,15 @@ func (p *asciiTableReporter) iter(_ io.Writer, _ int, row []string) error {
 		return nil
 	}
 
+	const asciiTableWarnRows = 10000
+
+	if p.rows == asciiTableWarnRows {
+		fmt.Fprintf(stderr,
+			"warning: buffering more than %d result rows in client "+
+				"- RAM usage growing, consider another formatter instead\n",
+			asciiTableWarnRows)
+	}
+
 	for i, r := range row {
 		p.buf.Reset()
 		fmt.Fprint(p.w, r)
@@ -269,6 +279,7 @@ func (p *asciiTableReporter) iter(_ io.Writer, _ int, row []string) error {
 		row[i] = p.buf.String()
 	}
 	p.table.Append(row)
+	p.rows++
 	return nil
 }
 
