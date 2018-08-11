@@ -70,7 +70,7 @@ func initCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	if cliCtx.terminalOutput {
 		// See also setCLIDefaultForTests() in cli_test.go.
-		cliCtx.tableDisplayFormat = tableDisplayPretty
+		cliCtx.tableDisplayFormat = tableDisplayTable
 	}
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout

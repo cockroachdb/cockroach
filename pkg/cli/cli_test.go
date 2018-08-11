@@ -156,7 +156,7 @@ func setCLIDefaultsForTests() {
 	cliCtx.showTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
-	cliCtx.tableDisplayFormat = tableDisplayPretty
+	cliCtx.tableDisplayFormat = tableDisplayTable
 }
 
 // stopServer stops the test server.
@@ -211,8 +211,12 @@ func (c *cliTest) cleanup() {
 }
 
 func (c cliTest) Run(line string) {
+	redirectOutput(func() { c.runUnredirected(line) })
+}
+
+func (c cliTest) runUnredirected(line string) {
 	a := strings.Fields(line)
-	c.RunWithArgs(a)
+	c.runWithArgsUnredirected(a)
 }
 
 // RunWithCapture runs c and returns a string containing the output of c
@@ -221,14 +225,76 @@ func (c cliTest) Run(line string) {
 // the output of c.
 func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	return captureOutput(func() {
-		c.Run(line)
+		c.runUnredirected(line)
 	})
 }
 
 func (c cliTest) RunWithCaptureArgs(args []string) (string, error) {
 	return captureOutput(func() {
-		c.RunWithArgs(args)
+		c.runWithArgsUnredirected(args)
 	})
+}
+
+// stripWhitespaces removes whitespaces before each newline character.
+// We need to strip whitespace because otherwise we get test failures
+// in Example_tests: some tests produce whitespace at the end of each
+// line, the reference output is in Go comments here, and most text
+// editor remove trailing whitespaces in source files.
+func stripWhitespaces(s string) string {
+	start := 0
+	var res strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\n' {
+			continue
+		}
+		end := i
+		for ; end > start && s[end-1] == ' '; end-- {
+		}
+		res.WriteString(s[start:end])
+		res.WriteByte('\n')
+		start = i + 1
+	}
+	end := len(s)
+	for ; end > start && s[end-1] == ' '; end-- {
+	}
+	res.WriteString(s[start:end])
+	return res.String()
+}
+
+func TestStripWhitespaces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testData := []struct {
+		in, out string
+	}{
+		{" ", ""},
+		{" \n", "\n"},
+		{"abc", "abc"},
+		{"abc  ", "abc"},
+		{"abc  \n", "abc\n"},
+		{"abc  \nxyz", "abc\nxyz"},
+	}
+	for _, test := range testData {
+		t.Run(test.in, func(t *testing.T) {
+			res := stripWhitespaces(test.in)
+			if res != test.out {
+				t.Errorf("%q: got %q, expected %q", test.in, res, test.out)
+			}
+		})
+	}
+}
+
+// redirectOutput runs f and prints out either its output, or the
+// error if one was produed. We use redirectOutput for the various
+// Run functions because this ensures that trailing whitespace
+// on each line is properly stripped out; otherwise Example_ tests
+// don't work properly.
+func redirectOutput(f func()) {
+	out, err := captureOutput(f)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+	} else {
+		fmt.Print(out)
+	}
 }
 
 // captureOutput runs f and returns a string containing the output and any
@@ -237,12 +303,13 @@ func captureOutput(f func()) (out string, err error) {
 	// Heavily inspired by Go's testing/example.go:runExample().
 
 	// Funnel stdout into a pipe.
-	stdout := os.Stdout
+	stdoutSave, stderrRedirSave := os.Stdout, stderr
 	r, w, err := os.Pipe()
 	if err != nil {
 		return "", err
 	}
 	os.Stdout = w
+	stderr = w
 
 	// Send all bytes from piped stdout through the output channel.
 	type captureResult struct {
@@ -254,14 +321,16 @@ func captureOutput(f func()) (out string, err error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		r.Close()
-		outC <- captureResult{buf.String(), err}
+		s := stripWhitespaces(buf.String())
+		outC <- captureResult{s, err}
 	}()
 
 	// Clean up and record output in separate function to handle panics.
 	defer func() {
 		// Close pipe and restore normal stdout.
 		w.Close()
-		os.Stdout = stdout
+		os.Stdout = stdoutSave
+		stderr = stderrRedirSave
 		outResult := <-outC
 		out, err = outResult.out, outResult.err
 		if x := recover(); x != nil {
@@ -275,6 +344,10 @@ func captureOutput(f func()) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(origArgs []string) {
+	redirectOutput(func() { c.runWithArgsUnredirected(origArgs) })
+}
+
+func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -306,6 +379,10 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 }
 
 func (c cliTest) RunWithCAArgs(origArgs []string) {
+	redirectOutput(func() { c.runWithCAArgsUnredirected(origArgs) })
+}
+
+func (c cliTest) runWithCAArgsUnredirected(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -657,27 +734,19 @@ func Example_zone() {
 }
 
 func Example_demo() {
+	c := newCLITest(cliTestParams{noServer: true})
+	defer c.cleanup()
+
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
 		{`demo`, `-e`, `show application_name`},
-		{`demo`, `--format=pretty`, `-e`, `show database`},
+		{`demo`, `--format=table`, `-e`, `show database`},
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
 		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
 		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
 	}
-
-	// Ensure that CLI error messages and anything meant for the
-	// original stderr is redirected to stdout, where it can be
-	// captured.
-	defer func() { stderr = log.OrigStderr }()
-	stderr = os.Stdout
-
 	for _, cmd := range testData {
-		TestingReset()
-		fmt.Println(strings.Join(cmd, " "))
-		if err := Run(cmd); err != nil {
-			fmt.Println(err)
-		}
+		c.RunWithArgs(cmd)
 	}
 
 	// Output:
@@ -687,12 +756,10 @@ func Example_demo() {
 	// demo -e show application_name
 	// application_name
 	// cockroach demo
-	// demo --format=pretty -e show database
+	// demo --format=table -e show database
+	//   database
 	// +-----------+
-	// | database  |
-	// +-----------+
-	// | defaultdb |
-	// +-----------+
+	//   defaultdb
 	// (1 row)
 	// demo -e select 1 as "1" -e select 3 as "3"
 	// 1
@@ -849,13 +916,12 @@ thenshort`,
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.u values (" + vals.String() + ")"})
 	c.RunWithArgs([]string{"sql", "-e", "show columns from t.u"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.u"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "show columns from t.u"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.u"})
+	c.RunWithArgs([]string{"sql", "--format=table", "-e", "show columns from t.u"})
 	for i := tableDisplayFormat(0); i < tableDisplayLastFormat; i++ {
 		c.RunWithArgs([]string{"sql", "--format=" + i.String(), "-e", "select * from t.u"})
 	}
 
-	// Output:
+	// Output
 	// sql -e create database t; create table t.u ("f""oo" int, "f'oo" int, "f\oo" int, "short
 	// very very long
 	// not much" int, "very very long
@@ -882,37 +948,21 @@ thenshort`,
 	// not much"	"very very long
 	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
-	// sql --format=pretty -e show columns from t.u
+	// sql --format=table -e show columns from t.u
+	//    column_name   | data_type | is_nullable | column_default | generation_expression | indices
 	// +----------------+-----------+-------------+----------------+-----------------------+---------+
-	// |  column_name   | data_type | is_nullable | column_default | generation_expression | indices |
-	// +----------------+-----------+-------------+----------------+-----------------------+---------+
-	// | f"oo           | INT       |    true     | NULL           |                       | {}      |
-	// | f'oo           | INT       |    true     | NULL           |                       | {}      |
-	// | f\oo           | INT       |    true     | NULL           |                       | {}      |
-	// | short          | INT       |    true     | NULL           |                       | {}      |
-	// |                |           |             |                |                       |         |
-	// | very very long |           |             |                |                       |         |
-	// |                |           |             |                |                       |         |
-	// | not much       |           |             |                |                       |         |
-	// | very very long | INT       |    true     | NULL           |                       | {}      |
-	// |                |           |             |                |                       |         |
-	// | thenshort      |           |             |                |                       |         |
-	// | κόσμε          | INT       |    true     | NULL           |                       | {}      |
-	// | a|b            | INT       |    true     | NULL           |                       | {}      |
-	// | ܈85            | INT       |    true     | NULL           |                       | {}      |
-	// +----------------+-----------+-------------+----------------+-----------------------+---------+
+	//   f"oo           | INT       |    true     | NULL           |                       | {}
+	//   f'oo           | INT       |    true     | NULL           |                       | {}
+	//   f\oo           | INT       |    true     | NULL           |                       | {}
+	//   short          | INT       |    true     | NULL           |                       | {}
+	//   very very long |           |             |                |                       |
+	//   not much       |           |             |                |                       |
+	//   very very long | INT       |    true     | NULL           |                       | {}
+	//   thenshort      |           |             |                |                       |
+	//   κόσμε          | INT       |    true     | NULL           |                       | {}
+	//   a|b            | INT       |    true     | NULL           |                       | {}
+	//   ܈85            | INT       |    true     | NULL           |                       | {}
 	// (8 rows)
-	// sql --format=pretty -e select * from t.u
-	// +------+------+------+----------------+----------------+-------+-----+-----+
-	// | f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85 |
-	// |      |      |      |                |                |       |     |     |
-	// |      |      |      | very very long |   thenshort    |       |     |     |
-	// |      |      |      |                |                |       |     |     |
-	// |      |      |      |    not much    |                |       |     |     |
-	// +------+------+------+----------------+----------------+-------+-----+-----+
-	// |    0 |    0 |    0 |              0 |              0 |     0 |   0 |   0 |
-	// +------+------+------+----------------+----------------+-------+-----+-----+
-	// (1 row)
 	// sql --format=tsv -e select * from t.u
 	// "f""oo"	f'oo	f\oo	"short
 	// very very long
@@ -925,16 +975,12 @@ thenshort`,
 	// not much","very very long
 	// thenshort",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0,0,0
-	// sql --format=pretty -e select * from t.u
+	// sql --format=table -e select * from t.u
+	//   f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85
+	//        |      |      | very very long |   thenshort    |       |     |
+	//        |      |      |    not much    |                |       |     |
 	// +------+------+------+----------------+----------------+-------+-----+-----+
-	// | f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85 |
-	// |      |      |      |                |                |       |     |     |
-	// |      |      |      | very very long |   thenshort    |       |     |     |
-	// |      |      |      |                |                |       |     |     |
-	// |      |      |      |    not much    |                |       |     |     |
-	// +------+------+------+----------------+----------------+-------+-----+-----+
-	// |    0 |    0 |    0 |              0 |              0 |     0 |   0 |   0 |
-	// +------+------+------+----------------+----------------+-------+-----+-----+
+	//      0 |    0 |    0 |              0 |              0 |     0 |   0 |   0
 	// (1 row)
 	// sql --format=records -e select * from t.u
 	// -[ RECORD 1 ]
@@ -1016,10 +1062,8 @@ func Example_sql_empty_table() {
 	// x
 	// sql --format=csv -e select * from t.norows
 	// x
-	// sql --format=pretty -e select * from t.norows
-	// +---+
-	// | x |
-	// +---+
+	// sql --format=table -e select * from t.norows
+	//   x
 	// +---+
 	// (0 rows)
 	// sql --format=records -e select * from t.norows
@@ -1047,7 +1091,7 @@ func Example_sql_empty_table() {
 	// # empty
 	// # empty
 	// # empty
-	// sql --format=pretty -e select * from t.nocols
+	// sql --format=table -e select * from t.nocols
 	// --
 	// (3 rows)
 	// sql --format=records -e select * from t.nocols
@@ -1079,7 +1123,7 @@ func Example_sql_empty_table() {
 	// # no columns
 	// sql --format=csv -e select * from t.nocolsnorows
 	// # no columns
-	// sql --format=pretty -e select * from t.nocolsnorows
+	// sql --format=table -e select * from t.nocolsnorows
 	// --
 	// (0 rows)
 	// sql --format=records -e select * from t.nocolsnorows
@@ -1348,24 +1392,20 @@ func Example_sql_table() {
 	// ܈85,UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313",tabs
-	// sql --format=pretty -e select * from t.t
+	// sql --format=table -e select * from t.t
+	//            s          |               d
 	// +---------------------+--------------------------------+
-	// |          s          |               d                |
-	// +---------------------+--------------------------------+
-	// | foo                 | printable ASCII                |
-	// | "foo                | printable ASCII with quotes    |
-	// | \foo                | printable ASCII with backslash |
-	// | foo                 | non-printable ASCII            |
-	// |                     |                                |
-	// | bar                 |                                |
-	// | κόσμε               | printable UTF8                 |
-	// | ñ                   | printable UTF8 using escapes   |
-	// | \x01                | non-printable UTF8 string      |
-	// | ܈85                 | UTF8 string with RTL char      |
-	// | a   b         c     | tabs                           |
-	// |                     |                                |
-	// | 12  123123213 12313 |                                |
-	// +---------------------+--------------------------------+
+	//   foo                 | printable ASCII
+	//   "foo                | printable ASCII with quotes
+	//   \foo                | printable ASCII with backslash
+	//   foo                 | non-printable ASCII
+	//   bar                 |
+	//   κόσμε               | printable UTF8
+	//   ñ                   | printable UTF8 using escapes
+	//   \x01                | non-printable UTF8 string
+	//   ܈85                 | UTF8 string with RTL char
+	//   a   b         c     | tabs
+	//   12  123123213 12313 |
 	// (9 rows)
 	// sql --format=records -e select * from t.t
 	// -[ RECORD 1 ]
@@ -1557,33 +1597,29 @@ func TestRenderHTML(t *testing.T) {
 	}
 }
 
-func Example_misc_pretty() {
+func Example_misc_table() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s, 'foo' from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=table", "-e", "select '  hai' as x"})
+	c.RunWithArgs([]string{"sql", "--format=table", "-e", "explain select s, 'foo' from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE TABLE
-	// sql --format=pretty -e select '  hai' as x
+	// sql --format=table -e select '  hai' as x
+	//     x
 	// +-------+
-	// |   x   |
-	// +-------+
-	// |   hai |
-	// +-------+
+	//     hai
 	// (1 row)
-	// sql --format=pretty -e explain select s, 'foo' from t.t
+	// sql --format=table -e explain select s, 'foo' from t.t
+	//     tree    | field | description
 	// +-----------+-------+-------------+
-	// |   tree    | field | description |
-	// +-----------+-------+-------------+
-	// | render    |       |             |
-	// |  └── scan |       |             |
-	// |           | table | t@primary   |
-	// |           | spans | ALL         |
-	// +-----------+-------+-------------+
+	//   render    |       |
+	//    └── scan |       |
+	//             | table | t@primary
+	//             | spans | ALL
 	// (4 rows)
 }
 
@@ -1592,7 +1628,7 @@ func Example_user() {
 	defer c.cleanup()
 
 	c.Run("user ls")
-	c.Run("user ls --format=pretty")
+	c.Run("user ls --format=table")
 	c.Run("user ls --format=tsv")
 	c.Run("user set FOO")
 	c.RunWithArgs([]string{"sql", "-e", "create user if not exists 'FOO'"})
@@ -1617,20 +1653,18 @@ func Example_user() {
 	c.Run("user set table")
 	// Don't use get, since the output of hashedPassword is random.
 	// c.Run("user get foo")
-	c.Run("user ls --format=pretty")
+	c.Run("user ls --format=table")
 	c.Run("user rm foo")
-	c.Run("user ls --format=pretty")
+	c.Run("user ls --format=table")
 
 	// Output:
 	// user ls
 	// user_name
 	// root
-	// user ls --format=pretty
+	// user ls --format=table
+	//   user_name
 	// +-----------+
-	// | user_name |
-	// +-----------+
-	// | root      |
-	// +-----------+
+	//   root
 	// (1 row)
 	// user ls --format=tsv
 	// user_name
@@ -1675,40 +1709,36 @@ func Example_user() {
 	// CREATE USER 1
 	// user set table
 	// CREATE USER 1
-	// user ls --format=pretty
+	// user ls --format=table
+	//                              user_name
 	// +-----------------------------------------------------------------+
-	// |                            user_name                            |
-	// +-----------------------------------------------------------------+
-	// | _foo                                                            |
-	// | and                                                             |
-	// | f0oo                                                            |
-	// | f_oo                                                            |
-	// | foo                                                             |
-	// | foo0                                                            |
-	// | foo_                                                            |
-	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
-	// | root                                                            |
-	// | table                                                           |
-	// | ομηρος                                                          |
-	// +-----------------------------------------------------------------+
+	//   _foo
+	//   and
+	//   f0oo
+	//   f_oo
+	//   foo
+	//   foo0
+	//   foo_
+	//   foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
+	//   root
+	//   table
+	//   ομηρος
 	// (11 rows)
 	// user rm foo
 	// DROP USER 1
-	// user ls --format=pretty
+	// user ls --format=table
+	//                              user_name
 	// +-----------------------------------------------------------------+
-	// |                            user_name                            |
-	// +-----------------------------------------------------------------+
-	// | _foo                                                            |
-	// | and                                                             |
-	// | f0oo                                                            |
-	// | f_oo                                                            |
-	// | foo0                                                            |
-	// | foo_                                                            |
-	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
-	// | root                                                            |
-	// | table                                                           |
-	// | ομηρος                                                          |
-	// +-----------------------------------------------------------------+
+	//   _foo
+	//   and
+	//   f0oo
+	//   f_oo
+	//   foo0
+	//   foo_
+	//   foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
+	//   root
+	//   table
+	//   ομηρος
 	// (10 rows)
 }
 
@@ -1835,19 +1865,17 @@ func Example_node() {
 	}
 
 	c.Run("node ls")
-	c.Run("node ls --format=pretty")
+	c.Run("node ls --format=table")
 	c.Run("node status 10000")
 
 	// Output:
 	// node ls
 	// id
 	// 1
-	// node ls --format=pretty
+	// node ls --format=table
+	//   id
 	// +----+
-	// | id |
-	// +----+
-	// |  1 |
-	// +----+
+	//    1
 	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
@@ -1893,49 +1921,49 @@ func TestNodeStatus(t *testing.T) {
 		t.Fatalf("couldn't write stats summaries: %s", err)
 	}
 
-	out, err := c.RunWithCapture("node status 1 --format=pretty")
+	out, err := c.RunWithCapture("node status 1 --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --ranges --format=pretty")
+	out, err = c.RunWithCapture("node status --ranges --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --stats --format=pretty")
+	out, err = c.RunWithCapture("node status --stats --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --ranges --stats --format=pretty")
+	out, err = c.RunWithCapture("node status --ranges --stats --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --decommission --format=pretty")
+	out, err = c.RunWithCapture("node status --decommission --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --ranges --stats --decommission --format=pretty")
+	out, err = c.RunWithCapture("node status --ranges --stats --decommission --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --all --format=pretty")
+	out, err = c.RunWithCapture("node status --all --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkNodeStatus(t, c, out, start)
 
-	out, err = c.RunWithCapture("node status --format=pretty")
+	out, err = c.RunWithCapture("node status --format=table")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1956,8 +1984,6 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if !s.Scan() {
 		t.Fatalf("Couldn't skip command line: %s", s.Err())
 	}
-
-	checkSeparatorLine(t, s)
 
 	// check column names.
 	if !s.Scan() {
@@ -2055,8 +2081,6 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 			t.Errorf("value for %s (%d) greater than max (%d)", tc.name, val, tc.maxval)
 		}
 	}
-
-	checkSeparatorLine(t, s)
 }
 
 var separatorLineExp = regexp.MustCompile(`[\+-]+$`)
@@ -2094,10 +2118,9 @@ func extractFields(line string) ([]string, error) {
 	// fields has two extra entries, one for the empty token to the left of the first
 	// |, and another empty one to the right of the final |. So, we need to take those
 	// out.
-	if a, e := len(fields), len(getStatusNodeHeaders())+2; a != e {
+	if a, e := len(fields), len(getStatusNodeHeaders()); a != e {
 		return nil, errors.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
 	}
-	fields = fields[1 : len(fields)-1]
 	var r []string
 	for _, f := range fields {
 		r = append(r, strings.TrimSpace(f))
@@ -2321,7 +2344,7 @@ func Example_pretty_print_numerical_strings() {
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'-1', 'negative numerical string')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'1.0', 'decimal numerical string')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'aaaaa', 'non-numerical string')"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=table", "-e", "select * from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -2334,15 +2357,13 @@ func Example_pretty_print_numerical_strings() {
 	// INSERT 1
 	// sql -e insert into t.t values (e'aaaaa', 'non-numerical string')
 	// INSERT 1
-	// sql --format=pretty -e select * from t.t
+	// sql --format=table -e select * from t.t
+	//     s   |             d
 	// +-------+---------------------------+
-	// |   s   |             d             |
-	// +-------+---------------------------+
-	// | 0     | positive numerical string |
-	// | -1    | negative numerical string |
-	// | 1.0   | decimal numerical string  |
-	// | aaaaa | non-numerical string      |
-	// +-------+---------------------------+
+	//   0     | positive numerical string
+	//   -1    | negative numerical string
+	//   1.0   | decimal numerical string
+	//   aaaaa | non-numerical string
 	// (4 rows)
 }
 

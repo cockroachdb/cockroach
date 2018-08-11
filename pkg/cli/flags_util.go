@@ -232,7 +232,7 @@ type tableDisplayFormat int
 const (
 	tableDisplayTSV tableDisplayFormat = iota
 	tableDisplayCSV
-	tableDisplayPretty
+	tableDisplayTable
 	tableDisplayRecords
 	tableDisplaySQL
 	tableDisplayHTML
@@ -250,8 +250,8 @@ func (f *tableDisplayFormat) String() string {
 		return "tsv"
 	case tableDisplayCSV:
 		return "csv"
-	case tableDisplayPretty:
-		return "pretty"
+	case tableDisplayTable:
+		return "table"
 	case tableDisplayRecords:
 		return "records"
 	case tableDisplaySQL:
@@ -271,8 +271,8 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplayTSV
 	case "csv":
 		*f = tableDisplayCSV
-	case "pretty":
-		*f = tableDisplayPretty
+	case "table":
+		*f = tableDisplayTable
 	case "records":
 		*f = tableDisplayRecords
 	case "sql":
@@ -283,7 +283,7 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplayRaw
 	default:
 		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, pretty, records, sql, html, raw)", s)
+			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
 	}
 	return nil
 }
