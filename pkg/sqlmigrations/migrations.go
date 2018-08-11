@@ -190,6 +190,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add progress to system.jobs",
 		workFn: addJobsProgress,
 	},
+	{
+		// Introduced in v2.1.
+		// TODO(vivek): Bake into v2.2.
+		name:   "add epoch to system.lease",
+		workFn: addEpochToTableDescriptorLeaseTable,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -839,5 +845,24 @@ func addJobsProgress(ctx context.Context, r runner) error {
 			return err
 		}
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc))
+	})
+}
+
+func addEpochToTableDescriptorLeaseTable(ctx context.Context, r runner) error {
+	// Ideally to add the epoch column we'd just run a ALTER TABLE ADD COLUMN
+	// via the SQL interface. However root doesn't have CREATE privileges on
+	// system.lease. This change is safe to make without going through the
+	// schema change mechanism for a number of reasons:
+	// 1. The epoch column is NULLABLE so 2.0 nodes seeing this descriptor
+	// will not barf.
+	// 2. The epoch is read/written internally, and read/written only after
+	// the cluster has successfully migrated to 2.1. The epoch column is in
+	// its own column family.
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		desc := &sqlbase.LeaseTable
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(keys.LeaseTableID), sqlbase.WrapDescriptor(desc))
 	})
 }
