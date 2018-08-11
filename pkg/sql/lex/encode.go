@@ -124,7 +124,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
 	buf.WriteString(in[start:])
-	if escapedString || quote {
+	if quote {
 		buf.WriteByte('\'')
 	}
 }
