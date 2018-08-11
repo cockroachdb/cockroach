@@ -734,6 +734,7 @@ system         public        jobs              payload         4
 system         public        jobs              progress        5
 system         public        jobs              status          2
 system         public        lease             descID          1
+system         public        lease             epoch           5
 system         public        lease             expiration      4
 system         public        lease             nodeID          3
 system         public        lease             version         2
