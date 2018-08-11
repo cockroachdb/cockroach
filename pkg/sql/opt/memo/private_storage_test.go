@@ -138,9 +138,9 @@ func TestInternScanOpDef(t *testing.T) {
 	test(scanDef3, scanDef4, false)
 	scanDef5 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2)}
 	test(scanDef3, scanDef5, false)
-	scanDef6 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Reverse: true}
+	scanDef6 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: 10}
 	test(scanDef5, scanDef6, false)
-	scanDef7 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: 10}
+	scanDef7 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: -10}
 	test(scanDef5, scanDef7, false)
 	scanDef8 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{NoIndexJoin: true}}
 	test(scanDef5, scanDef8, false)

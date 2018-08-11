@@ -288,13 +288,16 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 
 	reqOrder := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 
+	_, reverse := def.CanProvideOrdering(md, &ev.Physical().Ordering)
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(def.Index),
 		needed,
 		def.Constraint,
-		def.HardLimit,
-		def.Reverse,
+		def.HardLimit.RowCount(),
+		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
+		reverse,
 		reqOrder,
 	)
 	if err != nil {
