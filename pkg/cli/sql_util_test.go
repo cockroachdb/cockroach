@@ -148,13 +148,11 @@ SET
 	}
 
 	expected = `
+  column_name | data_type | is_nullable | column_default | generation_expression |   indices    
 +-------------+-----------+-------------+----------------+-----------------------+-------------+
-| column_name | data_type | is_nullable | column_default | generation_expression |   indices   |
-+-------------+-----------+-------------+----------------+-----------------------+-------------+
-| parentID    | INT       |    false    | NULL           |                       | {"primary"} |
-| name        | STRING    |    false    | NULL           |                       | {"primary"} |
-| id          | INT       |    true     | NULL           |                       | {}          |
-+-------------+-----------+-------------+----------------+-----------------------+-------------+
+  parentID    | INT       |    false    | NULL           |                       | {"primary"}  
+  name        | STRING    |    false    | NULL           |                       | {"primary"}  
+  id          | INT       |    true     | NULL           |                       | {}           
 (3 rows)
 `
 
@@ -170,11 +168,9 @@ SET
 	}
 
 	expected = `
+  parentID |    name    | id  
 +----------+------------+----+
-| parentID |    name    | id |
-+----------+------------+----+
-|        1 | descriptor |  3 |
-+----------+------------+----+
+         1 | descriptor |  3  
 (1 row)
 `
 	if a, e := b.String(), expected[1:]; a != e {
@@ -189,23 +185,17 @@ SET
 	}
 
 	expected = `
+  1  
 +---+
-| 1 |
-+---+
-| 1 |
-+---+
+  1  
 (1 row)
+  2 | 3  
 +---+---+
-| 2 | 3 |
-+---+---+
-| 2 | 3 |
-+---+---+
+  2 | 3  
 (1 row)
+  'hello'  
 +---------+
-| 'hello' |
-+---------+
-| hello   |
-+---------+
+  hello    
 (1 row)
 `
 

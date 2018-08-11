@@ -286,7 +286,7 @@ var options = map[string]struct {
 		},
 	},
 	`display_format`: {
-		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
+		"the output format for tabular data (table, csv, tsv, html, sql, records, raw, pretty)",
 		false,
 		true,
 		func(_ *cliState, val string) error {
@@ -295,7 +295,7 @@ var options = map[string]struct {
 		func(_ *cliState) error {
 			displayFormat := tableDisplayTSV
 			if cliCtx.terminalOutput {
-				displayFormat = tableDisplayPretty
+				displayFormat = tableDisplayTable
 			}
 			cliCtx.tableDisplayFormat = displayFormat
 			return nil
