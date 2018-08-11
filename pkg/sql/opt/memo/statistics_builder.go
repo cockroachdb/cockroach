@@ -389,8 +389,10 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
 
 	// Cap distinct count at limit, if it exists.
-	if def.HardLimit > 0 && float64(def.HardLimit) < s.RowCount {
-		colStat.DistinctCount = min(colStat.DistinctCount, float64(def.HardLimit))
+	if def.HardLimit.IsSet() {
+		if limit := float64(def.HardLimit.RowCount()); limit < s.RowCount {
+			colStat.DistinctCount = min(colStat.DistinctCount, limit)
+		}
 	}
 
 	return colStat

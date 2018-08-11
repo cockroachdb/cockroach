@@ -92,7 +92,8 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 	case opt.ScanOp:
 		// Scan naturally orders according to the order of the scanned index.
 		def := mexpr.Private(o.mem).(*memo.ScanOpDef)
-		return def.CanProvideOrdering(o.mem.Metadata(), required)
+		ok, _ := def.CanProvideOrdering(o.mem.Metadata(), required)
+		return ok
 
 	case opt.RowNumberOp:
 		def := mexpr.Private(o.mem).(*memo.RowNumberDef)

@@ -15,7 +15,7 @@
 )
 =>
 (Scan
-    (LimitScanDef $def $limit)
+    (LimitScanDef $def $limit $ordering)
 )
 
 # PushLimitIntoIndexJoin pushes a limit through an index join.
