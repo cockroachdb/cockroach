@@ -197,7 +197,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,12 +208,16 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
 		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
 	correctExpiration := ts.mu.active.data[0].expiration == expiration
+	correctEpoch := ts.mu.active.data[0].epoch == 1
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
 	}
 	if !correctExpiration {
 		t.Fatalf("wrong lease expiration survived purge")
+	}
+	if !correctEpoch {
+		t.Fatalf("wrong lease epoch survived purge")
 	}
 
 	// Test that purgeOldVersions correctly removes a table version
@@ -229,7 +233,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
 	if err := purgeOldVersions(
-		context.TODO(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+		context.TODO(), tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -207,6 +208,9 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.server.Stopper(),
 			t.cfg,
 		)
+		if mockLiveness := t.leaseManagerTestingKnobs.MockNodeLiveness; mockLiveness != nil {
+			mgr.SetLiveness(mockLiveness)
+		}
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
@@ -1248,6 +1252,159 @@ CREATE TABLE t.test2 ();
 
 		return nil
 	})
+}
+
+type mockNodeLiveness struct {
+	epoch int64
+}
+
+func (m *mockNodeLiveness) Self() (*storage.Liveness, error) {
+	return &storage.Liveness{Epoch: atomic.LoadInt64(&m.epoch)}, nil
+}
+
+// This test makes sure leases get renewed automatically when the node
+// liveness epoch changes.
+func TestLeaseRenewedWithEpochChange(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	var testAcquiredCount int32
+	var testAcquisitionBlockCount int32
+	var testAcquisitionFreshestCount int32
+	var nl mockNodeLiveness
+	atomic.AddInt64(&nl.epoch, 1)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			MockNodeLiveness: &nl,
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				// We also want to know when acquiring blocks to test lease renewal.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.ID > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquiredCount, 1)
+					}
+				},
+				LeaseAcquireResultBlockEvent: func(eventType sql.LeaseAcquireBlockType) {
+					switch eventType {
+					case sql.LeaseAcquireBlock:
+						atomic.AddInt32(&testAcquisitionBlockCount, 1)
+
+					case sql.LeaseAcquireFreshestBlock:
+						atomic.AddInt32(&testAcquisitionFreshestCount, 1)
+					}
+				},
+			},
+		},
+	}
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// The lease jitter is set to ensure newer leases have higher
+	// expiration timestamps.
+	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	// Speed up epoch refresh.
+	params.LeaseManagerConfig.TableDescriptorLeaseEpochRefreshInterval = 100 * time.Millisecond
+
+	ctx := context.Background()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.test2 ();
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
+	dbID := test2Desc.ParentID
+
+	// Acquire a lease on test1 by name.
+	ts1, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts1); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	}
+
+	// Acquire a lease on test2 by ID.
+	ts2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts2); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 2 {
+		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
+			count)
+	}
+
+	// Reset testAcquisitionBlockCount as the first acqusition will always block.
+	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+
+	// Increment the epoch.
+	atomic.AddInt64(&nl.epoch, 1)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Acquire another lease by name on test1. At first this will be the
+		// same lease, but eventually we will see a renewed lease.
+		ts1, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := t.release(1, ts1); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// We check for the new expiry time because if our past acquire triggered
+		// the background renewal, the next lease we get will be the result of the
+		// background renewal.
+		if en1.WallTime <= eo1.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				en1, eo1)
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
+				count)
+		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
+			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
+		}
+
+		// Acquire another lease by ID on test2. At first this will be the same
+		// lease, but eventually we will asynchronously renew a lease and our
+		// acquire will get a newer lease.
+		ts2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := t.release(1, ts2); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// We check for the new expiry time because if our past acquire triggered
+		// the background renewal, the next lease we get will be the result of the
+		// background renewal.
+		if en2.WallTime <= eo2.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				en2, eo2)
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 3 {
+			return errors.Errorf("expected at least 3 leases to be acquired, but acquired %d times",
+				count)
+		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
+			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
+		}
+
+		return nil
+	})
+
+	if count := atomic.LoadInt32(&testAcquisitionFreshestCount); count != 2 {
+		t.Fatalf("freshest lease acquisition count is: %d", count)
+	}
 }
 
 // Check that the table version is incremented with every schema change.

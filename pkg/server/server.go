@@ -653,9 +653,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.execCfg = &execCfg
 
-	s.leaseMgr.SetExecCfg(&execCfg)
-	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-
 	s.node.InitLogger(&execCfg)
 
 	return s, nil
@@ -1578,6 +1575,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			return err
 		}
 	}
+
+	s.leaseMgr.Start(s.execCfg, s.nodeLiveness)
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
