@@ -185,3 +185,13 @@ func Run(args []string) error {
 	cockroachCmd.SetArgs(args)
 	return cockroachCmd.Execute()
 }
+
+// usageAndErr informs the user about the usage of the command
+// and returns an error. This ensures that the top-level command
+// has a suitable exit status.
+func usageAndErr(cmd *cobra.Command, args []string) error {
+	if err := cmd.Usage(); err != nil {
+		return err
+	}
+	return fmt.Errorf("unknown sub-command: %s", strings.Join(args, " "))
+}
