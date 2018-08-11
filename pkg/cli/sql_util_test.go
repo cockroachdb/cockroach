@@ -134,8 +134,8 @@ SET
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`, ``, `{\"primary\"}`},
-		{`name`, `STRING`, `false`, `NULL`, ``, `{\"primary\"}`},
+		{`parentID`, `INT`, `false`, `NULL`, ``, `{"primary"}`},
+		{`name`, `STRING`, `false`, `NULL`, ``, `{"primary"}`},
 		{`id`, `INT`, `true`, `NULL`, ``, `{}`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {

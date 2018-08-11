@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -35,7 +34,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -887,23 +888,21 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		return s[1 : len(s)-1]
 
 	case []byte:
-		if showPrintableUnicode {
-			pred := isNotGraphicUnicode
-			if showNewLinesAndTabs {
-				pred = isNotGraphicUnicodeOrTabOrNewline
-			}
-			if utf8.Valid(t) && bytes.IndexFunc(t, pred) == -1 {
-				return string(t)
-			}
-		} else {
-			if bytes.IndexFunc(t, isNotPrintableASCII) == -1 {
-				return string(t)
-			}
-		}
-		// Strip the start and final quotes. The surrounding display
-		// format (e.g. CSV/TSV) will add its own quotes.
-		s := fmt.Sprintf("%+q", t)
-		return s[1 : len(s)-1]
+		// Format the bytes as per bytea_output = escape.
+		//
+		// We use the "escape" format here because it enables printing
+		// readable strings as-is -- the default hex format would always
+		// render as hexadecimal digits. The escape format is also more
+		// compact.
+		//
+		// TODO(knz): this formatting is unfortunate/incorrect, and exists
+		// only because lib/pq incorrectly interprets the bytes received
+		// from the server. The proper behavior would be for the driver to
+		// not interpret the bytes and for us here to print that as-is, so
+		// that we can let the user see and control the result using
+		// `bytea_output`.
+		return lex.EncodeByteArrayToRawBytes(string(t),
+			sessiondata.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
 		return t.Format(tree.TimestampOutputFormat)
