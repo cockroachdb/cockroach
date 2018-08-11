@@ -187,16 +187,18 @@ func init() {
 	initCLIDefaults()
 
 	// Every command but start will inherit the following setting.
-	cockroachCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
 		extraClientFlagInit()
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
-	}
-
-	// Add a pre-run command for `start`.
-	AddPersistentPreRunE(StartCmd, func(cmd *cobra.Command, _ []string) error {
-		extraServerFlagInit()
-		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 	})
+
+	// Add a pre-run command for `start` and `start-single-node`.
+	for _, cmd := range StartCmds {
+		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			extraServerFlagInit()
+			return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+		})
+	}
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -253,8 +255,8 @@ func init() {
 	// avoid printing some messages to standard output in that case.
 	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
 
-	{
-		f := StartCmd.Flags()
+	for _, cmd := range StartCmds {
+		f := cmd.Flags()
 
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
@@ -312,8 +314,15 @@ func init() {
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
-		// Cluster joining flags.
+		// Cluster joining flags. We need to enable this both for 'start'
+		// and 'start-single-node' although the latter does not support
+		// --join, because it delegates its logic to that of 'start', and
+		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		// We also hide it from help for 'start-single-node'.
+		if cmd == startSingleNodeCmd {
+			_ = f.MarkHidden(cliflags.Join.Name)
+		}
 
 		// Engine flags.
 		VarFlag(f, cacheSizeValue, cliflags.Cache)
@@ -329,7 +338,7 @@ func init() {
 	}
 
 	// Log flags.
-	for _, cmd := range []*cobra.Command{demoCmd, StartCmd} {
+	for _, cmd := range append(StartCmds, demoCmd) {
 		f := cmd.Flags()
 		VarFlag(f, &startCtx.logDir, cliflags.LogDir)
 		startCtx.logDirFlag = f.Lookup(cliflags.LogDir.Name)
@@ -383,7 +392,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
-		/* StartCmd is covered above */
+		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
