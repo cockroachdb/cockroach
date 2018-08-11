@@ -21,12 +21,14 @@ import (
 var storeEncryptionSpecs baseccl.StoreEncryptionSpecList
 
 func init() {
-	cli.VarFlag(cli.StartCmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	for _, cmd := range cli.StartCmds {
+		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
-	// Add a new pre-run command to match encryption specs to store specs.
-	cli.AddPersistentPreRunE(cli.StartCmd, func(cmd *cobra.Command, _ []string) error {
-		return populateStoreSpecsEncryption()
-	})
+		// Add a new pre-run command to match encryption specs to store specs.
+		cli.AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			return populateStoreSpecsEncryption()
+		})
+	}
 }
 
 // populateStoreSpecsEncryption is a PreRun hook that matches store encryption specs with the

@@ -15,7 +15,7 @@ workdir=$(mktemp -d)
 tar xzf cockroach.src.tgz -C "$workdir"
 (cd "$workdir"/cockroach-* && make clean && make install)
 
-cockroach start --insecure --store type=mem,size=1GiB --background
+cockroach start-single-node --insecure --store type=mem,size=1GiB --background
 cockroach sql --insecure <<EOF
   CREATE DATABASE bank;
   CREATE TABLE bank.accounts (id INT PRIMARY KEY, balance DECIMAL);
