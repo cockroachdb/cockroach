@@ -53,9 +53,10 @@ eexpect "1 row"
 eexpect root@
 end_test
 
-start_test "Check that tables are not pretty-printed when output is a terminal and --format=tsv is specified."
 send "\\q\r"
 eexpect ":/# "
+
+start_test "Check that tables are not pretty-printed when output is a terminal and --format=tsv is specified."
 send "$argv sql --format=tsv\r"
 eexpect root@
 send "select 42 as woo; select 1 as woo;\r"
@@ -63,9 +64,17 @@ eexpect "woo\r\n42\r\n"
 eexpect "woo\r\n1\r\n"
 eexpect root@
 send "\\q\r"
+eexpect ":/# "
 end_test
 
+start_test "Check that a warning is printed if the pretty-printer is buffering many rows."
+send "$argv sql --format=table -e 'select * from generate_series(1,20000)' >/dev/null\r"
+eexpect "warning: buffering more than"
+eexpect "RAM usage growing"
+eexpect "consider another formatter"
 eexpect ":/# "
+end_test
+
 send "exit\r"
 eexpect eof
 
