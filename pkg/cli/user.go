@@ -173,9 +173,7 @@ var userCmds = []*cobra.Command{
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "get, set, list and remove users",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {
