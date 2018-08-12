@@ -1086,6 +1086,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "internal error: cannot parse http listen address")
 	}
 
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after both calls to UpdateAddrs() above.
+	s.cfg.CheckCertificateAddrs(ctx)
+
 	workersCtx := s.AnnotateCtx(context.Background())
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
@@ -1509,7 +1515,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
-	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), s.cfg.HTTPAdvertiseAddr)
+	log.Infof(ctx, "starting %s server at %s (use: %s)",
+		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
