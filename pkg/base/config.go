@@ -129,13 +129,17 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
-	// HTTPAddr is server's public HTTP address.
+	// HTTPAddr is the configured HTTP listen address.
 	//
 	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
 	// performance problems are addressed upstream.
 	//
 	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
+
+	// HTTPAdvertiseAddr is the advertised HTTP address.
+	// This is computed from HTTPAddr if specified otherwise Addr.
+	HTTPAdvertiseAddr string
 
 	// The certificate manager. Must be accessed through GetCertificateManager.
 	certificateManager lazyCertificateManager
@@ -184,7 +188,7 @@ func (cfg *Config) HTTPRequestScheme() string {
 func (cfg *Config) AdminURL() *url.URL {
 	return &url.URL{
 		Scheme: cfg.HTTPRequestScheme(),
-		Host:   cfg.HTTPAddr,
+		Host:   cfg.HTTPAdvertiseAddr,
 	}
 }
 
