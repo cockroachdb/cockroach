@@ -364,7 +364,7 @@ func (tc *TestCluster) AddReplicas(
 				log.Errorf(context.TODO(), "unexpected error: %s", err)
 				return err
 			}
-			repl := store.LookupReplica(rKey, nil)
+			repl := store.LookupReplica(rKey)
 			if repl == nil {
 				return errors.Errorf("range not found on store %d", target)
 			}

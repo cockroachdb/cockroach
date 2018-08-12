@@ -187,7 +187,7 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStats(t, mtc, 0)
 
 	// Replicate the "right" range to the other stores.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"))
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	// Verify stats on store1 after replication.

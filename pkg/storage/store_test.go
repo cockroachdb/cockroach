@@ -131,8 +131,8 @@ func (db *testSender) Send(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	repl := db.store.LookupReplica(rs.Key, rs.EndKey)
-	if repl == nil {
+	repl := db.store.LookupReplica(rs.Key)
+	if repl == nil || !repl.Desc().ContainsKeyRange(rs.Key, rs.EndKey) {
 		return nil, roachpb.NewError(roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), nil))
 	}
 	ba.RangeID = repl.RangeID
@@ -587,25 +587,20 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 
 	testCases := []struct {
-		start, end roachpb.RKey
-		expRng     *Replica
+		key    roachpb.RKey
+		expRng *Replica
 	}{
-		{roachpb.RKey("a"), roachpb.RKey("a\x00"), repl2},
-		{roachpb.RKey("a"), roachpb.RKey("b"), repl2},
-		{roachpb.RKey("a\xff\xff"), roachpb.RKey("b"), repl2},
-		{roachpb.RKey("c"), roachpb.RKey("c\x00"), repl3},
-		{roachpb.RKey("c"), roachpb.RKey("d"), repl3},
-		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d"), repl3},
-		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a"), nil},
-		{roachpb.RKey("x60\xff\xff"), roachpb.RKey("a\x00"), nil},
-		{roachpb.RKey("d"), roachpb.RKey("d"), nil},
-		{roachpb.RKey("c\xff\xff"), roachpb.RKey("d\x00"), nil},
-		{roachpb.RKey("a"), nil, repl2},
-		{roachpb.RKey("d"), nil, nil},
+		{roachpb.RKey("a"), repl2},
+		{roachpb.RKey("a\xff\xff"), repl2},
+		{roachpb.RKey("c"), repl3},
+		{roachpb.RKey("c\xff\xff"), repl3},
+		{roachpb.RKey("x60\xff\xff"), nil},
+		{roachpb.RKey("x60\xff\xff"), nil},
+		{roachpb.RKey("d"), nil},
 	}
 
 	for i, test := range testCases {
-		if r := store.LookupReplica(test.start, test.end); r != test.expRng {
+		if r := store.LookupReplica(test.key); r != test.expRng {
 			t.Errorf("%d: expected range %v; got %v", i, test.expRng, r)
 		}
 	}
@@ -1298,7 +1293,7 @@ func TestStoreSendBadRange(t *testing.T) {
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
 func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
-	repl := store.LookupReplica(key, nil)
+	repl := store.LookupReplica(key)
 	if repl == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
@@ -1383,37 +1378,37 @@ func TestStoreReplicasByKey(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
-	r0 := store.LookupReplica(roachpb.RKeyMin, nil)
+	r0 := store.LookupReplica(roachpb.RKeyMin)
 	r1 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey("A"), t)
 	r2 := splitTestRange(store, roachpb.RKey("A"), roachpb.RKey("C"), t)
 	r3 := splitTestRange(store, roachpb.RKey("C"), roachpb.RKey("X"), t)
 	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
 
-	if r := store.LookupReplica(roachpb.RKey("0"), nil); r != r0 {
+	if r := store.LookupReplica(roachpb.RKey("0")); r != r0 {
 		t.Errorf("mismatched replica %s != %s", r, r0)
 	}
-	if r := store.LookupReplica(roachpb.RKey("B"), nil); r != r1 {
+	if r := store.LookupReplica(roachpb.RKey("B")); r != r1 {
 		t.Errorf("mismatched replica %s != %s", r, r1)
 	}
-	if r := store.LookupReplica(roachpb.RKey("C"), nil); r != r2 {
+	if r := store.LookupReplica(roachpb.RKey("C")); r != r2 {
 		t.Errorf("mismatched replica %s != %s", r, r2)
 	}
-	if r := store.LookupReplica(roachpb.RKey("M"), nil); r != r2 {
+	if r := store.LookupReplica(roachpb.RKey("M")); r != r2 {
 		t.Errorf("mismatched replica %s != %s", r, r2)
 	}
-	if r := store.LookupReplica(roachpb.RKey("X"), nil); r != r3 {
+	if r := store.LookupReplica(roachpb.RKey("X")); r != r3 {
 		t.Errorf("mismatched replica %s != %s", r, r3)
 	}
-	if r := store.LookupReplica(roachpb.RKey("Z"), nil); r != r3 {
+	if r := store.LookupReplica(roachpb.RKey("Z")); r != r3 {
 		t.Errorf("mismatched replica %s != %s", r, r3)
 	}
-	if r := store.LookupReplica(roachpb.RKey("ZZ"), nil); r != r4 {
+	if r := store.LookupReplica(roachpb.RKey("ZZ")); r != r4 {
 		t.Errorf("mismatched replica %s != %s", r, r4)
 	}
-	if r := store.LookupReplica(roachpb.RKey("\xff\x00"), nil); r != r4 {
+	if r := store.LookupReplica(roachpb.RKey("\xff\x00")); r != r4 {
 		t.Errorf("mismatched replica %s != %s", r, r4)
 	}
-	if store.LookupReplica(roachpb.RKeyMax, nil) != nil {
+	if store.LookupReplica(roachpb.RKeyMax) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated replica")
 	}
 }
@@ -1432,7 +1427,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		repl        *Replica
 		expMaxBytes int64
 	}{
-		{store.LookupReplica(roachpb.RKeyMin, nil),
+		{store.LookupReplica(roachpb.RKeyMin),
 			config.DefaultZoneConfig().RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(baseID), t),
 			1 << 20},
