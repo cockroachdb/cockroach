@@ -394,19 +394,20 @@ func tsOrNull(micros int64) tree.Datum {
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
-	job_id             INT,
-	job_type           STRING,
-	description        STRING,
-	user_name          STRING,
-	descriptor_ids     INT[],
-	status             STRING,
-	created            TIMESTAMP,
-	started            TIMESTAMP,
-	finished           TIMESTAMP,
-	modified           TIMESTAMP,
-	fraction_completed FLOAT,
-	error              STRING,
-	coordinator_id     INT
+	job_id             		INT,
+	job_type           		STRING,
+	description        		STRING,
+	user_name          		STRING,
+	descriptor_ids     		INT[],
+	status             		STRING,
+	created            		TIMESTAMP,
+	started            		TIMESTAMP,
+	finished           		TIMESTAMP,
+	modified           		TIMESTAMP,
+	fraction_completed 		FLOAT,
+	high_water_timestamp	DECIMAL,
+	error              		STRING,
+	coordinator_id     		INT
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -422,9 +423,9 @@ CREATE TABLE crdb_internal.jobs (
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 			var jobType, description, username, descriptorIDs, started,
-				finished, modified, fractionCompleted, errorStr, leaseNode = tree.DNull,
+				finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
 				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-				tree.DNull, tree.DNull
+				tree.DNull, tree.DNull, tree.DNull
 
 			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -462,7 +463,13 @@ CREATE TABLE crdb_internal.jobs (
 					}
 					errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
 				} else {
-					fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
+					// Progress contains either fractionCompleted for traditional jobs,
+					// or the highWaterTimestamp for change feeds.
+					if highwater := progress.GetHighWater(); highwater != nil {
+						highWaterTimestamp = tree.TimestampToDecimal(*highwater)
+					} else {
+						fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
+					}
 					modified = tsOrNull(progress.ModifiedMicros)
 				}
 			}
@@ -480,6 +487,7 @@ CREATE TABLE crdb_internal.jobs (
 				finished,
 				modified,
 				fractionCompleted,
+				highWaterTimestamp,
 				errorStr,
 				leaseNode,
 			); err != nil {

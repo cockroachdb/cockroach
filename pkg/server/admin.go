@@ -1151,6 +1151,7 @@ func (s *adminServer) Jobs(
 	}
 	for i, row := range rows {
 		job := &resp.Jobs[i]
+		var fractionCompletedOrNil *float32
 		if err := scanner.ScanAll(
 			row,
 			&job.ID,
@@ -1163,10 +1164,13 @@ func (s *adminServer) Jobs(
 			&job.Started,
 			&job.Finished,
 			&job.Modified,
-			&job.FractionCompleted,
+			&fractionCompletedOrNil,
 			&job.Error,
 		); err != nil {
 			return nil, s.serverError(err)
+		}
+		if fractionCompletedOrNil != nil {
+			job.FractionCompleted = *fractionCompletedOrNil
 		}
 	}
 
@@ -1662,6 +1666,18 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = float32(*s)
 
+	case **float32:
+		s, ok := src.(*tree.DFloat)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		val := float32(*s)
+		*d = &val
+
 	case *int64:
 		s, ok := tree.AsDInt(src)
 		if !ok {
@@ -1698,7 +1714,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 				return errors.Errorf("source type assertion failed")
 			}
 			*d = nil
-			return nil
+			break
 		}
 		*d = &s.Time
 
