@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -512,70 +510,6 @@ func TestSystemConfigGossip(t *testing.T) {
 			return errors.Errorf("mismatch: expected %+v, got %+v", *expected, *got)
 		}
 		return nil
-	})
-}
-
-func TestOfficializeAddr(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	host, err := os.Hostname()
-	if err != nil {
-		t.Fatal(err)
-	}
-	addrs, err := net.DefaultResolver.LookupHost(context.TODO(), host)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, network := range []string{"tcp", "tcp4", "tcp6"} {
-		t.Run(fmt.Sprintf("network=%s", network), func(t *testing.T) {
-			for _, tc := range []struct {
-				cfgAddr, lnAddr, expAddr string
-			}{
-				{"localhost:0", "127.0.0.1:1234", "localhost:1234"},
-				{"localhost:1234", "127.0.0.1:2345", "localhost:1234"},
-				{":1234", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "1234")},
-				{":0", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
-			} {
-				t.Run(tc.cfgAddr, func(t *testing.T) {
-					lnAddr := util.NewUnresolvedAddr(network, tc.lnAddr)
-
-					if unresolvedAddr, err := officialAddr(context.TODO(), tc.cfgAddr, lnAddr, os.Hostname); err != nil {
-						t.Fatal(err)
-					} else if retAddrString := unresolvedAddr.String(); retAddrString != tc.expAddr {
-						t.Errorf("officialAddr(%s, %s) was %s; expected %s", tc.cfgAddr, tc.lnAddr, retAddrString, tc.expAddr)
-					}
-				})
-			}
-		})
-	}
-
-	osHostnameError := errors.New("some error")
-
-	t.Run("osHostnameError", func(t *testing.T) {
-		if _, err := officialAddr(
-			context.TODO(),
-			":0",
-			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
-			func() (string, error) { return "", osHostnameError },
-		); errors.Cause(err) != osHostnameError {
-			t.Fatalf("unexpected error %v", err)
-		}
-	})
-
-	t.Run("LookupHostError", func(t *testing.T) {
-		if _, err := officialAddr(
-			context.TODO(),
-			"notarealhost.local.:0",
-			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
-			os.Hostname,
-		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: no such host") &&
-			!testutils.IsError(err, `unable to lookup hostname "notarealhost.local."`) {
-			// On Linux but not on macOS, the error returned from
-			// (*net.Resolver).LookupHost reports the DNS server used; permit
-			// both.
-			t.Fatalf("unexpected error %v", err)
-		}
 	})
 }
 
