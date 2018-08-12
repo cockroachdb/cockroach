@@ -1086,6 +1086,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrapf(err, "internal error: cannot parse http listen address")
 	}
 
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after both calls to UpdateAddrs() above.
+	s.cfg.CheckCertificateAddrs(ctx)
+
 	workersCtx := s.AnnotateCtx(context.Background())
 
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {

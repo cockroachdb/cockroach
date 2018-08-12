@@ -16,6 +16,7 @@ package base
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
@@ -219,4 +220,105 @@ func resolveAddr(ctx context.Context, host, port string) (string, string, error)
 	// addresses once the server is taught to listen on multiple
 	// addresses. #5816
 	return addrs[0].String(), port, nil
+}
+
+// CheckCertificateAddrs validates the addresses inside the configured
+// certificates to be compatible with the configured listen and
+// advertise addresses.
+func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
+	if cfg.Insecure {
+		return
+	}
+
+	// By now the certificate manager must be initialized.
+	cm, _ := cfg.GetCertificateManager()
+
+	// Verify that the listen and advertise addresses are compatible
+	// with the provided certificate.
+	certInfo := cm.NodeCert()
+	cert := certInfo.ParsedCertificates[0]
+	addrInfo := certAddrs(cert)
+
+	// Log the certificate details in any case. This will aid during troubleshooting.
+	log.Infof(ctx, "server certificate addresses: %s", addrInfo)
+
+	// Verify the compatibility. This requires that ValidateAddr() has
+	// been called already.
+	checkCertAddr(ctx, cfg.Addr, "listen", addrInfo, cert)
+	checkCertAddr(ctx, cfg.AdvertiseAddr, "advertise", addrInfo, cert)
+
+	// Verify that the http listen and advertise addresses are
+	// compatible with the provided certificate.
+	certInfo = cm.UICert()
+	if certInfo == nil {
+		// A nil UI cert means use the node cert instead;
+		// see details in (*CertificateManager) getEmbeddedUIServerTLSConfig()
+		// and (*CertificateManager) getUICertLocked().
+		certInfo = cm.NodeCert()
+	}
+	cert = certInfo.ParsedCertificates[0]
+	addrInfo = certAddrs(cert)
+
+	// Log the certificate details in any case. This will aid during troubleshooting.
+	log.Infof(ctx, "web UI certificate addresses: %s", addrInfo)
+
+	// Verify the compatibility. This requires that ValidateAddr() has
+	// been called already.
+	checkCertAddr(ctx, cfg.HTTPAddr, "HTTP listen", addrInfo, cert)
+	checkCertAddr(ctx, cfg.HTTPAdvertiseAddr, "HTTP advertise", addrInfo, cert)
+}
+
+// checkCertAddr verifies that the given address in addr is compatible
+// with the provided certificate.
+func checkCertAddr(ctx context.Context, addr, msg, addrInfo string, cert *x509.Certificate) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(fmt.Sprintf("programming error: %s address not normalized: %v", msg, err))
+	}
+	if err := cert.VerifyHostname(host); err != nil {
+		log.Shout(ctx, log.Severity_WARNING,
+			fmt.Sprintf("%s address %q not in node certificate (%s)", msg, host, addrInfo))
+	}
+}
+
+// certAddrs formats the list of addresses included in a certificate for
+// printing in an error message.
+func certAddrs(cert *x509.Certificate) string {
+	var buf strings.Builder
+	// If an IP address was specified as listen/adv address, the
+	// hostname validation will only use the IPAddresses field. So
+	// this needs to be printed in all cases.
+	if len(cert.IPAddresses) > 0 {
+		buf.WriteString("ipAddresses: ")
+		comma := ""
+		for _, ip := range cert.IPAddresses {
+			buf.WriteString(comma)
+			comma = ", "
+			buf.WriteString(ip.String())
+		}
+	}
+	// For names, the hostname validation will use DNSNames if
+	// the Subject Alt Name is present in the cert, otherwise
+	// it will use the common name. We can't parse the
+	// extensions here so we print both if available.
+	if len(cert.DNSNames) > 0 {
+		if buf.Len() > 0 {
+			buf.WriteString("; ")
+		}
+		buf.WriteString("dnsNames: ")
+		comma := ""
+		for _, name := range cert.DNSNames {
+			buf.WriteString(comma)
+			comma = ", "
+			buf.WriteString(name)
+		}
+	}
+	if cert.Subject.CommonName != "" {
+		if buf.Len() > 0 {
+			buf.WriteString("; ")
+		}
+		buf.WriteString("commonName: ")
+		buf.WriteString(cert.Subject.CommonName)
+	}
+	return buf.String()
 }
