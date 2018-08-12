@@ -559,7 +559,7 @@ project
       └── scan order@secondary,rev
            ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null)
            ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
-           ├── limit: 1
+           ├── limit: 1(rev)
            ├── stats: [rows=2.9154519e-06]
            ├── cost: 3.14868805e-06
            ├── key: ()
@@ -621,7 +621,7 @@ project
  └── scan new_order,rev
       ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
       ├── constraint: /3/2/-1: [/10/100 - /10/100]
-      ├── limit: 1
+      ├── limit: 1(rev)
       ├── stats: [rows=0.00204081633]
       ├── cost: 0.00216326531
       ├── key: ()
