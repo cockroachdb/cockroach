@@ -209,8 +209,8 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 		return results
 	}
 
-	l := collect(store.LookupReplica(keys.MustAddr(left), nil).AbortSpan())
-	r := collect(store.LookupReplica(keys.MustAddr(right), nil).AbortSpan())
+	l := collect(store.LookupReplica(keys.MustAddr(left)).AbortSpan())
+	r := collect(store.LookupReplica(keys.MustAddr(right)).AbortSpan())
 
 	if !reflect.DeepEqual(expL, l) {
 		t.Fatalf("left hand side: expected %+v, got %+v", expL, l)
@@ -315,8 +315,8 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 		t.Fatalf("%s: split unexpected error: %s", col1Key, pErr)
 	}
 
-	repl1 := store.LookupReplica(roachpb.RKey(col1Key), nil)
-	repl2 := store.LookupReplica(roachpb.RKey(col2Key), nil)
+	repl1 := store.LookupReplica(roachpb.RKey(col1Key))
+	repl2 := store.LookupReplica(roachpb.RKey(col2Key))
 
 	// Verify the two columns are still on the same range.
 	if !reflect.DeepEqual(repl1, repl2) {
@@ -328,7 +328,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	}
 
 	// Verify the previous range was split on a row key.
-	repl3 := store.LookupReplica(tableKey, nil)
+	repl3 := store.LookupReplica(tableKey)
 	if endKey := repl3.Desc().EndKey; !endKey.Equal(rowKey) {
 		t.Fatalf("%s: expected split on %s, but found %s", col1Key, rowKey, endKey)
 	}
@@ -431,7 +431,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 
 	// An AdminSplit request sent to the start of the new range
 	// should succeed but no new ranges should be created.
-	newRng := store.LookupReplica(roachpb.RKey(key), nil)
+	newRng := store.LookupReplica(roachpb.RKey(key))
 	h.RangeID = newRng.RangeID
 	if _, pErr := client.SendWrappedWith(context.Background(), store, h, args); pErr != nil {
 		t.Fatal(pErr)
@@ -487,8 +487,8 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	if a, e := store.ReplicaCount(), 2; a != e {
 		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
 	}
-	rngDesc := store.LookupReplica(roachpb.RKeyMin, nil).Desc()
-	newRngDesc := store.LookupReplica(roachpb.RKey(splitKey), nil).Desc()
+	rngDesc := store.LookupReplica(roachpb.RKeyMin).Desc()
+	newRngDesc := store.LookupReplica(roachpb.RKey(splitKey)).Desc()
 	if !bytes.Equal(newRngDesc.StartKey, splitKey) || !bytes.Equal(splitKey, rngDesc.EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRngDesc.StartKey, splitKey, rngDesc.EndKey)
 	}
@@ -570,9 +570,9 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		}
 	}
 
-	repl := store.LookupReplica(roachpb.RKeyMin, nil)
+	repl := store.LookupReplica(roachpb.RKeyMin)
 	rngDesc := repl.Desc()
-	newRng := store.LookupReplica([]byte("m"), nil)
+	newRng := store.LookupReplica([]byte("m"))
 	newRngDesc := newRng.Desc()
 	if !bytes.Equal(newRngDesc.StartKey, splitKey) || !bytes.Equal(splitKey, rngDesc.EndKey) {
 		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRngDesc.StartKey, splitKey, rngDesc.EndKey)
@@ -669,7 +669,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
-	repl := store.LookupReplica(keyPrefix, nil)
+	repl := store.LookupReplica(keyPrefix)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
@@ -710,7 +710,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replRight := store.LookupReplica(midKey, nil)
+	replRight := store.LookupReplica(midKey)
 	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
@@ -821,7 +821,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 
 	// Replicate the newly-split range to trigger a snapshot request from store 0
 	// to store 1.
-	rangeID := mtc.stores[0].LookupReplica(splitKey, nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica(splitKey).RangeID
 	mtc.replicateRange(rangeID, 1)
 
 	// Verify that we saw at least one snapshot request,
@@ -868,7 +868,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
-	repl := store.LookupReplica(keyPrefix, nil)
+	repl := store.LookupReplica(keyPrefix)
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
@@ -894,7 +894,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replRight := store.LookupReplica(midKey, nil)
+	replRight := store.LookupReplica(midKey)
 	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
@@ -988,7 +988,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		// Wait for the range to be split along table boundaries.
 		expectedRSpan := roachpb.RSpan{Key: roachpb.RKey(tableBoundary), EndKey: roachpb.RKeyMax}
 		testutils.SucceedsSoon(t, func() error {
-			repl = store.LookupReplica(tableBoundary, nil)
+			repl = store.LookupReplica(tableBoundary)
 			if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
 			}
@@ -1006,7 +1006,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	// Verify that the range is in fact split.
 	testutils.SucceedsSoon(t, func() error {
-		repl := store.LookupReplica(keys.MakeTablePrefix(descID+1), nil)
+		repl := store.LookupReplica(keys.MakeTablePrefix(descID + 1))
 		rngDesc := repl.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
@@ -1026,7 +1026,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	store, _ := createTestStore(t, stopper)
 	config.TestingSetupZoneConfigHook(stopper)
 
-	origRng := store.LookupReplica(roachpb.RKeyMin, nil)
+	origRng := store.LookupReplica(roachpb.RKeyMin)
 
 	// Set max bytes.
 	const maxBytes = 1 << 16
@@ -1040,7 +1040,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	testutils.SucceedsSoon(t, func() error {
-		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
+		newRng := store.LookupReplica(keys.MakeTablePrefix(descID))
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
@@ -1127,7 +1127,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 			// Split at the split key.
 			sArgs := adminSplitArgs(splitKey.AsRawKey())
-			repl := store.LookupReplica(splitKey, nil)
+			repl := store.LookupReplica(splitKey)
 			if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 				RangeID: repl.RangeID,
 			}, sArgs); pErr != nil {
@@ -1135,7 +1135,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			}
 
 			// Fill the new range past the point where writes should backpressure.
-			repl = store.LookupReplica(splitKey, nil)
+			repl = store.LookupReplica(splitKey)
 			singleKey := tc.splitImpossible
 			fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1, singleKey)
 
@@ -1356,7 +1356,7 @@ func runSetupSplitSnapshotRace(
 	// Get the left range's ID. This is currently 2, but using
 	// LookupReplica is more future-proof (and see below for
 	// rightRangeID).
-	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a")).RangeID
 
 	// Replicate the left range onto nodes 1-3 and remove it from node 0. We have
 	// to transfer the lease before unreplicating from range 0 because it isn't
@@ -1383,7 +1383,7 @@ func runSetupSplitSnapshotRace(
 	// 1, it is currently 11 and not 3 as might be expected.
 	var rightRangeID roachpb.RangeID
 	testutils.SucceedsSoon(t, func() error {
-		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
+		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z")).RangeID
 		if rightRangeID == leftRangeID {
 			return errors.Errorf("store 1 hasn't processed split yet")
 		}
@@ -1900,7 +1900,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	repl := store.LookupReplica(roachpb.RKey(splitKey), nil)
+	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	gcThreshold := repl.GetGCThreshold()
 	txnSpanGCThreshold := repl.GetTxnSpanGCThreshold()
 
@@ -1972,7 +1972,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
-	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	leftRange := mtc.stores[0].LookupReplica(roachpb.RKey("a"))
 
 	// Replicate the left range onto the second node. We don't wait since we
 	// don't actually care what the second node does. All we want is that the
@@ -2094,8 +2094,8 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	}
 
 	// Write some values left and right of the split key.
-	aDesc := store.LookupReplica([]byte("a"), nil).Desc()
-	bDesc := store.LookupReplica([]byte("c"), nil).Desc()
+	aDesc := store.LookupReplica([]byte("a")).Desc()
+	bDesc := store.LookupReplica([]byte("c")).Desc()
 	storage.WriteRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
 	storage.WriteRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
 
@@ -2252,7 +2252,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		}
 		args := adminSplitArgs(splitKey.AsRawKey())
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
-			RangeID: store.LookupReplica(splitKey, nil).RangeID,
+			RangeID: store.LookupReplica(splitKey).RangeID,
 		}, args)
 		doneSplit <- pErr
 	}()
@@ -2268,7 +2268,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	// the range is fully split, meaning the initial GC may fail because
 	// it spans ranges.
 	testutils.SucceedsSoon(t, func() error {
-		return store.ManualGC(store.LookupReplica(splitKey, nil))
+		return store.ManualGC(store.LookupReplica(splitKey))
 	})
 
 	// Wait for the split to complete.
@@ -2338,7 +2338,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	splitFunc := func(i int) *roachpb.Error {
 		splitKey := roachpb.Key(fmt.Sprintf("%02d", i))
-		_, pErr := store.LookupReplica(roachpb.RKey(splitKey), nil).AdminSplit(
+		_, pErr := store.LookupReplica(roachpb.RKey(splitKey)).AdminSplit(
 			context.TODO(),
 			roachpb.AdminSplitRequest{
 				RequestHeader: roachpb.RequestHeader{
@@ -2390,7 +2390,7 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
+	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin))
 	if !rhsRepl.IsTxnWaitQueueEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
@@ -2412,7 +2412,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), args); pErr != nil {
 		t.Fatalf("split at %q: %s", lhsKey, pErr)
 	}
-	lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+	lhs := store.LookupReplica(roachpb.RKey("a"))
 
 	// Split at "b".
 	rhsKey := roachpb.Key("b")
@@ -2422,7 +2422,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	}, args); pErr != nil {
 		t.Fatalf("split at %q: %s", rhsKey, pErr)
 	}
-	rhs := store.LookupReplica(roachpb.RKey("b"), nil)
+	rhs := store.LookupReplica(roachpb.RKey("b"))
 
 	if lhs == rhs {
 		t.Errorf("LHS == RHS after split: %s == %s", lhs, rhs)
@@ -2560,7 +2560,7 @@ func TestUnsplittableRange(t *testing.T) {
 	// Trigger the GC queue, which should clean up the earlier version of the
 	// row. Once the first version of the row is cleaned up, the range should
 	// exit the split queue purgatory.
-	repl := store.LookupReplica(tableKey, nil)
+	repl := store.LookupReplica(tableKey)
 	if err := store.ManualGC(repl); err != nil {
 		t.Fatal(err)
 	}
@@ -2611,7 +2611,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 		if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), args); pErr != nil {
 			t.Fatalf("split at %q: %s", lhsKey, pErr)
 		}
-		lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+		lhs := store.LookupReplica(roachpb.RKey("a"))
 
 		var txnACount, txnBCount int32
 
@@ -2939,7 +2939,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 		args := adminSplitArgs(splitKey)
 
 		// Don't use s.DistSender() so that we don't disturb the RangeDescriptorCache.
-		rangeID := store.LookupReplica(roachpb.RKey(splitKey), nil).RangeID
+		rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: rangeID,
 		}, args)
