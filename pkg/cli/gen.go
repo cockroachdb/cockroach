@@ -219,9 +219,7 @@ var genCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
 	Long:  "Generate manpages, example shell settings, example databases, etc.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 var genCmds = []*cobra.Command{

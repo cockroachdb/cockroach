@@ -1423,7 +1423,5 @@ var debugCmd = &cobra.Command{
 These commands are useful for extracting data from the data files of a
 process that has failed and cannot restart.
 `,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE: usageAndErr,
 }

@@ -301,9 +301,7 @@ var zoneCmds = []*cobra.Command{
 var zoneCmd = &cobra.Command{
 	Use:   "zone",
 	Short: "get, set, list and remove zones",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {
