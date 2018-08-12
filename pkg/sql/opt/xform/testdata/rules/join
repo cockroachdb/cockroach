@@ -91,7 +91,7 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (inner-join G2 G4 G5)
  │         └── cost: 2184.29
- ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
@@ -99,7 +99,7 @@ memo (optimized)
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
  ├── G3: (merge-on G5 inner-join,+1,+7)
- ├── G4: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G4: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
@@ -119,14 +119,14 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (full-join G2 G3 G5)
  │         └── cost: 2184.29
- ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
  │    └── "[ordering: +1]"
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
- ├── G3: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
@@ -186,14 +186,14 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (left-join G2 G3 G5)
  │         └── cost: 2184.29
- ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
  │    └── "[ordering: +1]"
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
- ├── G3: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
@@ -233,7 +233,7 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (right-join G2 G4 G5)
  │         └── cost: 2184.29
- ├── G2: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
@@ -241,7 +241,7 @@ memo (optimized)
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
  ├── G3: (merge-on G5 right-join,+1,+7)
- ├── G4: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G4: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
@@ -299,7 +299,7 @@ memo (optimized)
  │         ├── best: (merge-join G3="[ordering: +1]" G5="[ordering: +5]" G2)
  │         └── cost: 2174.29
  ├── G2: (merge-on G6 inner-join,+1,+5)
- ├── G3: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G3: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan abc,cols=(1-3))
  │    │    └── cost: 1070.00
@@ -307,7 +307,7 @@ memo (optimized)
  │         ├── best: (scan abc@ab,cols=(1-3))
  │         └── cost: 1070.00
  ├── G4: (merge-on G6 inner-join,+5,+1)
- ├── G5: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G5: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    ├── ""
  │    │    ├── best: (scan xyz,cols=(5-7))
  │    │    └── cost: 1070.00
@@ -389,7 +389,7 @@ memo (optimized)
  ├── G2: (merge-on G8 inner-join,+1,+2,+3,+4,+5,+6)
  ├── G3: (merge-on G8 inner-join,+3,+2,+1,+6,+5,+4)
  ├── G4: (merge-on G8 inner-join,+4,+5,+6,+1,+2,+3)
- ├── G5: (scan stu) (scan stu,rev) (scan stu@uts) (scan stu@uts,rev)
+ ├── G5: (scan stu) (scan stu@uts)
  │    ├── ""
  │    │    ├── best: (scan stu)
  │    │    └── cost: 1060.00
@@ -400,7 +400,7 @@ memo (optimized)
  │         ├── best: (scan stu@uts)
  │         └── cost: 1060.00
  ├── G6: (merge-on G8 inner-join,+6,+5,+4,+3,+2,+1)
- ├── G7: (scan stu) (scan stu,rev) (scan stu@uts) (scan stu@uts,rev)
+ ├── G7: (scan stu) (scan stu@uts)
  │    ├── ""
  │    │    ├── best: (scan stu)
  │    │    └── cost: 1060.00
@@ -616,16 +616,16 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (inner-join G2 G3 G4)
  │         └── cost: 1456.81
- ├── G2: (scan xyz,cols=(5-7)) (scan xyz,rev,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@xy,rev,cols=(5-7)) (scan xyz@yz,cols=(5-7)) (scan xyz@yz,rev,cols=(5-7))
+ ├── G2: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    └── ""
  │         ├── best: (scan xyz,cols=(5-7))
  │         └── cost: 1070.00
- ├── G3: (select G5 G10) (select G6 G10) (select G7 G10) (select G8 G10) (select G9 G10)
+ ├── G3: (select G5 G8) (select G6 G8) (select G7 G8)
  │    └── ""
- │         ├── best: (select G6 G10)
+ │         ├── best: (select G6 G8)
  │         └── cost: 360.00
  ├── G4: (true)
- ├── G5: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── ""
  │         ├── best: (scan abc,cols=(1-3))
  │         └── cost: 1070.00
@@ -633,22 +633,14 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
  │         └── cost: 356.67
- ├── G7: (scan abc@ab,rev,cols=(1-3),constrained)
- │    └── ""
- │         ├── best: (scan abc@ab,rev,cols=(1-3),constrained)
- │         └── cost: 384.60
- ├── G8: (scan abc@bc,cols=(1-3),constrained)
+ ├── G7: (scan abc@bc,cols=(1-3),constrained)
  │    └── ""
  │         ├── best: (scan abc@bc,cols=(1-3),constrained)
  │         └── cost: 356.67
- ├── G9: (scan abc@bc,rev,cols=(1-3),constrained)
- │    └── ""
- │         ├── best: (scan abc@bc,rev,cols=(1-3),constrained)
- │         └── cost: 384.60
- ├── G10: (filters G11)
- ├── G11: (eq G12 G13)
- ├── G12: (variable abc.a)
- └── G13: (variable abc.b)
+ ├── G8: (filters G9)
+ ├── G9: (eq G10 G11)
+ ├── G10: (variable abc.a)
+ └── G11: (variable abc.b)
 
 exec-ddl
 CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
@@ -666,11 +658,11 @@ memo (optimized)
  │    └── "[presentation: a:1,b:2,c:3,k:5]"
  │         ├── best: (inner-join G3 G2 G4)
  │         └── cost: 2130.00
- ├── G2: (scan kfloat) (scan kfloat,rev)
+ ├── G2: (scan kfloat)
  │    └── ""
  │         ├── best: (scan kfloat)
  │         └── cost: 1020.00
- ├── G3: (scan abc,cols=(1-3)) (scan abc,rev,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@ab,rev,cols=(1-3)) (scan abc@bc,cols=(1-3)) (scan abc@bc,rev,cols=(1-3))
+ ├── G3: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── ""
  │         ├── best: (scan abc,cols=(1-3))
  │         └── cost: 1070.00
@@ -1250,40 +1242,6 @@ New expression 1 of 1:
    │    ├── scan abc
    │    │    └── columns: a:1(int) b:2(int) c:3(int)
    │    ├── scan uvw@v
-   │    │    ├── columns: u:5(int!null) v:6(int)
-   │    │    ├── key: (5)
-   │    │    └── fd: (5)-->(6)
-   │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-   │         └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-   └── true [type=bool]
-
-================================================================================
-PushJoinThroughIndexJoin
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
-   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
-   ├── scan abc
-   │    └── columns: a:1(int) b:2(int) c:3(int)
-   ├── scan uvw
-   │    ├── columns: u:5(int!null) v:6(int) w:7(int)
-   │    ├── key: (5)
-   │    └── fd: (5)-->(6,7)
-   └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-        └── abc.a = uvw.u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-
-New expression 1 of 1:
-  inner-join (lookup uvw)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
-   ├── key columns: [5] = [5]
-   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
-   ├── inner-join
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int)
-   │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
-   │    ├── scan abc
-   │    │    └── columns: a:1(int) b:2(int) c:3(int)
-   │    ├── scan uvw@v,rev
    │    │    ├── columns: u:5(int!null) v:6(int)
    │    │    ├── key: (5)
    │    │    └── fd: (5)-->(6)
