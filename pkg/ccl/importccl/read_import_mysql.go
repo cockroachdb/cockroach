@@ -297,9 +297,10 @@ func mysqlTableToCockroach(
 	desc := sql.InitTableDescriptor(id, parentID, name, time, priv)
 
 	colNames := make(map[string]string)
+	checks := make(map[string]*tree.CheckConstraintTableDef)
 
 	for _, raw := range in.Columns {
-		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type)
+		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type, checks)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -328,6 +329,15 @@ func mysqlTableToCockroach(
 	if err := desc.AllocateIDs(); err != nil {
 		return nil, nil, err
 	}
+
+	for _, check := range checks {
+		ck, err := sql.MakeCheckConstraint(ctx, desc, check, nil, &tree.SemaContext{}, evalCtx, *tree.NewTableName("", tree.Name(name)))
+		if err != nil {
+			return nil, nil, err
+		}
+		desc.Checks = append(desc.Checks, ck)
+	}
+
 	var fkDefs []delayedFK
 	for _, raw := range in.Constraints {
 		switch i := raw.Details.(type) {
@@ -391,7 +401,9 @@ func toNameList(cols mysql.Columns) tree.NameList {
 // To the extent possible, parameters such as length or precision are preseved
 // even if they have only cosmetic (i.e. when viewing schemas) effects compared
 // to their behavior in MySQL.
-func mysqlColToCockroach(name string, col mysql.ColumnType) (*tree.ColumnTableDef, error) {
+func mysqlColToCockroach(
+	name string, col mysql.ColumnType, checks map[string]*tree.CheckConstraintTableDef,
+) (*tree.ColumnTableDef, error) {
 	def := &tree.ColumnTableDef{Name: tree.Name(name)}
 
 	var length, scale int
@@ -469,7 +481,17 @@ func mysqlColToCockroach(name string, col mysql.ColumnType) (*tree.ColumnTableDe
 		def.Type = coltypes.SmallInt
 
 	case mysqltypes.Enum:
-		fallthrough
+		def.Type = coltypes.String
+
+		expr, err := parser.ParseExpr(fmt.Sprintf("%s in (%s)", name, strings.Join(col.EnumValues, ",")))
+		if err != nil {
+			return nil, err
+		}
+		checks[name] = &tree.CheckConstraintTableDef{
+			Name: tree.Name(fmt.Sprintf("imported_from_enum_%s", name)),
+			Expr: expr,
+		}
+
 	case mysqltypes.Set:
 		fallthrough
 	case mysqltypes.Geometry:

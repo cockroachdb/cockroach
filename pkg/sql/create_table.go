@@ -1229,7 +1229,7 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(ctx, desc, d, generatedNames, semaCtx, evalCtx, *tableName)
+			ck, err := MakeCheckConstraint(ctx, desc, d, generatedNames, semaCtx, evalCtx, *tableName)
 			if err != nil {
 				return desc, err
 			}
@@ -1284,7 +1284,7 @@ func (p *planner) makeTableDesc(
 	return ret, err
 }
 
-// dummyColumnItem is used in makeCheckConstraint to construct an expression
+// dummyColumnItem is used in MakeCheckConstraint to construct an expression
 // that can be both type-checked and examined for variable expressions.
 type dummyColumnItem struct {
 	typ types.T
@@ -1498,7 +1498,8 @@ func replaceVars(
 	return newExpr, colIDs, err
 }
 
-func makeCheckConstraint(
+// MakeCheckConstraint makes a descriptor representation of a check from a def.
+func MakeCheckConstraint(
 	ctx context.Context,
 	desc sqlbase.TableDescriptor,
 	d *tree.CheckConstraintTableDef,
