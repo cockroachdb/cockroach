@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
@@ -232,6 +233,21 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
+}
+
+// CheckConsistency verifies that the store's bookkeping is self-consistent.
+func (s *Store) CheckConsistency() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.mu.replicas.Range(func(_ int64, p unsafe.Pointer) bool {
+		repl := (*Replica)(p)
+		log.Errorf(context.TODO(), "evaluating %s", repl)
+		if ex := s.mu.replicasByKey.Get(repl); ex != repl {
+			ctx := s.cfg.AmbientCtx.AnnotateCtx(context.Background())
+			log.Fatalf(ctx, "%v misplaced in replicasByKey; found %v instead", repl, ex)
+		}
+		return true // keep iterating
+	})
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {

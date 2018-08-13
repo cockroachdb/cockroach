@@ -1463,6 +1463,66 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 }
 
+func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0 := mtc.Store(0)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+
+	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
+	for _, key := range keys {
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], adminSplitArgs(key)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(key, []int64{1, 1, 1})
+	}
+
+	mtc.stopStore(2)
+
+	for i := 0; i < 2; i++ {
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Truncate the logs.
+	{
+		repl := store0.LookupReplica(roachpb.RKey("a"), nil)
+		index, err := repl.GetLastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Truncate the log at index+1 (log entries < N are removed, so this includes
+		// the merges).
+		truncArgs := &roachpb.TruncateLogRequest{
+			RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
+			Index:         index,
+			RangeID:       repl.RangeID,
+		}
+		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mtc.restartStore(2)
+
+	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incrementArgs(roachpb.Key("a"), 1)); pErr != nil {
+		t.Fatal(pErr)
+	}
+	mtc.waitForValues(roachpb.Key("a"), []int64{2, 2, 2})
+}
+
 // TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store
 // containing the RHS of a merge can occur cleanly. This previously triggered
 // a fatal error (#27552).
