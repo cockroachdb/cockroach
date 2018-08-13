@@ -77,13 +77,12 @@ limit
 build
 SELECT a FROM t ORDER BY 1 DESC
 ----
-sort
+project
  ├── columns: a:1(int!null)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 # TODO(rytaft): This query causes an error in Postgres, but it is supported by
 # CockroachDB with the semantics:
@@ -97,13 +96,12 @@ error (42P10): for SELECT DISTINCT, ORDER BY expressions must appear in select l
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
 ----
-sort
+project
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 # Check that ambiguous references to renders are properly reported.
 build
@@ -143,35 +141,32 @@ project
 build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
-sort
+project
  ├── columns: bar:1(int!null) b:2(int)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 build
 SELECT a AS foo, b FROM t ORDER BY a DESC
 ----
-sort
+project
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a DESC
 ----
-sort
+project
  ├── columns: b:2(int)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a LIMIT 1
@@ -337,13 +332,12 @@ limit
  ├── columns: a:1(int!null)
  ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
+ ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan t
- │              └── columns: a:1(int!null) b:2(int) c:3(bool)
+ │    └── scan t,rev
+ │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ │         └── ordering: -1
  └── const: 4 [type=int]
 
 build
@@ -353,13 +347,12 @@ limit
  ├── columns: a:1(int!null)
  ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
+ ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan t
- │              └── columns: a:1(int!null) b:2(int) c:3(bool)
+ │    └── scan t,rev
+ │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ │         └── ordering: -1
  └── const: 4 [type=int]
 
 build
@@ -677,13 +670,12 @@ sort
 build
 SELECT a FROM abc ORDER BY a DESC
 ----
-sort
+project
  ├── columns: a:1(int!null)
  ├── ordering: -1
- └── project
-      ├── columns: a:1(int!null)
-      └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ └── scan abc,rev
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      └── ordering: -1
 
 build
 SELECT a FROM abc ORDER BY a DESC LIMIT 1
@@ -692,13 +684,12 @@ limit
  ├── columns: a:1(int!null)
  ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
+ ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan abc
- │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │    └── scan abc,rev
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │         └── ordering: -1
  └── const: 1 [type=int]
 
 build
@@ -708,13 +699,12 @@ offset
  ├── columns: a:1(int!null)
  ├── internal-ordering: -1
  ├── ordering: -1
- ├── sort
+ ├── project
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: a:1(int!null)
- │         └── scan abc
- │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │    └── scan abc,rev
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │         └── ordering: -1
  └── const: 1 [type=int]
 
 build

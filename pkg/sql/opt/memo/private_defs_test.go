@@ -52,25 +52,39 @@ func TestScanCanProvideOrdering(t *testing.T) {
 	testcases := []struct {
 		index    int
 		ordering string
-		expected bool
+		expected string // "no", "fwd", or "rev".
 	}{
-		{index: primary, ordering: "", expected: true},
-		{index: primary, ordering: "+1", expected: true},
-		{index: primary, ordering: "+1,+2", expected: false},
-		{index: altIndex1, ordering: "", expected: true},
-		{index: altIndex1, ordering: "+1 opt(2)", expected: true},
-		{index: altIndex1, ordering: "-2,+1", expected: false},
-		{index: altIndex2, ordering: "", expected: true},
-		{index: altIndex2, ordering: "-3,+(4|1)", expected: true},
-		{index: altIndex2, ordering: "-3,+4,+1", expected: true},
+		{index: primary, ordering: "", expected: "fwd"},
+		{index: primary, ordering: "+1", expected: "fwd"},
+		{index: primary, ordering: "-1", expected: "rev"},
+		{index: primary, ordering: "+1,+2", expected: "no"},
+		{index: primary, ordering: "-1,-2", expected: "no"},
+		{index: altIndex1, ordering: "", expected: "fwd"},
+		{index: altIndex1, ordering: "+1 opt(2)", expected: "fwd"},
+		{index: altIndex1, ordering: "-1 opt(2)", expected: "rev"},
+		{index: altIndex1, ordering: "-2,+1", expected: "no"},
+		{index: altIndex2, ordering: "", expected: "fwd"},
+		{index: altIndex2, ordering: "-3,+(4|1)", expected: "fwd"},
+		{index: altIndex2, ordering: "-3,+4,+1", expected: "fwd"},
+		{index: altIndex2, ordering: "+3,-4,-1", expected: "rev"},
+		{index: altIndex2, ordering: "+3,+4,+1", expected: "no"},
 	}
 
 	for _, tc := range testcases {
 		def := &memo.ScanOpDef{Table: a, Index: tc.index}
 		required := props.ParseOrderingChoice(tc.ordering)
-		actual := def.CanProvideOrdering(md, &required)
-		if actual != tc.expected {
-			t.Errorf("index: %d, required: %s, expected %v", tc.index, tc.ordering, tc.expected)
+		ok, reverse := def.CanProvideOrdering(md, &required)
+		res := "no"
+		if ok {
+			if reverse {
+				res = "rev"
+			} else {
+				res = "fwd"
+			}
+		}
+
+		if res != tc.expected {
+			t.Errorf("index: %d, required: %s, expected %v, got %v", tc.index, tc.ordering, tc.expected, res)
 		}
 	}
 }

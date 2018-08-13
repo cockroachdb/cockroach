@@ -252,6 +252,14 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	formatter := ev.mem.makeExprFormatter(&buf)
 
+	logProps := ev.Logical()
+	var physProps *props.Physical
+	if ev.best == normBestOrdinal {
+		physProps = &props.Physical{}
+	} else {
+		physProps = ev.Physical()
+	}
+
 	// Special cases for merge-join and lookup-join: we want the type of the join
 	// to show up first.
 	switch ev.Operator() {
@@ -262,25 +270,16 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	case opt.LookupJoinOp:
 		def := ev.Private().(*LookupJoinDef)
 		fmt.Fprintf(&buf, "%v (lookup", def.JoinType)
-		formatter.formatPrivate(def, formatNormal)
+		formatter.formatPrivate(def, physProps, formatNormal)
 		buf.WriteByte(')')
 
 	case opt.ScanOp, opt.VirtualScanOp, opt.IndexJoinOp, opt.ShowTraceForSessionOp:
 		fmt.Fprintf(&buf, "%v", ev.op)
-		formatter.formatPrivate(ev.Private(), formatNormal)
+		formatter.formatPrivate(ev.Private(), physProps, formatNormal)
 
 	default:
 		fmt.Fprintf(&buf, "%v", ev.op)
 	}
-
-	var physProps *props.Physical
-	if ev.best == normBestOrdinal {
-		physProps = &props.Physical{}
-	} else {
-		physProps = ev.Physical()
-	}
-
-	logProps := ev.Logical()
 
 	tp = tp.Child(buf.String())
 
@@ -352,8 +351,8 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if def.Constraint != nil {
 			tp.Childf("constraint: %s", def.Constraint)
 		}
-		if def.HardLimit > 0 {
-			tp.Childf("limit: %d", def.HardLimit)
+		if def.HardLimit.IsSet() {
+			tp.Childf("limit: %s", def.HardLimit)
 		}
 		if !def.Flags.Empty() {
 			if def.Flags.NoIndexJoin {
@@ -381,7 +380,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		}
 		if logProps.Relational.Cardinality != props.AnyCardinality {
 			// Suppress cardinality for Scan ops if it's redundant with Limit field.
-			if ev.Operator() != opt.ScanOp || ev.Private().(*ScanOpDef).HardLimit == 0 {
+			if !(ev.Operator() == opt.ScanOp && ev.Private().(*ScanOpDef).HardLimit.IsSet()) {
 				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
 			}
 		}
@@ -536,7 +535,7 @@ func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
 	if private != nil {
 		buf.WriteRune(':')
 		formatter := ev.mem.makeExprFormatter(buf)
-		formatter.formatPrivate(private, formatNormal)
+		formatter.formatPrivate(private, &props.Physical{}, formatNormal)
 	}
 }
 

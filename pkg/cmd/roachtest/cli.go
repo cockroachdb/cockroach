@@ -26,6 +26,11 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Start(ctx, c.All())
 
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	waitForFullReplication(t, db)
+
 	lastWords := func(s string) []string {
 		var result []string
 		for _, line := range strings.Split(s, "\n") {
@@ -94,7 +99,6 @@ func registerCLI(r *registry) {
 	for _, tc := range testCases {
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Name:   tc.name,
-			Skip:   "#28486: flaky",
 			Stable: true, // DO NOT COPY to new tests
 			Run:    tc.fn,
 		})

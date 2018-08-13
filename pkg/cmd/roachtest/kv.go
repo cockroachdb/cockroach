@@ -19,8 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -110,18 +108,7 @@ func registerKVQuiescenceDead(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			for {
-				fullReplicated := false
-				if err := db.QueryRow(
-					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-				).Scan(&fullReplicated); err != nil {
-					t.Fatal(err)
-				}
-				if fullReplicated {
-					break
-				}
-				time.Sleep(time.Second)
-			}
+			waitForFullReplication(t, db)
 
 			qps := func(f func()) float64 {
 

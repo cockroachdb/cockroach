@@ -2815,13 +2815,12 @@ SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
 scalar-group-by
  ├── columns: array_agg:4(int[])
  ├── internal-ordering: -1
- ├── sort
+ ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── ordering: -1
- │    └── project
- │         ├── columns: x:1(int!null) y:2(int)
- │         └── scan xyz
- │              └── columns: x:1(int!null) y:2(int) z:3(float)
+ │    └── scan xyz,rev
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float)
+ │         └── ordering: -1
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: xyz.y [type=int]
