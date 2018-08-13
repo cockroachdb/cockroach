@@ -16,6 +16,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -216,9 +217,10 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	var i int
 	sub := &subscriber{ch, nil}
 	p.mu.Lock()
-	for i = range p.mu.subscribers {
+	for i = 0; i < len(p.mu.subscribers); i++ {
 		if p.mu.subscribers[i] == nil {
 			p.mu.subscribers[i] = sub
+			break
 		}
 	}
 	if i == len(p.mu.subscribers) {
@@ -239,7 +241,7 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 	}
 
 	if log.V(1) {
-		log.Info(ctx, "new subscriber connected")
+		log.Infof(ctx, "new subscriber (slot %d) connected", i)
 	}
 
 	// The subscription is already active, so any storage snapshot from now on is
@@ -282,12 +284,35 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 			return
 		}
 
+		shouldLog := log.V(1)
+		var n int
+		minMLAI := ctpb.LAI(math.MaxInt64)
+		var minRangeID, maxRangeID roachpb.RangeID
+		var maxMLAI ctpb.LAI
+
 		for _, entry := range queue {
+			if shouldLog {
+				n += len(entry.MLAI)
+				for rangeID, mlai := range entry.MLAI {
+					if mlai < minMLAI {
+						minMLAI = mlai
+						minRangeID = rangeID
+					}
+					if mlai > maxMLAI {
+						maxMLAI = mlai
+						maxRangeID = rangeID
+					}
+				}
+			}
+
 			select {
 			case ch <- entry:
 			case <-ctx.Done():
 				return
 			}
+		}
+		if shouldLog {
+			log.Infof(ctx, "sent %d closed timestamp entries to client %d (%d range updates total, min/max mlai: %d@r%d / %d@r%d)", len(queue), i, n, minMLAI, minRangeID, maxMLAI, maxRangeID)
 		}
 	}
 }

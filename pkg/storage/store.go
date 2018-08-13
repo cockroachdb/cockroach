@@ -3798,6 +3798,13 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	}
 	livenessMap, _ := s.livenessMap.Load().(map[roachpb.NodeID]bool)
 
+	// Make sure we ask all live nodes for closed timestamp updates.
+	for nodeID, live := range livenessMap {
+		if live {
+			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
+		}
+	}
+
 	start := timeutil.Now()
 	r := (*Replica)(value)
 	exists, err := r.tick(livenessMap)

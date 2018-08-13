@@ -48,6 +48,7 @@ func NewTestContainer() *TestContainer {
 	s := transport.NewServer(stopper, p, refreshed.Add)
 	dialer := transporttestutils.NewChanDialer(stopper, s)
 	c := transport.NewClients(transport.Config{
+		NodeID:   roachpb.NodeID(12345),
 		Settings: st,
 		Stopper:  stopper,
 		Dialer:   dialer,
