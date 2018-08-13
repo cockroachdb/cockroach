@@ -29,8 +29,10 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,6 +98,15 @@ func (qp *quotaPool) add(v int64) {
 	qp.Unlock()
 }
 
+func logSlowQuota(ctx context.Context, v int64, start time.Time) func() {
+	log.Warningf(ctx, "have been waiting %s attempting to acquire %s of proposal quota",
+		humanizeutil.IBytes(v),
+		timeutil.Since(start))
+	return func() {
+		log.Infof(ctx, "acquiring %v of proposal quota after %s resulted in %v", v, humanizeutil.IBytes(v), timeutil.Since(start))
+	}
+}
+
 // acquire acquires the specified amount of quota from the pool. On success,
 // nil is returned and the caller must call add(v) or otherwise arrange for the
 // quota to be returned to the pool. If 'v' is greater than the total capacity
@@ -124,10 +135,9 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
 		select {
-		case now := <-slowTimer.C:
+		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
-				now.Sub(start))
+			defer logSlowQuota(ctx, v, start)()
 			continue
 		case <-ctx.Done():
 			qp.Lock()
@@ -168,13 +178,11 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	// next in line (if any).
 
 	var acquired int64
-	slowTimer.Reset(base.SlowRequestThreshold)
 	for acquired < v {
 		select {
-		case now := <-slowTimer.C:
+		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
-				now.Sub(start))
+			defer logSlowQuota(ctx, v, start)()
 		case <-ctx.Done():
 			if acquired > 0 {
 				qp.add(acquired)
