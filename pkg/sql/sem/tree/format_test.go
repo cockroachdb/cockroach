@@ -59,6 +59,10 @@ func TestFormatStatement(t *testing.T) {
 		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
 			`GRANT SELECT ON TABLE _ TO _`},
 
+		{`INSERT INTO a VALUES (-2, +3)`,
+			tree.FmtHideConstants,
+			`INSERT INTO a VALUES (_, _)`},
+
 		{`INSERT INTO a VALUES (0), (0), (0), (0), (0), (0)`,
 			tree.FmtHideConstants,
 			`INSERT INTO a VALUES (_), (__more5__)`},
