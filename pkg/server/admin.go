@@ -1540,6 +1540,130 @@ func (s *adminServer) DataDistribution(
 	return resp, nil
 }
 
+// EnqueueRange runs the specified range through the specified queue, returning
+// the detailed trace and error information from doing so.
+func (s *adminServer) EnqueueRange(
+	ctx context.Context, req *serverpb.EnqueueRangeRequest,
+) (*serverpb.EnqueueRangeResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
+		return nil, remoteDebuggingErr
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
+	if req.NodeID < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
+	}
+	if req.Queue == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "queue name must be non-empty")
+	}
+	if req.RangeID <= 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "range_id must be positive; got %d", req.RangeID)
+	}
+
+	// If the request is targeted at this node, serve it directly. Otherwise,
+	// forward it to the appropriate node(s).
+	if req.NodeID == s.server.NodeID() {
+		return s.enqueueRangeLocal(ctx, req)
+	}
+
+	isLiveMap := s.server.nodeLiveness.GetIsLiveMap()
+
+	// If a specific NodeID was requested, then shrink down isLiveMap to contain
+	// only it, since we choose which nodes to send the request to based on
+	// what's in isLiveMap.
+	if req.NodeID > 0 {
+		isLiveMap = map[roachpb.NodeID]bool{req.NodeID: isLiveMap[req.NodeID]}
+	}
+
+	response := &serverpb.EnqueueRangeResponse{}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		admin := client.(serverpb.AdminClient)
+		req := *req
+		req.NodeID = nodeID
+		return admin.EnqueueRange(ctx, &req)
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		nodeDetails := nodeResp.(*serverpb.EnqueueRangeResponse)
+		response.Details = append(response.Details, nodeDetails.Details...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errDetail := &serverpb.EnqueueRangeResponse_Details{
+			NodeID: nodeID,
+			Error:  err.Error(),
+		}
+		response.Details = append(response.Details, errDetail)
+	}
+
+	nodeCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	if err := s.server.status.iterateNodes(
+		nodeCtx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+		dialFn, nodeFn, responseFn, errorFn,
+	); err != nil {
+		if len(response.Details) == 0 {
+			return nil, err
+		}
+		response.Details = append(response.Details, &serverpb.EnqueueRangeResponse_Details{
+			Error: err.Error(),
+		})
+	}
+
+	return response, nil
+}
+
+// enqueueRangeLocal checks whether the local node has a replica for the
+// requested range that can be run through the queue, running it through the
+// queue and returning trace/error information if so. If not, returns an empty
+// response.
+func (s *adminServer) enqueueRangeLocal(
+	ctx context.Context, req *serverpb.EnqueueRangeRequest,
+) (*serverpb.EnqueueRangeResponse, error) {
+	response := &serverpb.EnqueueRangeResponse{
+		Details: []*serverpb.EnqueueRangeResponse_Details{
+			{
+				NodeID: s.server.NodeID(),
+			},
+		},
+	}
+
+	var store *storage.Store
+	var repl *storage.Replica
+	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
+		r, err := s.GetReplica(req.RangeID)
+		if err != nil {
+			return nil
+		}
+		repl = r
+		store = s
+		return nil
+	}); err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+
+	if store == nil || repl == nil {
+		response.Details[0].Error = fmt.Sprintf("n%d has no replica for r%d", s.server.NodeID(), req.RangeID)
+		return response, nil
+	}
+
+	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	if err != nil {
+		response.Details[0].Error = err.Error()
+		return response, nil
+	}
+	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
+	response.Details[0].Error = processErr
+	return response, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
@@ -1858,4 +1982,18 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+func (s *adminServer) dialNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.AdminClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := s.server.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewAdminClient(conn), nil
 }

@@ -217,18 +217,19 @@ message GossipRequest {
   string node_id = 1;
 }
 
+message TraceEvent {
+  google.protobuf.Timestamp time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  string message = 2;
+}
+
 message AllocatorDryRun {
-  message Event {
-    google.protobuf.Timestamp time = 1
-        [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-    string message = 2;
-  }
   int64 range_id = 1 [
     (gogoproto.customname) = "RangeID",
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
-  repeated Event events = 2;
+  repeated TraceEvent events = 2;
 }
 
 message AllocatorRangeRequest {

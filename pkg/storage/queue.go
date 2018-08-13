@@ -303,6 +303,16 @@ func newBaseQueue(
 	return &bq
 }
 
+// Name returns the name of the queue.
+func (bq *baseQueue) Name() string {
+	return bq.name
+}
+
+// NeedsLease returns whether the queue requires a replica to be leaseholder.
+func (bq *baseQueue) NeedsLease() bool {
+	return bq.needsLease
+}
+
 // Length returns the current size of the queue.
 func (bq *baseQueue) Length() int {
 	bq.mu.Lock()
