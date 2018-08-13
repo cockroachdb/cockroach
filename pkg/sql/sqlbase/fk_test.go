@@ -264,6 +264,21 @@ CREATE TABLE IF NOT EXISTS childInterleaved(
 	PRIMARY KEY(foo, baz),
 	FOREIGN KEY(foo) REFERENCES parentInterleaved(foo) ON UPDATE CASCADE ON DELETE CASCADE
 ) INTERLEAVE IN PARENT parentInterleaved (foo)`,
+		`siblingInterleaved`: `
+CREATE TABLE IF NOT EXISTS siblingInterleaved(
+	baz INT,
+	foo INT,
+	PRIMARY KEY(foo, baz),
+	FOREIGN KEY(foo) REFERENCES parentInterleaved(foo) ON UPDATE CASCADE ON DELETE CASCADE
+) INTERLEAVE IN PARENT parentInterleaved (foo)`,
+		`grandchildInterleaved`: `
+CREATE TABLE IF NOT EXISTS grandchildInterleaved(
+	bar INT,
+	foo INT,
+	baz INT,
+	PRIMARY KEY(foo, baz, bar),
+	FOREIGN KEY(foo, baz) REFERENCES childInterleaved(foo, baz) ON UPDATE CASCADE ON DELETE CASCADE
+) INTERLEAVE IN PARENT childInterleaved (foo, baz)`,
 		// `self_referential` has a foreign key reference to itself (parent-child relationship) with
 		// 		cascading updates and deletes
 		// `self_referential_noFK` has the same schema
@@ -639,6 +654,111 @@ CREATE TABLE IF NOT EXISTS self_referential_setnull(
 		}
 		b.ResetTimer()
 		if _, err := db.Exec(`DELETE FROM childInterleaved`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	// This tests the performance of deleting rows from the parent table
+	b.Run("deleteRowsFromParent_interleaved", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run bytes.Buffer
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM parentInterleaved`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	// This tests the performance of deleting rows from the parent table when there are two interleaved tables
+	b.Run("deleteRowsFromParent_interleaved_sibling", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`, `siblingInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run, runSibling bytes.Buffer
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		runSibling.WriteString(`INSERT INTO siblingInterleaved(baz, foo) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				runSibling.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+					runSibling.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		statementSibling := runSibling.String()
+		if _, err := db.Exec(statementSibling); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM parentInterleaved`); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	})
+
+	// This tests the performance of deleting rows from the parent table when there is an interleaved table
+	// and another table further interleaved in it.
+	b.Run("deleteRowsFromParent_interleaved_grandchild", func(b *testing.B) {
+		setup([]string{`parentInterleaved`, `childInterleaved`, `grandchildInterleaved`})
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT INTO parentInterleaved(foo) VALUES(%d)`, i)); err != nil {
+				b.Fatal(err)
+			}
+		}
+		defer drop()
+		var run, runGrandchild bytes.Buffer
+		run.WriteString(`INSERT INTO childInterleaved(baz, foo) VALUES `)
+		runGrandchild.WriteString(`INSERT INTO grandChildInterleaved(foo, baz, bar) VALUES `)
+		for i := 1; i <= numFKRowsMultipleRef; i++ {
+			for j := 1; j <= refsPerRow; j++ {
+				run.WriteString(fmt.Sprintf("(%d, %d)", j, i))
+				runGrandchild.WriteString(fmt.Sprintf("(%d, %d, 1)", i, j))
+				if i != numFKRowsMultipleRef || j != refsPerRow {
+					run.WriteString(", ")
+					runGrandchild.WriteString(", ")
+				}
+			}
+		}
+		statement := run.String()
+		if _, err := db.Exec(statement); err != nil {
+			b.Fatal(err)
+		}
+		statementGrandchild := runGrandchild.String()
+		if _, err := db.Exec(statementGrandchild); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		if _, err := db.Exec(`DELETE FROM parentInterleaved`); err != nil {
 			b.Fatal(err)
 		}
 		b.StopTimer()
