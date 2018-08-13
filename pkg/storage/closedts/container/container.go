@@ -47,13 +47,15 @@ type Config struct {
 type Container struct {
 	Config
 	// Initialized on Start().
-	Tracker       closedts.TrackerI
-	Storage       closedts.Storage
-	Provider      closedts.Provider
-	Server        ctpb.Server
-	Clients       closedts.ClientRegistry
+	Tracker  closedts.TrackerI
+	Storage  closedts.Storage
+	Provider closedts.Provider
+	Server   ctpb.Server
+	Clients  closedts.ClientRegistry
+
 	nodeID        roachpb.NodeID
 	delayedServer *delayedServer
+	noop          bool // if true, is NoopContainer
 }
 
 const (
@@ -85,7 +87,7 @@ func NewContainer(cfg Config) *Container {
 
 type delayedServer struct {
 	active int32 // atomic
-	s      ctpb.ClosedTimestampServer
+	s      ctpb.Server
 }
 
 func (s *delayedServer) Start() {
@@ -96,13 +98,13 @@ func (s delayedServer) Get(client ctpb.ClosedTimestamp_GetServer) error {
 	if atomic.LoadInt32(&s.active) == 0 {
 		return errors.New("not available yet")
 	}
-	return s.Get(client)
+	return s.s.Get(client)
 }
 
 // RegisterClosedTimestampServer registers the Server contained in the container
 // with gRPC.
 func (c *Container) RegisterClosedTimestampServer(s *grpc.Server) {
-	c.delayedServer = &delayedServer{s: ctpb.ServerShim{Server: c.Server}}
+	c.delayedServer = &delayedServer{}
 	ctpb.RegisterClosedTimestampServer(s, c.delayedServer)
 }
 
@@ -110,6 +112,10 @@ func (c *Container) RegisterClosedTimestampServer(s *grpc.Server) {
 // charge of stopping it.
 func (c *Container) Start(nodeID roachpb.NodeID) {
 	cfg := c.Config
+
+	if c.noop {
+		return
+	}
 
 	storage := storage.NewMultiStorage(func() storage.SingleStorage {
 		return storage.NewMemStorage(StorageBucketScale, storageBucketNum)
@@ -131,6 +137,7 @@ func (c *Container) Start(nodeID roachpb.NodeID) {
 	server := transport.NewServer(cfg.Stopper, provider, cfg.Refresh)
 
 	rConf := transport.Config{
+		NodeID:   nodeID,
 		Settings: cfg.Settings,
 		Stopper:  cfg.Stopper,
 		Dialer:   cfg.Dialer,
@@ -145,6 +152,7 @@ func (c *Container) Start(nodeID roachpb.NodeID) {
 	c.Provider = provider
 	c.Provider.Start()
 	if c.delayedServer != nil {
+		c.delayedServer.s = server
 		c.delayedServer.Start()
 	}
 }
