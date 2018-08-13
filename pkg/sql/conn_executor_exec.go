@@ -947,9 +947,22 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		},
 		&ex.sessionTracing,
 	)
+
+	evalCtx := planner.ExtendedEvalContext()
+	var planCtx PlanningCtx
+	if distribute {
+		planCtx = ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn)
+	} else {
+		planCtx = ex.server.cfg.DistSQLPlanner.newLocalPlanningCtx(ctx, evalCtx)
+	}
+	planCtx.isLocal = !distribute
+	planCtx.planner = planner
+	planCtx.stmtType = recv.stmtType
+	planCtx.validExtendedEvalCtx = true
+
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
-	ex.server.cfg.DistSQLPlanner.PlanAndRun(ctx, planner, recv, distribute)
+	ex.server.cfg.DistSQLPlanner.PlanAndRun(ctx, evalCtx, &planCtx, planner.txn, planner, recv)
 	return recv.commErr
 }
 

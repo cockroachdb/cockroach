@@ -543,22 +543,10 @@ func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
-	ctx context.Context, p *planner, recv *DistSQLReceiver, distribute bool,
+	ctx context.Context, evalCtx *extendedEvalContext, planCtx *PlanningCtx, txn *client.Txn,
+	p *planner, recv *DistSQLReceiver,
 ) {
-	evalCtx := p.ExtendedEvalContext()
-	txn := p.txn
-	var planCtx PlanningCtx
-	if distribute {
-		planCtx = dsp.NewPlanningCtx(ctx, evalCtx, txn)
-	} else {
-		planCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
-	}
-	planCtx.isLocal = !distribute
-	planCtx.planner = p
-	planCtx.stmtType = recv.stmtType
-	planCtx.validExtendedEvalCtx = true
-
-	log.VEventf(ctx, 1, "creating DistSQL plan with distributedMode=%v", distribute)
+	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	if len(p.curPlan.subqueryPlans) != 0 {
 		err := p.curPlan.evalSubqueries(runParams{
@@ -574,11 +562,11 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		log.VEvent(ctx, 2, "evaluated subqueries")
 	}
 
-	physPlan, err := dsp.createPlanForNode(&planCtx, p.curPlan.plan)
+	physPlan, err := dsp.createPlanForNode(planCtx, p.curPlan.plan)
 	if err != nil {
 		recv.SetError(err)
 		return
 	}
-	dsp.FinalizePlan(&planCtx, &physPlan)
-	dsp.Run(&planCtx, txn, &physPlan, recv, evalCtx)
+	dsp.FinalizePlan(planCtx, &physPlan)
+	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx)
 }
