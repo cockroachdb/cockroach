@@ -275,7 +275,7 @@
     "raft",
     "raft/raftpb",
   ]
-  revision = "90a2fbe50ebdb8f6e3cef987558dd73b9101d483"
+  revision = "3a037744dee9a7df42d3469917e3b34c02ae0bb3"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
