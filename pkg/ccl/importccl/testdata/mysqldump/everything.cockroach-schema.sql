@@ -4,6 +4,7 @@ CREATE TABLE everything (
   c     CHAR(10) NOT NULL,
   s     VARCHAR(100),
   tx    TEXT,
+  e     STRING,
 
   bin   BYTEA NOT NULL,
   vbin  BYTEA,
@@ -33,5 +34,6 @@ CREATE TABLE everything (
 
   f17   FLOAT4,
   f47   DOUBLE PRECISION,
-  f75   FLOAT4
+  f75   FLOAT4,
+  CONSTRAINT imported_from_enum_e CHECK (e IN ('Small':::STRING, 'Medium':::STRING, 'Large':::STRING))
 )
