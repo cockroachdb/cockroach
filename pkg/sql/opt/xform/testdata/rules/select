@@ -459,6 +459,41 @@ memo (optimized)
  ├── G22: (variable b.k)
  └── G23: (const 5)
 
+# Ensure the rule doesn't match at all when the first column of the index is
+# not in the filter.
+exploretrace rule=ConstrainScan
+SELECT k FROM a WHERE u = 1
+----
+----
+================================================================================
+ConstrainScan
+================================================================================
+Source expression:
+  project
+   ├── columns: k:1(int!null)
+   ├── key: (1)
+   └── select
+        ├── columns: k:1(int!null) u:2(int!null)
+        ├── key: (1)
+        ├── fd: ()-->(2)
+        ├── scan a
+        │    ├── columns: k:1(int!null) u:2(int)
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2)
+        └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+             └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+
+New expression 1 of 1:
+  project
+   ├── columns: k:1(int!null)
+   ├── key: (1)
+   └── scan a@u
+        ├── columns: k:1(int!null) u:2(int!null)
+        ├── constraint: /2/1: [/1 - /1]
+        ├── key: (1)
+        └── fd: ()-->(2)
+----
+----
 
 # --------------------------------------------------
 # PushFilterIntoLookupJoin
