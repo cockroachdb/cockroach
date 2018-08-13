@@ -146,16 +146,6 @@ SELECT current_date - current_date() = 0
 true
 
 query B
-SELECT current_time:::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
-----
-true
-
-query B
-SELECT current_time():::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
-----
-true
-
-query B
 SELECT now() - current_timestamp() = interval '0s'
 ----
 true

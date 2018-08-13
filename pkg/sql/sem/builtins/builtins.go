@@ -1694,18 +1694,6 @@ CockroachDB supports the following flags:
 		},
 	),
 
-	"current_time": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.TimeTZ),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return ctx.GetTxnTime(), nil
-			},
-			Info: "Returns the time of the current transaction, with time zone." + txnTSContextDoc,
-		},
-	),
-
 	"now":                   txnTSImpl,
 	"current_timestamp":     txnTSImpl,
 	"transaction_timestamp": txnTSImpl,
@@ -1818,18 +1806,6 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
-				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTime(fromTime, timeSpan)
-			},
-			Info: "Extracts `element` from `input`.\n\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				fromTimeTZ := args[1].(*tree.DTimeTZ)
-				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return extractStringFromTime(fromTime, timeSpan)
 			},

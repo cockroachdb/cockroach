@@ -95,8 +95,6 @@ func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
 		return NewDString(s), nil
 	case types.Time:
 		return ParseDTime(s)
-	case types.TimeTZ:
-		return ParseDTimeTZ(s, ctx.GetLocation())
 	case types.Timestamp:
 		return ParseDTimestamp(s, time.Microsecond)
 	case types.TimestampTZ:

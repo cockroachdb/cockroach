@@ -56,7 +56,7 @@ message ColumnType {
     INET = 16;
     TIME = 17;
     JSON = 18;
-    TIMETZ = 19;
+    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
 
     INT2VECTOR = 200;

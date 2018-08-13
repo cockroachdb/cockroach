@@ -536,64 +536,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.Date,
-			RightType:  types.TimeTZ,
-			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(right.(*DTimeTZ).Location, left.(*DDate))
-				t := time.Duration(right.(*DTimeTZ).TimeOfDay) * time.Microsecond
-				return MakeDTimestampTZ(d.Add(t), time.Microsecond), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Date,
-			ReturnType: types.TimestampTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(left.(*DTimeTZ).Location, right.(*DDate))
-				t := time.Duration(left.(*DTimeTZ).TimeOfDay) * time.Microsecond
-				return MakeDTimestampTZ(d.Add(t), time.Microsecond), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Interval,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := left.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(right.(*DInterval).Duration), left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.Interval,
-			RightType:  types.TimeTZ,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := right.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(left.(*DInterval).Duration), right.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Time,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := left.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.Time,
-			RightType:  types.TimeTZ,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := right.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*left.(*DTime))
-				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), right.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
 			ReturnType: types.Timestamp,
@@ -776,26 +718,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				t2 := timeofday.TimeOfDay(*right.(*DTime))
 				diff := timeofday.Difference(t1, t2)
 				return &DInterval{Duration: diff}, nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Time,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := left.(*DTimeTZ).TimeOfDay
-				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				diff := timeofday.FromInt(int64(t1 - t2))
-				return MakeDTimeTZ(diff, left.(*DTimeTZ).Location), nil
-			},
-		},
-		BinOp{
-			LeftType:   types.TimeTZ,
-			RightType:  types.Interval,
-			ReturnType: types.TimeTZ,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := left.(*DTimeTZ).TimeOfDay
-				return MakeDTimeTZ(t.Add(right.(*DInterval).Duration.Mul(-1)), left.(*DTimeTZ).Location), nil
 			},
 		},
 		BinOp{
@@ -1690,7 +1612,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Oid, types.Oid),
 		makeEqFn(types.String, types.String),
 		makeEqFn(types.Time, types.Time),
-		makeEqFn(types.TimeTZ, types.TimeTZ),
 		makeEqFn(types.Timestamp, types.Timestamp),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
 		makeEqFn(types.UUID, types.UUID),
@@ -1708,8 +1629,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Timestamp, types.TimestampTZ),
 		makeEqFn(types.TimestampTZ, types.Date),
 		makeEqFn(types.TimestampTZ, types.Timestamp),
-		makeEqFn(types.TimeTZ, types.Time),
-		makeEqFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1735,7 +1654,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Oid, types.Oid),
 		makeLtFn(types.String, types.String),
 		makeLtFn(types.Time, types.Time),
-		makeLtFn(types.TimeTZ, types.TimeTZ),
 		makeLtFn(types.Timestamp, types.Timestamp),
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
 		makeLtFn(types.UUID, types.UUID),
@@ -1753,8 +1671,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Timestamp, types.TimestampTZ),
 		makeLtFn(types.TimestampTZ, types.Date),
 		makeLtFn(types.TimestampTZ, types.Timestamp),
-		makeLtFn(types.TimeTZ, types.Time),
-		makeLtFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1780,7 +1696,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Oid, types.Oid),
 		makeLeFn(types.String, types.String),
 		makeLeFn(types.Time, types.Time),
-		makeLeFn(types.TimeTZ, types.TimeTZ),
 		makeLeFn(types.Timestamp, types.Timestamp),
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
 		makeLeFn(types.UUID, types.UUID),
@@ -1798,8 +1713,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Timestamp, types.TimestampTZ),
 		makeLeFn(types.TimestampTZ, types.Date),
 		makeLeFn(types.TimestampTZ, types.Timestamp),
-		makeLeFn(types.TimeTZ, types.Time),
-		makeLeFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1834,7 +1747,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Oid, types.Oid),
 		makeIsFn(types.String, types.String),
 		makeIsFn(types.Time, types.Time),
-		makeIsFn(types.TimeTZ, types.TimeTZ),
 		makeIsFn(types.Timestamp, types.Timestamp),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
 		makeIsFn(types.UUID, types.UUID),
@@ -1852,8 +1764,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Timestamp, types.TimestampTZ),
 		makeIsFn(types.TimestampTZ, types.Date),
 		makeIsFn(types.TimestampTZ, types.Timestamp),
-		makeIsFn(types.TimeTZ, types.Time),
-		makeIsFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1883,7 +1793,6 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Oid),
 		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
-		makeEvalTupleIn(types.TimeTZ),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
 		makeEvalTupleIn(types.UUID),
@@ -2634,17 +2543,6 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
-// GetTxnTime retrieves the current transaction time as per
-// the evaluation context. The time is guaranteed to be nonzero.
-func (ctx *EvalContext) GetTxnTime() *DTimeTZ {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
-	}
-	return MakeDTimeTZ(timeofday.FromTime(ctx.TxnTimestamp), ctx.TxnTimestamp.Location())
-}
-
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
@@ -3065,7 +2963,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal, dNull:
 			s = d.String()
-		case *DTimestamp, *DTimestampTZ, *DDate, *DTime, *DTimeTZ:
+		case *DTimestamp, *DTimestampTZ, *DDate, *DTime:
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DTuple:
 			s = AsStringWithFlags(d, FmtPgwireText)
@@ -3167,28 +3065,12 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return ParseDTime(d.Contents)
 		case *DTime:
 			return d, nil
-		case *DTimeTZ:
-			return MakeDTime(d.TimeOfDay), nil
 		case *DTimestamp:
 			return MakeDTime(timeofday.FromTime(d.Time)), nil
 		case *DTimestampTZ:
 			return MakeDTime(timeofday.FromTime(d.Time)), nil
 		case *DInterval:
 			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
-		}
-
-	case *coltypes.TTimeTZ:
-		switch d := d.(type) {
-		case *DString:
-			return ParseDTimeTZ(string(*d), ctx.GetLocation())
-		case *DCollatedString:
-			return ParseDTimeTZ(d.Contents, ctx.GetLocation())
-		case *DTime:
-			return MakeDTimeTZ(timeofday.TimeOfDay(*d), ctx.GetLocation()), nil
-		case *DTimeTZ:
-			return d, nil
-		case *DTimestampTZ:
-			return MakeDTimeTZ(timeofday.FromTime(d.Time), d.Time.Location()), nil
 		}
 
 	case *coltypes.TTimestamp:
@@ -3880,11 +3762,6 @@ func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DTime) Eval(_ *EvalContext) (Datum, error) {
-	return t, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (t *DTimeTZ) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

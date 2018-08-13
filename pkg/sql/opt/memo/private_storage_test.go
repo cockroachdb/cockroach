@@ -394,7 +394,6 @@ func TestInternColType(t *testing.T) {
 	// Time/date types.
 	test(coltypes.Date, &coltypes.TDate{}, true)
 	test(coltypes.Time, &coltypes.TTime{}, true)
-	test(coltypes.TimeTZ, &coltypes.TTimeTZ{}, true)
 	test(coltypes.Timestamp, &coltypes.TTimestamp{}, true)
 	test(coltypes.TimestampWithTZ, &coltypes.TTimestampTZ{}, true)
 	test(coltypes.Interval, &coltypes.TInterval{}, true)

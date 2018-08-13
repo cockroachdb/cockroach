@@ -42,17 +42,6 @@ func (node *TTime) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIME")
 }
 
-// TTimeTZ represents a TIMETZ type.
-type TTimeTZ struct{}
-
-// TypeName implements the ColTypeFormatter interface.
-func (node *TTimeTZ) TypeName() string { return "TIMETZ" }
-
-// Format implements the ColTypeFormatter interface.
-func (node *TTimeTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIME WITH TIME ZONE")
-}
-
 // TTimestamp represents a TIMESTAMP type.
 type TTimestamp struct{}
 
