@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -341,36 +342,41 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	}
 }
 
-func (b *Builder) resolveTableRef(ref *tree.TableRef) opt.Table {
-	tab, err := b.catalog.FindTableByID(b.ctx, ref.TableID)
+// resolveDataSource returns the data source in the catalog with the given name.
+// If the name does not resolve to a table, or if the current user does not have
+// the right privileges, then resolveDataSource raises an error.
+func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt.DataSource {
+	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
 	if err != nil {
-		// TODO(madhavsuresh): This branching statement is a hack to maintain compatibility
-		// with the heuristic planner. The problem is that privilege checking in the
-		// heuristic planner happens in a different code path than checking if the table
-		// has been dropped, or if it exists
-		if err.Error() == "table is being dropped" {
-			panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
-		} else if err.Error() == sqlbase.NewUndefinedRelationError(
-			&tree.TableRef{TableID: ref.TableID}).Error() {
-			panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
-		} else {
+		panic(builderError{err})
+	}
+
+	if !b.skipSelectPrivilegeChecks {
+		err := ds.CheckPrivilege(b.ctx, priv)
+		if err != nil {
 			panic(builderError{err})
 		}
 	}
-	return tab
+
+	return ds
 }
 
-// resolveTable returns the table in the catalog with the given name.
-func (b *Builder) resolveTable(tn *tree.TableName) opt.Table {
-	tab, err := b.catalog.FindTable(b.ctx, tn)
+// resolveDataSourceFromRef returns the data source in the catalog that matches
+// the given TableRef spec. If no data source matches, or if the current user
+// does not have the right privileges, then resolveDataSourceFromRef raises an
+// error.
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) opt.DataSource {
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, ref.TableID)
 	if err != nil {
-		pgerr, ok := err.(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeWrongObjectTypeError {
-			// Remap wrong object error to unimplemented error.
-			panic(unimplementedf("views and sequences are not supported"))
-		}
-
-		panic(builderError{err})
+		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
-	return tab
+
+	if !b.skipSelectPrivilegeChecks {
+		err := ds.CheckPrivilege(b.ctx, priv)
+		if err != nil {
+			panic(builderError{err})
+		}
+	}
+
+	return ds
 }

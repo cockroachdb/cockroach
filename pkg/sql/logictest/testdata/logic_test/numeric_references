@@ -83,3 +83,9 @@ query I
 SELECT count(rowid) FROM [54(3) AS num_ref_hidden]
 ----
 3
+
+# Ensure that privileges are checked when using numeric references.
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation num_ref
+SELECT * FROM [53 AS t]

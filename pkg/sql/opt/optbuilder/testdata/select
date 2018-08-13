@@ -1211,7 +1211,6 @@ project
  └── scan num_ref_hidden
       └── columns: x:1(int) rowid:3(int!null)
 
-
 # Numeric Reference Test (11/11)
 build
 SELECT rowid FROM [54(3) as t]

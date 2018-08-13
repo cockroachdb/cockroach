@@ -222,7 +222,7 @@ func (md *Metadata) ColumnOrdinal(id ColumnID) int {
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query).
 func (md *Metadata) AddTable(tab Table) TableID {
-	return md.AddTableWithName(tab, string(tab.TabName().TableName))
+	return md.AddTableWithName(tab, string(tab.Name().TableName))
 }
 
 // AddTableWithName indexes a new reference to a table within the query.

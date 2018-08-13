@@ -73,6 +73,16 @@ type Builder struct {
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
 	catalog opt.Catalog
+
+	// If set, the planner will skip checking for the SELECT privilege when
+	// resolving data sources (tables, views, etc). This is used when compiling
+	// views and the view SELECT privilege has already been checked. This should
+	// be used with care.
+	skipSelectPrivilegeChecks bool
+
+	// views contains a cache of views that have already been parsed, in case they
+	// are referenced multiple times in the same query.
+	views map[opt.View]*tree.Select
 }
 
 // New creates a new Builder structure initialized with the given
