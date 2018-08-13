@@ -1363,6 +1363,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// Speed up epoch refresh.
+	params.LeaseManagerConfig.TableDescriptorLeaseEpochRefreshInterval = 100 * time.Millisecond
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

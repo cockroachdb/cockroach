@@ -123,8 +123,22 @@ func (s *tableVersionState) incRefcountLocked() {
 // We've decided that it's too much work to change the type to
 // hlc.Timestamp, so we're using this method to give us the stored
 // type: tree.DTimestamp.
-func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
+func (s *tableVersionState) storedExpiration() tree.DTimestamp {
 	return tree.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
+}
+
+// The lease expiration. For an expiration based lease it is the
+// expiration of the lease. For an epoch based lease it is the
+// expiration of the epoch.
+func (m *LeaseManager) leaseExpiration(s *tableVersionState) hlc.Timestamp {
+	if s.epoch > 0 {
+		m.mu.Lock()
+		expiration := m.mu.expiration[s.epoch]
+		m.mu.Unlock()
+		return expiration
+	}
+	// expiration base lease
+	return s.expiration
 }
 
 // LeaseStore implements the operations for acquiring and releasing leases and
@@ -174,7 +188,6 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
-
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
 			return err
@@ -190,6 +203,13 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 		var epoch int64
 		if s.execCfg.Settings.Version.IsMinSupported(cluster.VersionWriteEpochBasedTableLeases) {
 			epoch = s.getEpoch()
+			// TODO(vivek) Set to hlc.MaxTimestamp. The reason why this
+			// is set to a large expiration that is not a constant large number
+			// is because expiration is part of the primary key in the lease
+			// table, and there are various conditions under which two leases
+			// can be acquired for the same table simulatenously resulting in
+			// one of them failing because of a uniqueness constraint violation.
+			expiration.WallTime += int64(20 * 365 * 24 * time.Hour)
 		}
 		table = &tableVersionState{
 			TableDescriptor: *tableDesc,
@@ -208,7 +228,7 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		leaseExpiration := table.leaseExpiration()
+		storedExpiration := table.storedExpiration()
 
 		// We use string interpolation here, instead of passing the arguments to
 		// InternalExecutor.Exec() because we don't want to pay for preparing the
@@ -220,12 +240,12 @@ func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVers
 		if epoch > 0 {
 			insertLease = fmt.Sprintf(
 				`INSERT INTO system.lease ("descID", version, "nodeID", expiration, epoch) VALUES (%d, %d, %d, %s, %d)`,
-				table.ID, int(table.Version), nodeID, &leaseExpiration, table.epoch,
+				table.ID, int(table.Version), nodeID, &storedExpiration, table.epoch,
 			)
 		} else {
 			insertLease = fmt.Sprintf(
 				`INSERT INTO system.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-				table.ID, int(table.Version), nodeID, &leaseExpiration,
+				table.ID, int(table.Version), nodeID, &storedExpiration,
 			)
 		}
 		count, err := s.execCfg.InternalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
@@ -261,13 +281,13 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 		}
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
-		leaseExpiration := table.leaseExpiration()
+		storedExpiration := table.storedExpiration()
 		count, err := s.execCfg.InternalExecutor.Exec(
 			ctx,
 			"lease-release",
 			nil, /* txn */
 			deleteLease,
-			table.ID, int(table.Version), nodeID, &leaseExpiration,
+			table.ID, int(table.Version), nodeID, &storedExpiration,
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", table, err)
@@ -1319,6 +1339,9 @@ type LeaseManager struct {
 	mu struct {
 		syncutil.Mutex
 		tables map[sqlbase.ID]*tableState
+		// expirations for different epochs. The expiration time for the
+		// latest epoch keeps getting updated.
+		expiration map[int64]hlc.Timestamp
 	}
 
 	draining     atomic.Value
@@ -1366,6 +1389,7 @@ func NewLeaseManager(
 	}
 
 	lm.mu.tables = make(map[sqlbase.ID]*tableState)
+	lm.mu.expiration = make(map[int64]hlc.Timestamp)
 
 	lm.draining.Store(false)
 	return lm
@@ -1403,6 +1427,8 @@ func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 // the returned descriptor. Renewal of a lease may begin in the
 // background. Renewal is done in order to prevent blocking on future
 // acquisitions.
+// TODO(vivek): Return epoch from this API so that the txn deadline can
+// be set at commit time.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1411,6 +1437,7 @@ func (m *LeaseManager) AcquireByName(
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
 			// If this lease is nearly expired, ensure a renewal is queued.
+			// TODO(vivek): Remove once epoch based leases are completely baked.
 			durationUntilExpiry := time.Duration(tableVersion.expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
 				if t := m.findTableState(tableVersion.ID, false /* create */); t != nil {
@@ -1420,7 +1447,11 @@ func (m *LeaseManager) AcquireByName(
 					}
 				}
 			}
-			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
+			expiration := m.leaseExpiration(tableVersion)
+			if timestamp.Less(expiration) {
+				return &tableVersion.TableDescriptor, expiration, nil
+			}
+			// The epoch expiration was insufficient.
 		}
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
 			return nil, hlc.Timestamp{}, err
@@ -1536,6 +1567,8 @@ func (m *LeaseManager) resolveName(
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
 // the returned descriptor.
+// TODO(vivek): Return epoch from this API so that the txn deadline can
+// be set at commit time.
 func (m *LeaseManager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1544,6 +1577,7 @@ func (m *LeaseManager) Acquire(
 		table, latest, err := t.findForTimestamp(ctx, timestamp)
 		if err == nil {
 			// If the latest lease is nearly expired, ensure a renewal is queued.
+			// TODO(vivek): Remove once epoch based leases are completely baked.
 			if latest {
 				durationUntilExpiry := time.Duration(table.expiration.WallTime - timestamp.WallTime)
 				if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
@@ -1552,7 +1586,15 @@ func (m *LeaseManager) Acquire(
 					}
 				}
 			}
-			return &table.TableDescriptor, table.expiration, nil
+			expiration := m.leaseExpiration(table)
+			if timestamp.Less(expiration) {
+				return &table.TableDescriptor, expiration, nil
+			}
+			// The epoch expiration was insufficient.
+			if err := m.Release(&table.TableDescriptor); err != nil {
+				return nil, hlc.Timestamp{}, err
+			}
+			err = errRenewLease
 		}
 		switch err {
 		case errRenewLease:
@@ -1724,6 +1766,11 @@ func (m *LeaseManager) refreshEpoch() {
 			}
 			continue
 		}
+		// Store the lease duration for the epoch before updating the epoch.
+		m.mu.Lock()
+		// Update the expiration time for the liveness epoch.
+		m.mu.expiration[liveness.Epoch] = m.execCfg.Clock.Now().Add(int64(m.leaseDuration), 0)
+		m.mu.Unlock()
 		atomic.StoreInt64(&m.epoch, liveness.Epoch)
 		return
 	}

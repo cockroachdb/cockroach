@@ -360,7 +360,7 @@ CREATE TABLE crdb_internal.leases (
 					if !leased {
 						continue
 					}
-					expCopy := state.leaseExpiration()
+					expCopy := state.storedExpiration()
 					if err := addRow(
 						nodeID,
 						tableID,

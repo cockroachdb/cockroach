@@ -207,9 +207,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
 		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
-	correctExpiration := ts.mu.active.data[0].expiration == expiration
-	correctEpoch := ts.mu.active.data[0].epoch == 1
+	epoch := ts.mu.active.data[0].epoch
+	correctEpoch := epoch == 1
 	ts.mu.Unlock()
+	leaseManager.mu.Lock()
+	correctExpiration := leaseManager.mu.expiration[epoch] == expiration
+	leaseManager.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
 	}
