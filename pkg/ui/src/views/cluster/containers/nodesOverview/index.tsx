@@ -118,17 +118,20 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   return moment.duration(startTime.diff(moment())).humanize();
                 },
                 sort: (ns) => ns.started_at,
+                className: "sort-table__cell--right-aligned-stats",
               },
               // Replicas - displays the total number of replicas on the node.
               {
                 title: "Replicas",
                 cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
                 sort: (ns) => ns.metrics[MetricConstants.replicas],
+                className: "sort-table__cell--right-aligned-stat",
               },
               // CPUs - the number of CPUs on this node
               {
                 title: "CPUs",
                 cell: (ns) => ns.num_cpus,
+                className: "sort-table__cell--right-aligned-stat",
               },
               // Used Capacity - displays the total persisted bytes maintained by the node.
               {
@@ -145,6 +148,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   );
                 },
                 sort: (ns) => BytesUsed(ns),
+                className: "sort-table__cell--right-aligned-stat",
               },
               // Mem Usage - total memory being used on this node.
               {
@@ -161,6 +165,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   );
                 },
                 sort: (ns) => ns.metrics[MetricConstants.rss],
+                className: "sort-table__cell--right-aligned-stat",
               },
               // Version - the currently running version of cockroach.
               {
