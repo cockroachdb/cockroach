@@ -702,8 +702,8 @@ func clearRangeData(
 // applySnapshot updates the replica based on the given snapshot and associated
 // HardState. All snapshots must pass through Raft for correctness, i.e. the
 // parameters to this method must be taken from a raft.Ready. It is the caller's
-// responsibility to call r.store.processRangeDescriptorUpdate(r) after a
-// successful applySnapshot. This method requires that r.raftMu is held.
+// responsibility to call r.setDesc with the new descriptor after a successful
+// applySnapshot. This method requires that r.raftMu is held.
 func (r *Replica) applySnapshot(
 	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
 ) (err error) {
@@ -876,7 +876,9 @@ func (r *Replica) applySnapshot(
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
+	oldDesc := r.mu.state.Desc
 	r.mu.state = s
+	r.mu.state.Desc = oldDesc // TODO(benesch): ewwwww
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 
@@ -890,7 +892,6 @@ func (r *Replica) applySnapshot(
 		panic(err)
 	}
 
-	r.setDescWithoutProcessUpdate(s.Desc)
 	return nil
 }
 

@@ -3444,16 +3444,15 @@ func (s *Store) processRaftSnapshotRequest(
 		// to be applied to initialized replicas as of #8613.
 		if req.ToReplica.ReplicaID == 0 {
 			defer func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-
 				// We need to remove the placeholder regardless of whether the snapshot
 				// applied successfully or not.
 				if addedPlaceholder {
+					s.mu.Lock()
 					// Clear the replica placeholder; we are about to swap it with a real replica.
 					if !s.removePlaceholderLocked(ctx, req.RangeID) {
 						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 					}
+					s.mu.Unlock()
 					if pErr == nil {
 						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
 					} else {
@@ -3463,8 +3462,8 @@ func (s *Store) processRaftSnapshotRequest(
 				}
 
 				if pErr == nil {
-					// If the snapshot succeeded, process the range descriptor update.
-					if err := s.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
+					// If the snapshot succeeded, update the range descriptor.
+					if err := r.setDesc(inSnap.State.Desc); err != nil {
 						pErr = roachpb.NewError(err)
 					}
 				}

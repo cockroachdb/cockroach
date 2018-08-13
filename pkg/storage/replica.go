@@ -3927,21 +3927,46 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 		}
 
+		var subsumedRepls []*Replica
+		endKey := r.Desc().EndKey
+		for endKey.Less(inSnap.State.Desc.EndKey) {
+			repl := r.store.LookupReplica(endKey, nil /* end */)
+			if repl == nil {
+				log.Fatalf(ctx, "attempted to apply snapshot but no replica for subsumed key %s", endKey)
+			}
+			repl.raftMu.Lock()
+			subsumedRepls = append(subsumedRepls, repl)
+			endKey = repl.Desc().EndKey
+		}
+		if !endKey.Equal(inSnap.State.Desc.EndKey) {
+			log.Fatalf(ctx, "attempted to apply snapshot that ends in middle of replica %s", endKey)
+		}
+		defer func() {
+			for _, repl := range subsumedRepls {
+				repl.raftMu.Unlock()
+			}
+		}()
+
 		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
 			const expl = "while applying snapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 
+		for _, repl := range subsumedRepls {
+			if err := r.store.removeReplicaImpl(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{DestroyData: false}); err != nil {
+				log.Fatal(ctx, err)
+			}
+		}
+
 		if err := func() error {
 			r.store.mu.Lock()
-			defer r.store.mu.Unlock()
-
 			if r.store.removePlaceholderLocked(ctx, r.RangeID) {
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
-			return r.store.processRangeDescriptorUpdateLocked(ctx, r)
+			r.store.mu.Unlock()
+			return r.setDesc(inSnap.State.Desc)
 		}(); err != nil {
-			const expl = "could not processRangeDescriptorUpdate after applySnapshot"
+			const expl = "could not setDesc after applySnapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 
