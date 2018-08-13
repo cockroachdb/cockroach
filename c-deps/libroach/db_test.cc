@@ -46,6 +46,12 @@ TEST(Libroach, DBOpen) {
   EXPECT_EQ(stats.active_key_files, 0);
   EXPECT_EQ(stats.active_key_bytes, 0);
 
+  // Fetch registries, parse, and check that they're empty.
+  DBEncryptionRegistries result;
+  EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
+  EXPECT_STREQ(result.key_registry.data, NULL);
+  EXPECT_STREQ(result.file_registry.data, NULL);
+
   DBClose(db);
 }
 

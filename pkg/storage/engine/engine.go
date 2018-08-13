@@ -384,6 +384,17 @@ type EnvStats struct {
 	EncryptionStatus []byte
 }
 
+// EncryptionRegistries contains the encryption-related registries:
+// Both are serialized protobufs.
+type EncryptionRegistries struct {
+	// FileRegistry is the list of files with encryption status.
+	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
+	FileRegistry []byte
+	// KeyRegistry is the list of keys, scrubbed of actual key data.
+	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
+	KeyRegistry []byte
+}
+
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.

@@ -170,7 +170,7 @@ func init() {
 		demoCmd,
 		genCmd,
 		versionCmd,
-		debugCmd,
+		DebugCmd,
 		sqlfmtCmd,
 	)
 }
