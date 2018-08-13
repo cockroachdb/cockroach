@@ -346,9 +346,18 @@ typedef struct {
   DBString encryption_status;
 } DBEnvStatsResult;
 
+// DBEncryptionRegistries contains file and key registries.
+typedef struct {
+  // File registry.
+  DBString file_registry;
+  // Key registry (with actual keys scrubbed).
+  DBString key_registry;
+} DBEncryptionRegistries;
+
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
 DBString DBGetCompactionStats(DBEngine* db);
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats);
+DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result);
 
 typedef struct {
   int level;

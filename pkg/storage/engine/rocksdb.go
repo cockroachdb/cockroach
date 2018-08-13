@@ -1160,6 +1160,20 @@ func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
 	}, nil
 }
 
+// GetEncryptionRegistries returns the file and key registries when encryption is enabled
+// on the store.
+func (r *RocksDB) GetEncryptionRegistries() (*EncryptionRegistries, error) {
+	var s C.DBEncryptionRegistries
+	if err := statusToError(C.DBGetEncryptionRegistries(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+
+	return &EncryptionRegistries{
+		FileRegistry: cStringToGoBytes(s.file_registry),
+		KeyRegistry:  cStringToGoBytes(s.key_registry),
+	}, nil
+}
+
 type rocksDBSnapshot struct {
 	parent *RocksDB
 	handle *C.DBEngine

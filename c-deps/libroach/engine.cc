@@ -243,6 +243,39 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   return kSuccess;
 }
 
+DBStatus DBImpl::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  // Always initialize the fields.
+  result->file_registry = DBString();
+  result->key_registry = DBString();
+
+  if (env_mgr->env_stats_handler == nullptr || env_mgr->file_registry == nullptr) {
+    // We can't compute these if we don't have a file registry or stats handler.
+    // This happens in OSS mode or when encryption has not been turned on.
+    return kSuccess;
+  }
+
+  auto file_registry = env_mgr->file_registry->GetFileRegistry();
+  if (file_registry == nullptr) {
+    return ToDBStatus(rocksdb::Status::InvalidArgument("file registry has not been loaded"));
+  }
+
+  std::string serialized_file_registry;
+  if (!file_registry->SerializeToString(&serialized_file_registry)) {
+    return ToDBStatus(rocksdb::Status::InvalidArgument("failed to serialize file registry proto"));
+  }
+
+  std::string serialized_key_registry;
+  auto status = env_mgr->env_stats_handler->GetEncryptionRegistry(&serialized_key_registry);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  result->file_registry = ToDBString(serialized_file_registry);
+  result->key_registry = ToDBString(serialized_key_registry);
+
+  return kSuccess;
+}
+
 // EnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   rocksdb::Status s;

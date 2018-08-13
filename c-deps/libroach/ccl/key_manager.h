@@ -132,6 +132,9 @@ class DataKeyManager : public KeyManager {
   // be accurate here.
   std::unique_ptr<enginepbccl::KeyInfo> GetActiveStoreKeyInfo();
 
+  // GetScrubbedRegistry returns a copy of the key registry with key contents scrubbed.
+  std::unique_ptr<enginepbccl::DataKeysRegistry> GetScrubbedRegistry() const;
+
   virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() override;
   virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
@@ -157,7 +160,7 @@ class DataKeyManager : public KeyManager {
   // current_key_ is the active data key (or nullptr if none present yet) and is updated every time
   // registry_ is modified.
   // TODO(mberhault): use a shared_mutex for multiple read-only holders.
-  std::mutex mu_;
+  mutable std::mutex mu_;
   std::unique_ptr<enginepbccl::DataKeysRegistry> registry_;
   std::shared_ptr<enginepbccl::SecretKey> current_key_;
 };
