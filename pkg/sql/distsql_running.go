@@ -548,7 +548,12 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 ) {
 	evalCtx := p.ExtendedEvalContext()
 	txn := p.txn
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+	var planCtx PlanningCtx
+	if distribute {
+		planCtx = dsp.NewPlanningCtx(ctx, evalCtx, txn)
+	} else {
+		planCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+	}
 	planCtx.isLocal = !distribute
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
