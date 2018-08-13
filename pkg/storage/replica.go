@@ -3684,8 +3684,8 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		if log.V(4) {
 			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
-		// We're proposing a command so there is no need to wake the leader if we
-		// were quiesced.
+		// We're proposing a command so there is no need to wake the leader if
+		// we're quiesced.
 		r.unquiesceLocked()
 		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
