@@ -678,7 +678,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if isHex && lex.IsHexDigit(ch) || lex.IsDigit(ch) {
+		if (isHex && lex.IsHexDigit(ch)) || lex.IsDigit(ch) {
 			s.pos++
 			continue
 		}

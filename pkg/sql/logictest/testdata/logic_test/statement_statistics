@@ -116,7 +116,7 @@ INSERT INTO test VALUES (_, _, __more1__), (__more1__)            -
 SELECT (_, _, __more3__) FROM test WHERE _                        ·
 SELECT key FROM test.crdb_internal.node_statement_statistics      ·
 SELECT sin(_)                                                     ·
-SELECT sqrt(-_)                                                   !
+SELECT sqrt(_)                                                    !
 SELECT x FROM (VALUES (_, _, __more1__), (__more1__)) AS t (x)    ·
 SELECT x FROM test WHERE y = (_ / z)                              !+
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
@@ -142,7 +142,7 @@ INSERT INTO _ VALUES (_, _, __more1__), (__more1__)
 SELECT (_, _, __more3__) FROM _ WHERE _
 SELECT _ FROM _.crdb_internal.node_statement_statistics
 SELECT sin(_)
-SELECT sqrt(-_)
+SELECT sqrt(_)
 SELECT _ FROM (VALUES (_, _, __more1__), (__more1__)) AS _ (_)
 SELECT _ FROM _ WHERE _ = (_ / _)
 SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)

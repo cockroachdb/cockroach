@@ -16,6 +16,7 @@ package parser_test
 
 import (
 	"go/constant"
+	"go/token"
 	"reflect"
 	"regexp"
 	"strings"
@@ -513,7 +514,6 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1 + 1`},
 		{`SELECT -1`},
-		{`SELECT +1`},
 		{`SELECT .1`},
 		{`SELECT 1.2e1`},
 		{`SELECT 1.2e+1`},
@@ -1090,8 +1090,10 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a IS UNKNOWN`, `SELECT a FROM t WHERE a IS NULL`},
 		{`SELECT a FROM t WHERE a IS NOT UNKNOWN`, `SELECT a FROM t WHERE a IS NOT NULL`},
 
-		{`SELECT - - 5`, `SELECT -(-5)`},
-		{`SELECT a FROM t WHERE b = - 2`, `SELECT a FROM t WHERE b = (-2)`},
+		{`SELECT +1`, `SELECT 1`},
+		{`SELECT - - 5`, `SELECT 5`},
+		{`SELECT - + 5`, `SELECT -5`},
+		{`SELECT a FROM t WHERE b = - 2`, `SELECT a FROM t WHERE b = -2`},
 		{`SELECT a FROM t WHERE a = b AND a = c`, `SELECT a FROM t WHERE (a = b) AND (a = c)`},
 		{`SELECT a FROM t WHERE a = b OR a = c`, `SELECT a FROM t WHERE (a = b) OR (a = c)`},
 		{`SELECT a FROM t WHERE NOT a = b`, `SELECT a FROM t WHERE NOT (a = b)`},
@@ -1106,7 +1108,7 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = b / c`, `SELECT a FROM t WHERE a = (b / c)`},
 		{`SELECT a FROM t WHERE a = b % c`, `SELECT a FROM t WHERE a = (b % c)`},
 		{`SELECT a FROM t WHERE a = b || c`, `SELECT a FROM t WHERE a = (b || c)`},
-		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+b)`},
+		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = b`},
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
 
@@ -1207,18 +1209,18 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM t LIMIT 2 * a OFFSET b`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
-			`SELECT *, -(-5)`},
+			`SELECT *, 5`},
 		{"SELECT -\n-5",
-			`SELECT -(-5)`},
+			`SELECT 5`},
 		{`SELECT -0.-/*test*/-1`,
-			`SELECT (-0.) - (-1)`,
+			`SELECT -0. - -1`,
 		},
 		// See #1948.
 		{`SELECT~~+~++~bd(*)`,
-			`SELECT ~(~(+(~(+(+(~bd(*)))))))`},
+			`SELECT ~(~(~(~bd(*))))`},
 		// See #1957.
 		{`SELECT+y[array[]]`,
-			`SELECT +y[ARRAY[]]`},
+			`SELECT y[ARRAY[]]`},
 		{`SELECT a FROM t UNION DISTINCT SELECT 1 FROM t`,
 			`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t EXCEPT DISTINCT SELECT 1 FROM t`,
@@ -1624,7 +1626,7 @@ func TestParseTree(t *testing.T) {
 		expected string
 	}{
 		{`SELECT 1`, `SELECT (1)`},
-		{`SELECT -1+2`, `SELECT (((-(1))) + (2))`},
+		{`SELECT -1+2`, `SELECT ((-1) + (2))`},
 		{`SELECT -1:::INT`, `SELECT (-((1):::INT))`},
 		{`SELECT 1 = 2::INT`, `SELECT ((1) = ((2)::INT))`},
 		{`SELECT 1 = ANY 2::INT`, `SELECT ((1) = ANY ((2)::INT))`},
@@ -2207,7 +2209,9 @@ func TestParsePrecedence(t *testing.T) {
 	}
 
 	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	minusone := &tree.NumVal{Value: constant.UnaryOp(token.SUB, constant.MakeInt64(1), 0), OrigString: "-1"}
 	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	minustwo := &tree.NumVal{Value: constant.UnaryOp(token.SUB, constant.MakeInt64(2), 0), OrigString: "-2"}
 	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
 	a := tree.NewStrVal("a")
 	b := tree.NewStrVal("b")
@@ -2218,18 +2222,18 @@ func TestParsePrecedence(t *testing.T) {
 		expected tree.Expr
 	}{
 		// Unary plus and complement.
-		{`~-1`, unary(tree.UnaryComplement, unary(tree.UnaryMinus, one))},
+		{`~-1`, unary(tree.UnaryComplement, minusone)},
 		{`-~1`, unary(tree.UnaryMinus, unary(tree.UnaryComplement, one))},
 
 		// Mul, div, floordiv, mod combined with higher precedence.
-		{`-1*2`, binary(tree.Mult, unary(tree.UnaryMinus, one), two)},
-		{`1*-2`, binary(tree.Mult, one, unary(tree.UnaryMinus, two))},
-		{`-1/2`, binary(tree.Div, unary(tree.UnaryMinus, one), two)},
-		{`1/-2`, binary(tree.Div, one, unary(tree.UnaryMinus, two))},
-		{`-1//2`, binary(tree.FloorDiv, unary(tree.UnaryMinus, one), two)},
-		{`1//-2`, binary(tree.FloorDiv, one, unary(tree.UnaryMinus, two))},
-		{`-1%2`, binary(tree.Mod, unary(tree.UnaryMinus, one), two)},
-		{`1%-2`, binary(tree.Mod, one, unary(tree.UnaryMinus, two))},
+		{`-1*2`, binary(tree.Mult, minusone, two)},
+		{`1*-2`, binary(tree.Mult, one, minustwo)},
+		{`-1/2`, binary(tree.Div, minusone, two)},
+		{`1/-2`, binary(tree.Div, one, minustwo)},
+		{`-1//2`, binary(tree.FloorDiv, minusone, two)},
+		{`1//-2`, binary(tree.FloorDiv, one, minustwo)},
+		{`-1%2`, binary(tree.Mod, minusone, two)},
+		{`1%-2`, binary(tree.Mod, one, minustwo)},
 
 		// Mul, div, floordiv, mod combined with self (left associative).
 		{`1*2*3`, binary(tree.Mult, binary(tree.Mult, one, two), three)},
@@ -2340,13 +2344,15 @@ func TestParsePrecedence(t *testing.T) {
 		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.sql)
-		if err != nil {
-			t.Fatalf("%s: %v", d.sql, err)
-		}
-		if !reflect.DeepEqual(d.expected, expr) {
-			t.Fatalf("%s: expected %s, but found %s", d.sql, d.expected, expr)
-		}
+		t.Run(d.sql, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.sql)
+			if err != nil {
+				t.Fatalf("%s: %v", d.sql, err)
+			}
+			if !reflect.DeepEqual(d.expected, expr) {
+				t.Fatalf("%s: expected %s, but found %s", d.sql, d.expected, expr)
+			}
+		})
 	}
 }
 

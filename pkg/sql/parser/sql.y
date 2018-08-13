@@ -6324,11 +6324,12 @@ a_expr:
   // b_expr and to the math_op list below.
 | '+' a_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryPlus, Expr: $2.expr()}
+    // Unary plus is a no-op. Desugar immediately.
+    $$.val = $2.expr()
   }
 | '-' a_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryMinus, Expr: $2.expr()}
+    $$.val = unaryNegation($2.expr())
   }
 | '~' a_expr %prec UMINUS
   {
@@ -6681,11 +6682,11 @@ b_expr:
   }
 | '+' b_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryPlus, Expr: $2.expr()}
+    $$.val = $2.expr()
   }
 | '-' b_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryMinus, Expr: $2.expr()}
+    $$.val = unaryNegation($2.expr())
   }
 | '~' b_expr %prec UMINUS
   {
