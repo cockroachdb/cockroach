@@ -165,6 +165,7 @@ define VALID_VARS
   langgen-package
   libroach-inputs
   logic-test-selector
+  logictest-bins
   logictest-package
   logictestccl-package
   logictestopt-package

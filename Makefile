@@ -1392,10 +1392,14 @@ logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
 logictestopt-package = ./pkg/sql/opt/exec/execbuilder
 
+logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
+
 # Additional dependencies for binaries that depend on generated code.
-bin/workload bin/docgen bin/roachtest: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
-bin/workload bin/roachtest: $(C_LIBS_CCL) $(CGO_FLAGS_FILES)
-bin/roachtest: $(OPTGEN_TARGETS)
+#
+# TODO(benesch): Derive this automatically. This is getting out of hand.
+bin/workload bin/docgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES)
+bin/roachtest bin/logictestopt: $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
