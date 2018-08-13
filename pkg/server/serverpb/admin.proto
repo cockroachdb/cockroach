@@ -454,6 +454,13 @@ message JobsResponse {
     google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
     float fraction_completed = 11;
     string error = 12;
+    // highwater_timestamp is the highwater timestamp returned as normal
+    // timestamp. This is appropriate for display to humans.
+    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+    // highwater_decimal is the highwater timestamp in the proprietary decimal
+    // form used by logical timestamps internally. This is appropriate to pass
+    // to a "AS OF SYSTEM TIME" SQL statement.
+    string highwater_decimal = 14;
   }
 
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
