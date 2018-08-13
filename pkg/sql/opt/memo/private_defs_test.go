@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func TestScanCanProvideOrdering(t *testing.T) {
@@ -39,7 +40,7 @@ func TestScanCanProvideOrdering(t *testing.T) {
 	}
 
 	md := opt.NewMetadata()
-	a := md.AddTable(cat.Table("a"))
+	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
 
 	// PRIMARY KEY (k)
 	primary := 0
