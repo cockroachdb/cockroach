@@ -286,6 +286,12 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	return r.raftLastIndexLocked()
 }
 
+func (r *Replica) LastAssignedLeaseIndex() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.lastAssignedLeaseIndex
+}
+
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both

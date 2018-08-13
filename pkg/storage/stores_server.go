@@ -17,9 +17,11 @@ package storage
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // Server implements PerReplicaServer.
@@ -74,5 +76,36 @@ func (is Server) CollectChecksum(
 			resp = &ccr
 			return nil
 		})
+	return resp, err
+}
+
+// WaitForApplication implements PerReplicaServer.
+func (is Server) WaitForApplication(
+	ctx context.Context, req *WaitForApplicationRequest,
+) (*WaitForApplicationResponse, error) {
+	resp := &WaitForApplicationResponse{}
+	err := is.execStoreCommand(req.StoreRequestHeader, func(s *Store) error {
+		// TODO(benesch): Once Replica changefeeds land, see if we can implement
+		// this request handler without polling.
+		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Long-lived references to replicas are frowned upon, so re-fetch the
+			// replica on every turn of the loop.
+			repl, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			repl.mu.RLock()
+			leaseAppliedIndex := repl.mu.state.LeaseAppliedIndex
+			repl.mu.RUnlock()
+			if leaseAppliedIndex >= req.LeaseIndex {
+				return nil
+			}
+		}
+		if ctx.Err() == nil {
+			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+		}
+		return ctx.Err()
+	})
 	return resp, err
 }
