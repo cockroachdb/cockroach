@@ -66,9 +66,22 @@ func newTableReader(
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
-	for i := range types {
-		types[i] = spec.Table.Columns[i].Type
+	numCols := len(spec.Table.Columns)
+	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	if returnMutations {
+		numCols += len(spec.Table.Mutations)
+	}
+	types := make([]sqlbase.ColumnType, 0, numCols)
+	for i := range spec.Table.Columns {
+		types = append(types, spec.Table.Columns[i].Type)
+	}
+	if returnMutations {
+		for i := range spec.Table.Mutations {
+			col := spec.Table.Mutations[i].GetColumn()
+			if col != nil {
+				types = append(types, col.Type)
+			}
+		}
 	}
 	if err := tr.Init(
 		tr,
@@ -92,9 +105,18 @@ func newTableReader(
 
 	neededColumns := tr.out.neededColumns()
 
+	columnIdxMap := spec.Table.ColumnIdxMap()
+	if returnMutations {
+		for i := range spec.Table.Mutations {
+			col := spec.Table.Mutations[i].GetColumn()
+			if col != nil {
+				columnIdxMap[col.ID] = i + len(spec.Table.Columns)
+			}
+		}
+	}
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &spec.Table, int(spec.IndexIdx), spec.Table.ColumnIdxMap(), spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc,
+		&tr.fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
 		return nil, err
 	}
@@ -150,18 +172,31 @@ func initRowFetcher(
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
+	scanVisibility ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
+	cols := desc.Columns
+	if scanVisibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+		for _, mutation := range desc.Mutations {
+			if c := mutation.GetColumn(); c != nil {
+				col := *c
+				// Even if the column is non-nullable it can be null in the
+				// middle of a schema change.
+				col.Nullable = true
+				cols = append(cols, col)
+			}
+		}
+	}
 	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             desc.Columns,
+		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(

@@ -107,6 +107,7 @@ func newIndexJoiner(
 		ij.out.neededColumns(),
 		false, /* isCheck */
 		&ij.alloc,
+		ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}
