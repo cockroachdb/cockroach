@@ -151,12 +151,25 @@ vols="${vols} --volume=${gocache}/docker/native:/go/native${delegated_volume_mod
 mkdir -p "${gocache}"/docker/pkg
 vols="${vols} --volume=${gocache}/docker/pkg:/go/pkg${delegated_volume_mode}"
 
+# Attempt to run in the container with the same UID/GID as we have on the host,
+# as this results in the correct permissions on files created in the shared
+# volumes. This isn't always possible, however, as IDs less than 100 are
+# reserved by Debian, and IDs in the low 100s are dynamically assigned to
+# various system users and groups. To be safe, if we see a UID/GID less than
+# 500, promote it to 501. This is notably necessary on macOS Lion and later,
+# where administrator accounts are created with a GID of 20. This solution is
+# not foolproof, but it works well in practice.
+uid=$(id -u)
+gid=$(id -g)
+[ "$uid" -lt 500 ] && uid=501
+[ "$gid" -lt 500 ] && gid=$uid
+
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
 docker run --privileged -i ${tty-} --rm \
-  -u "$(id -u):$(id -g)" \
+  -u "$uid:$gid" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
