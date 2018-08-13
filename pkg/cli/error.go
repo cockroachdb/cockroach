@@ -59,7 +59,7 @@ var reGRPCAuthFailure = regexp.MustCompile(`authentication handshake failed: x50
 // provide one (i.e. the client was started with --insecure).
 // Note however in that case it's not certain what the problem is,
 // as the same error could be raised for other reasons.
-var reGRPCConnFailed = regexp.MustCompile(`desc = transport is closing`)
+var reGRPCConnFailed = regexp.MustCompile(`desc = (transport is closing|all SubConns are in TransientFailure)`)
 
 // MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
 // message to the user.
