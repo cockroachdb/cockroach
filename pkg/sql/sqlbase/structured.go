@@ -1823,6 +1823,27 @@ func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {
 	return colIdxMap
 }
 
+// ColumnIdxMapWithMutations returns a map from Column ID to the ordinal
+// position of that column, optionally including mutation columns if the input
+// bool is true.
+func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[ColumnID]int {
+	colIdxMap := make(map[ColumnID]int, len(desc.Columns))
+	for i, c := range desc.Columns {
+		colIdxMap[c.ID] = i
+	}
+	if mutations {
+		idx := len(desc.Columns)
+		for i := range desc.Mutations {
+			col := desc.Mutations[i].GetColumn()
+			if col != nil {
+				colIdxMap[col.ID] = idx
+				idx++
+			}
+		}
+	}
+	return colIdxMap
+}
+
 // UpdateColumnDescriptor updates an existing column descriptor.
 func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
 	for i := range desc.Columns {
@@ -2106,6 +2127,27 @@ func (desc *TableDescriptor) ColumnTypes() []ColumnType {
 	types := make([]ColumnType, len(desc.Columns))
 	for i, col := range desc.Columns {
 		types[i] = col.Type
+	}
+	return types
+}
+
+// ColumnTypesWithMutations returns the types of all columns, optionally
+// including mutation columns, which will be returned if the input bool is true.
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []ColumnType {
+	nCols := len(desc.Columns)
+	if mutations {
+		nCols += len(desc.Mutations)
+	}
+	types := make([]ColumnType, 0, nCols)
+	for i := range desc.Columns {
+		types = append(types, desc.Columns[i].Type)
+	}
+	if mutations {
+		for i := range desc.Mutations {
+			if col := desc.Mutations[i].GetColumn(); col != nil {
+				types = append(types, col.Type)
+			}
+		}
 	}
 	return types
 }
