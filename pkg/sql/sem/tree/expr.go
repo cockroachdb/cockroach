@@ -445,7 +445,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
-		switch t := rightRet.(type) {
+		switch t := types.UnwrapType(rightRet).(type) {
 		case types.TArray:
 			// For example:
 			//   x = ANY(ARRAY[1,2])
@@ -454,7 +454,11 @@ func (node *ComparisonExpr) memoizeFn() {
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
-			rightRet = t.Types[0]
+			if len(t.Types) > 0 {
+				rightRet = t.Types[0]
+			} else {
+				rightRet = leftRet
+			}
 		}
 	}
 

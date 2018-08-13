@@ -55,6 +55,7 @@ func init() {
 		opt.ColumnAccessOp:    (*Builder).buildColumnAccess,
 		opt.ArrayOp:           (*Builder).buildArray,
 		opt.AnyOp:             (*Builder).buildAny,
+		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Subquery operators.
@@ -317,6 +318,21 @@ func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedE
 		}
 	}
 	return tree.NewTypedArray(exprs, ev.Logical().Scalar.Type), nil
+}
+
+func (b *Builder) buildAnyScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	left, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+
+	right, err := b.buildScalar(ctx, ev.Child(1))
+	if err != nil {
+		return nil, err
+	}
+
+	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
+	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, left, right), nil
 }
 
 func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {

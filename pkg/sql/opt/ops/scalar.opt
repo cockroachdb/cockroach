@@ -348,6 +348,13 @@ define JsonSomeExists {
    Right Expr
 }
 
+[Scalar]
+define AnyScalar {
+   Left  Expr
+   Right Expr
+   Cmp   Operator
+}
+
 [Scalar, Binary]
 define Bitand {
    Left  Expr
