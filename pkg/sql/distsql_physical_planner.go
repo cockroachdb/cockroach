@@ -810,9 +810,10 @@ func initTableReaderSpec(
 	n *scanNode, evalCtx *tree.EvalContext, indexVarMap []int,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
-		Table:   *n.desc,
-		Reverse: n.reverse,
-		IsCheck: n.run.isCheck,
+		Table:      *n.desc,
+		Reverse:    n.reverse,
+		IsCheck:    n.run.isCheck,
+		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
@@ -844,10 +845,24 @@ func initTableReaderSpec(
 }
 
 // scanNodeOrdinal returns the index of a column with the given ID.
-func tableOrdinal(desc *sqlbase.TableDescriptor, colID sqlbase.ColumnID) int {
+func tableOrdinal(
+	desc *sqlbase.TableDescriptor, colID sqlbase.ColumnID, visibility scanVisibility,
+) int {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == colID {
 			return i
+		}
+	}
+	if visibility == publicAndNonPublicColumns {
+		offset := len(desc.Columns)
+		mutationIdx := 0
+		for i := range desc.Mutations {
+			if col := desc.Mutations[i].GetColumn(); col != nil {
+				if col.ID == colID {
+					return offset + mutationIdx
+				}
+				mutationIdx++
+			}
 		}
 	}
 	panic(fmt.Sprintf("column %d not in desc.Columns", colID))
@@ -875,7 +890,7 @@ func getScanNodeToTableOrdinalMap(n *scanNode) []int {
 	}
 	res := make([]int, len(n.cols))
 	for i := range res {
-		res[i] = tableOrdinal(n.desc, n.cols[i].ID)
+		res[i] = tableOrdinal(n.desc, n.cols[i].ID, n.colCfg.visibility)
 	}
 	return res
 }
@@ -1030,6 +1045,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 
+	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
+
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
@@ -1058,9 +1075,22 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
-	types := make([]sqlbase.ColumnType, len(n.desc.Columns))
+	var types []sqlbase.ColumnType
+	if returnMutations {
+		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	} else {
+		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns))
+	}
 	for i := range n.desc.Columns {
-		types[i] = n.desc.Columns[i].Type
+		types = append(types, n.desc.Columns[i].Type)
+	}
+	if returnMutations {
+		for i := range n.desc.Mutations {
+			col := n.desc.Mutations[i].GetColumn()
+			if col != nil {
+				types = append(types, col.Type)
+			}
+		}
 	}
 	p.SetLastStagePost(post, types)
 
@@ -1070,13 +1100,21 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	} else {
 		outCols = make([]uint32, len(overrideResultColumns))
 		for i, id := range overrideResultColumns {
-			outCols[i] = uint32(tableOrdinal(n.desc, id))
+			outCols[i] = uint32(tableOrdinal(n.desc, id, n.colCfg.visibility))
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
+	nCols := len(n.desc.Columns)
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
+			if returnMutations && int(c) >= nCols {
+				col := n.desc.Mutations[int(c)-nCols].GetColumn()
+				if col != nil && col.ID == n.cols[i].ID {
+					planToStreamColMap[i] = j
+					break
+				}
+			}
 			if n.desc.Columns[c].ID == n.cols[i].ID {
 				planToStreamColMap[i] = j
 				break
@@ -1742,8 +1780,9 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table:    *n.index.desc,
-		IndexIdx: 0,
+		Table:      *n.index.desc,
+		IndexIdx:   0,
+		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
 
 	filter, err := distsqlplan.MakeExpression(
@@ -1763,7 +1802,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	for i := range n.cols {
 		if !n.resultColumns[i].Omitted {
 			plan.PlanToStreamColMap[i] = len(post.OutputColumns)
-			ord := tableOrdinal(n.table.desc, n.cols[i].ID)
+			ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
 			post.OutputColumns = append(post.OutputColumns, uint32(ord))
 		}
 	}
@@ -1841,7 +1880,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 	for i := range n.table.cols {
 		types[numLeftCols+i] = n.table.cols[i].Type
-		ord := tableOrdinal(n.table.desc, n.table.cols[i].ID)
+		ord := tableOrdinal(n.table.desc, n.table.cols[i].ID, n.table.colCfg.visibility)
 		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
 	}
 
