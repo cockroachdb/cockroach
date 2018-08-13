@@ -1325,6 +1325,18 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 	return LeaseStatus{}, false
 }
 
+func maybeRecordTrace(ctx context.Context, opName string) (context.Context, func() []tracing.RecordedSpan, func()) {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && !tracing.IsBlackHoleSpan(sp) {
+		// If there's any chance someone will look at the events in this trace, leave
+		// the original span alone.
+		return ctx, func() []tracing.RecordedSpan { return nil }, func() {}
+	}
+	// There might be a span, but doesn't look like anyone's going to see its
+	// events. Make our own span with recording enabled so that we can print
+	// it if desired.
+	return tracing.ContextWithRecordingSpan(ctx, opName)
+}
+
 // redirectOnOrAcquireLease checks whether this replica has the lease
 // at the current timestamp. If it does, returns success. If another
 // replica currently holds the lease, redirects by returning
@@ -1342,6 +1354,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 	if status, ok := r.leaseGoodToGo(ctx); ok {
 		return status, nil
 	}
+
+	ctx, getRecording, cancel := maybeRecordTrace(ctx, "lease")
+	defer cancel()
 
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
@@ -1523,12 +1538,14 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					return nil
 				case <-slowTimer.C:
 					slowTimer.Read = true
-					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
-						base.SlowRequestThreshold)
+					log.Warningf(ctx, "have been waiting %s attempting to acquire lease, trace so far:\n%s",
+						base.SlowRequestThreshold,
+						tracing.FormatRecordedSpans(getRecording()),
+					)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer func() {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
-						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts with trace:\n%s", timeutil.Since(tBegin), pErr, attempt, tracing.FormatRecordedSpans(getRecording()))
 					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
