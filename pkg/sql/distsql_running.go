@@ -116,8 +116,20 @@ func (dsp *DistSQLPlanner) Run(
 ) {
 	ctx := planCtx.ctx
 
-	var txnCoordMeta *roachpb.TxnCoordMeta
-	if txn != nil {
+	var (
+		localState   distsqlrun.LocalState
+		txnCoordMeta *roachpb.TxnCoordMeta
+	)
+	if planCtx.validExtendedEvalCtx {
+		localState.EvalContext = planCtx.EvalContext()
+	}
+	if planCtx.isLocal {
+		localState.IsLocal = true
+		localState.LocalProcs = plan.LocalProcessors
+		localState.Txn = txn
+	} else if txn != nil {
+		// If the plan is not local, we will have to set up leaf txns using the
+		// txnCoordMeta.
 		meta := txn.GetStrippedTxnCoordMeta()
 		txnCoordMeta = &meta
 	}
@@ -214,15 +226,6 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = flows[thisNodeID]
-	var localState distsqlrun.LocalState
-	if planCtx.validExtendedEvalCtx {
-		localState.EvalContext = planCtx.EvalContext()
-	}
-	if planCtx.isLocal {
-		localState.IsLocal = true
-		localState.LocalProcs = plan.LocalProcessors
-		localState.Txn = txn
-	}
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
