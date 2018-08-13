@@ -94,6 +94,7 @@ func registerCLI(r *registry) {
 	for _, tc := range testCases {
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Name:   tc.name,
+			Skip:   "#28486: flaky",
 			Stable: true, // DO NOT COPY to new tests
 			Run:    tc.fn,
 		})
