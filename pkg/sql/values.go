@@ -145,7 +145,7 @@ func (n *valuesNode) startExec(params runParams) error {
 
 	// This node is coming from a SQL query (as opposed to sortNode and
 	// others that create a valuesNode internally for storing results
-	// from other planNodes), so its expressions need evaluting.
+	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
