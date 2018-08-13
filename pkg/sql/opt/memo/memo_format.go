@@ -123,7 +123,7 @@ func (f *memoFormatter) formatExpr(e *Expr) {
 	for i := 0; i < e.ChildCount(); i++ {
 		fmt.Fprintf(f.buf, " G%d", f.numbering[e.ChildGroup(f.mem, i)])
 	}
-	f.formatPrivate(e.Private(f.mem), formatMemo)
+	f.formatPrivate(e.Private(f.mem), &props.Physical{}, formatMemo)
 	f.buf.WriteString(")")
 }
 
@@ -190,7 +190,7 @@ func (f *memoFormatter) formatBestExpr(be *BestExpr) {
 		}
 	}
 
-	f.formatPrivate(be.Private(f.mem), formatMemo)
+	f.formatPrivate(be.Private(f.mem), f.mem.LookupPhysicalProps(be.Required()), formatMemo)
 	f.buf.WriteString(")")
 }
 
@@ -264,7 +264,9 @@ func (f *memoFormatter) computeIndegrees(id GroupID, reachable []bool, indegrees
 	})
 }
 
-func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
+func (f exprFormatter) formatPrivate(
+	private interface{}, physProps *props.Physical, mode formatMode,
+) {
 	if private == nil {
 		return
 	}
@@ -277,8 +279,8 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 		} else {
 			fmt.Fprintf(f.buf, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
 		}
-		if t.Reverse {
-			fmt.Fprintf(f.buf, ",rev")
+		if _, reverse := t.CanProvideOrdering(f.mem.metadata, &physProps.Ordering); reverse {
+			f.buf.WriteString(",rev")
 		}
 		if mode == formatMemo {
 			if tab.ColumnCount() != t.Cols.Len() {
@@ -287,8 +289,8 @@ func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 			if t.Constraint != nil {
 				fmt.Fprintf(f.buf, ",constrained")
 			}
-			if t.HardLimit > 0 {
-				fmt.Fprintf(f.buf, ",lim=%d", t.HardLimit)
+			if t.HardLimit.IsSet() {
+				fmt.Fprintf(f.buf, ",lim=%s", t.HardLimit)
 			}
 		}
 

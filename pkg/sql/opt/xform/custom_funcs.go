@@ -48,7 +48,6 @@ func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	return scanOpDef.Index == opt.PrimaryIndex &&
 		scanOpDef.Constraint == nil &&
-		!scanOpDef.Reverse &&
 		scanOpDef.HardLimit == 0
 }
 
@@ -82,12 +81,6 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	md := c.e.mem.Metadata()
 	tab := md.Table(scanOpDef.Table)
 
-	// Add a reverse index scan memo group for the primary index.
-	newDef := *scanOpDef
-	newDef.Reverse = true
-	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
-	c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
-
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	var pkCols opt.ColList
 	for i := 1; i < tab.IndexCount(); i++ {
@@ -109,11 +102,6 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 			newDef.Index = i
 			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
 			c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
-
-			newDefRev := newDef
-			newDefRev.Reverse = true
-			indexScanRev := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDefRev))
-			c.e.exprs = append(c.e.exprs, memo.Expr(indexScanRev))
 		} else if !scanOpDef.Flags.NoIndexJoin {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
@@ -140,16 +128,7 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 				Flags: scanOpDef.Flags,
 			}
 
-			indexScanOpDefRev := memo.ScanOpDef{
-				Table:   scanOpDef.Table,
-				Index:   i,
-				Cols:    scanCols,
-				Reverse: true,
-				Flags:   scanOpDef.Flags,
-			}
-
 			input := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDef))
-			inputRev := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDefRev))
 
 			def := memo.IndexJoinDef{
 				Table: scanOpDef.Table,
@@ -157,11 +136,8 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 			}
 
 			private := c.e.mem.InternIndexJoinDef(&def)
-			join := memo.MakeIndexJoinExpr(input, private)
-			joinRev := memo.MakeIndexJoinExpr(inputRev, private)
-
-			c.e.exprs = append(c.e.exprs, memo.Expr(join))
-			c.e.exprs = append(c.e.exprs, memo.Expr(joinRev))
+			indexJoin := memo.MakeIndexJoinExpr(input, private)
+			c.e.exprs = append(c.e.exprs, memo.Expr(indexJoin))
 		}
 	}
 
@@ -410,16 +386,22 @@ func (c *CustomFuncs) CanLimitScan(def, limit, ordering memo.PrivateID) bool {
 	}
 
 	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
-	return scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+	ok, _ := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+	return ok
 }
 
 // LimitScanDef constructs a new ScanOpDef private value that is based on the
 // given ScanOpDef. The new def's HardLimit is set to the given limit, which
 // must be a constant int datum value. The other fields are inherited from the
 // existing def.
-func (c *CustomFuncs) LimitScanDef(def, limit memo.PrivateID) memo.PrivateID {
-	defCopy := *c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	defCopy.HardLimit = int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
+func (c *CustomFuncs) LimitScanDef(def, limit, ordering memo.PrivateID) memo.PrivateID {
+	// Determine the scan direction necessary to provide the required ordering.
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
+	_, reverse := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+
+	defCopy := *scanOpDef
+	defCopy.HardLimit = memo.MakeScanLimit(int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt)), reverse)
 	return c.e.mem.InternScanOpDef(&defCopy)
 }
 
@@ -560,14 +542,12 @@ func isJoinEquality(
 //  - the scan has no constraints, and
 //  - the scan has no limit, and
 //  - a prefix of the scan index columns have equality constraints.
-// We also disallow reverse scans since it's enough to apply the rule on the
-// corresponding forward scan.
 func (c *CustomFuncs) CanUseLookupJoin(
 	input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
 ) bool {
 	md := c.e.mem.Metadata()
 	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
-	if scanDef.Constraint != nil || scanDef.HardLimit != 0 || scanDef.Reverse {
+	if scanDef.Constraint != nil || scanDef.HardLimit != 0 {
 		return false
 	}
 

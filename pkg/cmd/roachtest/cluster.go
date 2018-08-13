@@ -1209,3 +1209,13 @@ func (m *monitor) wait(args ...string) error {
 	wg.Wait()
 	return err
 }
+
+func waitForFullReplication(t *test, db *gosql.DB) {
+	for ok := false; !ok; time.Sleep(time.Second) {
+		if err := db.QueryRow(
+			"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+		).Scan(&ok); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
