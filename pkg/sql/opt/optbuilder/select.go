@@ -36,15 +36,17 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *scope) {
+func (b *Builder) buildTable(
+	texpr tree.TableExpr, indexFlags *tree.IndexFlags, inScope *scope,
+) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
-			panic(unimplementedf("index flags are not supported"))
+			indexFlags = source.IndexFlags
 		}
 
-		outScope = b.buildTable(source.Expr, inScope)
+		outScope = b.buildTable(source.Expr, indexFlags, inScope)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality("ordinality", outScope)
@@ -65,10 +67,10 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		}
 
 		tab := b.resolveTable(tn)
-		return b.buildScan(tab, tn, nil /* ordinals */, inScope)
+		return b.buildScan(tab, tn, nil /* ordinals */, indexFlags, inScope)
 
 	case *tree.ParenTableExpr:
-		return b.buildTable(source.Expr, inScope)
+		return b.buildTable(source.Expr, indexFlags, inScope)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
@@ -90,7 +92,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 	case *tree.TableRef:
 		tab := b.resolveTableRef(source)
-		outScope = b.buildScanFromTableRef(tab, source, inScope)
+		outScope = b.buildScanFromTableRef(tab, source, indexFlags, inScope)
 		b.renameSource(source.As, outScope)
 		return outScope
 
@@ -153,7 +155,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // Note, the query SELECT * FROM [53() as t] is unsupported. Column lists must
 // be non-empty
 func (b *Builder) buildScanFromTableRef(
-	tab opt.Table, ref *tree.TableRef, inScope *scope,
+	tab opt.Table, ref *tree.TableRef, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
 	if ref.Columns != nil && len(ref.Columns) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -176,7 +178,7 @@ func (b *Builder) buildScanFromTableRef(
 			ordinals[i] = ord
 		}
 	}
-	return b.buildScan(tab, tab.TabName(), ordinals, inScope)
+	return b.buildScan(tab, tab.TabName(), ordinals, indexFlags, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -187,7 +189,7 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tab opt.Table, tn *tree.TableName, ordinals []int, inScope *scope,
+	tab opt.Table, tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
 
@@ -223,10 +225,35 @@ func (b *Builder) buildScan(
 	}
 
 	if tab.IsVirtualTable() {
+		if indexFlags != nil {
+			panic(builderError{errors.Errorf("index flags not allowed with virtual tables")})
+		}
 		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabColIDs}
 		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
 	} else {
 		def := memo.ScanOpDef{Table: tabID, Cols: tabColIDs}
+
+		if indexFlags != nil {
+			def.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+			if indexFlags.Index != "" {
+				idx := -1
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).IdxName() == string(indexFlags.Index) {
+						idx = i
+						break
+					}
+				}
+				if idx == -1 {
+					panic(builderError{errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))})
+				}
+				def.Flags.ForceIndex = true
+				def.Flags.Index = idx
+			} else if indexFlags.IndexID != 0 {
+				// TODO(radu): support IndexIDs.
+				panic(unimplementedf("index IDs not supported in index flags"))
+			}
+		}
+
 		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
 	}
 	return outScope
@@ -384,7 +411,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	colsAdded := 0
 
 	for _, table := range from.Tables {
-		tableScope := b.buildTable(table, inScope)
+		tableScope := b.buildTable(table, nil /* indexFlags */, inScope)
 
 		if outScope == nil {
 			outScope = tableScope

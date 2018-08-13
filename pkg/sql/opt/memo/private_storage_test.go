@@ -138,6 +138,19 @@ func TestInternScanOpDef(t *testing.T) {
 	test(scanDef3, scanDef4, false)
 	scanDef5 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2)}
 	test(scanDef3, scanDef5, false)
+	scanDef6 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Reverse: true}
+	test(scanDef5, scanDef6, false)
+	scanDef7 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: 10}
+	test(scanDef5, scanDef7, false)
+	scanDef8 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{NoIndexJoin: true}}
+	test(scanDef5, scanDef8, false)
+	scanDef9 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{ForceIndex: true}}
+	test(scanDef5, scanDef9, false)
+	test(scanDef8, scanDef9, false)
+	scanDef10 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{ForceIndex: true, Index: 1}}
+	test(scanDef5, scanDef10, false)
+	test(scanDef8, scanDef10, false)
+	test(scanDef9, scanDef10, false)
 }
 
 func TestInternGroupByDef(t *testing.T) {
@@ -494,7 +507,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		SynthesizedCols: colList,
 		PassthroughCols: colSet,
 	}
-	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
+	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet, Flags: ScanFlags{NoIndexJoin: true}}
 	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
 	mergeOnDef := &MergeOnDef{
 		LeftEq:        opt.Ordering{+1, +2, +3},

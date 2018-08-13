@@ -100,6 +100,27 @@ type ScanOpDef struct {
 	// if more are available. If its value is zero, then the limit is
 	// unknown, and the scan should return all available rows.
 	HardLimit int64
+
+	Flags ScanFlags
+}
+
+// ScanFlags stores any flags for the scan specified in the query (see
+// tree.IndexFlags). These flags may be consulted by transformation rules or the
+// coster.
+type ScanFlags struct {
+	// NoIndexJoin disallows use of non-covering indexes (index-join) for scanning
+	// this table.
+	NoIndexJoin bool
+
+	// ForceIndex forces the use of a specific index (specified in Index).
+	// ForceIndex and NoIndexJoin cannot both be set at the same time.
+	ForceIndex bool
+	Index      int
+}
+
+// Empty returns true if there are no flags set.
+func (sf *ScanFlags) Empty() bool {
+	return !sf.NoIndexJoin && !sf.ForceIndex
 }
 
 // VirtualScanOpDef defines the value of the Def private field of the
