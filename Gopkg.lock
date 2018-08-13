@@ -250,7 +250,7 @@
     "raft",
     "raft/raftpb",
   ]
-  revision = "d6888f56de7436287397d8ac2ff448dae0091ddc"
+  revision = "5570a8e4af068992a8dc90ce936d05cfbaf1d320"
   source = "https://github.com/cockroachdb/etcd"
 
 [[projects]]
