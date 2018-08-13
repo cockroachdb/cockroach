@@ -878,6 +878,7 @@ func (r *Replica) applySnapshot(
 	r.store.metrics.addMVCCStats(*s.Stats)
 	r.mu.state = s
 	r.assertStateLocked(ctx, r.store.Engine())
+	r.stateChanged.Broadcast()
 	r.mu.Unlock()
 
 	// As the last deferred action after committing the batch, update other

@@ -2599,7 +2599,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID), destroyReasonRemoved)
+	rep.setDestroyedLocked(roachpb.NewRangeNotFoundError(rep.RangeID), destroyReasonRemoved)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -3608,7 +3608,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			// could be re-added with a higher replicaID, in which this error is
 			// cleared in setReplicaIDRaftMuLockedMuLocked.
 			if repl.mu.destroyStatus.IsAlive() {
-				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
+				repl.setDestroyedLocked(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
 			}
 			repl.mu.Unlock()
 
@@ -4093,7 +4093,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
+		repl.setDestroyedLocked(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.unlinkReplicaByRangeIDLocked(rangeID)

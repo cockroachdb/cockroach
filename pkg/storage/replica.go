@@ -23,6 +23,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -508,6 +509,9 @@ type Replica struct {
 		draining bool
 	}
 
+	// Signaled whenever mu.state is updated. The associated lock is mu.RWMutex.
+	stateChanged *sync.Cond
+
 	unreachablesMu struct {
 		syncutil.Mutex
 		remotes map[roachpb.ReplicaID]struct{}
@@ -727,6 +731,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
+	r.stateChanged = sync.NewCond(&r.mu.RWMutex)
 
 	// Init the minLeaseProposedTS such that we won't use an existing lease (if
 	// any). This is so that, after a restart, we don't propose under old leases.
@@ -760,7 +765,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		if err := pErr.GetDetail(); err != nil {
-			r.mu.destroyStatus.Set(err, destroyReasonRemoved)
+			r.setDestroyedLocked(err, destroyReasonRemoved)
 		}
 	}
 
@@ -789,6 +794,14 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 // the replica. This is done to prevent deadlocks in logging sites.
 func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
+}
+
+// setDestroyedLocked marks this replica as destroyed with the given reason.
+func (r *Replica) setDestroyedLocked(err error, reason DestroyReason) {
+	r.mu.destroyStatus.Set(err, reason)
+	// Wake up any goroutines waiting on state changes so they have an opportunity
+	// to notice that this replica has been destroyed.
+	r.stateChanged.Broadcast()
 }
 
 // destroyRaftMuLocked deletes data associated with a replica, leaving a
@@ -5500,7 +5513,7 @@ func (r *Replica) acquireSplitLock(
 			// then presumably it was alive for some reason other than a concurrent
 			// split and shouldn't be destroyed.
 			rightRng.mu.Lock()
-			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
+			rightRng.setDestroyedLocked(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
 			r.store.unlinkReplicaByRangeIDLocked(rightRng.RangeID)
@@ -6491,7 +6504,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
-		r.mu.destroyStatus.Set(cErr, destroyReasonCorrupted)
+		r.setDestroyedLocked(cErr, destroyReasonCorrupted)
 		pErr = roachpb.NewError(cErr)
 
 		// Try to persist the destroyed error message. If the underlying store is

@@ -76,3 +76,43 @@ func (is Server) CollectChecksum(
 		})
 	return resp, err
 }
+
+// WaitForApplication implements PerReplicaServer.
+func (is Server) WaitForApplication(
+	ctx context.Context, req *WaitForApplicationRequest,
+) (*WaitForApplicationResponse, error) {
+	resp := &WaitForApplicationResponse{}
+	err := is.execStoreCommand(req.StoreRequestHeader, func(s *Store) error {
+		r, err := s.GetReplica(req.RangeID)
+		if err != nil {
+			return err
+		}
+
+		// TODO(benesch): this extra goroutine is unfortunate. sync.Cond does not
+		// compose well with contexts (see golang/go#16620). Perhaps we could avoid
+		// using sync.Cond to implement WaitForApplication?
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go func() {
+			<-ctx.Done()
+			r.mu.Lock()
+			r.stateChanged.Broadcast()
+			r.mu.Unlock()
+		}()
+
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for r.mu.state.RaftAppliedIndex < req.Index {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if r.mu.destroyStatus.err != nil {
+				return r.mu.destroyStatus.err
+			}
+			r.stateChanged.Wait()
+		}
+		return nil
+	})
+	return resp, err
+}

@@ -880,4 +880,5 @@ func (r *Replica) handleEvalResultRaftMuLocked(
 		r.assertStateLocked(ctx, r.store.Engine())
 		r.mu.Unlock()
 	}
+	r.stateChanged.Broadcast()
 }
