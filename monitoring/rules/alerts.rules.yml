@@ -95,14 +95,41 @@ groups:
       frequency: daily
     annotations:
       summary: CA certificate for {{ $labels.instance }} expires in less than a year
+  - alert: ClientCACertificateExpiresSoon
+    expr: (security_certificate_expiration_client_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_client_ca{job="cockroachdb"}
+      - time()) < 86400 * 366
+    labels:
+      frequency: daily
+    annotations:
+      summary: Client CA certificate for {{ $labels.instance }} expires in less than a year
+  - alert: UICACertificateExpiresSoon
+    expr: (security_certificate_expiration_ui_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ui_ca{job="cockroachdb"}
+      - time()) < 86400 * 366
+    labels:
+      frequency: daily
+    annotations:
+      summary: UI CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: NodeCertificateExpiresSoon
     expr: (security_certificate_expiration_node{job="cockroachdb"} > 0) and (security_certificate_expiration_node{job="cockroachdb"}
       - time()) < 86400 * 183
     labels:
       frequency: daily
     annotations:
-      summary: Node certificate for {{ $labels.instance }} expires in less than six
-        months
+      summary: Node certificate for {{ $labels.instance }} expires in less than six months
+  - alert: NodeClientCertificateExpiresSoon
+    expr: (security_certificate_expiration_node_client{job="cockroachdb"} > 0) and (security_certificate_expiration_node_client{job="cockroachdb"}
+      - time()) < 86400 * 183
+    labels:
+      frequency: daily
+    annotations:
+      summary: Client certificate for {{ $labels.instance }} expires in less than six months
+  - alert: UICertificateExpiresSoon
+    expr: (security_certificate_expiration_ui{job="cockroachdb"} > 0) and (security_certificate_expiration_ui{job="cockroachdb"}
+      - time()) < 86400 * 30
+    labels:
+      frequency: daily
+    annotations:
+      summary: UI certificate for {{ $labels.instance }} expires in less than 30 days
   # Getting close to open file descriptor limit.
   - alert: HighOpenFDCount
     expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} > 0.8
