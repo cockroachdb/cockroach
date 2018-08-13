@@ -395,9 +395,6 @@ func TestPutS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	testExportStore(t,
 		fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
@@ -432,9 +429,6 @@ func TestPutS3Endpoint(t *testing.T) {
 		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	u := url.URL{
 		Scheme:   "s3",
 		Host:     bucket,
@@ -452,9 +446,6 @@ func TestPutGoogleCloud(t *testing.T) {
 	if bucket == "" {
 		t.Skip("GS_BUCKET env var must be set")
 	}
-
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
 	t.Run("empty", func(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"), false)
@@ -483,9 +474,6 @@ func TestPutAzure(t *testing.T) {
 	if bucket == "" {
 		t.Skip("AZURE_CONTAINER env var must be set")
 	}
-
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
 	testExportStore(t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
