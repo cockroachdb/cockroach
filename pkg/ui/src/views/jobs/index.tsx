@@ -18,8 +18,10 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { NanoToMilli } from "src/util/convert";
 
 import spinner from "assets/spinner.gif";
+import { converter } from "../../../node_modules/protobufjs";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -48,6 +50,7 @@ const typeOptions = [
   { value: jobType.RESTORE.toString(), label: "Restores" },
   { value: jobType.IMPORT.toString(), label: "Imports" },
   { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
+  { value: jobType.CHANGEFEED.toString(), label: "Change Feed"},
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(
@@ -103,11 +106,37 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     }
   }
 
+  renderFractionCompleted() {
+    return (
+      <div>
+        {this.renderProgress()}
+        <span className="jobs-table__duration">{this.renderDuration()}</span>
+      </div>
+    );
+  }
+
+  renderHighwater() {
+    const highwater = this.props.job.highwater_timestamp;
+    const tooltip = this.props.job.highwater_decimal;
+    let highwaterMoment = moment(highwater.seconds.toNumber() * 1000);
+    // It's possible due to client clock skew that this timestamp could be in
+    // the future. To avoid confusion, set a maximum bound of now.
+    const now = moment();
+    if (highwaterMoment.isAfter(now)) {
+      highwaterMoment = now;
+    }
+    return (
+      <ToolTipWrapper text={`System Time: ${tooltip}`}>
+        Last Processed: {highwaterMoment.fromNow()}
+      </ToolTipWrapper>
+    );
+  }
+
   render() {
-    return <div>
-      {this.renderProgress()}
-      <span className="jobs-table__duration">{this.renderDuration()}</span>
-    </div>;
+    if (this.props.job.highwater_timestamp) {
+      return this.renderHighwater();
+    }
+    return this.renderFractionCompleted();
   }
 }
 
