@@ -127,14 +127,31 @@ func (ms *MultiStorage) Add(nodeID roachpb.NodeID, entry ctpb.Entry) {
 
 // String prints a tabular rundown of the contents of the MultiStorage.
 func (ms *MultiStorage) String() string {
+	return ms.StringForNodes()
+}
+
+// StringForNodes is like String, but restricted to the supplied NodeIDs.
+// If none are specified, is equivalent to String().
+func (ms *MultiStorage) StringForNodes(nodes ...roachpb.NodeID) string {
 	type tuple struct {
 		roachpb.NodeID
 		SingleStorage
 	}
 
+	var shouldPrint map[roachpb.NodeID]struct{}
+	if len(nodes) > 0 {
+		shouldPrint = make(map[roachpb.NodeID]struct{}, len(nodes))
+		for _, nodeID := range nodes {
+			shouldPrint[nodeID] = struct{}{}
+		}
+	}
+
 	var sl []tuple
 	ms.m.Range(func(k int64, p unsafe.Pointer) bool {
-		sl = append(sl, tuple{roachpb.NodeID(k), (*entry)(p).SingleStorage})
+		nodeID := roachpb.NodeID(k)
+		if _, ok := shouldPrint[nodeID]; ok || len(shouldPrint) == 0 {
+			sl = append(sl, tuple{nodeID, (*entry)(p).SingleStorage})
+		}
 		return true // want more
 	})
 	sort.Slice(sl, func(i, j int) bool {

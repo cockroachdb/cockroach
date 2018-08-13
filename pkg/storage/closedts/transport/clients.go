@@ -31,6 +31,7 @@ import (
 type Config struct {
 	Settings *cluster.Settings
 	Stopper  *stop.Stopper
+	NodeID   roachpb.NodeID
 	Dialer   closedts.Dialer
 	Sink     closedts.Notifyee
 }
@@ -68,6 +69,9 @@ type client struct {
 // done so, the information should soon thereafter be available to the Sink and
 // from there, further follower read attempts. Does not block.
 func (pr *Clients) Request(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
+	if nodeID == pr.cfg.NodeID {
+		return
+	}
 	if cl := pr.getOrCreateClient(nodeID); cl != nil {
 		cl.mu.Lock()
 		cl.mu.requested[rangeID] = struct{}{}
@@ -78,11 +82,13 @@ func (pr *Clients) Request(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
 // EnsureClient makes sure that updates from the given nodes are pulled in, if
 // they aren't already. This call does not block (and is cheap).
 func (pr *Clients) EnsureClient(nodeID roachpb.NodeID) {
+	if nodeID == pr.cfg.NodeID {
+		return
+	}
 	pr.getOrCreateClient(nodeID)
 }
 
 func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
-	ctx := log.WithLogTagStr(context.Background(), "ct-client", "")
 	// Fast path to check for existing client without an allocation.
 	p, found := pr.clients.Load(int64(nodeID))
 	cl := (*client)(p)
@@ -93,7 +99,15 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 		return nil
 	}
 
+	if nodeID == pr.cfg.NodeID {
+		panic("must not create client to local node")
+	}
+
 	// Slow path: create the client. Another inserter might race us to it.
+
+	// This allocates, so only do it when necessary.
+	ctx := log.WithLogTagStr(context.Background(), "ct-client", "")
+
 	cl = &client{}
 	cl.mu.requested = map[roachpb.RangeID]struct{}{}
 

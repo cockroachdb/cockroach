@@ -345,6 +345,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		}
 		// Make sure the push transaction queue is enabled.
 		r.txnWaitQueue.Enable()
+
+		// Emit an MLAI on the leaseholder replica, as follower will be looking
+		// for one and if we went on to quiesce, they wouldn't necessarily get
+		// one otherwise (unless they ask for it, which adds latency).
+		r.EmitMLAI()
 	}
 
 	// Mark the new lease in the replica's lease history.
