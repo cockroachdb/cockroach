@@ -22,6 +22,7 @@ import { LongToMoment } from "src/util/convert";
 import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
+import "./index.styl";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -124,11 +125,13 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 title: "Replicas",
                 cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
                 sort: (ns) => ns.metrics[MetricConstants.replicas],
+                className: "right-aligned-stat",
               },
               // CPUs - the number of CPUs on this node
               {
                 title: "CPUs",
                 cell: (ns) => ns.num_cpus,
+                className: "right-aligned-stat",
               },
               // Used Capacity - displays the total persisted bytes maintained by the node.
               {
@@ -145,6 +148,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   );
                 },
                 sort: (ns) => BytesUsed(ns),
+                className: "right-aligned-stat",
               },
               // Mem Usage - total memory being used on this node.
               {
@@ -161,6 +165,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                   );
                 },
                 sort: (ns) => ns.metrics[MetricConstants.rss],
+                className: "right-aligned-stat",
               },
               // Version - the currently running version of cockroach.
               {
