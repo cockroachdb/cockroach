@@ -361,9 +361,36 @@ func (a *Allocator) AllocateTarget(
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
+	target, details := a.allocateTargetFromList(
+		ctx, sl, zone, existing, rangeInfo, a.scorerOptions(disableStatsBasedRebalancing))
+
+	if target != nil {
+		return target, details, nil
+	}
+
+	// When there are throttled stores that do match, we shouldn't send
+	// the replica to purgatory.
+	if throttledStoreCount > 0 {
+		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+	}
+	return nil, "", &allocatorError{
+		constraints:      zone.Constraints,
+		existingReplicas: len(existing),
+		aliveStores:      aliveStoreCount,
+		throttledStores:  throttledStoreCount,
+	}
+}
+
+func (a *Allocator) allocateTargetFromList(
+	ctx context.Context,
+	sl StoreList,
+	zone config.ZoneConfig,
+	existing []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+	options scorerOptions,
+) (*roachpb.StoreDescriptor, string) {
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existing, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
 	)
@@ -379,20 +406,10 @@ func (a *Allocator) AllocateTarget(
 		if err != nil {
 			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
 		}
-		return &target.store, string(detailsBytes), nil
+		return &target.store, string(detailsBytes)
 	}
 
-	// When there are throttled stores that do match, we shouldn't send
-	// the replica to purgatory.
-	if throttledStoreCount > 0 {
-		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
-	}
-	return nil, "", &allocatorError{
-		constraints:      zone.Constraints,
-		existingReplicas: len(existing),
-		aliveStores:      aliveStoreCount,
-		throttledStores:  throttledStoreCount,
-	}
+	return nil, ""
 }
 
 func (a Allocator) simulateRemoveTarget(
