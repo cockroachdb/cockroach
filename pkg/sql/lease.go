@@ -170,6 +170,10 @@ type LeaseStore struct {
 	// to refresh the LeaseManager local epoch.
 	epochRefreshInterval time.Duration
 
+	// purgeOldLeasesInterval determines the frequency at which we
+	// attempt to purge old leases.
+	purgeOldLeasesInterval time.Duration
+
 	testingKnobs LeaseStoreTestingKnobs
 }
 
@@ -1193,6 +1197,9 @@ type LeaseStoreTestingKnobs struct {
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
+	// ReleaseOldEpochLeases is called whenever an old node liveness epoch is marked
+	// as expired.
+	ReleaseOldEpochLeases func(nodeID roachpb.NodeID, epoch int64, numLeases int)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1320,6 +1327,7 @@ func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey 
 // by sql.
 type NodeLiveness interface {
 	Self() (*storage.Liveness, error)
+	GetLivenesses() []storage.Liveness
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
@@ -1372,13 +1380,14 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			execCfg:              execCfg,
-			group:                &singleflight.Group{},
-			leaseDuration:        cfg.TableDescriptorLeaseDuration,
-			leaseJitterFraction:  cfg.TableDescriptorLeaseJitterFraction,
-			leaseRenewalTimeout:  cfg.TableDescriptorLeaseRenewalTimeout,
-			epochRefreshInterval: cfg.TableDescriptorLeaseEpochRefreshInterval,
-			testingKnobs:         testingKnobs.LeaseStoreTestingKnobs,
+			execCfg:                execCfg,
+			group:                  &singleflight.Group{},
+			leaseDuration:          cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction:    cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout:    cfg.TableDescriptorLeaseRenewalTimeout,
+			epochRefreshInterval:   cfg.TableDescriptorLeaseEpochRefreshInterval,
+			purgeOldLeasesInterval: cfg.TableDescriptorLeasePurgeOldLeasesInterval,
+			testingKnobs:           testingKnobs.LeaseStoreTestingKnobs,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
@@ -1406,6 +1415,7 @@ func (m *LeaseManager) Start(execCfg *ExecutorConfig, nodeLiveness NodeLiveness)
 func (m *LeaseManager) SetLiveness(nodeLiveness NodeLiveness) {
 	m.nodeLiveness = nodeLiveness
 	m.periodicallyRefreshEpoch()
+	m.periodicallyPurgeOldLeases()
 }
 
 func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
@@ -1893,4 +1903,124 @@ func (m *LeaseManager) refreshAllLeases(ctx context.Context) (chan struct{}, cha
 		return nil, nil
 	}
 	return done, closer
+}
+
+func (m *LeaseManager) getLatestIDVersions() []IDVersion {
+	var idVersions []IDVersion
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, table := range m.mu.tables {
+		if table.mu.dropped {
+			continue
+		}
+		if s := table.mu.active.findNewest(); s != nil {
+			idVersions = append(idVersions, IDVersion{id: id, version: s.Version})
+		}
+	}
+	return idVersions
+}
+
+// periodicallyPurgeOldLeases created from other nodes in the cluster that
+// are invalid.
+func (m *LeaseManager) periodicallyPurgeOldLeases() {
+	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		tickDuration := m.purgeOldLeasesInterval
+		ticker := time.NewTicker(tickDuration)
+		tickChan := ticker.C
+		defer ticker.Stop()
+		// maintains epoch history for a specific node in the cluster.
+		type epochHistory struct {
+			epoch            int64
+			oldEpoch         int64
+			oldEpochLastSeen hlc.Timestamp
+		}
+
+		epochs := make(map[roachpb.NodeID]epochHistory)
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+
+			case <-tickChan:
+				if !m.execCfg.Settings.Version.IsMinSupported(cluster.VersionWriteEpochBasedTableLeases) {
+					break
+				}
+				// Update epoch stability information.
+				nodeLiveness := m.nodeLiveness.GetLivenesses()
+				now := m.execCfg.Clock.Now()
+				nodeID := m.execCfg.NodeID.Get()
+				for _, nl := range nodeLiveness {
+					if nl.NodeID == nodeID {
+						// Don't keep history of self.
+						continue
+					}
+					es, ok := epochs[nl.NodeID]
+					if !ok {
+						es = epochHistory{epoch: nl.Epoch, oldEpoch: nl.Epoch - 1, oldEpochLastSeen: now}
+					} else if es.epoch != nl.Epoch {
+						// Keep track of oldEpoch if one doesn't exist history.
+						if es.oldEpoch == 0 {
+							es = epochHistory{oldEpoch: nl.Epoch - 1, oldEpochLastSeen: now}
+						}
+						es.epoch = nl.Epoch
+					}
+					epochs[nl.NodeID] = es
+				}
+
+				// An epoch last seen before the liveThreshold has expired.
+				liveThreshold := now.Add(int64(-m.leaseDuration), 0).Add(int64(-m.execCfg.Clock.MaxOffset()), 0)
+				for nodeID, es := range epochs {
+					if es.oldEpoch > 0 && es.oldEpochLastSeen.Less(liveThreshold) {
+						// Release stability epoch. This is a rather aggressive strategy
+						// given that it's being sent from all nodes and usually nodes
+						// that gracefully shutdown delete their leases.
+						if err := m.releaseOldEpochLeases(ctx, m.stopper, nodeID, es.oldEpoch); err != nil {
+							continue
+						}
+						newOldEpoch := es.epoch - 1
+						if es.oldEpoch != newOldEpoch {
+							// Schedule a new old epoch to be released.
+							es.oldEpoch = newOldEpoch
+							es.oldEpochLastSeen = now
+						} else {
+							// done.
+							es.oldEpoch = 0
+						}
+						epochs[nodeID] = es
+					}
+				}
+			}
+		}
+	})
+}
+
+func (s LeaseStore) releaseOldEpochLeases(
+	ctx context.Context, stopper *stop.Stopper, nodeID roachpb.NodeID, expiredEpoch int64,
+) error {
+	log.VEventf(ctx, 2, "LeaseStore releasing old leases <= (%d:%d)", nodeID, expiredEpoch)
+	// Check if such leases exist.
+	stmt := fmt.Sprintf(`SELECT "descID", version, expiration FROM system.lease WHERE epoch <= %d`, expiredEpoch)
+	rows, _, err := s.execCfg.InternalExecutor.Query(ctx, "expired-leases", nil /* txn */, stmt)
+	if err != nil {
+		log.Warningf(ctx, "error releasing old leases <= (%d:%d), err = %s", nodeID, expiredEpoch, err)
+		return err
+	}
+
+	if fn := s.testingKnobs.ReleaseOldEpochLeases; fn != nil {
+		fn(nodeID, expiredEpoch, len(rows))
+	}
+
+	for _, row := range rows {
+		if row.Len() != 3 {
+			return errors.Errorf("incorrect number of columns returned: %d", row.Len())
+		}
+
+		vs := &tableVersionState{}
+		vs.ID = sqlbase.ID(*row[0].(*tree.DInt))
+		vs.Version = sqlbase.DescriptorVersion(*row[1].(*tree.DInt))
+		vs.expiration.WallTime = row[2].(*tree.DTimestamp).Time.UnixNano()
+
+		s.release(ctx, stopper, vs)
+	}
+	return nil
 }

@@ -787,3 +787,70 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		})
 	}
 }
+
+// Tests the LeaseManager.releaseOldEpochLeases method.
+func TestReleaseOldEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	const tableName = "test"
+
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.test2 (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Acquire leases.
+	if _, err := db.Exec("SELECT * FROM t.test1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("SELECT * FROM t.test2"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	var count int
+	if err := db.QueryRow("SELECT COUNT(1) FROM system.lease").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("unexpected number of leases: %d", count)
+	}
+
+	// No leases are released at invalid epoch.
+	leaseManager.releaseOldEpochLeases(ctx, leaseManager.stopper, leaseManager.execCfg.NodeID.Get(), 0)
+	if err := db.QueryRow("SELECT COUNT(1) FROM system.lease").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("unexpected number of leases: %d", count)
+	}
+
+	leaseManager.releaseOldEpochLeases(ctx, leaseManager.stopper, leaseManager.execCfg.NodeID.Get(), 1)
+
+	if err := db.QueryRow("SELECT COUNT(1) FROM system.lease").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("unexpected number of leases: %d", count)
+	}
+
+	// Query using cached entries with leases that were deleted from under them!!!!!!
+	if _, err := db.Exec("SELECT * FROM t.test1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("SELECT * FROM t.test2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT COUNT(1) FROM system.lease").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("unexpected number of leases: %d", count)
+	}
+}

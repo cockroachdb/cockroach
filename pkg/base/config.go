@@ -93,6 +93,11 @@ const (
 	// periodicity at which an attempt is made to refresh the LeaseManager
 	// local epoch.
 	DefaultTableDescriptorLeaseEpochRefreshInterval = 10 * time.Second
+
+	// DefaultTableDescriptorLeasePurgeOldLeasesInterval is the default
+	// periodicity at which an attempt is made to purge old epoch leases
+	// originating from other nodes.
+	DefaultTableDescriptorLeasePurgeOldLeasesInterval = 1 * time.Minute
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -560,14 +565,19 @@ type LeaseManagerConfig struct {
 	// TableDescriptorLeaseEpochRefreshInterval is the default periodicity
 	// at which an attempt is made to refresh the LeaseManager local epoch.
 	TableDescriptorLeaseEpochRefreshInterval time.Duration
+
+	// TableDescriptorLeasePurgeOldLeasesInterval is the periodicity
+	// at which an attempt is made to refresh the LeaseManager local epoch.
+	TableDescriptorLeasePurgeOldLeasesInterval time.Duration
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
 func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
-		TableDescriptorLeaseDuration:             DefaultTableDescriptorLeaseDuration,
-		TableDescriptorLeaseJitterFraction:       DefaultTableDescriptorLeaseJitterFraction,
-		TableDescriptorLeaseRenewalTimeout:       DefaultTableDescriptorLeaseRenewalTimeout,
-		TableDescriptorLeaseEpochRefreshInterval: DefaultTableDescriptorLeaseEpochRefreshInterval,
+		TableDescriptorLeaseDuration:               DefaultTableDescriptorLeaseDuration,
+		TableDescriptorLeaseJitterFraction:         DefaultTableDescriptorLeaseJitterFraction,
+		TableDescriptorLeaseRenewalTimeout:         DefaultTableDescriptorLeaseRenewalTimeout,
+		TableDescriptorLeaseEpochRefreshInterval:   DefaultTableDescriptorLeaseEpochRefreshInterval,
+		TableDescriptorLeasePurgeOldLeasesInterval: DefaultTableDescriptorLeasePurgeOldLeasesInterval,
 	}
 }
