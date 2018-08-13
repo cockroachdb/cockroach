@@ -92,8 +92,6 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return Date, nil
 	case types.Time:
 		return Time, nil
-	case types.TimeTZ:
-		return TimeTZ, nil
 	case types.String:
 		return String, nil
 	case types.Name:
@@ -165,8 +163,6 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 		return types.Date
 	case *TTime:
 		return types.Time
-	case *TTimeTZ:
-		return types.TimeTZ
 	case *TTimestamp:
 		return types.Timestamp
 	case *TTimestampTZ:

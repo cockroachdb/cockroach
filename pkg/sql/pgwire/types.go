@@ -128,12 +128,6 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *tree.DTimeTZ:
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v, conv.Location, b.putbuf[4:4])
-		b.putInt32(int32(len(s)))
-		b.write(s)
-
 	case *tree.DTimestamp:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(v.Time, nil, b.putbuf[4:4])
@@ -339,10 +333,6 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
-	case *tree.DTimeTZ:
-		b.putInt32(8)
-		b.putInt64(int64(timeofday.FromTime(v.ToTime().UTC())))
-
 	case *tree.DInterval:
 		b.putInt32(16)
 		b.putInt64(v.Nanos / int64(time.Microsecond/time.Nanosecond))
@@ -386,7 +376,6 @@ func (b *writeBuffer) writeBinaryDatum(
 }
 
 const pgTimeFormat = "15:04:05.999999"
-const pgTimeTSFormat = pgTimeFormat + "-07:00"
 const pgTimeStampFormatNoOffset = "2006-01-02 " + pgTimeFormat
 const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
@@ -395,17 +384,6 @@ const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 // the resulting buffer.
 func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
-}
-
-// formatTimeTZ formats ttz into a format lib/pq understands, appending to the
-// provided tmp buffer and reallocating if needed. The function will then return
-// the resulting buffer.
-func formatTimeTZ(ttz *tree.DTimeTZ, offset *time.Location, tmp []byte) []byte {
-	t := ttz.ToTime()
-	if offset != nil {
-		t = t.In(offset)
-	}
-	return t.AppendFormat(tmp, pgTimeTSFormat)
 }
 
 // formatTs formats t with an optional offset into a format lib/pq understands,
