@@ -49,6 +49,9 @@ func (ef *execFactory) ConstructValues(
 	if len(cols) == 0 && len(rows) == 1 {
 		return &unaryNode{}, nil
 	}
+	if len(rows) == 0 {
+		return &zeroNode{columns: cols}, nil
+	}
 	return &valuesNode{
 		columns:          cols,
 		tuples:           rows,

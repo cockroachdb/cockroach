@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -340,6 +341,24 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 		lb.AddItem(right)
 	}
 	return c.f.ConstructFilters(lb.BuildList())
+}
+
+// IsContradiction returns true if the given operation is False or a Filter with
+// a contradiction constraint.
+func (c *CustomFuncs) IsContradiction(filter memo.GroupID) bool {
+	if c.f.mem.NormExpr(filter).Operator() == opt.FalseOp {
+		return true
+	}
+	return c.LookupLogical(filter).Scalar.Constraints == constraint.Contradiction
+}
+
+// ConstructEmptyValues constructs a Values expression with no rows.
+func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.GroupID {
+	colList := make(opt.ColList, 0, cols.Len())
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		colList = append(colList, opt.ColumnID(i))
+	}
+	return c.f.ConstructValues(memo.EmptyList, c.f.InternColList(colList))
 }
 
 // ----------------------------------------------------------------------

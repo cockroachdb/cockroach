@@ -227,12 +227,42 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 //
 // ----------------------------------------------------------------------
 
-// CanConstrainScan returns true if the scan can have a constraint applied to
-// it. This is only possible when it has no constraints and when it does not
-// have a limit applied to it (since limit is applied after the constraint).
-func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID) bool {
+// CanConstrainScan returns true if the scan could potentially have a constraint
+// applied to it from the given filter. This is only allowed when the scan
+//  - does not already have constraints, and
+//  - does not have a limit (which applies pre-filter).
+// The function also makes some fast checks on the filter and returns false if
+// it detects that the filter will not result in any index constraints.
+func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID, filter memo.GroupID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Constraint == nil && scanOpDef.HardLimit == 0
+	if scanOpDef.Constraint != nil || scanOpDef.HardLimit != 0 {
+		return false
+	}
+	md := c.e.mem.Metadata()
+	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
+	firstIndexCol := scanOpDef.Table.ColumnID(index.Column(0).Ordinal)
+	// If the filter does not involve the first index column, we won't be able to
+	// generate a constraint.
+	filterProps := c.LookupLogical(filter).Scalar
+	if !filterProps.OuterCols.Contains(int(firstIndexCol)) {
+		return false
+	}
+	// If the constraints are tight, check if there is a constraint that starts
+	// with the first index column. If the constraints are not tight, it's
+	// possible that index constraints can still be generated (that code currently
+	// supports more expressions).
+	if filterProps.TightConstraints {
+		cset := filterProps.Constraints
+		for i := 0; i < cset.Length(); i++ {
+			firstCol := cset.Constraint(i).Columns.Get(0).ID()
+			if firstCol == firstIndexCol {
+				return true
+			}
+		}
+		// None of the constraints start with firstIndexCol.
+		return false
+	}
+	return true
 }
 
 // constrainedScanOpDef tries to push a filter into a scanOpDef as a

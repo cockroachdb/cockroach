@@ -334,3 +334,13 @@
         (RemoveListItem $list $condition)
      )
 )
+
+# DetectSelectContradiction replaces a Select with an empty Values if
+# it detects a contradiction in the filter.
+[DetectSelectContradiction, Normalize]
+(Select
+    $input:*
+    $filters:(Filters | False) & (IsContradiction $filters)
+)
+=>
+(ConstructEmptyValues (OutputCols $input))
