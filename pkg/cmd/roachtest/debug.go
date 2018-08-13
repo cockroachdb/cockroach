@@ -18,7 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 func registerDebug(r *registry) {
@@ -65,14 +64,7 @@ func registerDebug(r *registry) {
 			return c.RunE(ctx, c.Node(node), "rm "+file)
 		}
 
-		// Wait until each nodes has at least 3 replications.
-		for ok := false; !ok; time.Sleep(time.Second) {
-			if err := db.QueryRow(
-				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-			).Scan(&ok); err != nil {
-				t.Fatal(err)
-			}
-		}
+		waitForFullReplication(t, db)
 
 		// Kill first nodes-1 nodes.
 		for i := 1; i < nodes; i++ {
