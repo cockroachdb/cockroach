@@ -1560,7 +1560,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)
 
-	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
+	s.storeRebalancer.Start(ctx, s.stopper)
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {

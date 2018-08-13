@@ -60,7 +60,7 @@ const (
 var EnableStatsBasedRebalancing = settings.RegisterBoolSetting(
 	"kv.allocator.stat_based_rebalancing.enabled",
 	"set to enable rebalancing range replicas and leases to more evenly distribute read and write load across the stores in a cluster",
-	false, // TODO(a-robinson): switch to true for v2.1 once the store-rebalancer is done
+	true,
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -85,12 +85,13 @@ var rangeRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
 // TODO(a-robinson): Should disk usage be held to a higher standard than this?
 var statRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
 	"kv.allocator.stat_rebalance_threshold",
-	"minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull",
+	"minimum fraction away from the mean a store's stats (such as queries per second) can be before it is considered overfull or underfull",
 	0.20,
 )
 
 type scorerOptions struct {
 	deterministic                bool
+	balanceQPSInsteadOfCount     bool
 	statsBasedRebalancingEnabled bool
 	rangeRebalanceThreshold      float64
 	statRebalanceThreshold       float64
@@ -442,11 +443,22 @@ func allocateCandidates(
 		}
 		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
+		var convergesScore int
+		if options.balanceQPSInsteadOfCount {
+			if s.Capacity.QueriesPerSecond < underfullStatThreshold(options, sl.candidateQueriesPerSecond.mean) {
+				convergesScore = 1
+			} else if s.Capacity.QueriesPerSecond < sl.candidateQueriesPerSecond.mean {
+				convergesScore = 0
+			} else {
+				convergesScore = -1
+			}
+		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
+			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
