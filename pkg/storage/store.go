@@ -1546,7 +1546,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
-	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
+	s.storeRebalancer.Start(ctx, s.stopper)
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {

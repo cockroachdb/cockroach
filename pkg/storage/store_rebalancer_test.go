@@ -155,8 +155,8 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	for _, tc := range testCases {
 		loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 		hottestRanges := rr.topQPS()
-		_, target := sr.chooseLeaseToTransfer(
-			ctx, config.SystemConfig{}, &hottestRanges, localDesc, storeList, storeMap, minQPS, maxQPS)
+		_, target, _ := sr.chooseLeaseToTransfer(
+			ctx, config.SystemConfig{}, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
 		if target.StoreID != tc.expectTarget {
 			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
