@@ -804,10 +804,20 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 func initTableReaderSpec(
 	n *scanNode, evalCtx *tree.EvalContext, indexVarMap []int,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
+	var visibility distsqlrun.ScanVisibility
+	switch n.colCfg.visibility {
+	case publicColumns:
+		visibility = distsqlrun.ScanVisibility_PUBLIC
+	case publicAndNonPublicColumns:
+		visibility = distsqlrun.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	default:
+		panic(fmt.Sprintf("Unknown visibility %+v", n.colCfg.visibility))
+	}
 	s := distsqlrun.TableReaderSpec{
-		Table:   *n.desc,
-		Reverse: n.reverse,
-		IsCheck: n.run.isCheck,
+		Table:      *n.desc,
+		Reverse:    n.reverse,
+		IsCheck:    n.run.isCheck,
+		Visibility: visibility,
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
@@ -1025,6 +1035,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 
+	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
+
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
@@ -1053,9 +1065,22 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
-	types := make([]sqlbase.ColumnType, len(n.desc.Columns))
+	var types []sqlbase.ColumnType
+	if returnMutations {
+		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	} else {
+		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns))
+	}
 	for i := range n.desc.Columns {
-		types[i] = n.desc.Columns[i].Type
+		types = append(types, n.desc.Columns[i].Type)
+	}
+	if returnMutations {
+		for i := range n.desc.Mutations {
+			col := n.desc.Mutations[i].GetColumn()
+			if col != nil {
+				types = append(types, col.Type)
+			}
+		}
 	}
 	p.SetLastStagePost(post, types)
 
@@ -1069,9 +1094,17 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
+	nCols := len(n.desc.Columns)
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
+			if returnMutations && int(c) >= nCols {
+				col := n.desc.Mutations[int(c)-nCols].GetColumn()
+				if col != nil && col.ID == n.cols[i].ID {
+					planToStreamColMap[i] = j
+					break
+				}
+			}
 			if n.desc.Columns[c].ID == n.cols[i].ID {
 				planToStreamColMap[i] = j
 				break
