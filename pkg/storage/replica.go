@@ -46,6 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -128,6 +130,16 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 		}
 		return nil
 	},
+)
+
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	"kv.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	false,
 )
 
 type proposalRetryReason int
@@ -2497,8 +2509,13 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
+//
+// minReadTS is used as a per-request low water mark for the value returned from
+// the read timestamp cache. That is, if the read timestamp cache returns a
+// value below minReadTS, minReadTS (without an associated txn id) will be used
+// instead to adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
 	var bumped bool
 	for _, union := range ba.Requests {
@@ -2540,6 +2557,9 @@ func (r *Replica) applyTimestampCache(
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			if rTS.Forward(minReadTS) {
+				rTxnID = uuid.Nil
+			}
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					nextTS := rTS.Next()
@@ -2819,11 +2839,41 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease.
+	// If the read is not inconsistent, the read requires the range lease or
+	// permission to serve via follower reads.
 	var status LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr
+			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
+				FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
+				lErr.LeaseHolder != nil && lErr.Lease.Epoch != 0 {
+
+				r.mu.Lock()
+				lai := r.mu.state.LeaseAppliedIndex
+				r.mu.Unlock()
+				if !r.store.cfg.ClosedTimestamp.Provider.CanServe(
+					lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
+				) {
+					r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+					// NB: this can't go behind V(x) because the log message created by the
+					// storage might be gigantic in real clusters, and we don't want to trip it
+					// using logspy.
+					if false {
+						log.Warningf(ctx, "can't serve follower read for %s at epo %d lai %d, storage is %s",
+							ba.Timestamp, lErr.Lease.Epoch, lai,
+							r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
+						)
+					}
+					return nil, pErr
+				}
+				// This replica can serve this read!
+				//
+				// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
+				// serve reads for that and smaller timestamps forever.
+				log.Event(ctx, "serving via follower read")
+			} else {
+				return nil, pErr
+			}
 		}
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
@@ -3046,19 +3096,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
-	// TODO(tschottdorf): hook up the closed timestamp subsystem. For now, this
-	// block serves as an easily enabled canary that verifies whether the system
-	// is set up where it's needed.
-	if false {
-		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-		untrack(ctx, r.RangeID, 0)
-	}
+	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	defer untrack(ctx, 0, 0) // covers all error returns below
 
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
 		return nil, pErr, proposalNoRetry
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
@@ -3081,9 +3126,20 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	ch, tryAbandon, maxLeaseIndex, pErr := r.propose(ctx, lease, ba, endCmds, spans)
 	if pErr != nil {
+		if maxLeaseIndex != 0 {
+			log.Fatalf(
+				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
+				maxLeaseIndex, ba, pErr,
+			)
+		}
 		return nil, pErr, proposalNoRetry
+	}
+	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
+	// In both cases, we don't need to communicate a MLAI.
+	if maxLeaseIndex != 0 {
+		untrack(ctx, r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is now the
@@ -3332,10 +3388,10 @@ func (r *Replica) evaluateProposal(
 }
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
-// it to the pending map.
+// it to the pending map. Returns the assigned MaxLeaseIndex, if any.
 func (r *Replica) insertProposalLocked(
 	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
-) {
+) int64 {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
 	// (=predict) the index differently from the order in which commands are
@@ -3343,7 +3399,8 @@ func (r *Replica) insertProposalLocked(
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !proposal.Request.IsLeaseRequest() {
+	isLease := proposal.Request.IsLeaseRequest()
+	if !isLease {
 		r.mu.lastAssignedLeaseIndex++
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
@@ -3360,6 +3417,12 @@ func (r *Replica) insertProposalLocked(
 		log.Fatalf(ctx, "pending command already exists for %s", proposal.idKey)
 	}
 	r.mu.localProposals[proposal.idKey] = proposal
+	if isLease {
+		// For lease requests, we return zero because no real MaxLeaseIndex is assigned.
+		// We could also return the lastAssignedIndex but this invites confusion.
+		return 0
+	}
+	return int64(proposal.command.MaxLeaseIndex)
 }
 
 func makeIDKey() storagebase.CmdIDKey {
@@ -3381,6 +3444,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // - a callback to undo quota acquisition if the attempt to propose the batch
 //   request to raft fails. This also cleans up the command sizes stored for
 //   the corresponding proposal.
+// - the MaxLeaseIndex of the resulting proposal, if any.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) propose(
@@ -3389,25 +3453,25 @@ func (r *Replica) propose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
-) (_ chan proposalResult, _ func() bool, pErr *roachpb.Error) {
+) (_ chan proposalResult, _ func() bool, _ int64, pErr *roachpb.Error) {
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
 		err := r.mu.destroyStatus.err
 		r.mu.Unlock()
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 	r.mu.Unlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// Only need to check that the request is in bounds at proposal time,
@@ -3415,7 +3479,7 @@ func (r *Replica) propose(
 	// all requests (notably EndTransaction with SplitTrigger) that may
 	// cause this condition to change.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	idKey := makeIDKey()
@@ -3444,7 +3508,7 @@ func (r *Replica) propose(
 			EndTxns: endTxns,
 		}
 		proposal.finishApplication(pr)
-		return proposalCh, func() bool { return false }, nil
+		return proposalCh, func() bool { return false }, 0, nil
 	}
 
 	// If the request requested that Raft consensus be performed asynchronously,
@@ -3455,7 +3519,7 @@ func (r *Replica) propose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, 0, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -3483,14 +3547,21 @@ func (r *Replica) propose(
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
-		return nil, nil, roachpb.NewError(errors.Errorf(
+		return nil, nil, 0, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)",
 			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
 		))
 	}
 
+	// TODO(tschottdorf): blocking a proposal here will leave it dangling in the
+	// closed timestamp tracker for an extended period of time, which will in turn
+	// prevent the node-wide closed timestamp from making progress. This is quite
+	// unfortunate; we should hoist the quota pool before the reference with the
+	// closed timestamp tracker is acquired. This is better anyway; right now many
+	// commands can evaluate but then be blocked on quota, which has worse memory
+	// behavior.
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposalSize)); err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
@@ -3534,14 +3605,17 @@ func (r *Replica) propose(
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
 	if !r.mu.destroyStatus.IsAlive() {
-		return nil, nil, roachpb.NewError(r.mu.destroyStatus.err)
+		return nil, nil, 0, roachpb.NewError(r.mu.destroyStatus.err)
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
-	r.insertProposalLocked(proposal, repDesc, lease)
+	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
+	if maxLeaseIndex == 0 && !ba.IsLeaseRequest() {
+		log.Fatalf(ctx, "no MaxLeaseIndex returned for %s", ba)
+	}
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := storagebase.ProposalFilterArgs{
@@ -3551,7 +3625,7 @@ func (r *Replica) propose(
 			Req:   ba,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
-			return nil, nil, pErr
+			return nil, nil, 0, pErr
 		}
 	}
 
@@ -3561,7 +3635,7 @@ func (r *Replica) propose(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 	} else if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// Must not use `proposal` in the closure below as a proposal which is not
@@ -3583,7 +3657,7 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return proposalCh, tryAbandon, nil
+	return proposalCh, tryAbandon, maxLeaseIndex, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
@@ -6734,4 +6808,20 @@ func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
 		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
 		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),
 	}
+}
+
+// EmitMLAI registers the replica's last assigned max lease index with the
+// closed timestamp tracker. This is called to emit an update about this
+// replica in the absence of write activity.
+func (r *Replica) EmitMLAI() {
+	r.mu.Lock()
+	lai := r.mu.lastAssignedLeaseIndex
+	if r.mu.state.LeaseAppliedIndex > lai {
+		lai = r.mu.state.LeaseAppliedIndex
+	}
+	r.mu.Unlock()
+
+	ctx := r.AnnotateCtx(context.Background())
+	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	untrack(ctx, r.RangeID, ctpb.LAI(lai))
 }

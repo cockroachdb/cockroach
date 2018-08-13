@@ -17,6 +17,7 @@ package provider_test
 import (
 	"context"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -234,4 +235,58 @@ func TestProviderSubscribeNotify(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestProviderSubscribeConcurrent prevents regression of a bug that improperly
+// handled concurrent subscriptions.
+func TestProviderSubscribeConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
+	closedts.CloseFraction.Override(&st.SV, 1.0)
+
+	stopper := stop.NewStopper()
+	storage := &providertestutils.TestStorage{}
+
+	var ts int64 // atomic
+	cfg := &provider.Config{
+		NodeID:   1,
+		Settings: st,
+		Stopper:  stopper,
+		Storage:  storage,
+		Clock: func(roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
+			return hlc.Timestamp{}, 1, nil
+		},
+		Close: func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+			return hlc.Timestamp{
+					WallTime: atomic.AddInt64(&ts, 1),
+				}, map[roachpb.RangeID]ctpb.LAI{
+					1: ctpb.LAI(atomic.LoadInt64(&ts)),
+				}
+		},
+	}
+
+	p := provider.NewProvider(cfg)
+	p.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	cancel = func() {}
+	const n = 10
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			ch := make(chan ctpb.Entry, 3)
+			p.Subscribe(ctx, ch)
+			// Read from channel until stopper stops Provider (and in turn Provider
+			// closes channel).
+			for range ch {
+			}
+		}()
+	}
+	stopper.Stop(context.Background())
+	wg.Wait()
 }
