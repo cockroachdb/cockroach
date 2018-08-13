@@ -387,6 +387,8 @@ output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+# TODO(radu): we don't fold the constants to "a = 3" so we don't generate index
+# constraints.
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
 
@@ -394,8 +396,10 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
+fetched: /t/ab/1/2 -> NULL
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
+fetched: /t/ab/5/6 -> NULL
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
@@ -578,13 +582,13 @@ CREATE INDEX baz ON ab (i, s)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-render     ·         ·                  (i, s)                         ·
- │         render 0  test.public.ab.i   ·                              ·
- │         render 1  test.public.ab.s   ·                              ·
- └── scan  ·         ·                  (s, i, rowid[hidden,omitted])  rowid!=NULL; weak-key(s,i,rowid)
-·          table     ab@baz             ·                              ·
-·          spans     /!NULL-/1/"c"      ·                              ·
-·          filter    (i, s) < (1, 'c')  ·                              ·
+render     ·         ·                  (i, s)  ·
+ │         render 0  i                  ·       ·
+ │         render 1  s                  ·       ·
+ └── scan  ·         ·                  (s, i)  ·
+·          table     ab@baz             ·       ·
+·          spans     /!NULL-/1/"c"      ·       ·
+·          filter    (i, s) < (1, 'c')  ·       ·
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -790,50 +794,30 @@ ts3 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL/6-/!NULL      ·                                    ·
+scan  ·      ·               (a, b, c, d)  ·
+·     table  abcd@abcd       ·             ·
+·     spans  /NULL/6-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-render     ·         ·                    (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a   ·                                    ·
- │         render 1  test.public.abcd.b   ·                                    ·
- │         render 2  test.public.abcd.c   ·                                    ·
- │         render 3  test.public.abcd.d   ·                                    ·
- └── scan  ·         ·                    (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd            ·                                    ·
-·          spans     /NULL/!NULL-/NULL/5  ·                                    ·
+scan  ·      ·                    (a, b, c, d)  ·
+·     table  abcd@abcd            ·             ·
+·     spans  /NULL/!NULL-/NULL/5  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; +b
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; rowid!=NULL; weak-key(b,c,d,rowid); +b
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL-/!NULL        ·                                    ·
+scan  ·      ·             (a, b, c, d)  +b
+·     table  abcd@abcd     ·             ·
+·     spans  /NULL-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-render     ·         ·                     (a, b, c, d)                         a=CONST; b=CONST; c!=NULL; +c
- │         render 0  test.public.abcd.a    ·                                    ·
- │         render 1  test.public.abcd.b    ·                                    ·
- │         render 2  test.public.abcd.c    ·                                    ·
- │         render 3  test.public.abcd.d    ·                                    ·
- └── scan  ·         ·                     (a, b, c, d, rowid[hidden,omitted])  a=CONST; b=CONST; c!=NULL; rowid!=NULL; weak-key(c,d,rowid); +c
-·          table     abcd@abcd             ·                                    ·
-·          spans     /1/NULL/1-/1/NULL/10  ·                                    ·
+scan  ·      ·                     (a, b, c, d)  +c
+·     table  abcd@abcd             ·             ·
+·     spans  /1/NULL/1-/1/NULL/10  ·             ·
 
 # Regression test for #3548: verify we create constraints on implicit columns
 # when they are part of the key (non-unique index).

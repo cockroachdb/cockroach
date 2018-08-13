@@ -60,6 +60,10 @@ const (
 	cpuCostFactor    = 0.01
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
+
+	// hugeCost is used with expressions we want to avoid; for example: scanning
+	// an index that doesn't match a "force index" flag.
+	hugeCost = 1e100
 )
 
 // computeCost calculates the estimated cost of the candidate best expression,
@@ -168,6 +172,11 @@ func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logica
 	// many columns. Ideally, we would want to use statistics about the size of
 	// each column. In lieu of that, use the number of columns.
 	def := candidate.Private(c.mem).(*memo.ScanOpDef)
+	if def.Flags.ForceIndex && def.Flags.Index != def.Index {
+		// If we are forcing an index, any other index has a very high cost. In
+		// practice, this will only happen when this is a primary index scan.
+		return hugeCost
+	}
 	rowCount := logical.Relational.Stats.RowCount
 	perRowCost := c.rowScanCost(def.Table, def.Index, def.Cols.Len())
 	if def.Reverse {

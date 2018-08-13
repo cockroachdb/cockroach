@@ -152,7 +152,8 @@ func (c *CustomFuncs) pruneScanCols(scan memo.GroupID, neededCols opt.ColSet) me
 	colSet := c.OutputCols(scan).Intersection(neededCols)
 	scanExpr := c.f.mem.NormExpr(scan).AsScan()
 	existing := c.f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
-	new := memo.ScanOpDef{Table: existing.Table, Cols: colSet}
+	new := *existing
+	new.Cols = colSet
 	return c.f.ConstructScan(c.f.mem.InternScanOpDef(&new))
 }
 

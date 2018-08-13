@@ -83,8 +83,9 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	tab := md.Table(scanOpDef.Table)
 
 	// Add a reverse index scan memo group for the primary index.
-	newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: 0, Cols: scanOpDef.Cols, Reverse: true}
-	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
+	newDef := *scanOpDef
+	newDef.Reverse = true
+	indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
 	c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
@@ -94,19 +95,26 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 			// Ignore inverted indexes.
 			continue
 		}
+		if scanOpDef.Flags.ForceIndex && scanOpDef.Flags.Index != i {
+			// If we are forcing a specific index, don't bother with the others.
+			continue
+		}
+
 		indexCols := md.IndexColumns(scanOpDef.Table, i)
 
 		// If the alternate index includes the set of needed columns (def.Cols),
 		// then construct a new Scan operator using that index.
 		if scanOpDef.Cols.SubsetOf(indexCols) {
-			newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: i, Cols: scanOpDef.Cols}
-			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDef))
+			newDef := *scanOpDef
+			newDef.Index = i
+			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
 			c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
 
-			newDefRev := &memo.ScanOpDef{Table: scanOpDef.Table, Index: i, Cols: scanOpDef.Cols, Reverse: true}
-			indexScanRev := memo.MakeScanExpr(c.e.mem.InternScanOpDef(newDefRev))
+			newDefRev := newDef
+			newDefRev.Reverse = true
+			indexScanRev := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDefRev))
 			c.e.exprs = append(c.e.exprs, memo.Expr(indexScanRev))
-		} else {
+		} else if !scanOpDef.Flags.NoIndexJoin {
 			// The alternate index was missing columns, so in order to satisfy the
 			// requirements, we need to perform an index join with the primary index.
 			if pkCols == nil {
@@ -129,6 +137,7 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 				Table: scanOpDef.Table,
 				Index: i,
 				Cols:  scanCols,
+				Flags: scanOpDef.Flags,
 			}
 
 			indexScanOpDefRev := memo.ScanOpDef{
@@ -136,6 +145,7 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 				Index:   i,
 				Cols:    scanCols,
 				Reverse: true,
+				Flags:   scanOpDef.Flags,
 			}
 
 			input := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDef))
@@ -185,6 +195,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		if !tab.Index(i).IsInverted() {
 			continue
 		}
+		if scanOpDef.Flags.ForceIndex && scanOpDef.Flags.Index != i {
+			// If we are forcing a specific index, ignore the others.
+			continue
+		}
 
 		preDef := &memo.ScanOpDef{
 			Table: scanOpDef.Table,
@@ -192,7 +206,8 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			// Though the index is marked as containing the JSONB column being
 			// indexed, it doesn't actually, and it's only valid to extract the
 			// primary key columns from it.
-			Cols: pkColSet,
+			Cols:  pkColSet,
+			Flags: scanOpDef.Flags,
 		}
 
 		constrainedScan, remainingFilter, ok := c.constrainedScanOpDef(filter, c.e.mem.InternScanOpDef(preDef), true /* isInverted */)
