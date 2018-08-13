@@ -441,7 +441,11 @@ type PlanningCtx struct {
 	// of this PlanningCtx directly, without having to instantiate a new one. This
 	// is normally false, with the main exception of the ordinary SQL executor.
 	validExtendedEvalCtx bool
-	spanIter             distsqlplan.SpanResolverIterator
+	// newSpanIter is a function used to create a new span resolver iterator
+	// lazily in getSpanIter.
+	newSpanIter func() distsqlplan.SpanResolverIterator
+	// spanIter should not be used directly, instead call getSpanIter.
+	spanIter distsqlplan.SpanResolverIterator
 	// NodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.
@@ -478,6 +482,14 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 		inverted[addr] = nodeID
 	}
 	return nil
+}
+
+// getSpanIter returns the planningCtx's SpanResolverIterator.
+func (p *PlanningCtx) getSpanIter() distsqlplan.SpanResolverIterator {
+	if p.spanIter == nil {
+		p.spanIter = p.newSpanIter()
+	}
+	return p.spanIter
 }
 
 // PhysicalPlan is a partial physical plan which corresponds to a planNode
@@ -660,7 +672,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
 	// versions compatible with this plan and which ones don't.
 	nodeVerCompatMap := make(map[roachpb.NodeID]bool)
-	it := planCtx.spanIter
+	it := planCtx.getSpanIter()
 	for _, span := range spans {
 		// rspan is the span we are currently partitioning.
 		var rspan roachpb.RSpan
@@ -944,7 +956,7 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	}
 
 	// Determine the node ID for the first range to be scanned.
-	it := planCtx.spanIter
+	it := planCtx.getSpanIter()
 	if reverse {
 		it.Seek(planCtx.ctx, spans[len(spans)-1], kv.Descending)
 	} else {
@@ -3108,8 +3120,10 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	planCtx := PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
-		spanIter:        dsp.spanResolver.NewSpanResolverIterator(txn),
-		NodeAddresses:   make(map[roachpb.NodeID]string),
+		newSpanIter: func() distsqlplan.SpanResolverIterator {
+			return dsp.spanResolver.NewSpanResolverIterator(txn)
+		},
+		NodeAddresses: make(map[roachpb.NodeID]string),
 	}
 	planCtx.NodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
 	return planCtx
