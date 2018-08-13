@@ -500,14 +500,9 @@ func TestGCQueueProcess(t *testing.T) {
 		desc := tc.repl.Desc()
 		defer snap.Close()
 
-		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
-		if err != nil {
-			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
-		}
-
 		ctx := context.Background()
 		now := tc.Clock().Now()
-		return RunGC(ctx, desc, snap, now, zone.GC,
+		return RunGC(ctx, desc, snap, now, tc.repl.GetZoneConfig().GC,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -1013,11 +1008,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	if !ok {
 		t.Fatal("config not set")
 	}
-	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))
-	if err != nil {
-		t.Fatalf("could not find zone config for range %s", err)
-	}
-	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1E9 + 1)
+	tc.manualClock.Increment(int64(tc.repl.GetZoneConfig().GC.TTLSeconds)*1E9 + 1)
 	gcQ := newGCQueue(tc.store, tc.gossip)
 	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)

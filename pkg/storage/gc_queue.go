@@ -163,19 +163,14 @@ func makeGCQueueScore(
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
 	gcThreshold := *repl.mu.state.GCThreshold
+	ttlSeconds := repl.mu.zone.GC.TTLSeconds
 	repl.mu.Unlock()
 
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
-		return gcQueueScore{}
-	}
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
 	r := makeGCQueueScoreImpl(
-		ctx, int64(desc.RangeID), now, ms, zone.GC.TTLSeconds,
+		ctx, int64(repl.RangeID), now, ms, ttlSeconds,
 	)
 	if (gcThreshold != hlc.Timestamp{}) {
 		r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
@@ -574,13 +569,7 @@ func (gcq *gcQueue) processImpl(
 	desc := repl.Desc()
 	defer snap.Close()
 
-	// Lookup the GC policy for the zone containing this key range.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
-	}
-
-	info, err := RunGC(ctx, desc, snap, now, zone.GC, &replicaGCer{repl: repl},
+	info, err := RunGC(ctx, desc, snap, now, repl.GetZoneConfig().GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.cleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
 			if err == nil {

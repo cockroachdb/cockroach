@@ -76,6 +76,7 @@ export default function (props: GraphDashboardProps) {
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
         <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
+        <Metric name="cr.store.replicas.resident" title="Resident" />
       </Axis>
     </LineGraph>,
 

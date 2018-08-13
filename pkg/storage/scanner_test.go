@@ -76,7 +76,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	return rs
 }
 
-func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
+func (rs *testRangeSet) Visit(onlyResident bool, visitor func(*Replica) bool) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.visited = 0
@@ -361,7 +361,7 @@ func TestScannerDisabled(t *testing.T) {
 	lastScannerCount := s.scanCount()
 
 	// Remove the replicas and verify the scanner still removes them while disabled.
-	ranges.Visit(func(repl *Replica) bool {
+	ranges.Visit(false /* onlyResident */, func(repl *Replica) bool {
 		s.RemoveReplica(repl)
 		return true
 	})

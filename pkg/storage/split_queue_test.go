@@ -89,8 +89,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
-		repl.mu.maxBytes = test.maxBytes
 		repl.mu.Unlock()
+		repl.SetZoneConfig(config.ZoneConfig{RangeMaxBytes: test.maxBytes})
 
 		shouldQ, priority := splitQ.shouldQueue(context.TODO(), hlc.Timestamp{}, repl, cfg)
 		if shouldQ != test.shouldQ {

@@ -190,17 +190,17 @@ func TestStoreMetrics(t *testing.T) {
 	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
-	// Verify stats on store1 after replication.
-	verifyStats(t, mtc, 1)
+	// Verify stats after replication.
+	verifyStats(t, mtc, 0, 1, 2)
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
 	if _, err := mtc.dbs[0].Inc(context.TODO(), dataKey, 5); err != nil {
 		t.Fatal(err)
 	}
-	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
+	mtc.waitForValues(roachpb.Key(dataKey), []int64{5, 5, 5})
 
-	// Verify all stats on stores after addition.
+	// Verify all stats after addition.
 	verifyStats(t, mtc, 0, 1, 2)
 
 	// Create a transaction statement that fails. Regression test for #4969.

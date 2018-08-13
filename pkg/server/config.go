@@ -53,7 +53,7 @@ const (
 	DefaultCacheSize         = 128 << 20 // 128 MB
 	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
 	defaultScanInterval      = 10 * time.Minute
-	defaultScanMinIdleTime   = 10 * time.Millisecond
+	defaultScanMinIdleTime   = 20 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
