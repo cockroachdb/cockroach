@@ -69,7 +69,11 @@ func newTableReader(
 	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if returnMutations {
-		numCols += len(spec.Table.Mutations)
+		for i := range spec.Table.Mutations {
+			if spec.Table.Mutations[i].GetColumn() != nil {
+				numCols++
+			}
+		}
 	}
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	if err := tr.Init(
