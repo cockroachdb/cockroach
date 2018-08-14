@@ -25,6 +25,8 @@ enum RangeLogEventType {
   // originally stored.
   // Split is the event type recorded when a range splits.
   split = 0;
+  // Merge is the event type recorded when a range merges.
+  merge = 3;
   // Add is the event type recorded when a range adds a new replica.
   add = 1;
   // Remove is the event type recorded when a range removed an existing replica.
@@ -35,6 +37,7 @@ message RangeLogEvent {
   message Info {
       roachpb.RangeDescriptor updated_desc = 1 [(gogoproto.jsontag) = "UpdatedDesc,omitempty"];
       roachpb.RangeDescriptor new_desc = 2 [(gogoproto.jsontag) = "NewDesc,omitempty"];
+      roachpb.RangeDescriptor removed_desc = 7 [(gogoproto.jsontag) = "RemovedDesc,omitempty"];
       roachpb.ReplicaDescriptor added_replica = 3 [(gogoproto.jsontag) = "AddReplica,omitempty"];
       roachpb.ReplicaDescriptor removed_replica = 4 [(gogoproto.jsontag) = "RemovedReplica,omitempty"];
       string reason = 5 [

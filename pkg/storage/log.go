@@ -88,6 +88,8 @@ func (s *Store) insertRangeLogEvent(
 	switch event.EventType {
 	case RangeLogEventType_split:
 		s.metrics.RangeSplits.Inc(1)
+	case RangeLogEventType_merge:
+		s.metrics.RangeMerges.Inc(1)
 	case RangeLogEventType_add:
 		s.metrics.RangeAdds.Inc(1)
 	case RangeLogEventType_remove:
@@ -107,7 +109,8 @@ func (s *Store) insertRangeLogEvent(
 // logSplit logs a range split event into the event table. The affected range is
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
-// TODO(mrtracy): There are several different reasons that a replica split
+//
+// TODO(mrtracy): There are several different reasons that a range split
 // could occur, and that information should be logged.
 func (s *Store) logSplit(
 	ctx context.Context, txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
@@ -124,6 +127,30 @@ func (s *Store) logSplit(
 		Info: &RangeLogEvent_Info{
 			UpdatedDesc: &updatedDesc,
 			NewDesc:     &newDesc,
+		},
+	})
+}
+
+// logMerge logs a range split event into the event table. The affected range is
+// the subsuming range; the "other" range is the subsumed range.
+//
+// TODO(benesch): There are several different reasons that a range merge
+// could occur, and that information should be logged.
+func (s *Store) logMerge(
+	ctx context.Context, txn *client.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
+) error {
+	if !s.cfg.LogRangeEvents {
+		return nil
+	}
+	return s.insertRangeLogEvent(ctx, txn, RangeLogEvent{
+		Timestamp:    selectEventTimestamp(s, txn.OrigTimestamp()),
+		RangeID:      updatedLHSDesc.RangeID,
+		EventType:    RangeLogEventType_merge,
+		StoreID:      s.StoreID(),
+		OtherRangeID: rhsDesc.RangeID,
+		Info: &RangeLogEvent_Info{
+			UpdatedDesc: &updatedLHSDesc,
+			RemovedDesc: &rhsDesc,
 		},
 	})
 }
