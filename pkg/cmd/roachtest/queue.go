@@ -127,7 +127,7 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 		maxRows *= dbNodeCount * 64
 	}
 	if queueCount > maxRows {
-		t.Fatalf("resulting table had %d entries, expected %d or fewer", count, maxRows)
+		t.Fatalf("resulting table had %d entries, expected %d or fewer", queueCount, maxRows)
 	}
 
 	// Sample the scan time after the primary workload. We expect this to be
