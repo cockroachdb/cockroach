@@ -1269,8 +1269,7 @@ type WindowerSpec_Frame_Bound struct {
 	BoundType WindowerSpec_Frame_BoundType `protobuf:"varint,1,opt,name=boundType,enum=cockroach.sql.distsqlrun.WindowerSpec_Frame_BoundType" json:"boundType"`
 	// For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
 	// is ignored. Integer offset for ROWS mode is stored in int_offset while
-	// an encoded datum and the type information are stored for RANGE mode
-	// (the support for the latter will be added soon).
+	// an encoded datum and the type information are stored for RANGE mode.
 	IntOffset   uint32    `protobuf:"varint,2,opt,name=int_offset,json=intOffset" json:"int_offset"`
 	TypedOffset []byte    `protobuf:"bytes,3,opt,name=typed_offset,json=typedOffset" json:"typed_offset,omitempty"`
 	OffsetType  DatumInfo `protobuf:"bytes,4,opt,name=offset_type,json=offsetType" json:"offset_type"`

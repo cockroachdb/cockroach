@@ -364,6 +364,9 @@ func (p *planner) constructWindowDefinitions(
 			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
 				return err
 			}
+			if windowDef.Frame.Mode == tree.RANGE && windowDef.Frame.Bounds.HasOffset() {
+				n.funcs[idx].ordColTyp = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			}
 		}
 
 		n.run.windowFrames[idx] = windowDef.Frame
@@ -421,7 +424,6 @@ func constructWindowDef(
 	if referencedSpec.Frame != nil {
 		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
 	}
-	// TODO(yuzefovich): check the logic above, maybe we need to do or to check something else.
 
 	return def, nil
 }
@@ -534,7 +536,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
 				// windowFuncHolders at this point, so if we see an aggregate
-				// function in the window renders, it is above a windowing level.
+				// function in the window renders, it is above the windowing level.
 				if t.GetAggregateConstructor() != nil {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
@@ -675,7 +677,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
 			// so we need to make sure these expressions are evaluated before using offsets.
 			bounds := frameRun.Frame.Bounds
-			if bounds.StartBound.OffsetExpr != nil {
+			if bounds.StartBound.HasOffset() {
 				typedStartOffset := bounds.StartBound.OffsetExpr.(tree.TypedExpr)
 				dStartOffset, err := typedStartOffset.Eval(evalCtx)
 				if err != nil {
@@ -685,11 +687,14 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
 				}
 				if isNegative(evalCtx, dStartOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame starting offset must not be negative")
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 				}
 				frameRun.StartBoundOffset = dStartOffset
 			}
-			if bounds.EndBound != nil && bounds.EndBound.OffsetExpr != nil {
+			if bounds.EndBound != nil && bounds.EndBound.HasOffset() {
 				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
 				dEndOffset, err := typedEndOffset.Eval(evalCtx)
 				if err != nil {
@@ -699,9 +704,29 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
 				}
 				if isNegative(evalCtx, dEndOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "frame ending offset must not be negative")
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
 				frameRun.EndBoundOffset = dEndOffset
+			}
+			if frameRun.RangeModeWithOffsets() {
+				frameRun.OrdColIdx = windowFn.columnOrdering[0].ColIdx
+				frameRun.OrdDirection = windowFn.columnOrdering[0].Direction
+
+				colTyp := windowFn.ordColTyp
+				// Type of offset depends on the ordering column's type.
+				offsetTyp := colTyp
+				if types.IsDateTimeType(colTyp) {
+					// For datetime related ordering columns, offset must be an Interval.
+					offsetTyp = types.Interval
+				}
+				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
+				if !found {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
+				}
+				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
 			}
 		}
 
@@ -735,6 +760,10 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.run.wrappedRenderVals.At(rowI)
+			// We need the whole row and not just arguments to window functions since
+			// in RANGE mode we might need access to the column over which the rows
+			// are sorted, and all such columns come after all arguments to window
+			// functions.
 			entry := indexedRow{idx: rowI, row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
@@ -774,12 +803,6 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		//   * Segment Tree
 		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
 		for _, partition := range partitions {
-			// TODO(nvanbenschoten): Handle framing here. Right now we only handle the default
-			// framing option of RANGE UNBOUNDED PRECEDING. With ORDER BY, this sets the frame
-			// to be all rows from the partition start up through the current row's last ORDER BY
-			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
-			// since all rows become peers of the current row. Once we add better framing support,
-			// we should flesh this logic out more.
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
@@ -1027,10 +1050,11 @@ type windowFuncHolder struct {
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx      int // index of the windowFuncHolder in window.funcs
-	argIdxStart  int // index of the window function's first arguments in window.wrappedValues
-	argCount     int // number of arguments taken by the window function
-	filterColIdx int // optinal index of filtering column, -1 if no filter
+	funcIdx      int     // index of the windowFuncHolder in window.funcs
+	argIdxStart  int     // index of the window function's first arguments in window.wrappedValues
+	argCount     int     // number of arguments taken by the window function
+	filterColIdx int     // optional index of filtering column, -1 if no filter
+	ordColTyp    types.T // type of the ordering column, used only in RANGE mode with offsets
 
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
