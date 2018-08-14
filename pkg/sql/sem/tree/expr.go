@@ -1085,15 +1085,13 @@ func (UnaryOperator) operator() {}
 
 // UnaryExpr.Operator
 const (
-	UnaryPlus UnaryOperator = iota
-	UnaryMinus
+	UnaryMinus UnaryOperator = iota
 	UnaryComplement
 
 	NumUnaryOperators
 )
 
 var unaryOpName = [...]string{
-	UnaryPlus:       "+",
 	UnaryMinus:      "-",
 	UnaryComplement: "~",
 }
@@ -1119,7 +1117,17 @@ func (*UnaryExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.Operator.String())
-	exprFmtWithParen(ctx, node.Expr)
+	e := node.Expr
+	_, isOp := e.(operatorExpr)
+	_, isDatum := e.(Datum)
+	_, isConstant := e.(Constant)
+	if isOp || (node.Operator == UnaryMinus && (isDatum || isConstant)) {
+		ctx.WriteByte('(')
+		ctx.FormatNode(e)
+		ctx.WriteByte(')')
+	} else {
+		ctx.FormatNode(e)
+	}
 }
 
 // TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.

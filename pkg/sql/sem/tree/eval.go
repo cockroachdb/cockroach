@@ -103,30 +103,6 @@ type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = map[UnaryOperator]unaryOpOverload{
-	UnaryPlus: {
-		UnaryOp{
-			Typ:        types.Int,
-			ReturnType: types.Int,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-		UnaryOp{
-			Typ:        types.Float,
-			ReturnType: types.Float,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-		UnaryOp{
-			Typ:        types.Decimal,
-			ReturnType: types.Decimal,
-			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				return d, nil
-			},
-		},
-	},
-
 	UnaryMinus: {
 		UnaryOp{
 			Typ:        types.Int,
