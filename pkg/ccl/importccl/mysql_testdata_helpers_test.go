@@ -93,6 +93,7 @@ var simpleTestRows = func() []simpleTestRow {
 
 type everythingTestRow struct {
 	i   int
+	e   string
 	c   string
 	bin []byte
 	dt  time.Time
@@ -103,7 +104,7 @@ type everythingTestRow struct {
 
 var everythingTestRows = func() []everythingTestRow {
 	return []everythingTestRow{
-		{1, "c", []byte("bin"), timeutil.Unix(946684800, 0), -2, -1.5, "-12.345"},
+		{1, "Small", "c", []byte("bin"), timeutil.Unix(946684800, 0), -2, -1.5, "-12.345"},
 	}
 }()
 
@@ -245,6 +246,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 				c       CHAR(10) NOT NULL,
 				s       VARCHAR(100),
 				tx      TEXT,
+				e       ENUM('Small', 'Medium', 'Large'),
 
 				bin     BINARY(100) NOT NULL,
 				vbin    VARBINARY(100),
@@ -302,10 +304,10 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 	for _, r := range everythingTestRows {
 		if _, err := db.Exec(
 			`INSERT INTO everything (
-			i, c, bin, dt, iw, fl, d53
+			i, e, c, bin, dt, iw, fl, d53
 		) VALUES (
-			?, ?, ?, ?, ?, ?, ?
-		)`, r.i, r.c, r.bin, r.dt, r.iw, r.fl, r.d53); err != nil {
+			?, ?, ?, ?, ?, ?, ?, ?
+		)`, r.i, r.e, r.c, r.bin, r.dt, r.iw, r.fl, r.d53); err != nil {
 			t.Fatal(err)
 		}
 	}
