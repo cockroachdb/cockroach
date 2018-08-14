@@ -388,6 +388,12 @@ var (
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeMerges = metric.Metadata{
+		Name:        "range.merges",
+		Help:        "Number of range merges",
+		Measurement: "Range Ops",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeAdds = metric.Metadata{
 		Name:        "range.adds",
 		Help:        "Number of range additions",
@@ -1024,6 +1030,7 @@ type StoreMetrics struct {
 
 	// Range event metrics.
 	RangeSplits                     *metric.Counter
+	RangeMerges                     *metric.Counter
 	RangeAdds                       *metric.Counter
 	RangeRemoves                    *metric.Counter
 	RangeSnapshotsGenerated         *metric.Counter
@@ -1223,6 +1230,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Range event metrics.
 		RangeSplits:                     metric.NewCounter(metaRangeSplits),
+		RangeMerges:                     metric.NewCounter(metaRangeMerges),
 		RangeAdds:                       metric.NewCounter(metaRangeAdds),
 		RangeRemoves:                    metric.NewCounter(metaRangeRemoves),
 		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),

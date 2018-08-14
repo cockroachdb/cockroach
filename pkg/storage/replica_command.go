@@ -462,6 +462,15 @@ func (r *Replica) AdminMerge(
 			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
 		}
 
+		// Log the merge into the range event log.
+		// TODO(spencer): event logging API should accept a batch
+		// instead of a transaction; there's no reason this logging
+		// shouldn't be done in parallel via the batch with the updated
+		// range addressing.
+		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
+			return err
+		}
+
 		b := txn.NewBatch()
 
 		// Update the meta addressing records.
