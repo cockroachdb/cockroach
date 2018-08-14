@@ -17,6 +17,7 @@ package engine
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -92,6 +93,11 @@ func (ol *OpLoggerBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 }
 
 func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	if keys.IsLocal(details.Key) {
+		// Ignore mvcc operations on local keys.
+		return
+	}
+
 	switch op {
 	case MVCCWriteValueOpType:
 		if !details.Safe {
