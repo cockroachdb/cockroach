@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -359,6 +360,7 @@ func (ef *execFactory) constructGroupBy(
 			inputCols[idx].Typ,
 			int(idx),
 			builtins.NewAnyNotNullAggregate,
+			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
@@ -369,23 +371,25 @@ func (ef *execFactory) constructGroupBy(
 		agg := &aggregations[i]
 		builtin := agg.Builtin
 		var renderIdx int
-		var aggFn func(*tree.EvalContext) tree.AggregateFunc
+		var aggFn func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
 
 		switch len(agg.ArgCols) {
 		case 0:
 			renderIdx = noRenderIdx
-			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{}, evalCtx)
+			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{}, evalCtx, arguments)
 			}
 
 		case 1:
 			renderIdx = int(agg.ArgCols[0])
-			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx)
+			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
 			}
 
 		default:
-			return nil, errors.Errorf("multi-argument aggregation functions not implemented")
+			return nil, pgerror.UnimplementedWithIssueError(28417,
+				"aggregate functions with multiple non-constant expressions are not supported",
+			)
 		}
 
 		f := n.newAggregateFuncHolder(
@@ -393,6 +397,7 @@ func (ef *execFactory) constructGroupBy(
 			agg.ResultType,
 			renderIdx,
 			aggFn,
+			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		if agg.Distinct {
