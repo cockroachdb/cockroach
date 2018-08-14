@@ -167,7 +167,7 @@ func createTestStoreWithEngine(
 		t.Fatal(err)
 	}
 	// Wait for the store's single range to have quorum before proceeding.
-	repl := store.LookupReplica(roachpb.RKeyMin, nil)
+	repl := store.LookupReplica(roachpb.RKeyMin)
 	testutils.SucceedsSoon(t, func() error {
 		if !repl.HasQuorum() {
 			return errors.New("first range has not reached quorum")
@@ -595,7 +595,7 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 		// querying all stores; it may not be present on all stores, but the
 		// current version is guaranteed to be present on one of them.
 		if err := str.VisitStores(func(s *storage.Store) error {
-			firstRng := s.LookupReplica(roachpb.RKeyMin, nil)
+			firstRng := s.LookupReplica(roachpb.RKeyMin)
 			if firstRng != nil {
 				descs = append(descs, firstRng.Desc())
 			}

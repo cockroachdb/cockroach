@@ -57,7 +57,7 @@ func TestStoreRangeLease(t *testing.T) {
 			}
 		}
 
-		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 		lease, _ := rLeft.GetLease()
 		if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 			t.Fatalf("expected lease type expiration; got %d", lt)
@@ -65,7 +65,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 		// After the split, expect an expiration lease for other ranges.
 		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
 			lease, _ = repl.GetLease()
 			if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 				t.Fatalf("%s: expected lease type epoch; got %d", key, lt)
@@ -84,7 +84,7 @@ func TestStoreRangeLease(t *testing.T) {
 		// After the expiration, expect an epoch lease for the RHS if
 		// we've enabled epoch based range leases.
 		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
 			lease, _ = repl.GetLease()
 			if enableEpoch {
 				if lt := lease.Type(); lt != roachpb.LeaseEpoch {
@@ -123,7 +123,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// We started with epoch ranges enabled, so verify we have an epoch lease.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ := repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
 		t.Fatalf("expected lease type epoch; got %d", lt)
@@ -140,7 +140,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// Verify we end up with an expiration lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ = repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 		t.Fatalf("expected lease type expiration; got %d", lt)
@@ -157,7 +157,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	}
 
 	// Verify we end up with an epoch lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	lease, _ = repl.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
 		t.Fatalf("expected lease type epoch; got %d", lt)
@@ -245,7 +245,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	const numStores = 3
 	mtc.Start(t, numStores)
 
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key)).RangeID
 	mtc.replicateRange(rangeID, 1, 2)
 
 	initialStoreIdx := -1

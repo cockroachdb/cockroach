@@ -539,13 +539,13 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	// Get the left range's ID.
-	rangeID := l.mtc.stores[0].LookupReplica(keys.MustAddr(l.leftKey), nil).RangeID
+	rangeID := l.mtc.stores[0].LookupReplica(keys.MustAddr(l.leftKey)).RangeID
 
 	// Replicate the left range onto node 1.
 	l.mtc.replicateRange(rangeID, 1)
 
-	l.replica0 = l.mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
-	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	l.replica0 = l.mtc.stores[0].LookupReplica(roachpb.RKey("a"))
+	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"))
 	{
 		var err error
 		if l.replica0Desc, err = l.replica0.GetReplicaDescriptor(); err != nil {
@@ -564,7 +564,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 }
 
 func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
-	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey), nil)
+	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey))
 	replicaDesc, err := desc.GetReplicaDescriptor()
 	if err != nil {
 		return roachpb.NewError(err)
@@ -908,11 +908,11 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	}
 
 	// Up-replicate the data in the range to node2.
-	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA), nil)
+	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
 	mtc.replicateRange(replica1.RangeID, 1)
 
 	// Transfer the lease from node1 to node2.
-	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA), nil)
+	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA))
 	replica2Desc, err := replica2.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
@@ -969,7 +969,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	mtc.Start(t, 2)
 
 	// Up-replicate to two replicas.
-	keyMinReplica0 := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	keyMinReplica0 := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(keyMinReplica0.RangeID, 1)
 
 	// Split the key space at key "a".
@@ -991,7 +991,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	// Wait for all replicas to process.
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < 2; i++ {
-			r := mtc.stores[i].LookupReplica(roachpb.RKeyMin, nil)
+			r := mtc.stores[i].LookupReplica(roachpb.RKeyMin)
 			if l, _ := r.GetLease(); l.Replica.StoreID != mtc.stores[1].StoreID() {
 				return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
 			}
@@ -1001,7 +1001,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 
 	// Next a failed transfer from RHS replica 0 to replica 1.
 	injectLeaseTransferError.Store(true)
-	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey, nil)
+	keyAReplica0 := mtc.stores[0].LookupReplica(splitKey)
 	if err := mtc.dbs[0].AdminTransferLease(
 		context.TODO(), keyAReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err == nil {
@@ -1190,7 +1190,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		repl := store.LookupReplica(rKey, nil)
+		repl := store.LookupReplica(rKey)
 		if repl == nil {
 			t.Fatalf("replica for key %s not found", rKey)
 		}
@@ -1383,7 +1383,7 @@ func TestRangeInfo(t *testing.T) {
 	mtc.Start(t, 2)
 
 	// Up-replicate to two replicas.
-	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).RangeID, 1)
+	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin).RangeID, 1)
 
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
@@ -1398,10 +1398,10 @@ func TestRangeInfo(t *testing.T) {
 	// a SucceedsSoon loop to ensure the split completes.
 	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *storage.Replica
 	testutils.SucceedsSoon(t, func() error {
-		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin, nil)
-		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey, nil)
-		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey, nil)
+		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin)
+		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin)
+		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey)
+		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey)
 		if lhsReplica0 == rhsReplica0 || lhsReplica1 == rhsReplica1 {
 			return errors.Errorf("replicas not post-split %v, %v, %v, %v",
 				lhsReplica0, rhsReplica0, rhsReplica0, rhsReplica1)
@@ -1589,7 +1589,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 	}
 
 	// Up-replicate to three replicas.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	if repl == nil {
 		t.Fatal("replica should not be nil for RHS range")
 	}

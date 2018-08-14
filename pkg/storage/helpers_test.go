@@ -444,7 +444,7 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyVal
 
 func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, store *Store) error {
 	var ba roachpb.BatchRequest
-	ba.RangeID = store.LookupReplica(roachpb.RKey(key), nil).RangeID
+	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
 	var addReq roachpb.AddSSTableRequest
 	addReq.Data, _ = MakeSSTable(key, val, ts)

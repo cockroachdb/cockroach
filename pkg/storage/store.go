@@ -1592,7 +1592,7 @@ func (s *Store) startGossip() {
 				retryOptions := base.DefaultRetryOptions()
 				retryOptions.Closer = s.stopper.ShouldStop()
 				for r := retry.Start(retryOptions); r.Next(); {
-					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key), nil); repl != nil {
+					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							log.Warningf(annotatedCtx, "could not gossip %s: %s", gossipFn.description, err)
@@ -2000,21 +2000,21 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
 }
 
-// LookupReplica looks up a replica via binary search over the
-// "replicasByKey" btree. Returns nil if no replica is found for
-// specified key range. Note that the specified keys are transformed
-// using Key.Address() to ensure we lookup replicas correctly for local
-// keys. When end is nil, a replica that contains start is looked up.
-func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
+// LookupReplica looks up the replica that contains the specified key. It
+// returns nil if no such replica exists.
+func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	var repl *Replica
-	s.visitReplicasLocked(start, roachpb.RKeyMax, func(replIter *Replica) bool {
-		repl = replIter
+	// Simulate AscendGreater by calling key.Next. We want to skip the replica
+	// whose end key equals key, as end keys are exclusive.
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(key.Next()), func(item btree.Item) bool {
+		repl, _ = item.(*Replica)
+		// Stop iterating immediately. The first item we see is the only one that
+		// can possibly contain key.
 		return false
 	})
-	if repl == nil || !repl.Desc().ContainsKeyRange(start, end) {
+	if repl == nil || !repl.Desc().ContainsKey(key) {
 		return nil
 	}
 	return repl
@@ -2055,37 +2055,6 @@ func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) K
 	}
 
 	return nil
-}
-
-// visitReplicasLocked will call iterator for every replica on the store which
-// contains any keys in the span between startKey and endKey. Iteration will be
-// in ascending order. Iteration can be stopped early by returning false from
-// iterator.
-func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func(r *Replica) bool) {
-	// Iterate over replicasByKey to visit all ranges containing keys in the
-	// specified range. We use startKey.Next() because btree's Ascend methods
-	// are inclusive of the start bound and exclusive of the end bound, but
-	// ranges are stored in the BTree by EndKey; in cockroach, end keys have the
-	// opposite behavior (a range's EndKey is contained by the subsequent
-	// range). We want visitReplicasLocked to match cockroach's behavior; using
-	// startKey.Next(), will ignore a range which has EndKey exactly equal to
-	// the supplied startKey. Iteration ends when all ranges are exhausted, or
-	// the next range contains no keys in the supplied span.
-	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey.Next()),
-		func(item btree.Item) bool {
-			kr := item.(KeyRange)
-			if !kr.Desc().StartKey.Less(endKey) {
-				// This properly checks if this range contains any keys in the supplied span.
-				return false
-			}
-
-			switch rep := item.(type) {
-			case *Replica:
-				return iterator(rep)
-			default:
-				return true
-			}
-		})
 }
 
 // RaftStatus returns the current raft status of the local replica of

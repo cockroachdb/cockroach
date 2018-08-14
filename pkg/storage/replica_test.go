@@ -783,7 +783,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	tc.Start(t, stopper)
 
 	key := roachpb.RKey("a")
-	firstRepl := tc.store.LookupReplica(key, nil)
+	firstRepl := tc.store.LookupReplica(key)
 	newRepl := splitTestRange(tc.store, key, key, t)
 	if _, pErr := newRepl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
@@ -6502,7 +6502,7 @@ func TestReplicaCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := tc.store.LookupReplica(rkey, rkey)
+	r := tc.store.LookupReplica(rkey)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.destroyStatus.err.Error() != pErr.GetDetail().Error() {
@@ -6961,7 +6961,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repl := tc.store.LookupReplica(scStartSddr, nil)
+	repl := tc.store.LookupReplica(scStartSddr)
 	if repl == nil {
 		t.Fatalf("no replica contains the SystemConfig span")
 	}
@@ -9345,7 +9345,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repl := store.LookupReplica(rkey, nil /* end */)
+	repl := store.LookupReplica(rkey) /* end */
 	if repl == nil {
 		t.Fatalf("replica for key %s not found", rkey)
 	}
@@ -9683,7 +9683,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	tc.Start(t, stopper)
 
 	key := roachpb.RKey("a")
-	repl := tc.store.LookupReplica(key, nil)
+	repl := tc.store.LookupReplica(key)
 	desc := repl.Desc()
 	sKey := desc.StartKey.AsRawKey()
 

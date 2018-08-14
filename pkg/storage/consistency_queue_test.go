@@ -49,7 +49,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	mtc.Start(t, 3)
 
 	// Replicate the range to three nodes.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	repl := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	rangeID := repl.RangeID
 	mtc.replicateRange(rangeID, 1, 2)
 
