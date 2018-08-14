@@ -35,13 +35,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -93,13 +87,7 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -122,13 +110,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return err
 	}
