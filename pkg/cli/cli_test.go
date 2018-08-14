@@ -744,6 +744,8 @@ func Example_demo() {
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
 		{`demo`, `--echo-sql`, `-e`, `select 1 as "1"`},
 		{`demo`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`},
+		{`demo`, `startrek`, `-e`, `show databases`},
+		{`demo`, `startrek`, `-e`, `show databases`, `--format=table`},
 	}
 	for _, cmd := range testData {
 		c.RunWithArgs(cmd)
@@ -774,6 +776,20 @@ func Example_demo() {
 	// pq: column "nonexistent" does not exist
 	// 123
 	// 123
+	// demo startrek -e show databases
+	// database_name
+	// defaultdb
+	// postgres
+	// startrek
+	// system
+	// demo startrek -e show databases --format=table
+	//   database_name
+	// +---------------+
+	//   defaultdb
+	//   postgres
+	//   startrek
+	//   system
+	// (4 rows)
 }
 
 func Example_sql() {
