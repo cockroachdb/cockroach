@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xfunc
+package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -47,7 +47,7 @@ func (s listSorter) compare(i, j int) int {
 
 		leftD := memo.ExtractConstDatum(memo.MakeNormExprView(s.cf.mem, s.list[i]))
 		rightD := memo.ExtractConstDatum(memo.MakeNormExprView(s.cf.mem, s.list[j]))
-		return leftD.Compare(s.cf.evalCtx, rightD)
+		return leftD.Compare(s.cf.f.evalCtx, rightD)
 	} else if isRightConst {
 		// Non-constant always sorts after constant.
 		return 1
