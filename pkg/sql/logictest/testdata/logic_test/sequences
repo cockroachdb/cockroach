@@ -829,3 +829,44 @@ SELECT last_value FROM priv_test
 5
 
 user root
+
+subtest virtual_sequences
+
+statement ok
+CREATE SEQUENCE sv VIRTUAL
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
+----
+CREATE SEQUENCE sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+
+statement ok
+CREATE TABLE svals(x INT)
+
+statement ok
+BEGIN;
+  INSERT INTO svals VALUES(nextval('sv'));
+  INSERT INTO svals VALUES(lastval());
+  INSERT INTO svals VALUES(currval('sv'));
+END
+
+# Check that lastval returns the last auto-generated virtual value.
+query I
+SELECT count(DISTINCT x) FROM svals
+----
+1
+
+# Check that the KV trace is empty.
+statement ok
+BEGIN;
+  SELECT nextval('sv'); -- acquire the lease, so that doesn't go to the KV trace
+  SET tracing = on; SELECT nextval('sv'); SET tracing = off;
+  COMMIT
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+----
+rows affected: 1
+
+statement ok
+DROP SEQUENCE sv
