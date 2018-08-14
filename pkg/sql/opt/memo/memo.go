@@ -143,7 +143,7 @@ func New() *Memo {
 	m := &Memo{
 		metadata: opt.NewMetadata(),
 		exprMap:  make(map[Fingerprint]GroupID),
-		groups:   make([]group, 1),
+		groups:   make([]group, 1, 8),
 	}
 
 	m.privateStorage.init()
