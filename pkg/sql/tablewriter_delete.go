@@ -127,14 +127,14 @@ func (td *tableDeleter) fastDeleteInterleaved(
 				continue
 			}
 
-			after, _, err := scan.run.fetcher.ReadIndexKey(i)
+			after, ok, err := scan.run.fetcher.ReadIndexKey(i)
 			log.Warningf(ctx, "after: %s", after)
 			if err != nil {
 				return 0, err
 			}
-			/*if !ok {
-				return 0, errors.Errorf("key did not match descriptor")
-			}*/
+			if !ok {
+				continue
+			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {
 				prev = k
