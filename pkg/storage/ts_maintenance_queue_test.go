@@ -113,7 +113,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// Generate several splits.
 	splitKeys := []roachpb.Key{roachpb.Key("c"), roachpb.Key("b"), roachpb.Key("a")}
 	for _, k := range splitKeys {
-		repl := store.LookupReplica(roachpb.RKey(k), nil)
+		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
 		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: repl.RangeID,
@@ -177,7 +177,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 			keys = append(keys, roachpb.RKey(k))
 		}
 		for _, key := range keys {
-			repl := store.LookupReplica(key, nil)
+			repl := store.LookupReplica(key)
 			ts, err := repl.GetQueueLastProcessed(context.TODO(), "timeSeriesMaintenance")
 			if err != nil {
 				return err

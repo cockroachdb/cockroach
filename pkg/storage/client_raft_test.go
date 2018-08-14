@@ -127,7 +127,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := client.SendWrapped(context.Background(), store.TestSender(), splitArgs); err != nil {
 			t.Fatal(err)
 		}
-		rangeID2 = store.LookupReplica(roachpb.RKey(key2), nil).RangeID
+		rangeID2 = store.LookupReplica(roachpb.RKey(key2)).RangeID
 		if rangeID2 == rangeID {
 			t.Fatal("got same range id after split")
 		}
@@ -1296,13 +1296,10 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	// The range should become available on every node.
 	var r *storage.Replica // from the last store
 	testutils.SucceedsSoon(t, func() error {
-		rs := roachpb.RSpan{
-			Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z"),
-		}
 		for _, s := range mtc.stores {
-			r = s.LookupReplica(rs.Key, rs.EndKey)
+			r = s.LookupReplica(roachpb.RKey("a"))
 			if r == nil {
-				return errors.Errorf("expected replica for span %v", rs)
+				return errors.Errorf("expected replica for 'a'")
 			}
 			if n := s.ReservationCount(); n != 0 {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
@@ -1401,7 +1398,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			store0.ForceReplicationScanAndProcess()
 
-			replicas := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
+			replicas := store0.LookupReplica(roachpb.RKey("a")).Desc().Replicas
 			if len(replicas) < numReplicas {
 				return errors.Errorf("initial replication: expected len(replicas) = %d, got %+v", numReplicas, replicas)
 			}
@@ -1423,7 +1420,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 
 		var corruptRep roachpb.ReplicaDescriptor
 		testutils.SucceedsSoon(t, func() error {
-			r := corrupt.store.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+			r := corrupt.store.LookupReplica(roachpb.RKey("a"))
 			if r == nil {
 				return errors.New("replica is not available yet")
 			}
@@ -1459,7 +1456,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			store0.ForceReplicationScanAndProcess()
 			// Should be removed from the corrupt store.
-			replicas := store0.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b")).Desc().Replicas
+			replicas := store0.LookupReplica(roachpb.RKey("a")).Desc().Replicas
 			for _, rep := range replicas {
 				if rep == corruptRep {
 					return errors.Errorf("expected corrupt replica %+v to be removed from %+v", rep, replicas)
@@ -1559,9 +1556,9 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		r := mtc.stores[1].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+		r := mtc.stores[1].LookupReplica(roachpb.RKey("a"))
 		if r == nil {
-			return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+			return errors.Errorf(`expected replica for key "a"`)
 		}
 		return nil
 	})
@@ -1599,9 +1596,9 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
 				before, after)
 		}
-		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"))
 		if r == nil {
-			return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+			return errors.Errorf(`expected replica for key "a"`)
 		}
 		return nil
 	})
@@ -1874,7 +1871,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		inc1 + inc2 + inc3,
 	}))
 
-	desc := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).Desc()
+	desc := mtc.stores[0].LookupReplica(roachpb.RKeyMin).Desc()
 	replicaIDsByStore := map[roachpb.StoreID]roachpb.ReplicaID{}
 	for _, rep := range desc.Replicas {
 		replicaIDsByStore[rep.StoreID] = rep.ReplicaID
@@ -2289,7 +2286,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rangeID2 := store0.LookupReplica(roachpb.RKey(key), nil).RangeID
+	rangeID2 := store0.LookupReplica(roachpb.RKey(key)).RangeID
 	if rangeID2 == rangeID {
 		t.Fatal("got same range id after split")
 	}
@@ -2303,7 +2300,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Now add the second replica.
 	mtc.replicateRange(rangeID2, 1)
 
-	if mtc.stores[1].LookupReplica(roachpb.RKey(key), nil).GetMaxBytes() == 0 {
+	if mtc.stores[1].LookupReplica(roachpb.RKey(key)).GetMaxBytes() == 0 {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
@@ -2361,7 +2358,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
+			replica2 := store0.LookupReplica(roachpb.RKey(key2))
 
 			rg2 := func(s *storage.Store) client.Sender {
 				return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
@@ -2776,7 +2773,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
 	// cluster leaving an extra store available as a replication target once the
 	// replica on the dead node is removed.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
 	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
@@ -2827,7 +2824,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
 	// cluster leaving an extra store available as a replication target once the
 	// replica on the dead node is removed.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(replica.RangeID, 1, 3)
 
 	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
@@ -3279,7 +3276,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	replica := mtc.stores[0].LookupReplica(splitKeyAddr, nil)
+	replica := mtc.stores[0].LookupReplica(splitKeyAddr)
 	if replica == nil {
 		t.Fatalf("lookup replica at key %q returned nil", splitKey)
 	}
@@ -3507,7 +3504,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 	}
 
-	repl0 := store0.LookupReplica(keys.MustAddr(key), nil)
+	repl0 := store0.LookupReplica(keys.MustAddr(key))
 	if repl0 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
@@ -3517,7 +3514,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	}
 	mtc.replicateRange(repl0.RangeID, 1, 2)
 
-	repl1 := store1.LookupReplica(keys.MustAddr(key), nil)
+	repl1 := store1.LookupReplica(keys.MustAddr(key))
 	if repl1 == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
@@ -3746,7 +3743,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey), nil)
+	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
 	if repl == nil {
 		t.Fatal("replica should not be nil for RHS range")
 	}
@@ -3758,7 +3755,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 
 	// Get replica from the store which isn't the leaseholder.
 	storeIdx := int(lease.Replica.StoreID) % len(mtc.stores)
-	if repl = mtc.stores[storeIdx].LookupReplica(roachpb.RKey(splitKey), nil); repl == nil {
+	if repl = mtc.stores[storeIdx].LookupReplica(roachpb.RKey(splitKey)); repl == nil {
 		t.Fatal("replica should not be nil for RHS range")
 	}
 

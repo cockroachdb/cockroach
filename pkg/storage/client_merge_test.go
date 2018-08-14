@@ -69,8 +69,8 @@ func createSplitRanges(
 		return nil, nil, err.GoError()
 	}
 
-	lhsDesc := store.LookupReplica(roachpb.RKey("a"), nil).Desc()
-	rhsDesc := store.LookupReplica(roachpb.RKey("c"), nil).Desc()
+	lhsDesc := store.LookupReplica(roachpb.RKey("a")).Desc()
+	rhsDesc := store.LookupReplica(roachpb.RKey("c")).Desc()
 
 	if bytes.Equal(lhsDesc.StartKey, rhsDesc.StartKey) {
 		return nil, nil, fmt.Errorf("split ranges have the same start key: %q = %q",
@@ -104,8 +104,8 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	lhsRepl := store.LookupReplica(roachpb.RKey("a"), nil)
-	rhsRepl := store.LookupReplica(roachpb.RKey("c"), nil)
+	lhsRepl := store.LookupReplica(roachpb.RKey("a"))
+	rhsRepl := store.LookupReplica(roachpb.RKey("c"))
 
 	if !reflect.DeepEqual(lhsRepl, rhsRepl) {
 		t.Fatalf("ranges were not merged: %s != %s", lhsRepl, rhsRepl)
@@ -303,8 +303,8 @@ func mergeWithData(t *testing.T, retries int64) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	lhsRepl := store1.LookupReplica(roachpb.RKey("a"), nil)
-	rhsRepl := store1.LookupReplica(roachpb.RKey("c"), nil)
+	lhsRepl := store1.LookupReplica(roachpb.RKey("a"))
+	rhsRepl := store1.LookupReplica(roachpb.RKey("c"))
 
 	if lhsRepl != rhsRepl {
 		t.Fatalf("ranges were not merged %+v=%+v", lhsRepl.Desc(), rhsRepl.Desc())
@@ -566,7 +566,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	if _, err := client.SendWrapped(ctx, store.TestSender(), args); err != nil {
 		t.Fatal(err)
 	}
-	replMerged := store.LookupReplica(lhsDesc.StartKey, nil)
+	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
@@ -1400,7 +1400,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		repls = nil
 		for _, key := range keys {
-			repl := store2.LookupReplica(key, nil /* end */)
+			repl := store2.LookupReplica(key) /* end */
 			if repl == nil || !repl.Desc().StartKey.Equal(key) {
 				return fmt.Errorf("replica for key %q is missing or has wrong start key: %s", key, repl)
 			}
@@ -1560,8 +1560,8 @@ func TestMergeQueue(t *testing.T) {
 	split(t, roachpb.Key("a"))
 	split(t, roachpb.Key("b"))
 	split(t, roachpb.Key("c"))
-	lhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("a"), nil) }
-	rhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("b"), nil) }
+	lhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("a")) }
+	rhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("b")) }
 	lhsDesc := lhs().Desc()
 	rhsDesc := rhs().Desc()
 
@@ -1591,7 +1591,7 @@ func TestMergeQueue(t *testing.T) {
 
 	verifyMerged := func(t *testing.T) {
 		t.Helper()
-		repl := store.LookupReplica(rhsDesc.StartKey, nil)
+		repl := store.LookupReplica(rhsDesc.StartKey)
 		if !repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
 			t.Fatalf("ranges unexpectedly unmerged")
 		}
@@ -1599,7 +1599,7 @@ func TestMergeQueue(t *testing.T) {
 
 	verifyUnmerged := func(t *testing.T) {
 		t.Helper()
-		repl := store.LookupReplica(rhsDesc.StartKey, nil)
+		repl := store.LookupReplica(rhsDesc.StartKey)
 		if repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
 			t.Fatalf("ranges unexpectedly merged")
 		}
