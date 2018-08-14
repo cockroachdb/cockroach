@@ -1199,13 +1199,13 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
+func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) AggregateFunc {
 	if node.fn == nil || node.fn.AggregateFunc == nil {
 		return nil
 	}
-	return func(evalCtx *EvalContext) AggregateFunc {
+	return func(evalCtx *EvalContext, arguments Datums) AggregateFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types, evalCtx)
+		return node.fn.AggregateFunc(types, evalCtx, arguments)
 	}
 }
 
