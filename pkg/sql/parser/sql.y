@@ -1632,6 +1632,10 @@ import_format:
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
+// IMPORT [ TABLE <tablename> FROM ]
+//        <format> ( <datafile> )
+//        [ WITH <option> [= <value>] [, ...] ]
+//
 // IMPORT TABLE <tablename>
 //        { ( <elements> ) | CREATE USING <schemafile> }
 //        <format>

@@ -33,6 +33,7 @@ func (node *Import) Format(ctx *FmtCtx) {
 
 	if node.Bundle {
 		if node.Table.TableNameReference != nil {
+			ctx.WriteString("TABLE ")
 			ctx.FormatNode(&node.Table)
 			ctx.WriteString(" FROM ")
 		}
