@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -85,11 +84,10 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	lhsDesc, _, err := createSplitRanges(ctx, store)
 	if err != nil {
@@ -124,11 +122,10 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	scan := func() map[string]struct{} {
 		t.Helper()
@@ -385,11 +382,10 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// Merge last range.
 	_, pErr := client.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.KeyMin))
@@ -420,9 +416,10 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 		return nil
 	}
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 	kvDB := store.DB()
 
 	if err := kvDB.Put(ctx, "aa", "val"); err != nil {
@@ -490,12 +487,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
-	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	mtc := &multiTestContext{}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
@@ -552,14 +547,14 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, lhsDesc, msA, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, lhsDesc, msA, mtc.manualClock.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range A's stats before split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, rhsDesc, msB, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, rhsDesc, msB, mtc.manualClock.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range B's stats before split: %v", err)
 	}
 
-	manual.Increment(100)
+	mtc.manualClock.Increment(100)
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
@@ -577,7 +572,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, mtc.manualClock.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
@@ -1700,11 +1695,10 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// A GetSnapshotForMerge request that succeeds when it shouldn't will wedge a
 	// store because it waits for a merge that is not actually in progress. Set a
@@ -1765,11 +1759,10 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(b, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(b, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	if err != nil {
