@@ -1018,6 +1018,7 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' MYSQLOUTFILE DATA ('path/to/some/file', $1)`},
 		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
+		{`IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal:///some/file') WITH temp = 'path/to/temp'`},
 		{`EXPORT INTO CSV 'a' FROM TABLE a`},
 		{`EXPORT INTO CSV 'a' FROM SELECT * FROM a`},
 		{`EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a`},
