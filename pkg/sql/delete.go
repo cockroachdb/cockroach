@@ -348,8 +348,9 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
-
 	// If there are no interleaved tables then don't take the fast path.
+	// Otherwise, the modifications that the delete node would do to the spans would result in
+	// errant behavior.
 	hasInterleaved := false
 	for _, idx := range table.AllNonDropIndexes() {
 		if len(idx.InterleavedBy) > 0 {
@@ -361,18 +362,14 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 		return false
 	}
 
-	// contains all table IDs that are directly or indirectly interleaved into `table`,
-	// including `table` itself
-	interleavedQueue := []sqlbase.ID{table.ID}
-
 	// if the base table is interleaved in another table, fail
 	for _, idx := range fkTables[table.ID].Table.AllNonDropIndexes() {
 		if len(idx.Interleave.Ancestors) > 0 {
-			log.Warning(context.TODO(), "Base table is interleaved in another one")
 			return false
 		}
 	}
 
+	interleavedQueue := []sqlbase.ID{table.ID}
 	for len(interleavedQueue) > 0 {
 		tableID := interleavedQueue[0]
 		interleavedQueue = interleavedQueue[1:]
@@ -392,13 +389,11 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 			// interleavedIdxs will contain all of the table and index IDs of the indexes interleaved in this one
 			interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
 			for _, ref := range idx.InterleavedBy {
-
 				if _, ok := interleavedIdxs[ref.Table]; !ok {
 					interleavedIdxs[ref.Table] = make(map[sqlbase.IndexID]struct{})
 				}
 				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
 
-				// Append the next tables to inspect to the queue
 			}
 			// The index can't be referenced by anything that's not the interleaved relationship
 			for _, ref := range idx.ReferencedBy {
@@ -426,7 +421,6 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 
 		}
 	}
-
 	return true
 }
 

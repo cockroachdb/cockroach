@@ -53,14 +53,6 @@ CREATE TABLE IF NOT EXISTS sibling(
   FOREIGN KEY(pid) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE
 ) INTERLEAVE IN PARENT parent(pid)
 `,
-		`childNoCascade`: `
-CREATE TABLE IF NOT EXISTS childNoCascade(
-  pid INT,
-  id INT,
-  PRIMARY KEY (pid, id),
-  FOREIGN KEY(pid) REFERENCES parent(id) ON DELETE NO ACTION
-) INTERLEAVE IN PARENT parent(pid)
-`,
 		`grandchild`: `
 CREATE TABLE IF NOT EXISTS grandchild(
     gid INT,
@@ -159,7 +151,6 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 	t.Run("canDeleteFastInterleaved, two children", testCheck(true, "parent", "child", "grandchild"))
 	t.Run("canDeleteFastInterleaved, one child, external ref", testCheck(false, "parent", "child", "external_ref"))
 	t.Run("canDeleteFastInterleaved, one child with a secondary index", testCheck(false, "parent", "child_with_index"))
-	//t.Run("canDeleteFastInterleaved, two children", testCheck(false, "parent", "childNoCascade")) // turning this on returns a "panic: missing table" triggered by trying to get the table descriptor for childNoCascade.
 }
 
 func TestInterleavedFastDeleteRestorable(t *testing.T) {
