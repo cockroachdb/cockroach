@@ -639,6 +639,10 @@ DBString DBGetCompactionStats(DBEngine* db) { return db->GetCompactionStats(); }
 
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats) { return db->GetEnvStats(stats); }
 
+DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result) {
+  return db->GetEncryptionRegistries(result);
+}
+
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }

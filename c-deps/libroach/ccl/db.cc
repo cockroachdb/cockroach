@@ -58,6 +58,23 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     return rocksdb::Status::OK();
   }
 
+  virtual rocksdb::Status GetEncryptionRegistry(std::string* serialized_registry) override {
+    if (data_key_manager_ == nullptr) {
+      return rocksdb::Status::OK();
+    }
+
+    auto key_registry = data_key_manager_->GetScrubbedRegistry();
+    if (key_registry == nullptr) {
+      return rocksdb::Status::OK();
+    }
+
+    if (!key_registry->SerializeToString(serialized_registry)) {
+      return rocksdb::Status::InvalidArgument("failed to serialize data keys registry");
+    }
+
+    return rocksdb::Status::OK();
+  }
+
   virtual std::string GetActiveDataKeyID() override {
     // Look up the current data key.
     if (data_key_manager_ == nullptr) {

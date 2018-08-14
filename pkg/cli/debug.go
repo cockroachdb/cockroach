@@ -97,7 +97,9 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
-func openExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engine.RocksDB, error) {
+// OpenExistingStore opens the rocksdb engine rooted at 'dir'.
+// If 'readOnly' is true, opens the store in read-only mode.
+func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -168,7 +170,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -251,7 +253,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -505,7 +507,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -607,7 +609,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -651,7 +653,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -737,7 +739,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -958,7 +960,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, false /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -1017,7 +1019,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -1244,7 +1246,7 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := openExistingStore(args[0], stopper, false /* readOnly */)
+	db, err := OpenExistingStore(args[0], stopper, false /* readOnly */)
 	if err != nil {
 		return err
 	}
@@ -1374,7 +1376,7 @@ func removeDeadReplicas(
 }
 
 func init() {
-	debugCmd.AddCommand(debugCmds...)
+	DebugCmd.AddCommand(debugCmds...)
 
 	f := debugSyncTestCmd.Flags()
 	f.IntVarP(&syncTestOpts.Concurrency, "concurrency", "c", syncTestOpts.Concurrency,
@@ -1389,7 +1391,9 @@ func init() {
 		"list of dead store IDs")
 }
 
-// DebugCmdsForRocksDB lists debug commands that access rocksdb.
+// DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
+// and need encryption flags (injected by CCL code).
+// Note: do NOT include commands that just call rocksdb code without setting up an engine.
 var DebugCmdsForRocksDB = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
@@ -1415,7 +1419,8 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugZipCmd,
 )
 
-var debugCmd = &cobra.Command{
+// DebugCmd is the root of all debug commands. Exported to allow modification by CCL code.
+var DebugCmd = &cobra.Command{
 	Use:   "debug [command]",
 	Short: "debugging commands",
 	Long: `Various commands for debugging.
