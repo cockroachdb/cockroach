@@ -13,10 +13,10 @@
 // permissions and limitations under the License.
 
 #include "snapshot.h"
+#include "encoding.h"
 #include "getter.h"
 #include "iterator.h"
 #include "status.h"
-#include "encoding.h"
 
 namespace cockroach {
 
@@ -56,6 +56,10 @@ DBString DBSnapshot::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBSnapshot::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBSnapshot::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
 }
@@ -80,6 +84,8 @@ DBStatus DBSnapshot::EnvDeleteFile(DBSlice path) { return FmtStatus("unsupported
 
 DBStatus DBSnapshot::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsupported"); }
 
-DBStatus DBSnapshot::EnvLinkFile(DBSlice oldname, DBSlice newname) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvLinkFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
 
 }  // namespace cockroach

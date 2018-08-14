@@ -173,7 +173,7 @@ std::string StoreKeyInfoSummary(const enginepbccl::KeyInfo& info) {
   if (info.encryption_type() == enginepbccl::Plaintext) {
     return "plain";
   }
-  return fmt::StringPrintf("ID: %s, Type: %s, Source: %s", info.key_id().substr(0, 8).c_str(),
+  return fmt::StringPrintf("ID: %s, Type: %s, Source: %s", info.key_id().c_str(),
                            AlgorithmEnumToString(info.encryption_type()).c_str(),
                            info.source().c_str());
 }
@@ -182,10 +182,9 @@ std::string DataKeyInfoSummary(const enginepbccl::KeyInfo& info) {
   if (info.encryption_type() == enginepbccl::Plaintext) {
     return "plain";
   }
-  return fmt::StringPrintf("ID: %s, Type: %s, Parent Key ID: %s",
-                           info.key_id().substr(0, 8).c_str(),
+  return fmt::StringPrintf("ID: %s, Type: %s, Parent Key ID: %s", info.key_id().c_str(),
                            AlgorithmEnumToString(info.encryption_type()).c_str(),
-                           info.parent_key_id().substr(0, 8).c_str());
+                           info.parent_key_id().c_str());
 }
 
 };  // namespace KeyManagerUtils
@@ -349,6 +348,22 @@ std::unique_ptr<enginepbccl::KeyInfo> DataKeyManager::GetActiveStoreKeyInfo() {
   // Any modification of the registry should have called Validate.
   assert(iter != registry_->store_keys().cend());
   return std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(iter->second));
+}
+
+std::unique_ptr<enginepbccl::DataKeysRegistry> DataKeyManager::GetScrubbedRegistry() const {
+  std::unique_lock<std::mutex> l(mu_);
+  if (registry_ == nullptr) {
+    return nullptr;
+  }
+
+  auto new_registry =
+      std::unique_ptr<enginepbccl::DataKeysRegistry>(new enginepbccl::DataKeysRegistry(*registry_));
+  auto keys = new_registry->mutable_data_keys();
+  for (auto key_iter = keys->begin(); key_iter != keys->end(); ++key_iter) {
+    key_iter->second.clear_key();
+  }
+
+  return new_registry;
 }
 
 rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {

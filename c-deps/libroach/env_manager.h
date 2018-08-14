@@ -25,7 +25,10 @@ class EnvStatsHandler {
  public:
   virtual ~EnvStatsHandler() {}
 
+  // Get serialized encryption stats.
   virtual rocksdb::Status GetEncryptionStats(std::string* stats) = 0;
+  // Get a serialized encryption registry (scrubbed of key contents).
+  virtual rocksdb::Status GetEncryptionRegistry(std::string* registry) = 0;
   // Get the ID of the active data key, or "plain" if none.
   virtual std::string GetActiveDataKeyID() = 0;
   // Get the key ID in use by this file, or "plain" if none.

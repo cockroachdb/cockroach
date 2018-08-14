@@ -216,6 +216,23 @@ TEST_F(CCLTest, EncryptionStats) {
     EXPECT_EQ(stats.total_files, stats.active_key_files);
     EXPECT_EQ(stats.total_bytes, stats.active_key_bytes);
 
+    // Fetch registries and parse.
+    DBEncryptionRegistries result;
+    EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
+
+    enginepbccl::DataKeysRegistry key_registry;
+    ASSERT_TRUE(key_registry.ParseFromArray(result.key_registry.data, result.key_registry.len));
+
+    enginepb::FileRegistry file_registry;
+    ASSERT_TRUE(file_registry.ParseFromArray(result.file_registry.data, result.file_registry.len));
+
+    // Check some registry contents.
+    EXPECT_STREQ(key_registry.active_store_key_id().c_str(), "plain");
+    EXPECT_STREQ(key_registry.active_data_key_id().c_str(), "plain");
+    EXPECT_GT(key_registry.store_keys().size(), 0);
+    EXPECT_GT(key_registry.data_keys().size(), 0);
+    EXPECT_GT(file_registry.files().size(), 0);
+
     DBClose(db);
   }
 
@@ -279,6 +296,34 @@ TEST_F(CCLTest, EncryptionStats) {
     // the time we first saw the store key, not the second start.
     EXPECT_EQ(enc_status2.active_store_key().creation_time(),
               enc_status.active_store_key().creation_time());
+
+    // Fetch registries and parse.
+    DBEncryptionRegistries result;
+    EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
+
+    enginepbccl::DataKeysRegistry key_registry;
+    ASSERT_TRUE(key_registry.ParseFromArray(result.key_registry.data, result.key_registry.len));
+
+    enginepb::FileRegistry file_registry;
+    ASSERT_TRUE(file_registry.ParseFromArray(result.file_registry.data, result.file_registry.len));
+
+    // Check some registry contents.
+    EXPECT_STRNE(key_registry.active_store_key_id().c_str(), "plain");
+    EXPECT_STRNE(key_registry.active_data_key_id().c_str(), "plain");
+
+    auto iter = key_registry.data_keys().find(key_registry.active_data_key_id());
+    ASSERT_NE(iter, key_registry.data_keys().end());
+    // Make sure the key data was cleared.
+    EXPECT_STREQ(iter->second.key().c_str(), "");
+    EXPECT_EQ(iter->second.info().encryption_type(), enginepbccl::AES128_CTR);
+
+    auto iter2 = key_registry.store_keys().find(key_registry.active_store_key_id());
+    ASSERT_NE(iter2, key_registry.store_keys().end());
+    EXPECT_EQ(iter2->second.encryption_type(), enginepbccl::AES128_CTR);
+
+    EXPECT_GT(key_registry.store_keys().size(), 0);
+    EXPECT_GT(key_registry.data_keys().size(), 0);
+    EXPECT_GT(file_registry.files().size(), 0);
 
     DBClose(db);
   }
