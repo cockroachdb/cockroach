@@ -3105,14 +3105,22 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
 ) PlanningCtx {
-	planCtx := PlanningCtx{
-		ctx:             ctx,
-		ExtendedEvalCtx: evalCtx,
-		spanIter:        dsp.spanResolver.NewSpanResolverIterator(txn),
-		NodeAddresses:   make(map[roachpb.NodeID]string),
-	}
+	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
+	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
+	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
 	planCtx.NodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
 	return planCtx
+}
+
+// newLocalPlanningCtx is a lightweight version of NewPlanningCtx that can be
+// used when the caller knows plans will only be run on one node.
+func (dsp *DistSQLPlanner) newLocalPlanningCtx(
+	ctx context.Context, evalCtx *extendedEvalContext,
+) PlanningCtx {
+	return PlanningCtx{
+		ctx:             ctx,
+		ExtendedEvalCtx: evalCtx,
+	}
 }
 
 // FinalizePlan adds a final "result" stage if necessary and populates the
