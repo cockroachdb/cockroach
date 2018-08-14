@@ -28,13 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
 var sstOutputTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_INT},
+	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
@@ -213,14 +214,19 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						}
 					}
 
+					countsBytes, err := protoutil.Marshal(&sst.counts)
+					if err != nil {
+						return err
+					}
+
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
 							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-							tree.NewDInt(tree.DInt(len(sst.data))),
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
 							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
@@ -300,10 +306,11 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 type sstContent struct {
-	data []byte
-	size int64
-	span roachpb.Span
-	more bool
+	data   []byte
+	size   int64
+	span   roachpb.Span
+	more   bool
+	counts roachpb.BulkOpSummary
 }
 
 const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
@@ -327,12 +334,14 @@ func makeSSTs(
 	}
 	defer sst.Close()
 
+	var counts storageccl.RowCounter
 	var writtenKVs int
 	writeSST := func(key, endKey roachpb.Key, more bool) error {
 		data, err := sst.Finish()
 		if err != nil {
 			return err
 		}
+		counts.BulkOpSummary.DataSize = sst.DataSize
 		sc := sstContent{
 			data: data,
 			size: sst.DataSize,
@@ -340,13 +349,16 @@ func makeSSTs(
 				Key:    key,
 				EndKey: endKey,
 			},
-			more: more,
+			more:   more,
+			counts: counts.BulkOpSummary,
 		}
+
 		select {
 		case contentCh <- sc:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		counts.Reset()
 		sst.Close()
 		if progressFn != nil {
 			if err := progressFn(writtenKVs); err != nil {
@@ -410,9 +422,14 @@ func makeSSTs(
 				defer sst.Close()
 			}
 		}
+
 		if err := sst.Add(kv); err != nil {
 			return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
+		if err := counts.Count(kv.Key.Key); err != nil {
+			return errors.Wrapf(err, "failed to count key")
+		}
+
 		if sst.DataSize > sstMaxSize && lastKey == nil {
 			// When we would like to split the file, proceed until we aren't in the
 			// middle of a row. Start by finding the next safe split key.
@@ -423,6 +440,7 @@ func makeSSTs(
 			lastKey = lastKey.PrefixEnd()
 		}
 	}
+
 	if sst.DataSize > 0 {
 		// Although we don't need to avoid row splitting here because there aren't any
 		// more keys to read, we do still want to produce the same kind of lastKey

@@ -39,12 +39,16 @@ func declareKeysExport(
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
-type rowCounter struct {
+// RowCounter is a helper that counts how many distinct rows appear in the KVs
+// that is is shown via `Count`.
+type RowCounter struct {
 	prev roachpb.Key
 	roachpb.BulkOpSummary
 }
 
-func (r *rowCounter) count(key roachpb.Key) error {
+// Count examines each key passed to it and increments the running count when it
+// sees a key that belongs to a new row.
+func (r *RowCounter) Count(key roachpb.Key) error {
 	// EnsureSafeSplitKey is usually used to avoid splitting a row across ranges,
 	// by returning the row's key prefix.
 	// We reuse it here to count "rows" by counting when it changes.
@@ -152,7 +156,7 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	var rows rowCounter
+	var rows RowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
@@ -183,7 +187,7 @@ func evalExport(
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
 
-		if err := rows.count(iter.UnsafeKey().Key); err != nil {
+		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
 			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {

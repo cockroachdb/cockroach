@@ -381,12 +381,12 @@ func LoadCSV(
 		firstStageRouters[i] = pIdx
 	}
 
-	// The SST Writer returns 5 columns: name of the file, size of the file,
+	// The SST Writer returns 5 columns: name of the file, encoded BulkOpSummary,
 	// checksum, start key, end key.
 	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
 	p.ResultTypes = []sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_INT},
+		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,
