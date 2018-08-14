@@ -38,6 +38,7 @@ import (
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := s.(*server.TestServer)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -115,11 +116,7 @@ func TestLogSplits(t *testing.T) {
 		t.Fatal(rows.Err())
 	}
 
-	// This code assumes that there is only one TestServer, and thus that
-	// StoreID 1 is present on the testserver. If this assumption changes in the
-	// future, *any* store will work, but a new method will need to be added to
-	// Stores (or a creative usage of VisitStores could suffice).
-	store, pErr := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -144,6 +141,97 @@ func TestLogSplits(t *testing.T) {
 		if count != 0 {
 			t.Fatalf("found %d uniqueIDs with a zero node ID", count)
 		}
+	}
+}
+
+func TestLogMerges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.(*server.TestServer)
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	countRangeLogMerges := func() int {
+		var count int
+		err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
+			storage.RangeLogEventType_merge.String()).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	// No ranges should have merged immediately after startup.
+	if n := countRangeLogMerges(); n != 0 {
+		t.Fatalf("expected 0 initial merges, but got %d", n)
+	}
+	if n := store.Metrics().RangeMerges.Count(); n != 0 {
+		t.Errorf("expected 0 initial merges, but got %d", n)
+	}
+
+	// Create two ranges, then merge them.
+	if err := kvDB.AdminSplit(ctx, "a", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminSplit(ctx, "b", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.AdminMerge(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := countRangeLogMerges(); n != 1 {
+		t.Fatalf("expected 1 merge, but got %d", n)
+	}
+	if n := store.Metrics().RangeMerges.Count(); n != 1 {
+		t.Errorf("expected 1 merge, but got %d", n)
+	}
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
+		storage.RangeLogEventType_merge.String(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var rangeID int64
+		var otherRangeID gosql.NullInt64
+		var infoStr gosql.NullString
+		if err := rows.Scan(&rangeID, &otherRangeID, &infoStr); err != nil {
+			t.Fatal(err)
+		}
+
+		if !otherRangeID.Valid {
+			t.Errorf("otherRangeID not recorded for merge of range %d", rangeID)
+		}
+		if otherRangeID.Int64 <= rangeID {
+			t.Errorf("otherRangeID %d is not greater than rangeID %d", otherRangeID.Int64, rangeID)
+		}
+		if !infoStr.Valid {
+			t.Errorf("info not recorded for merge of range %d", rangeID)
+		}
+		var info storage.RangeLogEvent_Info
+		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
+			t.Errorf("error unmarshalling info string for merge of range %d: %s", rangeID, err)
+			continue
+		}
+		if int64(info.UpdatedDesc.RangeID) != rangeID {
+			t.Errorf("recorded wrong updated descriptor %s for merge of range %d", info.UpdatedDesc, rangeID)
+		}
+		if int64(info.RemovedDesc.RangeID) != otherRangeID.Int64 {
+			t.Errorf("recorded wrong new descriptor %s for merge of range %d", info.RemovedDesc, rangeID)
+		}
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
 	}
 }
 
