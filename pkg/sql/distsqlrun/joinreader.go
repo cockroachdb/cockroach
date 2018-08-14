@@ -193,6 +193,7 @@ func newJoinReader(
 		_, _, err = initRowFetcher(
 			jr.primaryFetcher, &jr.desc, 0 /* indexIdx */, jr.colIdxMap, false, /* reverse */
 			jr.neededRightCols(), false /* isCheck */, &jr.alloc,
+			ScanVisibility_PUBLIC,
 		)
 		if err != nil {
 			return nil, err
@@ -211,6 +212,7 @@ func newJoinReader(
 	_, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		neededIndexColumns, false /* isCheck */, &jr.alloc,
+		ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return nil, err
