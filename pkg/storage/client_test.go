@@ -179,7 +179,7 @@ func createTestStoreWithEngine(
 }
 
 type multiTestContext struct {
-	t           *testing.T
+	t           testing.TB
 	storeConfig *storage.StoreConfig
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
@@ -231,7 +231,7 @@ func (m *multiTestContext) getNodeIDAddress(nodeID roachpb.NodeID) (net.Addr, er
 	return nil, errors.Errorf("unknown peer %d", nodeID)
 }
 
-func (m *multiTestContext) Start(t *testing.T, numStores int) {
+func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	{
 		// Only the fields we nil out below can be injected into m as it
 		// starts up, so fail early if anything else was set (as we'd likely
