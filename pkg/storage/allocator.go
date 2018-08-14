@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -130,20 +129,38 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	constraints     []config.Constraints
-	aliveStoreCount int
+	constraints      []config.Constraints
+	existingReplicas int
+	aliveStores      int
+	throttledStores  int
 }
 
 func (ae *allocatorError) Error() string {
-	var auxInfo string
-	// Whenever the likely problem is not having enough nodes up, make the
-	// message really clear.
-	if len(ae.constraints) == 0 {
-		auxInfo = "; likely not enough nodes in cluster"
+	var existingReplsStr string
+	if ae.existingReplicas == 1 {
+		existingReplsStr = "1 already has a replica"
+	} else {
+		existingReplsStr = fmt.Sprintf("%d already have a replica", ae.existingReplicas)
 	}
-	return fmt.Sprintf("0 of %d store%s with attributes matching %v%s",
-		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
-		ae.constraints, auxInfo)
+
+	var baseMsg string
+	if ae.throttledStores != 0 {
+		baseMsg = fmt.Sprintf(
+			"0 of %d live stores are able to take a new replica for the range (%d throttled, %s)",
+			ae.aliveStores, ae.throttledStores, existingReplsStr)
+	} else {
+		baseMsg = fmt.Sprintf(
+			"0 of %d live stores are able to take a new replica for the range (%s)",
+			ae.aliveStores, existingReplsStr)
+	}
+
+	if len(ae.constraints) == 0 {
+		if ae.throttledStores > 0 {
+			return baseMsg
+		}
+		return baseMsg + "; likely not enough nodes in cluster"
+	}
+	return fmt.Sprintf("%s; must match constraints %v", baseMsg, ae.constraints)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
@@ -368,8 +385,10 @@ func (a *Allocator) AllocateTarget(
 		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 	return nil, "", &allocatorError{
-		constraints:     zone.Constraints,
-		aliveStoreCount: aliveStoreCount,
+		constraints:      zone.Constraints,
+		existingReplicas: len(existing),
+		aliveStores:      aliveStoreCount,
+		throttledStores:  throttledStoreCount,
 	}
 }
 
