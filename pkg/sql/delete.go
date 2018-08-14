@@ -180,6 +180,8 @@ type deleteRun struct {
 	// completion during startExec.
 	fastPath bool
 
+	fastPathRowFetcher sqlbase.RowFetcher
+
 	// fastPathInterleaved
 	fastPathInterleaved bool
 
@@ -347,7 +349,10 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
-func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
+func canDeleteFastInterleaved(
+	table TableDescriptor,
+	fkTables sqlbase.TableLookupsByID,
+) bool {
 
 	// If there are no interleaved tables then don't take the fast path.
 	hasInterleaved := false
@@ -423,7 +428,6 @@ func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLooku
 			for _, ref := range idx.InterleavedBy {
 				interleavedQueue = append(interleavedQueue, ref.Table)
 			}
-
 		}
 	}
 
@@ -492,13 +496,16 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode, interleavedFas
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
+	var err error
 	if interleavedFastPath {
 		for i, span := range scan.spans {
 			span.EndKey = span.EndKey.PrefixEnd()
 			scan.spans[i] = span
 		}
+		d.run.rowCount, err = d.run.td.fastDeleteInterleaved(
+			params.ctx, scan, d.run.autoCommit, d.run.traceKV)
+		return err
 	}
-	var err error
 	d.run.rowCount, err = d.run.td.fastDelete(
 		params.ctx, scan, d.run.autoCommit, d.run.traceKV)
 	return err

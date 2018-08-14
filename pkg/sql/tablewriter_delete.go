@@ -91,6 +91,62 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 	return true
 }
 
+func (td *tableDeleter) fastDeleteInterleaved(
+	ctx context.Context, scan *scanNode, autoCommit autoCommitOpt, traceKV bool,
+) (rowCount int, err error) {
+	var req roachpb.BatchRequest
+	for _, span := range scan.spans {
+		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+	}
+	br, roachErr := td.txn.Send(ctx, req)
+	if roachErr != nil {
+		return 0, roachErr.GoError()
+	}
+	for _, resp := range br.Responses {
+		kvs := resp.GetInner().(*roachpb.ScanResponse).Rows
+		for _, kv := range kvs {
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", kv.Key)
+			}
+			td.b.Del(kv.Key)
+		}
+	}
+
+	_, err = td.finalize(ctx, autoCommit, traceKV)
+	if err != nil {
+		return 0, err
+	}
+	log.Warningf(ctx, "result of final delete batch: length %d", len(td.b.Results))
+	for _, r := range td.b.Results {
+		var prev []byte
+		for _, kv := range r.Rows {
+			i := kv.Key
+			// If prefix is same, don't bother decoding key.
+			log.Warningf(ctx, "prev: %s, key: %s", prev, i)
+			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
+				continue
+			}
+
+			after, _, err := scan.run.fetcher.ReadIndexKey(i)
+			log.Warningf(ctx, "after: %s", after)
+			if err != nil {
+				return 0, err
+			}
+			/*if !ok {
+				return 0, errors.Errorf("key did not match descriptor")
+			}*/
+			k := i[:len(i)-len(after)]
+			if !bytes.Equal(k, prev) {
+				prev = k
+				rowCount++
+			}
+		}
+	}
+
+	td.b = nil
+	return rowCount, nil
+}
+
 // fastDelete adds to the batch the kv operations necessary to delete sql rows
 // without knowing the values that are currently present. fastDelete calls
 // finalize, so it should not be called after.

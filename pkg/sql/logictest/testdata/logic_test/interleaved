@@ -467,11 +467,27 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 flow              Scan /Table/77/1/{5-7/#}
 dist sender send  querying next range at /Table/77/1/5
 dist sender send  r1: sending batch 1 Scan to (n1,s1):1
-flow              DelRange /Table/77/1/5 - /Table/77/1/7/NULL
 dist sender send  querying next range at /Table/77/1/5
-dist sender send  r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+flow              Del /Table/77/1/5/0
+flow              Del /Table/77/1/5/#/78/1/1/0
+flow              Del /Table/77/1/5/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/5/#/78/1/2/0
+flow              Del /Table/77/1/5/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/6/0
+flow              Del /Table/77/1/6/#/78/1/1/0
+flow              Del /Table/77/1/6/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/6/#/78/1/2/0
+flow              Del /Table/77/1/6/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/7/0
+flow              Del /Table/77/1/7/#/78/1/1/0
+flow              Del /Table/77/1/7/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/7/#/78/1/2/0
+flow              Del /Table/77/1/7/#/78/1/2/#/79/1/1/0
+dist sender send  querying next range at /Table/77/1/5/0
+dist sender send  r1: sending batch 15 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 flow              fast path completed
-sql txn           rows affected: 3
+sql txn           rows affected: 15
 
 query II colnames
 select * from b order by a_id, b_id
@@ -512,11 +528,37 @@ select operation, message FROM [SHOW KV TRACE FOR SESSION]
 flow              Scan /Table/77/{1-2}
 dist sender send  querying next range at /Table/77/1
 dist sender send  r1: sending batch 1 Scan to (n1,s1):1
-flow              DelRange /Table/77/1 - /Table/77/3
 dist sender send  querying next range at /Table/77/1
-dist sender send  r1: sending batch 1 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+dist sender send  r1: sending batch 1 Scan to (n1,s1):1
+flow              Del /Table/77/1/3/0
+flow              Del /Table/77/1/3/#/78/1/1/0
+flow              Del /Table/77/1/3/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/3/#/78/1/2/0
+flow              Del /Table/77/1/3/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/4/0
+flow              Del /Table/77/1/4/#/78/1/1/0
+flow              Del /Table/77/1/4/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/4/#/78/1/2/0
+flow              Del /Table/77/1/4/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/8/0
+flow              Del /Table/77/1/8/#/78/1/1/0
+flow              Del /Table/77/1/8/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/8/#/78/1/2/0
+flow              Del /Table/77/1/8/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/9/0
+flow              Del /Table/77/1/9/#/78/1/1/0
+flow              Del /Table/77/1/9/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/9/#/78/1/2/0
+flow              Del /Table/77/1/9/#/78/1/2/#/79/1/1/0
+flow              Del /Table/77/1/10/0
+flow              Del /Table/77/1/10/#/78/1/1/0
+flow              Del /Table/77/1/10/#/78/1/1/#/79/1/1/0
+flow              Del /Table/77/1/10/#/78/1/2/0
+flow              Del /Table/77/1/10/#/78/1/2/#/79/1/1/0
+dist sender send  querying next range at /Table/77/1/3/0
+dist sender send  r1: sending batch 25 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 flow              fast path completed
-sql txn           rows affected: 5
+sql txn           rows affected: 25
 
 query II colnames
 select * from b order by a_id, b_id
