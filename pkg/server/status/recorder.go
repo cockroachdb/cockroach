@@ -285,11 +285,11 @@ func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 // about races with mr.promMu.prometheusExporter. We are not as worried
 // about the extra memory allocations.
 func (mr *MetricsRecorder) ExportToGraphite(
-	ctx context.Context, endpoint string, pm *metric.PrometheusExporter,
+	ctx context.Context, endpoint string, pm *metric.PrometheusExporter, whitelistPath string,
 ) error {
 	mr.scrapeIntoPrometheus(pm)
 	graphiteExporter := metric.MakeGraphiteExporter(pm)
-	return graphiteExporter.Push(ctx, endpoint)
+	return graphiteExporter.Push(ctx, endpoint, whitelistPath)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by

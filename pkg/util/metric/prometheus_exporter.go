@@ -15,8 +15,10 @@
 package metric
 
 import (
+	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -86,6 +88,7 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
 // as it goes, readying the families for another found of registry additions.
 func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 	for _, family := range pm.families {
+		log.Errorf(context.TODO(), "neeral MetricFamily name: %v %d", *family.Name, len(family.Metric))
 		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
 			return err
 		}
