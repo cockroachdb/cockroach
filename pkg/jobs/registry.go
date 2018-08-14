@@ -310,7 +310,6 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	// If we haven't persisted a liveness record within the leniency
 	// interval, we'll cancel all of our jobs.
 	if !liveness.IsLive(r.lenientNow(), r.clock.MaxOffset()) {
-		log.Warning(ctx, "canceling all jobs due to liveness failure")
 		r.cancelAll(ctx)
 		r.mu.epoch = liveness.Epoch
 	}
