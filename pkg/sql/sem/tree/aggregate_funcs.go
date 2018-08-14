@@ -36,4 +36,8 @@ type AggregateFunc interface {
 	// requested during aggregation, and must be called upon completion of the
 	// aggregation.
 	Close(context.Context)
+
+	// Size returns the size of the AggregateFunc implementation in bytes. It does
+	// not account for additional memory used during accumulation.
+	Size() int64
 }
