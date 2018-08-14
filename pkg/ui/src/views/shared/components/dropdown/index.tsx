@@ -49,20 +49,36 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
     );
 
-    return <div className={className}>
-      {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
-      <span
-        className={leftClassName}
-        dangerouslySetInnerHTML={trustIcon(leftArrow)}
-        onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
-      </span>
-      <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
-      <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
-      <span
-        className={rightClassName}
-        dangerouslySetInnerHTML={trustIcon(rightArrow)}
-        onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
-      </span>
-    </div>;
+    return (
+      <div className={className}>
+        {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
+        <span
+          className={leftClassName}
+          dangerouslySetInnerHTML={trustIcon(leftArrow)}
+          onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
+        </span>
+        <Select
+          className="dropdown__select"
+          clearable={false}
+          searchable={false}
+          options={options}
+          value={selected}
+          onChange={onChange}
+          valueRenderer={(selectedOption) => (
+            <div className="dropdown__inner">
+              <span className="dropdown__title">
+                {this.props.title}{this.props.title ? ":" : ""}
+              </span>
+              <span className="dropdown__selectedOption">{selectedOption.label}</span>
+            </div>
+          )}
+        />
+        <span
+          className={rightClassName}
+          dangerouslySetInnerHTML={trustIcon(rightArrow)}
+          onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
+        </span>
+      </div>
+    );
   }
 }

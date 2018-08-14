@@ -3,29 +3,30 @@
 
 $dropdown-hover-color = darken($background-color, 2.5%)
 
+.dropdown__selectedOption
+  color $link-color
+
 .dropdown
-  text-transform uppercase
-  letter-spacing 2px
-  line-height 17px
-  padding 12px 24px
-  vertical-align middle
   border 1px solid $button-border-color
   border-radius 4px
   display inline-flex
-  white-space nowrap
-  padding-right 10px
-  color $body-color
 
-  &:hover
-    background-color $dropdown-hover-color
+  .dropdown__inner
+    text-transform uppercase
+    letter-spacing 2px
+    line-height 17px
+    padding 12px 24px
+    vertical-align middle
+    white-space nowrap
+    padding-right 10px
+    color $body-color
 
   &__title
-    vertical-align middle
-    display inline-block
+    padding-right 10px
+    display inline
 
   &__select
     display inline-block
-    vertical-align middle
 
     &:hover
       background-color $dropdown-hover-color
