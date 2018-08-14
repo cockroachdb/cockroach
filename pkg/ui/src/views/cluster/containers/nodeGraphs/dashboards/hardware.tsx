@@ -141,6 +141,38 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Disk Read Ops"
+      sources={nodeSources}
+    >
+      <Axis units={AxisUnits.Count} label="Read Ops">
+        {nodeIDs.map((nid) => (
+          <Metric
+            name="cr.node.sys.host.disk.read.count"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Disk Write Ops"
+      sources={nodeSources}
+    >
+      <Axis units={AxisUnits.Count} label="Write Ops">
+        {nodeIDs.map((nid) => (
+          <Metric
+            name="cr.node.sys.host.disk.write.count"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Available Disk Capacity"
       sources={storeSources}
     >
