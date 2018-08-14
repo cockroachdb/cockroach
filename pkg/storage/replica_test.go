@@ -951,10 +951,17 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer EnableLeaseHistory(100)()
-	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	var tc testContext
+	cfg := TestStoreConfig(nil)
+	// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
+	// refreshes so that our lease proposal does not risk being rejected
+	// with an AmbiguousResultError.
+	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
+	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	assert := func(actual, min, max int64) error {
 		if actual < min || actual > max {
@@ -1947,10 +1954,17 @@ func TestLeaseConcurrent(t *testing.T) {
 
 	const origMsg = "boom"
 	testutils.RunTrueAndFalse(t, "withError", func(t *testing.T, withError bool) {
-		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
-		tc.Start(t, stopper)
+
+		tc := testContext{manualClock: hlc.NewManualClock(123)}
+		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
+		// refreshes so that our lease proposal does not risk being rejected
+		// with an AmbiguousResultError.
+		cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
+		cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+		tc.StartWithStoreConfig(t, stopper, cfg)
 
 		var wg sync.WaitGroup
 		wg.Add(num)
