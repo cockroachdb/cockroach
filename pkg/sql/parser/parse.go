@@ -25,8 +25,6 @@ package parser
 
 import (
 	"fmt"
-	"go/constant"
-	"go/token"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -69,24 +67,8 @@ func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList
 // for the purpose of formatting and scrubbing.
 func unaryNegation(e tree.Expr) tree.Expr {
 	if cst, ok := e.(*tree.NumVal); ok {
-		// We have a constant. Try to use it. We need to extend the
-		// OrigString to include the negation, as this is what gets
-		// pretty-printed prior to type checking.
-		// If the constant was already negative, we need to introduce
-		// disambiguating parentheses.
-		//
-		// TODO(knz): this could be considered inefficient. Consider using
-		// a linked list of strings instead of prepending every time.
-		origString := cst.OrigString
-		if origString[0] == '-' {
-			origString = origString[1:]
-		} else {
-			origString = "-" + origString
-		}
-		return &tree.NumVal{
-			Value:      constant.UnaryOp(token.SUB, cst.Value, 0),
-			OrigString: origString,
-		}
+		cst.Negative = !cst.Negative
+		return cst
 	}
 
 	// Common case.

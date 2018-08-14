@@ -16,7 +16,6 @@ package parser_test
 
 import (
 	"go/constant"
-	"go/token"
 	"reflect"
 	"regexp"
 	"strings"
@@ -2206,9 +2205,9 @@ func TestParsePrecedence(t *testing.T) {
 	}
 
 	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	minusone := &tree.NumVal{Value: constant.UnaryOp(token.SUB, constant.MakeInt64(1), 0), OrigString: "-1"}
+	minusone := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1", Negative: true}
 	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	minustwo := &tree.NumVal{Value: constant.UnaryOp(token.SUB, constant.MakeInt64(2), 0), OrigString: "-2"}
+	minustwo := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2", Negative: true}
 	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
 	a := tree.NewStrVal("a")
 	b := tree.NewStrVal("b")

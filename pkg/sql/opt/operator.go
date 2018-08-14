@@ -124,6 +124,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	JsonbAggOp:        "jsonb_agg",
 	ConstAggOp:        "any_not_null",
 	ConstNotNullAggOp: "any_not_null",
+	AnyNotNullAggOp:   "any_not_null",
 }
 
 // NegateOpMap maps from a comparison operator type to its negated operator
@@ -171,7 +172,8 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
 	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp:
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
+		AnyNotNullAggOp:
 		return true
 	}
 	return false
@@ -184,8 +186,9 @@ func AggregateIgnoresNulls(op Operator) bool {
 // NULL when its input is empty.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp,
-		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp:
+	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp, SqrDiffOp,
+		VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
+		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp:
 		return true
 	}
 	return false

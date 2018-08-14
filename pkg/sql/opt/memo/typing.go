@@ -137,6 +137,7 @@ func init() {
 		opt.MinOp:             typeAsFirstArg,
 		opt.ConstAggOp:        typeAsFirstArg,
 		opt.ConstNotNullAggOp: typeAsFirstArg,
+		opt.AnyNotNullAggOp:   typeAsFirstArg,
 		opt.FirstAggOp:        typeAsFirstArg,
 
 		// Modifiers for aggregations pass through their argument.

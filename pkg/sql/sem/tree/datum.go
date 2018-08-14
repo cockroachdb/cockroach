@@ -536,12 +536,14 @@ func (*DInt) AmbiguousFormat() bool { return true }
 func (d *DInt) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
-	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && *d < 0
-	if quote {
+	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	needParens := (disambiguate || parsable) && *d < 0
+	if needParens {
 		ctx.WriteByte('(')
 	}
 	ctx.WriteString(strconv.FormatInt(int64(*d), 10))
-	if quote {
+	if needParens {
 		ctx.WriteByte(')')
 	}
 }
@@ -660,30 +662,24 @@ func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DFloat) AmbiguousFormat() bool {
-	// We return false here because DFloat.Format always returns a type-annotated
-	// string when fmtDisambiguateDatumTypes is enabled. This renders the format
-	// string  unambiguous.
-	return false
-}
+func (*DFloat) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
 
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
-	quote := ctx.flags.HasFlags(FmtParsableNumerics) && (math.IsNaN(fl) || math.IsInf(fl, 0))
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	quote := parsable && (math.IsNaN(fl) || math.IsInf(fl, 0))
 	// We need to use Signbit here and not just fl < 0 because of -0.
-	needParens := !quote && disambiguate && math.Signbit(fl)
+	needParens := !quote && (disambiguate || parsable) && math.Signbit(fl)
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
-	if needParens {
-		ctx.WriteByte('(')
-	}
 	if quote {
 		ctx.WriteByte('\'')
+	} else if needParens {
+		ctx.WriteByte('(')
 	}
-
 	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
 		// d is a small whole number. Ensure it is printed using a decimal point.
 		ctx.Printf("%.1f", fl)
@@ -692,11 +688,7 @@ func (d *DFloat) Format(ctx *FmtCtx) {
 	}
 	if quote {
 		ctx.WriteByte('\'')
-	}
-	if disambiguate {
-		ctx.WriteString(":::FLOAT")
-	}
-	if needParens {
+	} else if needParens {
 		ctx.WriteByte(')')
 	}
 }
@@ -818,19 +810,16 @@ func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DDecimal) AmbiguousFormat() bool {
-	// DDecimal is marked as unambiguous because its Format method annotates the
-	// datum with a type annotation when fmtDisambiguateDatumTypes is enabled.
-	return false
-}
+func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
-	quote := ctx.flags.HasFlags(FmtParsableNumerics) && d.Decimal.Form != apd.Finite
-	needParens := !quote && disambiguate && d.Negative
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	quote := parsable && d.Decimal.Form != apd.Finite
+	needParens := !quote && (disambiguate || parsable) && d.Negative
 	if needParens {
 		ctx.WriteByte('(')
 	}
@@ -840,9 +829,6 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	ctx.WriteString(d.Decimal.String())
 	if quote {
 		ctx.WriteByte('\'')
-	}
-	if disambiguate {
-		ctx.WriteString(":::DECIMAL")
 	}
 	if needParens {
 		ctx.WriteByte(')')

@@ -63,13 +63,21 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		if strings.ContainsAny(test.str, ".eE") {
 			tok = token.FLOAT
 		}
-		val := constant.MakeFromLiteral(test.str, tok, 0)
+
+		str := test.str
+		neg := false
+		if str[0] == '-' {
+			neg = true
+			str = str[1:]
+		}
+
+		val := constant.MakeFromLiteral(str, tok, 0)
 		if val.Kind() == constant.Unknown {
 			t.Fatalf("%d: could not parse value string %q", i, test.str)
 		}
 
 		// Check available types.
-		c := &tree.NumVal{Value: val, OrigString: test.str}
+		c := &tree.NumVal{Value: val, OrigString: str, Negative: neg}
 		avail := c.AvailableTypes()
 		if !reflect.DeepEqual(avail, test.avail) {
 			t.Errorf("%d: expected the available type set %v for %v, found %v",
