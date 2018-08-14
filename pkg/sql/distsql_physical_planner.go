@@ -1094,18 +1094,22 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
-	nCols := len(n.desc.Columns)
+	var descColumnIDs []sqlbase.ColumnID
+	for _, c := range n.desc.Columns {
+		descColumnIDs = append(descColumnIDs, c.ID)
+	}
+	if returnMutations {
+		for _, m := range n.desc.Mutations {
+			c := m.GetColumn()
+			if c != nil {
+				descColumnIDs = append(descColumnIDs, c.ID)
+			}
+		}
+	}
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
-			if returnMutations && int(c) >= nCols {
-				col := n.desc.Mutations[int(c)-nCols].GetColumn()
-				if col != nil && col.ID == n.cols[i].ID {
-					planToStreamColMap[i] = j
-					break
-				}
-			}
-			if n.desc.Columns[c].ID == n.cols[i].ID {
+			if descColumnIDs[c] == n.cols[i].ID {
 				planToStreamColMap[i] = j
 				break
 			}

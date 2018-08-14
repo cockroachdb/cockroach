@@ -69,7 +69,11 @@ func newTableReader(
 	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if returnMutations {
-		numCols += len(spec.Table.Mutations)
+		for i := range spec.Table.Mutations {
+			if spec.Table.Mutations[i].GetColumn() != nil {
+				numCols++
+			}
+		}
 	}
 	types := make([]sqlbase.ColumnType, 0, numCols)
 	for i := range spec.Table.Columns {
@@ -107,10 +111,12 @@ func newTableReader(
 
 	columnIdxMap := spec.Table.ColumnIdxMap()
 	if returnMutations {
+		idx := len(spec.Table.Columns)
 		for i := range spec.Table.Mutations {
 			col := spec.Table.Mutations[i].GetColumn()
 			if col != nil {
-				columnIdxMap[col.ID] = i + len(spec.Table.Columns)
+				columnIdxMap[col.ID] = idx
+				idx++
 			}
 		}
 	}
