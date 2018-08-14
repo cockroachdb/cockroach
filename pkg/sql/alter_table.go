@@ -220,7 +220,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				ck, err := makeCheckConstraint(params.ctx,
+				ck, err := MakeCheckConstraint(params.ctx,
 					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
 				if err != nil {
 					return err
