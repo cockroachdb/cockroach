@@ -1489,10 +1489,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
-		pErr = func() *roachpb.Error {
+		pErr = func() (pErr *roachpb.Error) {
 			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
+			tBegin := timeutil.Now()
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1537,7 +1538,10 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
-					defer r.store.metrics.SlowLeaseRequests.Dec(1)
+					defer func() {
+						r.store.metrics.SlowLeaseRequests.Dec(1)
+						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
@@ -3152,6 +3156,8 @@ func (r *Replica) tryExecuteWriteBatch(
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
+	tBegin := timeutil.Now()
+
 	for {
 		select {
 		case propResult := <-ch:
@@ -3180,7 +3186,14 @@ func (r *Replica) tryExecuteWriteBatch(
 			log.Warningf(ctx, "have been waiting %s for proposing command %s",
 				base.SlowRequestThreshold, ba)
 			r.store.metrics.SlowRaftRequests.Inc(1)
-			defer r.store.metrics.SlowRaftRequests.Dec(1)
+			defer func() {
+				r.store.metrics.SlowRaftRequests.Dec(1)
+				contextStr := ""
+				if err := ctx.Err(); err != nil {
+					contextStr = " with context cancellation"
+				}
+				log.Infof(ctx, "slow command %s finished after %s%s", ba, timeutil.Since(tBegin), contextStr)
+			}()
 
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError
