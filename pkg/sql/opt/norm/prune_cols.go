@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -166,7 +165,7 @@ func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet
 	newCols := make(opt.ColList, 0, neededCols.Len())
 
 	existingRows := c.f.mem.LookupList(valuesExpr.Rows())
-	newRows := xfunc.MakeListBuilder(&c.CustomFuncs)
+	newRows := MakeListBuilder(c)
 
 	// Create new list of columns that only contains needed columns.
 	for _, colID := range existingCols {
@@ -177,7 +176,7 @@ func (c *CustomFuncs) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet
 	}
 
 	// newElems is used to store tuple values.
-	newElems := xfunc.MakeListBuilder(&c.CustomFuncs)
+	newElems := MakeListBuilder(c)
 
 	for _, row := range existingRows {
 		tuple := c.f.mem.NormExpr(row).AsTuple()

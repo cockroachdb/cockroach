@@ -33,6 +33,12 @@ type CustomFuncs struct {
 	e *explorer
 }
 
+// Init initializes a new CustomFuncs with the given explorer.
+func (c *CustomFuncs) Init(e *explorer) {
+	c.CustomFuncs.Init(e.f)
+	c.e = e
+}
+
 // ----------------------------------------------------------------------
 //
 // Scan Rules

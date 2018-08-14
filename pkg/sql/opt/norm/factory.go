@@ -17,7 +17,6 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -99,18 +98,14 @@ type Factory struct {
 	funcs CustomFuncs
 }
 
-// NewFactory returns a new Factory structure with a new, blank memo structure
-// inside.
-func NewFactory(evalCtx *tree.EvalContext) *Factory {
-	mem := memo.New()
-	f := &Factory{
-		mem:        mem,
-		evalCtx:    evalCtx,
-		ruleCycles: make(map[memo.Fingerprint]bool),
-		funcs:      CustomFuncs{CustomFuncs: xfunc.MakeCustomFuncs(mem, evalCtx)},
-	}
-	f.funcs.f = f
-	return f
+// Init initializes a Factory structure with a new, blank memo structure inside.
+// This must be called exactly once before the factory can be used (and never
+// again).
+func (f *Factory) Init(evalCtx *tree.EvalContext) {
+	f.mem = memo.New()
+	f.evalCtx = evalCtx
+	f.ruleCycles = make(map[memo.Fingerprint]bool)
+	f.funcs.Init(f)
 }
 
 // DisableOptimizations disables all transformation rules. The unaltered input

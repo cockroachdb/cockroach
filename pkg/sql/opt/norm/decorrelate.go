@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -174,7 +173,7 @@ func (c *CustomFuncs) HoistValuesSubquery(rows memo.ListID, cols memo.PrivateID)
 	var hoister subqueryHoister
 	hoister.init(c, c.constructNoColsRow())
 
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	lb := MakeListBuilder(c)
 	for _, item := range c.f.mem.LookupList(rows) {
 		lb.AddItem(hoister.hoistAll(item))
 	}
@@ -216,7 +215,7 @@ func (c *CustomFuncs) HoistZipSubquery(funcs memo.ListID, cols memo.PrivateID) m
 	var hoister subqueryHoister
 	hoister.init(c, c.constructNoColsRow())
 
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	lb := MakeListBuilder(c)
 	for _, item := range c.f.mem.LookupList(funcs) {
 		lb.AddItem(hoister.hoistAll(item))
 	}
@@ -627,7 +626,7 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right memo.GroupID)
 // constructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (c *CustomFuncs) constructNoColsRow() memo.GroupID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	lb := MakeListBuilder(c)
 	lb.AddItem(c.f.ConstructTuple(
 		c.f.InternList(nil), c.f.InternType(memo.EmptyTupleType),
 	))

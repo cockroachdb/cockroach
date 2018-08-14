@@ -19,32 +19,34 @@ import (
 	"math"
 	"reflect"
 
+	"sort"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xfunc"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
-// the normalization rules. The unnamed xfunc.CustomFuncs allows
-// CustomFuncs to provide a clean interface for calling functions from both the
-// norm and xfunc packages using the same struct.
+// the normalization rules. These are also imported and used by the explorer.
 type CustomFuncs struct {
-	xfunc.CustomFuncs
-	f *Factory
+	f   *Factory
+	mem *memo.Memo
+
+	// scratchItems is a slice that is reused by ListBuilder to store temporary
+	// results that are accumulated before passing them to memo.InternList.
+	scratchItems []memo.GroupID
 }
 
-// MakeCustomFuncs returns a new CustomFuncs initialized with the given factory.
-func MakeCustomFuncs(f *Factory) CustomFuncs {
-	return CustomFuncs{
-		CustomFuncs: xfunc.MakeCustomFuncs(f.mem, f.evalCtx),
-		f:           f,
-	}
+// Init initializes a new CustomFuncs with the given factory.
+func (c *CustomFuncs) Init(f *Factory) {
+	c.f = f
+	c.mem = f.mem
 }
 
 // ----------------------------------------------------------------------
@@ -55,6 +57,14 @@ func MakeCustomFuncs(f *Factory) CustomFuncs {
 //
 // ----------------------------------------------------------------------
 
+// InternSingletonList interns a list containing the single given item and
+// returns its id.
+func (c *CustomFuncs) InternSingletonList(item memo.GroupID) memo.ListID {
+	b := MakeListBuilder(c)
+	b.AddItem(item)
+	return b.BuildList()
+}
+
 // ListOnlyHasNulls if every item in the given list is a Null op. If the list
 // is empty, ListOnlyHasNulls returns false.
 func (c *CustomFuncs) ListOnlyHasNulls(list memo.ListID) bool {
@@ -62,8 +72,8 @@ func (c *CustomFuncs) ListOnlyHasNulls(list memo.ListID) bool {
 		return false
 	}
 
-	for _, item := range c.f.mem.LookupList(list) {
-		if c.f.mem.NormExpr(item).Operator() != opt.NullOp {
+	for _, item := range c.mem.LookupList(list) {
+		if c.mem.NormExpr(item).Operator() != opt.NullOp {
 			return false
 		}
 	}
@@ -75,8 +85,8 @@ func (c *CustomFuncs) ListOnlyHasNulls(list memo.ListID) bool {
 // multiple times, then only the first instance is removed. If the list does not
 // contain the item, then the method is a no-op.
 func (c *CustomFuncs) RemoveListItem(list memo.ListID, search memo.GroupID) memo.ListID {
-	existingList := c.f.mem.LookupList(list)
-	b := xfunc.MakeListBuilder(&c.CustomFuncs)
+	existingList := c.mem.LookupList(list)
+	b := MakeListBuilder(c)
 	for i, item := range existingList {
 		if item == search {
 			b.AddItems(existingList[i+1:])
@@ -93,8 +103,8 @@ func (c *CustomFuncs) RemoveListItem(list memo.ListID, search memo.GroupID) memo
 // instance is replaced. If the list does not contain the item, then the method
 // is a no-op.
 func (c *CustomFuncs) ReplaceListItem(list memo.ListID, search, replace memo.GroupID) memo.ListID {
-	existingList := c.f.mem.LookupList(list)
-	b := xfunc.MakeListBuilder(&c.CustomFuncs)
+	existingList := c.mem.LookupList(list)
+	b := MakeListBuilder(c)
 
 	for i, item := range existingList {
 		if item == search {
@@ -106,6 +116,53 @@ func (c *CustomFuncs) ReplaceListItem(list memo.ListID, search, replace memo.Gro
 		b.AddItem(item)
 	}
 	return b.BuildList()
+}
+
+// IsSortedUniqueList returns true if the list is in sorted order, with no
+// duplicates. See the comment for listSorter.compare for comparison rule
+// details.
+func (c *CustomFuncs) IsSortedUniqueList(list memo.ListID) bool {
+	if list.Length <= 1 {
+		return true
+	}
+	ls := listSorter{cf: c, list: c.mem.LookupList(list)}
+	for i := 0; i < int(list.Length-1); i++ {
+		if !ls.less(i, i+1) {
+			return false
+		}
+	}
+	return true
+}
+
+// ConstructSortedUniqueList sorts the given list and removes duplicates, and
+// returns the resulting list. See the comment for listSorter.compare for
+// comparison rule details.
+func (c *CustomFuncs) ConstructSortedUniqueList(list memo.ListID) (memo.ListID, memo.PrivateID) {
+	// Make a copy of the list, since it needs to stay immutable.
+	lb := MakeListBuilder(c)
+	lb.AddItems(c.mem.LookupList(list))
+	ls := listSorter{cf: c, list: lb.items}
+
+	// Sort the list.
+	sort.Slice(ls.list, ls.less)
+
+	// Remove duplicates from the list.
+	n := 0
+	for i := 0; i < int(list.Length); i++ {
+		if i == 0 || ls.compare(i-1, i) < 0 {
+			lb.items[n] = lb.items[i]
+			n++
+		}
+	}
+	lb.setLength(n)
+
+	// Construct the type of the tuple.
+	typ := types.TTuple{Types: make([]types.T, n)}
+	for i := 0; i < n; i++ {
+		typ.Types[i] = c.mem.GroupProperties(lb.items[i]).Scalar.Type
+	}
+
+	return lb.BuildList(), c.mem.InternType(typ)
 }
 
 // ----------------------------------------------------------------------
@@ -120,7 +177,7 @@ func (c *CustomFuncs) ReplaceListItem(list memo.ListID, search, replace memo.Gro
 // equivalent to the requested coltype.
 func (c *CustomFuncs) HasColType(group memo.GroupID, colTyp memo.PrivateID) bool {
 	srcTyp, _ := coltypes.DatumTypeToColumnType(c.LookupScalar(group).Type)
-	dstTyp := c.f.mem.LookupPrivate(colTyp).(coltypes.T)
+	dstTyp := c.mem.LookupPrivate(colTyp).(coltypes.T)
 	if reflect.TypeOf(srcTyp) != reflect.TypeOf(dstTyp) {
 		return false
 	}
@@ -134,8 +191,8 @@ func (c *CustomFuncs) IsString(group memo.GroupID) bool {
 
 // ColTypeToDatumType maps the given column type to a datum type.
 func (c *CustomFuncs) ColTypeToDatumType(colTyp memo.PrivateID) memo.PrivateID {
-	datumTyp := coltypes.CastTargetToDatumType(c.f.mem.LookupPrivate(colTyp).(coltypes.T))
-	return c.f.mem.InternType(datumTyp)
+	datumTyp := coltypes.CastTargetToDatumType(c.mem.LookupPrivate(colTyp).(coltypes.T))
+	return c.mem.InternType(datumTyp)
 }
 
 // BoolType returns the private ID of the boolean SQL type.
@@ -164,6 +221,72 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.Group
 //   logical properties.
 //
 // ----------------------------------------------------------------------
+
+// Operator returns the type of the given group's normalized expression.
+func (c *CustomFuncs) Operator(group memo.GroupID) opt.Operator {
+	return c.mem.NormExpr(group).Operator()
+}
+
+// LookupLogical returns the given group's logical properties.
+func (c *CustomFuncs) LookupLogical(group memo.GroupID) *props.Logical {
+	return c.mem.GroupProperties(group)
+}
+
+// LookupRelational returns the given group's logical relational properties.
+func (c *CustomFuncs) LookupRelational(group memo.GroupID) *props.Relational {
+	return c.LookupLogical(group).Relational
+}
+
+// LookupScalar returns the given group's logical scalar properties.
+func (c *CustomFuncs) LookupScalar(group memo.GroupID) *props.Scalar {
+	return c.LookupLogical(group).Scalar
+}
+
+// OutputCols is a helper function that extracts the set of columns projected
+// by the given operator. In addition to extracting columns from any relational
+// operator, OutputCols can also extract columns from the Projections and
+// Aggregations scalar operators, which are used with Project and GroupBy.
+func (c *CustomFuncs) OutputCols(group memo.GroupID) opt.ColSet {
+	// Handle columns projected by relational operators.
+	logical := c.LookupLogical(group)
+	if logical.Relational != nil {
+		return c.LookupRelational(group).OutputCols
+	}
+
+	expr := c.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.AggregationsOp:
+		return opt.ColListToSet(c.ExtractColList(expr.AsAggregations().Cols()))
+
+	case opt.ProjectionsOp:
+		return c.ExtractProjectionsOpDef(expr.AsProjections().Def()).AllCols()
+
+	default:
+		panic(fmt.Sprintf("OutputCols doesn't support op %s", expr.Operator()))
+	}
+}
+
+// OutputCols2 returns the union of the OutputCols for the two operators.
+func (c *CustomFuncs) OutputCols2(group1, group2 memo.GroupID) opt.ColSet {
+	return c.OutputCols(group1).Union(c.OutputCols(group2))
+}
+
+// OuterCols returns the set of outer columns associated with the given group,
+// whether it be a relational or scalar operator.
+func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
+	return c.LookupLogical(group).OuterCols()
+}
+
+// CandidateKey returns the candidate key columns from the given group. If there
+// is no candidate key, CandidateKey returns ok=false.
+func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool) {
+	return c.LookupLogical(group).Relational.FuncDeps.Key()
+}
+
+// IsColNotNull returns true if the given column has the NotNull property.
+func (c *CustomFuncs) IsColNotNull(col memo.PrivateID, input memo.GroupID) bool {
+	return c.LookupLogical(input).Relational.NotNullCols.Contains(int(c.ExtractColID(col)))
+}
 
 // HasOuterCols returns true if the given group has at least one outer column,
 // or in other words, a reference to a variable that is not bound within its
@@ -205,22 +328,55 @@ func (c *CustomFuncs) HasSubsetCols(left, right memo.GroupID) bool {
 
 // HasZeroRows returns true if the given group never returns any rows.
 func (c *CustomFuncs) HasZeroRows(group memo.GroupID) bool {
-	return c.f.mem.GroupProperties(group).Relational.Cardinality.IsZero()
+	return c.mem.GroupProperties(group).Relational.Cardinality.IsZero()
 }
 
 // HasOneRow returns true if the given group always returns exactly one row.
 func (c *CustomFuncs) HasOneRow(group memo.GroupID) bool {
-	return c.f.mem.GroupProperties(group).Relational.Cardinality.IsOne()
+	return c.mem.GroupProperties(group).Relational.Cardinality.IsOne()
 }
 
 // HasZeroOrOneRow returns true if the given group returns at most one row.
 func (c *CustomFuncs) HasZeroOrOneRow(group memo.GroupID) bool {
-	return c.f.mem.GroupProperties(group).Relational.Cardinality.IsZeroOrOne()
+	return c.mem.GroupProperties(group).Relational.Cardinality.IsZeroOrOne()
 }
 
 // CanHaveZeroRows returns true if the given group might return zero rows.
 func (c *CustomFuncs) CanHaveZeroRows(group memo.GroupID) bool {
-	return c.f.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
+	return c.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
+}
+
+// ----------------------------------------------------------------------
+//
+// Private extraction functions
+//   Helper functions that make extracting common private types easier.
+//
+// ----------------------------------------------------------------------
+
+// ExtractColID extracts an opt.ColumnID from the given private.
+func (c *CustomFuncs) ExtractColID(private memo.PrivateID) opt.ColumnID {
+	return c.mem.LookupPrivate(private).(opt.ColumnID)
+}
+
+// ExtractColList extracts an opt.ColList from the given private.
+func (c *CustomFuncs) ExtractColList(private memo.PrivateID) opt.ColList {
+	return c.mem.LookupPrivate(private).(opt.ColList)
+}
+
+// ExtractOrdering extracts an props.OrderingChoice from the given private.
+func (c *CustomFuncs) ExtractOrdering(private memo.PrivateID) *props.OrderingChoice {
+	return c.mem.LookupPrivate(private).(*props.OrderingChoice)
+}
+
+// ExtractProjectionsOpDef extracts a *memo.ProjectionsOpDef from the given
+// private.
+func (c *CustomFuncs) ExtractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
+	return c.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
+}
+
+// ExtractType extracts a types.T from the given private.
+func (c *CustomFuncs) ExtractType(private memo.PrivateID) types.T {
+	return c.mem.LookupPrivate(private).(types.T)
 }
 
 // ----------------------------------------------------------------------
@@ -249,6 +405,70 @@ func (c *CustomFuncs) PruneOrdering(group memo.GroupID, ordering memo.PrivateID)
 	ordCopy := ord.Copy()
 	ordCopy.ProjectCols(outCols)
 	return c.f.InternOrderingChoice(&ordCopy)
+}
+
+// -----------------------------------------------------------------------
+//
+// Filter functions
+//   General custom match and replace functions used to test and construct
+//   filters in Select and Join rules.
+//
+// -----------------------------------------------------------------------
+
+// IsBoundBy returns true if all outer references in the source expression are
+// bound by the given columns. For example:
+//
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Eq (Variable a.x) (Const 1))
+//   )
+//
+// The (Eq) expression is fully bound by the output columns of the (Scan a)
+// expression because all of its outer references are satisfied by the columns
+// produced by the Scan.
+func (c *CustomFuncs) IsBoundBy(src memo.GroupID, cols opt.ColSet) bool {
+	return c.OuterCols(src).SubsetOf(cols)
+}
+
+// ExtractBoundConditions returns a new list containing only those expressions
+// from the given list that are fully bound by the given columns (i.e. all
+// outer references are to one of these columns). For example:
+//
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Filters [
+//       (Eq (Variable a.x) (Variable b.x))
+//       (Gt (Variable a.x) (Const 1))
+//     ])
+//   )
+//
+// Calling ExtractBoundConditions with the filter conditions list and the output
+// columns of (Scan a) would extract the (Gt) expression, since its outer
+// references only reference columns from a.
+func (c *CustomFuncs) ExtractBoundConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(list) {
+		if c.IsBoundBy(item, cols) {
+			lb.AddItem(item)
+		}
+	}
+	return lb.BuildList()
+}
+
+// ExtractUnboundConditions is the opposite of ExtractBoundConditions. Instead of
+// extracting expressions that are bound by the given expression, it extracts
+// list expressions that have at least one outer reference that is *not* bound
+// by the given columns (i.e. it has a "free" variable).
+func (c *CustomFuncs) ExtractUnboundConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(list) {
+		if !c.IsBoundBy(item, cols) {
+			lb.AddItem(item)
+		}
+	}
+	return lb.BuildList()
 }
 
 // ----------------------------------------------------------------------
@@ -305,8 +525,8 @@ func (c *CustomFuncs) IsCorrelated(src, dst memo.GroupID) bool {
 // expression is itself a Filters operator, then it is "flattened" by merging
 // its conditions into the new Filters operator.
 func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
-	leftExpr := c.f.mem.NormExpr(left)
-	rightExpr := c.f.mem.NormExpr(right)
+	leftExpr := c.mem.NormExpr(left)
+	rightExpr := c.mem.NormExpr(right)
 
 	// Handle cases where left/right filters are constant boolean values.
 	if leftExpr.Operator() == opt.TrueOp || rightExpr.Operator() == opt.FalseOp {
@@ -328,15 +548,15 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 	}
 
 	// Create the conditions slice and populate it.
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	lb := MakeListBuilder(c)
 
 	if leftFiltersExpr != nil {
-		lb.AddItems(c.f.mem.LookupList(leftFiltersExpr.Conditions()))
+		lb.AddItems(c.mem.LookupList(leftFiltersExpr.Conditions()))
 	} else {
 		lb.AddItem(left)
 	}
 	if rightFiltersExpr != nil {
-		lb.AddItems(c.f.mem.LookupList(rightFiltersExpr.Conditions()))
+		lb.AddItems(c.mem.LookupList(rightFiltersExpr.Conditions()))
 	} else {
 		lb.AddItem(right)
 	}
@@ -346,7 +566,7 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 // IsContradiction returns true if the given operation is False or a Filter with
 // a contradiction constraint.
 func (c *CustomFuncs) IsContradiction(filter memo.GroupID) bool {
-	if c.f.mem.NormExpr(filter).Operator() == opt.FalseOp {
+	if c.mem.NormExpr(filter).Operator() == opt.FalseOp {
 		return true
 	}
 	return c.LookupLogical(filter).Scalar.Constraints == constraint.Contradiction
@@ -372,17 +592,17 @@ func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.GroupID {
 // which the input and output column IDs match). A filter on these columns can
 // be pushed through a GroupBy.
 func (c *CustomFuncs) GroupingAndConstCols(def memo.PrivateID, aggs memo.GroupID) opt.ColSet {
-	result := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Copy()
+	result := c.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols.Copy()
 
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsExpr := c.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.mem.LookupList(aggsExpr.Aggs())
 	aggsColList := c.ExtractColList(aggsExpr.Cols())
 
 	// Add any ConstAgg columns.
 	for i := range aggsElems {
-		if constAgg := c.f.mem.NormExpr(aggsElems[i]).AsConstAgg(); constAgg != nil {
+		if constAgg := c.mem.NormExpr(aggsElems[i]).AsConstAgg(); constAgg != nil {
 			// Verify that the input and output column IDs match.
-			if aggsColList[i] == c.ExtractColID(c.f.mem.NormExpr(constAgg.Input()).AsVariable().Col()) {
+			if aggsColList[i] == c.ExtractColID(c.mem.NormExpr(constAgg.Input()).AsVariable().Col()) {
 				result.Add(int(aggsColList[i]))
 			}
 		}
@@ -397,14 +617,14 @@ func (c *CustomFuncs) GroupingAndConstCols(def memo.PrivateID, aggs memo.GroupID
 // that the set of key column values uniquely determine the values of all other
 // columns in the relation.
 func (c *CustomFuncs) GroupingColsAreKey(def memo.PrivateID, group memo.GroupID) bool {
-	colSet := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
+	colSet := c.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
 	return c.LookupLogical(group).Relational.FuncDeps.ColsAreStrictKey(colSet)
 }
 
 // IsUnorderedGroupBy returns true if the given input ordering for the group by
 // is unspecified.
 func (c *CustomFuncs) IsUnorderedGroupBy(def memo.PrivateID) bool {
-	return c.f.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Any()
+	return c.mem.LookupPrivate(def).(*memo.GroupByDef).Ordering.Any()
 }
 
 // ----------------------------------------------------------------------
@@ -417,8 +637,8 @@ func (c *CustomFuncs) IsUnorderedGroupBy(def memo.PrivateID) bool {
 // LimitGeMaxRows returns true if the given constant limit value is greater than
 // or equal to the max number of rows returned by the input group.
 func (c *CustomFuncs) LimitGeMaxRows(limit memo.PrivateID, input memo.GroupID) bool {
-	limitVal := int64(*c.f.mem.LookupPrivate(limit).(*tree.DInt))
-	maxRows := c.f.mem.GroupProperties(input).Relational.Cardinality.Max
+	limitVal := int64(*c.mem.LookupPrivate(limit).(*tree.DInt))
+	maxRows := c.mem.GroupProperties(input).Relational.Cardinality.Max
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
 }
 
@@ -436,14 +656,14 @@ func (c *CustomFuncs) LimitGeMaxRows(limit memo.PrivateID, input memo.GroupID) b
 // matched any And operator children. If, after simplification, no operands
 // remain, then simplifyAnd returns True.
 func (c *CustomFuncs) SimplifyAnd(conditions memo.ListID) memo.GroupID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	for _, item := range c.f.mem.LookupList(conditions) {
-		itemExpr := c.f.mem.NormExpr(item)
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(conditions) {
+		itemExpr := c.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			lb.AddItems(c.f.mem.LookupList(itemExpr.AsAnd().Conditions()))
+			lb.AddItems(c.mem.LookupList(itemExpr.AsAnd().Conditions()))
 
 		case opt.TrueOp:
 			// And operator skips True operands.
@@ -470,15 +690,15 @@ func (c *CustomFuncs) SimplifyAnd(conditions memo.ListID) memo.GroupID {
 // matched any Or operator children. If, after simplification, no operands
 // remain, then simplifyOr returns False.
 func (c *CustomFuncs) SimplifyOr(conditions memo.ListID) memo.GroupID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
+	lb := MakeListBuilder(c)
 
-	for _, item := range c.f.mem.LookupList(conditions) {
-		itemExpr := c.f.mem.NormExpr(item)
+	for _, item := range c.mem.LookupList(conditions) {
+		itemExpr := c.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.OrOp:
 			// Flatten nested Or operands.
-			lb.AddItems(c.f.mem.LookupList(itemExpr.AsOr().Conditions()))
+			lb.AddItems(c.mem.LookupList(itemExpr.AsOr().Conditions()))
 
 		case opt.FalseOp:
 			// Or operator skips False operands.
@@ -504,14 +724,14 @@ func (c *CustomFuncs) SimplifyOr(conditions memo.ListID) memo.GroupID {
 // as a Select or Join filter condition, both of which treat a Null filter
 // conjunct exactly as if it were False.
 func (c *CustomFuncs) SimplifyFilters(conditions memo.ListID) memo.GroupID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	for _, item := range c.f.mem.LookupList(conditions) {
-		itemExpr := c.f.mem.NormExpr(item)
+	lb := MakeListBuilder(c)
+	for _, item := range c.mem.LookupList(conditions) {
+		itemExpr := c.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			lb.AddItems(c.f.mem.LookupList(itemExpr.AsAnd().Conditions()))
+			lb.AddItems(c.mem.LookupList(itemExpr.AsAnd().Conditions()))
 
 		case opt.TrueOp:
 			// Filters operator skips True operands.
@@ -540,8 +760,8 @@ func (c *CustomFuncs) SimplifyFilters(conditions memo.ListID) memo.GroupID {
 // to:
 //   NOT(a = 5) AND NOT(b < 10)
 func (c *CustomFuncs) NegateConditions(conditions memo.ListID) memo.ListID {
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	list := c.f.mem.LookupList(conditions)
+	lb := MakeListBuilder(c)
+	list := c.mem.LookupList(conditions)
 	for i := range list {
 		lb.AddItem(c.f.ConstructNot(list[i]))
 	}
@@ -585,13 +805,13 @@ func (c *CustomFuncs) CommuteInequality(op opt.Operator, left, right memo.GroupI
 //   (A AND B) OR (A AND C)      =>  true
 //   A OR (A AND B) OR (B AND C) =>  false
 func (c *CustomFuncs) IsRedundantSubclause(conditions memo.ListID, subclause memo.GroupID) bool {
-	for _, item := range c.f.mem.LookupList(conditions) {
-		itemExpr := c.f.mem.NormExpr(item)
+	for _, item := range c.mem.LookupList(conditions) {
+		itemExpr := c.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
 			found := false
-			for _, item := range c.f.mem.LookupList(itemExpr.AsAnd().Conditions()) {
+			for _, item := range c.mem.LookupList(itemExpr.AsAnd().Conditions()) {
 				if item == subclause {
 					found = true
 					break
@@ -628,10 +848,10 @@ func (c *CustomFuncs) IsRedundantSubclause(conditions memo.ListID, subclause mem
 func (c *CustomFuncs) ExtractRedundantSubclause(
 	conditions memo.ListID, subclause memo.GroupID,
 ) memo.GroupID {
-	orList := xfunc.MakeListBuilder(&c.CustomFuncs)
+	orList := MakeListBuilder(c)
 
-	for _, item := range c.f.mem.LookupList(conditions) {
-		itemExpr := c.f.mem.NormExpr(item)
+	for _, item := range c.mem.LookupList(conditions) {
+		itemExpr := c.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
@@ -650,14 +870,14 @@ func (c *CustomFuncs) ExtractRedundantSubclause(
 
 			panic(fmt.Errorf(
 				"ExtractRedundantSubclause called with non-redundant subclause:\n%s",
-				memo.MakeNormExprView(c.f.mem, subclause).FormatString(opt.ExprFmtHideScalars),
+				memo.MakeNormExprView(c.mem, subclause).FormatString(opt.ExprFmtHideScalars),
 			))
 		}
 	}
 
 	or := c.f.ConstructOr(orList.BuildList())
 
-	andList := xfunc.MakeListBuilder(&c.CustomFuncs)
+	andList := MakeListBuilder(c)
 	andList.AddItem(subclause)
 	andList.AddItem(or)
 
@@ -681,9 +901,9 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ListID) memo.Group
 		panic("tuple length mismatch")
 	}
 
-	lb := xfunc.MakeListBuilder(&c.CustomFuncs)
-	leftList := c.f.mem.LookupList(left)
-	rightList := c.f.mem.LookupList(right)
+	lb := MakeListBuilder(c)
+	leftList := c.mem.LookupList(left)
+	rightList := c.mem.LookupList(right)
 	for i := 0; i < len(leftList); i++ {
 		lb.AddItem(c.f.ConstructEq(leftList[i], rightList[i]))
 	}
@@ -700,11 +920,11 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ListID) memo.Group
 // SimplifyCoalesce discards any leading null operands, and then if the next
 // operand is a constant, replaces with that constant.
 func (c *CustomFuncs) SimplifyCoalesce(args memo.ListID) memo.GroupID {
-	argList := c.f.mem.LookupList(args)
+	argList := c.mem.LookupList(args)
 	for i := 0; i < int(args.Length-1); i++ {
 		// If item is not a constant value, then its value may turn out to be
 		// null, so no more folding. Return operands from then on.
-		item := c.f.mem.NormExpr(argList[i])
+		item := c.mem.NormExpr(argList[i])
 		if !item.IsConstValue() {
 			return c.f.ConstructCoalesce(c.f.InternList(argList[i:]))
 		}
@@ -753,7 +973,7 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 // EqualsNumber returns true if the given private numeric value (decimal, float,
 // or integer) is equal to the given integer value.
 func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
-	d := c.f.mem.LookupPrivate(private).(tree.Datum)
+	d := c.mem.LookupPrivate(private).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:
 		if value == 0 {
@@ -776,7 +996,7 @@ func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
 
 // CanFoldUnaryMinus checks if a constant numeric value can be negated.
 func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
-	d := c.f.mem.LookupPrivate(c.f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
+	d := c.mem.LookupPrivate(c.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
 	if t, ok := d.(*tree.DInt); ok {
 		return *t != math.MinInt64
 	}
@@ -785,7 +1005,7 @@ func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
 
 // NegateNumeric applies a unary minus to a numeric value.
 func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
-	ev := memo.MakeNormExprView(c.f.mem, input)
+	ev := memo.MakeNormExprView(c.mem, input)
 	r, err := memo.EvalUnaryOp(c.f.evalCtx, opt.UnaryMinusOp, ev)
 	if err != nil {
 		panic(err)
@@ -795,7 +1015,7 @@ func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
 
 // ExtractConstValue extracts the Datum from a constant value.
 func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
-	return c.f.mem.LookupPrivate(c.f.mem.NormExpr(group).AsConst().Value())
+	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
 }
 
 // IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
