@@ -29,7 +29,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -173,8 +172,8 @@ type Server struct {
 
 // NewServer creates a Server from a server.Config.
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
-	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
-		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
+	if err := cfg.ValidateAddrs(context.Background()); err != nil {
+		return nil, err
 	}
 
 	st := cfg.Settings
@@ -1067,22 +1066,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	ln, err := net.Listen("tcp", s.cfg.Addr)
 	if err != nil {
-		return ListenError{
-			error: err,
-			Addr:  s.cfg.Addr,
-		}
+		return ListenError{error: err, Addr: s.cfg.Addr}
+	}
+	if err := base.UpdateAddrs(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, ln.Addr()); err != nil {
+		return errors.Wrapf(err, "internal error: cannot parse listen address")
 	}
 	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
-	unresolvedListenAddr, err := officialAddr(ctx, s.cfg.Addr, ln.Addr(), os.Hostname)
-	if err != nil {
-		return err
-	}
-	s.cfg.Addr = unresolvedListenAddr.String()
-	unresolvedAdvertAddr, err := officialAddr(ctx, s.cfg.AdvertiseAddr, ln.Addr(), os.Hostname)
-	if err != nil {
-		return err
-	}
-	s.cfg.AdvertiseAddr = unresolvedAdvertAddr.String()
 
 	s.rpcContext.SetLocalInternalServer(s.node)
 
@@ -1105,11 +1094,15 @@ func (s *Server) Start(ctx context.Context) error {
 			Addr:  s.cfg.HTTPAddr,
 		}
 	}
-	unresolvedHTTPAddr, err := officialAddr(ctx, s.cfg.HTTPAddr, httpLn.Addr(), os.Hostname)
-	if err != nil {
-		return err
+	if err := base.UpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, httpLn.Addr()); err != nil {
+		return errors.Wrapf(err, "internal error: cannot parse http listen address")
 	}
-	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
+
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after both calls to UpdateAddrs() above.
+	s.cfg.CheckCertificateAddrs(ctx)
 
 	workersCtx := s.AnnotateCtx(context.Background())
 
@@ -1308,9 +1301,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
-		advertise: unresolvedAdvertAddr.String(),
-		http:      unresolvedHTTPAddr.String(),
-		listen:    unresolvedListenAddr.String(),
+		advertise: s.cfg.AdvertiseAddr,
+		http:      s.cfg.HTTPAdvertiseAddr,
+		listen:    s.cfg.Addr,
 	}.Iter()
 
 	for _, storeSpec := range s.cfg.Stores.Specs {
@@ -1346,8 +1339,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
-	s.gossip.Start(unresolvedAdvertAddr, filtered)
+	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
+	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
+	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
 
 	defer time.AfterFunc(30*time.Second, func() {
@@ -1445,7 +1440,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// we're joining an existing cluster for the first time.
 	if err := s.node.start(
 		ctx,
-		unresolvedAdvertAddr,
+		advAddrU,
 		bootstrappedEngines, emptyEngines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
@@ -1477,7 +1472,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(DefaultMetricsSampleInterval)
@@ -1532,9 +1527,10 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
-	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
-	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
+	log.Infof(ctx, "starting %s server at %s (use: %s)",
+		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
+	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
+	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
 
@@ -1941,45 +1937,6 @@ func (w *gzipResponseWriter) Close() error {
 	w.Reset(nil) // release ResponseWriter reference.
 	gzipResponseWriterPool.Put(w)
 	return err
-}
-
-func officialAddr(
-	ctx context.Context, cfgAddr string, lnAddr net.Addr, osHostname func() (string, error),
-) (*util.UnresolvedAddr, error) {
-	cfgHost, cfgPort, err := net.SplitHostPort(cfgAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	lnHost, lnPort, err := net.SplitHostPort(lnAddr.String())
-	if err != nil {
-		return nil, err
-	}
-
-	host := cfgHost
-	if len(host) == 0 {
-		// A host was not provided. Ask the system.
-		name, err := osHostname()
-		if err != nil {
-			return nil, errors.Wrap(err, "unable to get hostname")
-		}
-		host = name
-	}
-	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
-	if err != nil {
-		return nil, errors.Wrapf(err, "unable to lookup hostname %q", host)
-	}
-	if len(addrs) == 0 {
-		return nil, errors.Errorf("hostname %q did not resolve to any addresses; listener address: %s", host, lnHost)
-	}
-
-	// cfgPort may need to be used if --advertise-port was set on the command line.
-	port := lnPort
-	if i, err := strconv.Atoi(cfgPort); err == nil && i > 0 {
-		port = cfgPort
-	}
-
-	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, port)), nil
 }
 
 func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
