@@ -28,7 +28,6 @@ import (
     "strings"
 
     "go/constant"
-    "go/token"
 
     "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -4059,7 +4058,9 @@ numeric_only:
   }
 | '-' FCONST
   {
-    $$.val = &tree.NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
+    n := $2.numVal()
+    n.Negative = true
+    $$.val = n
   }
 | signed_iconst
   {
@@ -7860,7 +7861,9 @@ signed_iconst:
   }
 | '-' ICONST
   {
-    $$.val = &tree.NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
+    n := $2.numVal()
+    n.Negative = true
+    $$.val = n
   }
 
 // signed_iconst64 is a variant of signed_iconst which only accepts (signed) integer literals that fit in an int64.
