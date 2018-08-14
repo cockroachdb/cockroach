@@ -109,6 +109,12 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
+	metaCPUCombinedPercentNorm = metric.Metadata{
+		Name:        "sys.cpu.combined.percent-normalized",
+		Help:        "Current user+system cpu percentage, normalized 0-1 by number of cores",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
+	}
 	metaRSS = metric.Metadata{
 		Name:        "sys.rss",
 		Help:        "Current process RSS",
@@ -250,10 +256,11 @@ type RuntimeStatSampler struct {
 	GcPauseNS      *metric.Gauge
 	GcPausePercent *metric.GaugeFloat64
 	// CPU stats.
-	CPUUserNS      *metric.Gauge
-	CPUUserPercent *metric.GaugeFloat64
-	CPUSysNS       *metric.Gauge
-	CPUSysPercent  *metric.GaugeFloat64
+	CPUUserNS              *metric.Gauge
+	CPUUserPercent         *metric.GaugeFloat64
+	CPUSysNS               *metric.Gauge
+	CPUSysPercent          *metric.GaugeFloat64
+	CPUCombinedPercentNorm *metric.GaugeFloat64
 	// Memory stats.
 	Rss *metric.Gauge
 	// File descriptor stats.
@@ -310,39 +317,40 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 	}
 
 	return RuntimeStatSampler{
-		clock:               clock,
-		startTimeNanos:      clock.PhysicalNow(),
-		initialNetCounters:  netCounters,
-		initialDiskCounters: diskCounters,
-		CgoCalls:            metric.NewGauge(metaCgoCalls),
-		Goroutines:          metric.NewGauge(metaGoroutines),
-		GoAllocBytes:        metric.NewGauge(metaGoAllocBytes),
-		GoTotalBytes:        metric.NewGauge(metaGoTotalBytes),
-		CgoAllocBytes:       metric.NewGauge(metaCgoAllocBytes),
-		CgoTotalBytes:       metric.NewGauge(metaCgoTotalBytes),
-		GcCount:             metric.NewGauge(metaGCCount),
-		GcPauseNS:           metric.NewGauge(metaGCPauseNS),
-		GcPausePercent:      metric.NewGaugeFloat64(metaGCPausePercent),
-		CPUUserNS:           metric.NewGauge(metaCPUUserNS),
-		CPUUserPercent:      metric.NewGaugeFloat64(metaCPUUserPercent),
-		CPUSysNS:            metric.NewGauge(metaCPUSysNS),
-		CPUSysPercent:       metric.NewGaugeFloat64(metaCPUSysPercent),
-		Rss:                 metric.NewGauge(metaRSS),
-		HostDiskReadBytes:   metric.NewGauge(metaHostDiskReadBytes),
-		HostDiskReadTime:    metric.NewGauge(metaHostDiskReadTime),
-		HostDiskReadCount:   metric.NewGauge(metaHostDiskReadCount),
-		HostDiskWriteBytes:  metric.NewGauge(metaHostDiskWriteBytes),
-		HostDiskWriteTime:   metric.NewGauge(metaHostDiskWriteTime),
-		HostDiskWriteCount:  metric.NewGauge(metaHostDiskWriteCount),
-		IopsInProgress:      metric.NewGauge(metaHostIopsInProgress),
-		HostNetRecvBytes:    metric.NewGauge(metaHostNetRecvBytes),
-		HostNetRecvPackets:  metric.NewGauge(metaHostNetRecvPackets),
-		HostNetSendBytes:    metric.NewGauge(metaHostNetSendBytes),
-		HostNetSendPackets:  metric.NewGauge(metaHostNetSendPackets),
-		FDOpen:              metric.NewGauge(metaFDOpen),
-		FDSoftLimit:         metric.NewGauge(metaFDSoftLimit),
-		Uptime:              metric.NewGauge(metaUptime),
-		BuildTimestamp:      buildTimestamp,
+		clock:                  clock,
+		startTimeNanos:         clock.PhysicalNow(),
+		initialNetCounters:     netCounters,
+		initialDiskCounters:    diskCounters,
+		CgoCalls:               metric.NewGauge(metaCgoCalls),
+		Goroutines:             metric.NewGauge(metaGoroutines),
+		GoAllocBytes:           metric.NewGauge(metaGoAllocBytes),
+		GoTotalBytes:           metric.NewGauge(metaGoTotalBytes),
+		CgoAllocBytes:          metric.NewGauge(metaCgoAllocBytes),
+		CgoTotalBytes:          metric.NewGauge(metaCgoTotalBytes),
+		GcCount:                metric.NewGauge(metaGCCount),
+		GcPauseNS:              metric.NewGauge(metaGCPauseNS),
+		GcPausePercent:         metric.NewGaugeFloat64(metaGCPausePercent),
+		CPUUserNS:              metric.NewGauge(metaCPUUserNS),
+		CPUUserPercent:         metric.NewGaugeFloat64(metaCPUUserPercent),
+		CPUSysNS:               metric.NewGauge(metaCPUSysNS),
+		CPUSysPercent:          metric.NewGaugeFloat64(metaCPUSysPercent),
+		CPUCombinedPercentNorm: metric.NewGaugeFloat64(metaCPUCombinedPercentNorm),
+		Rss:                metric.NewGauge(metaRSS),
+		HostDiskReadBytes:  metric.NewGauge(metaHostDiskReadBytes),
+		HostDiskReadTime:   metric.NewGauge(metaHostDiskReadTime),
+		HostDiskReadCount:  metric.NewGauge(metaHostDiskReadCount),
+		HostDiskWriteBytes: metric.NewGauge(metaHostDiskWriteBytes),
+		HostDiskWriteTime:  metric.NewGauge(metaHostDiskWriteTime),
+		HostDiskWriteCount: metric.NewGauge(metaHostDiskWriteCount),
+		IopsInProgress:     metric.NewGauge(metaHostIopsInProgress),
+		HostNetRecvBytes:   metric.NewGauge(metaHostNetRecvBytes),
+		HostNetRecvPackets: metric.NewGauge(metaHostNetRecvPackets),
+		HostNetSendBytes:   metric.NewGauge(metaHostNetSendBytes),
+		HostNetSendPackets: metric.NewGauge(metaHostNetSendPackets),
+		FDOpen:             metric.NewGauge(metaFDOpen),
+		FDSoftLimit:        metric.NewGauge(metaFDSoftLimit),
+		Uptime:             metric.NewGauge(metaUptime),
+		BuildTimestamp:     buildTimestamp,
 	}
 }
 
@@ -402,6 +410,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	uPerc := float64(newUtime-rsr.lastUtime) / dur
 	sPerc := float64(newStime-rsr.lastStime) / dur
 	pausePerc := float64(ms.PauseTotalNs-rsr.lastPauseTime) / dur
+	combinedNormalizedPerc := (sPerc + uPerc) / float64(runtime.NumCPU())
 	rsr.lastNow = now
 	rsr.lastUtime = newUtime
 	rsr.lastStime = newStime
@@ -445,6 +454,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	rsr.CPUUserPercent.Update(uPerc)
 	rsr.CPUSysNS.Update(newStime)
 	rsr.CPUSysPercent.Update(sPerc)
+	rsr.CPUCombinedPercentNorm.Update(combinedNormalizedPerc)
 	rsr.FDOpen.Update(int64(fds.Open))
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.Rss.Update(int64(mem.Resident))
