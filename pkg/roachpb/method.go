@@ -148,4 +148,6 @@ const (
 	GetSnapshotForMerge
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
+	// CountKeys TODO
+	CountKeys
 )
