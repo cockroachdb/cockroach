@@ -1789,10 +1789,18 @@ func (ex *connExecutor) newPlanner(
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *client.Txn, stmtTS time.Time,
 ) {
-	p.statsCollector = ex.newStatsCollector()
 	p.txn = txn
 	p.stmt = nil
-	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	if p.cancelChecker == nil {
+		p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	} else {
+		p.cancelChecker.Reset(ctx)
+	}
+	if p.statsCollector == nil {
+		p.statsCollector = ex.newStatsCollector()
+	} else {
+		p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	}
 
 	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
@@ -1901,7 +1909,7 @@ func (ex *connExecutor) initStatementResult(
 // newStatsCollector returns an sqlStatsCollector that will record stats in the
 // session's stats containers.
 func (ex *connExecutor) newStatsCollector() sqlStatsCollector {
-	return newSQLStatsCollectorImpl(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
+	return newSQLStatsCollectorImpl(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.

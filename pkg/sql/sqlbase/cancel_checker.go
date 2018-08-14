@@ -55,3 +55,10 @@ func (c *CancelChecker) Check() error {
 	c.callsSinceLastCheck++
 	return nil
 }
+
+// Reset resets this cancel checker with a fresh context.
+func (c *CancelChecker) Reset(ctx context.Context) {
+	*c = CancelChecker{
+		ctx: ctx,
+	}
+}
