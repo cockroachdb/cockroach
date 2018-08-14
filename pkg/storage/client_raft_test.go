@@ -1006,12 +1006,18 @@ func TestRefreshPendingCommands(t *testing.T) {
 	// possible for node 3 to propose the RequestLease command and have that
 	// command executed by the other nodes but to never see the execution locally
 	// because it is caught up by applying a snapshot.
-	testCases := []storage.StoreTestingKnobs{
-		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonTicks: true},
-		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
+	testCases := map[string]storage.StoreTestingKnobs{
+		"reasonSnapshotApplied": {
+			DisableRefreshReasonNewLeader: true,
+			DisableRefreshReasonTicks:     true,
+		},
+		"reasonTicks": {
+			DisableRefreshReasonNewLeader:       true,
+			DisableRefreshReasonSnapshotApplied: true,
+		},
 	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
+	for name, c := range testCases {
+		t.Run(name, func(t *testing.T) {
 			sc := storage.TestStoreConfig(nil)
 			sc.TestingKnobs = c
 			// Disable periodic gossip tasks which can move the range 1 lease
