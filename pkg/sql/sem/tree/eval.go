@@ -2293,31 +2293,6 @@ type SequenceOperators interface {
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 }
 
-// CtxProvider is anything that can return a Context.
-//
-// TODO(andrei): I think this whole CtxProvider business might not be needed any
-// more. I think it was needed back in the day to indirect dereferencing a
-// context to a session, whose context used to change willy-nilly when entering
-// and exiting a transaction. More recently, the points where that context
-// changes are clear; uses of an EvalContext don't straddle context changes, so
-// we should bind EvalCtx.Ctx to a context.Context directly.
-type CtxProvider interface {
-	// Ctx returns this provider's context.
-	Ctx() context.Context
-}
-
-// FixedCtxProvider returns a given Context.
-type FixedCtxProvider struct {
-	context.Context
-}
-
-// Ctx implements CtxProvider.
-func (s FixedCtxProvider) Ctx() context.Context {
-	return s.Context
-}
-
-var _ CtxProvider = FixedCtxProvider{}
-
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
@@ -2389,14 +2364,8 @@ type EvalContext struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []IndexedVarContainer
 
-	// CtxProvider holds the context in which the expression is evaluated. This
-	// will point to the session, which is itself a provider of contexts.
-	// NOTE: seems a bit lazy to hold a pointer to the session's context here,
-	// instead of making sure the right context is explicitly set before the
-	// EvalContext is used. But there's already precedent with the Location field,
-	// and also at the time of writing, EvalContexts are initialized with the
-	// planner and not mutated.
-	CtxProvider CtxProvider
+	// Context holds the context in which the expression is evaluated.
+	Context context.Context
 
 	// InternalExecutor gives access to an executor to be used for running
 	// "internal" statements. It may seem bizarre that "expression evaluation" may
@@ -2461,7 +2430,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
-	ctx.CtxProvider = FixedCtxProvider{context.TODO()}
+	ctx.Context = context.TODO()
 	acc := monitor.MakeBoundAccount()
 	ctx.ActiveMemAcc = &acc
 	now := timeutil.Now()
@@ -2585,7 +2554,7 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
-	return ctx.CtxProvider.Ctx()
+	return ctx.Context
 }
 
 func (ctx *EvalContext) getTmpDec() *apd.Decimal {
