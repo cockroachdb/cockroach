@@ -676,6 +676,30 @@ func (rf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, 
 		}
 	}
 
+	// {
+	// 	var key, endKey roachpb.Key
+	// 	var sender client.Sender
+
+	// 	var b roachpb.BatchRequest
+	// 	b.Txn = nil
+	// 	b.Add(&roachpb.RangeStatsRequest{
+	// 		RequestHeader: roachpb.RequestHeader{Key: key, EndKey: endKey},
+	// 		Transactional: true,
+	// 	})
+
+	// 	resp, pErr := sender.Send(context.Background(), b)
+	// 	if pErr != nil {
+	// 		return 0, pErr
+	// 	}
+
+	// 	stats := resp.Responses[0].GetInner().(*roachpb.RangeStatsResponse).MVCCStats
+	// 	if !stats.ContainsEstimates && stats.IntentCount == 0 {
+	// 		return stats.LiveCount, nil
+	// 	}
+
+	// 	// Fall back to slow-path.
+	// }
+
 	// We can simply decode all the column values we retrieved
 	// when processing the index key. The column values are at the
 	// front of the key.

@@ -1296,6 +1296,7 @@ message RangeStatsRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool transactional = 2;
 }
 
 // RangeStatsResponse is the response to a RangeStatsRequest.

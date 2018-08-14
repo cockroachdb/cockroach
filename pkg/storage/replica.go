@@ -2221,6 +2221,11 @@ func (r *Replica) updateTimestampCache(
 				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			case *roachpb.RefreshRangeRequest:
 				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
+			case *roachpb.RangeStatsRequest:
+				resp := br.Responses[i].GetInner().(*roachpb.RangeStatsResponse)
+				if resp.MVCCStats.IntentCount == 0 {
+					tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+				}
 			default:
 				readCache := readOnlyUseReadCache
 				if roachpb.UpdatesWriteTimestampCache(args) {

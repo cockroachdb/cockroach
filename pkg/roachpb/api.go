@@ -348,6 +348,20 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 
 var _ combinable = &AdminScatterResponse{}
 
+// Combine implements the combinable interface.
+func (r *RangeStatsResponse) combine(c combinable) error {
+	if r != nil {
+		otherR := c.(*RangeStatsResponse)
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+		r.MVCCStats.Add(otherR.MVCCStats)
+	}
+	return nil
+}
+
+var _ combinable = &RangeStatsResponse{}
+
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
 	return rh
@@ -1080,7 +1094,12 @@ func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | upda
 
 func (*GetSnapshotForMergeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
 
-func (*RangeStatsRequest) flags() int { return isRead }
+func (r *RangeStatsRequest) flags() int {
+	if r.Transactional {
+		return isRead | isTxn | updatesReadTSCache
+	}
+	return isRead
+}
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {
