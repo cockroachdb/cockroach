@@ -217,6 +217,23 @@ func (rs *replicaStats) avgQPS() (float64, time.Duration) {
 	return sum / duration.Seconds(), duration
 }
 
+// latestWindowEmpty returns whether the most recent stats collection
+// window is empty.
+func (rs *replicaStats) latestWindowEmpty() bool {
+	now := timeutil.Unix(0, rs.clock.PhysicalNow())
+
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	rs.maybeRotateLocked(now)
+	for _, v := range rs.mu.requests[rs.mu.idx] {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (rs *replicaStats) resetRequestCounts() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()

@@ -325,7 +325,9 @@ func (rs *storeReplicaVisitor) Visit(onlyResident bool, visitor func(*Replica) b
 		var repl *Replica
 		if onlyResident {
 			shim.mu.Lock()
-			repl = shim.mu.replica
+			if repl = shim.mu.replica; repl != nil {
+				repl.Ref()
+			}
 			shim.mu.Unlock()
 			if repl == nil {
 				continue
@@ -345,7 +347,13 @@ func (rs *storeReplicaVisitor) Visit(onlyResident bool, visitor func(*Replica) b
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && (destroyed.IsAlive() || destroyed.reason == destroyReasonRemovalPending) && !visitor(repl) {
+		var done bool
+		if initialized && (destroyed.IsAlive() || destroyed.reason == destroyReasonRemovalPending) {
+			done = !visitor(repl)
+		}
+		repl.Unref()
+
+		if done {
 			break
 		}
 	}
@@ -1450,10 +1458,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// before shutting down. Add the replica to the GC queue.
 				if rep, err := s.GetReplica(desc.RangeID); err != nil {
 					log.Errorf(ctx, "unable to load GC'able replica for range %d: %s", desc.RangeID, err)
-				} else if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", rep, err)
-				} else if added {
-					log.Infof(ctx, "%s: added to replica GC queue", rep)
+				} else {
+					defer rep.Unref()
+					if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
+						log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", rep, err)
+					} else if added {
+						log.Infof(ctx, "%s: added to replica GC queue", rep)
+					}
 				}
 			}
 
@@ -2027,14 +2038,18 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 	return nil
 }
 
-// GetReplica fetches a replica by Range ID. If the replica is currently
-// non-resident, it is initialized. Returns an error if no replica is found.
+// GetReplica fetches a replica by Range ID. If the replica is
+// currently non-resident, it is initialized. Returns an error if no
+// replica is found. The caller is responsible for invoking the
+// returned replica's Unref() method when the replica is no longer
+// needed.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if value, ok := s.mu.replicaShims.Load(int64(rangeID)); ok {
 		shim := (*ReplicaShim)(value)
 		shim.mu.Lock()
 		defer shim.mu.Unlock()
 		if shim.mu.replica != nil {
+			shim.mu.replica.Ref()
 			return shim.mu.replica, nil
 		}
 		rep, err := NewReplica(shim.mu.rangeDesc, s, 0)
@@ -2044,6 +2059,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 		rep.SetZoneConfig(shim.mu.zone)
 		shim.mu.rangeDesc = nil
 		shim.mu.replica = rep
+		shim.mu.replica.Ref()
 		return rep, nil
 	}
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
@@ -2093,6 +2109,9 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 // Concretely, when key represents a key within replica R,
 // lookupPrecedingReplica returns the replica that immediately precedes R in
 // replicasByKey.
+//
+// The caller is responsible for invoking the returned replica's
+// Unref() method when the replica is no longer needed.
 func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -2153,8 +2172,10 @@ func (s *Store) visitReplicasLocked(
 			case *ReplicaShim:
 				t.mu.Lock()
 				rep := t.mu.replica
+				rep.Ref()
 				t.mu.Unlock()
 				if rep != nil {
+					defer rep.Unref()
 					return iterator(rep)
 				} else if !onlyResident {
 					// We must make the replica resident by initializing it.
@@ -2162,6 +2183,7 @@ func (s *Store) visitReplicasLocked(
 					if err != nil {
 						log.Fatalf(context.TODO(), "%s: unable to load replica %s", s, t)
 					}
+					defer rep.Unref()
 					return iterator(rep)
 				}
 				return true
@@ -2175,6 +2197,7 @@ func (s *Store) visitReplicasLocked(
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 	if repl, _ := s.GetReplica(rangeID); repl != nil {
+		defer repl.Unref()
 		return repl.RaftStatus()
 	}
 	return nil
@@ -2349,6 +2372,7 @@ func splitPostApply(
 	if err != nil {
 		log.Fatalf(ctx, "unable to find RHS replica: %s", err)
 	}
+	defer rightRng.Unref()
 	{
 		rightRng.mu.Lock()
 		// Already holding raftMu, see above.
@@ -2510,6 +2534,7 @@ func (s *Store) MergeRange(
 	if err != nil {
 		return err
 	}
+	defer rightRepl.Unref()
 
 	leftRepl.raftMu.AssertHeld()
 	rightRepl.raftMu.AssertHeld()
@@ -3109,6 +3134,7 @@ func (s *Store) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
+		defer repl.Unref()
 		if !repl.IsInitialized() {
 			repl.mu.RLock()
 			replicaID := repl.mu.replicaID
@@ -3429,6 +3455,7 @@ func (s *Store) withReplicaForRequest(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
+	defer r.Unref()
 	defer r.raftMu.Unlock()
 	ctx = r.AnnotateCtx(ctx)
 	r.setLastReplicaDescriptors(req)
@@ -3711,6 +3738,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 		// Best-effort context annotation of replica.
 		ctx = repl.AnnotateCtx(ctx)
 	}
+	defer repl.Unref()
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch tErr := val.GetDetail().(type) {
@@ -3861,6 +3889,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	if !ok {
 		return
 	}
+	defer r.Unref()
 
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(noSnap)
@@ -3899,6 +3928,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
+	defer r.Unref()
 	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
 
 	start := timeutil.Now()
@@ -3936,6 +3966,7 @@ func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
 		}
 		if shim.QuiescentButBehind() {
 			if repl, ok := s.mustGetReplica(context.TODO(), shim.RangeID()); ok {
+				defer repl.Unref()
 				repl.unquiesceLocked()
 			}
 		}
@@ -4072,11 +4103,13 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		for _, beat := range beats {
 			if repl, ok := s.mustGetReplica(ctx, beat.RangeID); ok {
 				repl.addUnreachableRemoteReplica(beat.ToReplicaID)
+				repl.Unref()
 			}
 		}
 		for _, resp := range resps {
 			if repl, ok := s.mustGetReplica(ctx, resp.RangeID); ok {
 				repl.addUnreachableRemoteReplica(resp.ToReplicaID)
+				repl.Unref()
 			}
 		}
 		return 0
@@ -4109,6 +4142,9 @@ var errRetry = errors.New("retry: orphaned replica")
 // uninitialized replica if necessary. The caller must not hold the store's
 // lock. The returned replica has Replica.raftMu locked and it is the caller's
 // responsibility to unlock it.
+//
+// The caller is responsible for invoking the returned replica's
+// Unref() method when the replica is no longer needed.
 func (s *Store) getOrCreateReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
@@ -4220,6 +4256,7 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.raftMu.Unlock()
 		return nil, false, errRetry
 	}
+	repl.Ref()
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock()
 
@@ -4282,7 +4319,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	s.mu.replicaShims.Range(func(_ int64, v unsafe.Pointer) bool {
-		rep, metrics := (*ReplicaShim)(v).Metrics(ctx, s.Ident.StoreID, timestamp, livenessMap)
+		shim := (*ReplicaShim)(v)
+		rep, metrics := shim.Metrics(ctx, s.Ident.StoreID, timestamp, livenessMap)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
@@ -4319,6 +4357,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 			if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
 				averageWritesPerSecond += wps
+			}
+			// If there were no queries or writes over the most recent stats
+			// collection window, make this replica non-resident if possible.
+			if rep.leaseholderStats.latestWindowEmpty() && rep.writeStats.latestWindowEmpty() {
+				shim.MaybeMakeNonResident()
 			}
 		}
 		return true // more

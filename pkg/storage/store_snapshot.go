@@ -417,6 +417,7 @@ func (s *Store) canApplySnapshotLocked(
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		} else {
+			defer exReplica.Unref()
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {
 					return true
