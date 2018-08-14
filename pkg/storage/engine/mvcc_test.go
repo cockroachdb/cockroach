@@ -1282,6 +1282,71 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 }
 
+// Regression test for #28205: MVCCGet and MVCCScan, FindSplitKey, and
+// ComputeStats need to invalidate the cached iterator data.
+func TestMVCCInvalidateIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, which := range []string{"get", "scan", "findSplitKey", "computeStats"} {
+		t.Run(which, func(t *testing.T) {
+			engine := createTestEngine()
+			defer engine.Close()
+
+			ctx := context.Background()
+			ts1 := hlc.Timestamp{WallTime: 1}
+			ts2 := hlc.Timestamp{WallTime: 2}
+
+			key := roachpb.Key("a")
+			if err := MVCCPut(ctx, engine, nil, key, ts1, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			var iterOptions IterOptions
+			switch which {
+			case "get":
+				iterOptions.Prefix = true
+			case "scan", "findSplitKey", "computeStats":
+				iterOptions.UpperBound = roachpb.KeyMax
+			}
+
+			// Use a batch which internally caches the iterator.
+			batch := engine.NewBatch()
+			defer batch.Close()
+
+			{
+				// Seek the iter to a valid position.
+				iter := batch.NewIterator(iterOptions)
+				iter.Seek(MakeMVCCMetadataKey(key))
+				iter.Close()
+			}
+
+			var err error
+			switch which {
+			case "get":
+				_, _, err = MVCCGet(ctx, batch, key, ts2, true, nil)
+			case "scan":
+				_, _, _, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, math.MaxInt64, ts2, true, nil)
+			case "findSplitKey":
+				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
+			case "computeStats":
+				iter := batch.NewIterator(iterOptions)
+				_, err = iter.ComputeStats(NilKey, MVCCKeyMax, 0)
+				iter.Close()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify that the iter is invalid.
+			iter := batch.NewIterator(iterOptions)
+			defer iter.Close()
+			if ok, _ := iter.Valid(); ok {
+				t.Fatalf("iterator should not be valid")
+			}
+		})
+	}
+}
+
 func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()
