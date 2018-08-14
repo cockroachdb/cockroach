@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // MVCCLogicalOpType is an enum with values corresponding to each of the
@@ -51,9 +52,9 @@ const (
 // MVCCLogicalOpDetails contains details about the occurrence of an MVCC logical
 // operation.
 type MVCCLogicalOpDetails struct {
-	Txn   enginepb.TxnMeta
-	Key   roachpb.Key
-	Value roachpb.Value
+	Txn       enginepb.TxnMeta
+	Key       roachpb.Key
+	Timestamp hlc.Timestamp
 
 	// Safe indicates that the values in this struct will never be invalidated
 	// at a later point. If the details object cannot promise that its values
@@ -102,13 +103,11 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 	case MVCCWriteValueOpType:
 		if !details.Safe {
 			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
-			ol.opsAlloc, details.Value.RawBytes = ol.opsAlloc.Copy(details.Value.RawBytes, 0)
 		}
 
 		ol.recordOp(&enginepb.MVCCWriteValueOp{
 			Key:       details.Key,
-			Timestamp: details.Value.Timestamp,
-			Value:     details.Value.RawBytes,
+			Timestamp: details.Timestamp,
 		})
 	case MVCCWriteIntentOpType:
 		if !details.Safe {
@@ -118,12 +117,12 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 		ol.recordOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:     details.Txn.ID,
 			TxnKey:    details.Txn.Key,
-			Timestamp: details.Value.Timestamp,
+			Timestamp: details.Timestamp,
 		})
 	case MVCCUpdateIntentOpType:
 		ol.recordOp(&enginepb.MVCCUpdateIntentOp{
 			TxnID:     details.Txn.ID,
-			Timestamp: details.Value.Timestamp,
+			Timestamp: details.Timestamp,
 		})
 	case MVCCCommitIntentOpType:
 		if !details.Safe {
@@ -133,7 +132,7 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 		ol.recordOp(&enginepb.MVCCCommitIntentOp{
 			TxnID:     details.Txn.ID,
 			Key:       details.Key,
-			Timestamp: details.Value.Timestamp,
+			Timestamp: details.Timestamp,
 		})
 	case MVCCAbortIntentOpType:
 		ol.recordOp(&enginepb.MVCCAbortIntentOp{

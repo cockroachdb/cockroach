@@ -120,7 +120,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteValueOp{
 			Key:       testKey1,
 			Timestamp: hlc.Timestamp{Logical: 1},
-			Value:     value1.RawBytes,
 		}),
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:     txn1.ID,
