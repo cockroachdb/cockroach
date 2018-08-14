@@ -75,7 +75,7 @@ type privateKey struct {
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
 	ps.privatesMap = make(map[privateKey]PrivateID)
-	ps.privates = make([]interface{}, 1)
+	ps.privates = make([]interface{}, 1, 8)
 }
 
 // lookup returns a private value previously interned by privateStorage.

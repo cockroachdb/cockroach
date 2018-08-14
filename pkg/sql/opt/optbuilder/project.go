@@ -84,6 +84,10 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
 	inScope.replaceSRFs = true
 
+	if outScope.cols == nil {
+		outScope.cols = make([]scopeColumn, 0, len(selects))
+	}
+
 	for _, e := range selects {
 		// Start with fast path, looking for simple column reference.
 		texpr := b.resolveColRef(e.Expr, inScope)
