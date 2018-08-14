@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,13 +46,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-var (
-	// SchemaChangeLeaseDuration is the duration a lease will be acquired for.
-	// Exported for testing purposes only.
-	SchemaChangeLeaseDuration = 5 * time.Minute
-	// MinSchemaChangeLeaseDuration is the minimum duration a lease will have
-	// remaining upon acquisition. Exported for testing purposes only.
-	MinSchemaChangeLeaseDuration = time.Minute
+var schemaChangeLeaseDuration = settings.RegisterNonNegativeDurationSetting(
+	"schemachanger.lease.duration",
+	"the duration of a schema change lease",
+	time.Minute*5,
+)
+
+var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
+	"schemachanger.lease.renew_fraction",
+	"the fraction of schemachanger.lease_duration remaining to trigger a renew of the lease",
+	0.4,
 )
 
 // This is a delay [0.9 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
@@ -69,7 +73,7 @@ var (
 // TODO(mjibson): Refine the job coordinator to elect a new job coordinator
 // on coordinator failure without causing a storm of polling requests
 // attempting to become the job coordinator.
-const asyncSchemaChangeDelay = 30 * time.Second
+const asyncSchemaChangeDelay = 1 * time.Minute
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
@@ -112,6 +116,7 @@ func NewSchemaChangerForTesting(
 	leaseMgr *LeaseManager,
 	jobRegistry *jobs.Registry,
 	execCfg *ExecutorConfig,
+	settings *cluster.Settings,
 ) SchemaChanger {
 	return SchemaChanger{
 		tableID:     tableID,
@@ -120,14 +125,18 @@ func NewSchemaChangerForTesting(
 		db:          &db,
 		leaseMgr:    leaseMgr,
 		jobRegistry: jobRegistry,
-		settings:    cluster.MakeTestingClusterSettings(),
+		settings:    settings,
 		execCfg:     execCfg,
 	}
 }
 
 func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {
 	return sqlbase.TableDescriptor_SchemaChangeLease{
-		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(SchemaChangeLeaseDuration).UnixNano()}
+		NodeID: sc.nodeID,
+		ExpirationTime: timeutil.Now().Add(
+			schemaChangeLeaseDuration.Get(&sc.settings.SV),
+		).UnixNano(),
+	}
 }
 
 // isPermanentSchemaChangeError returns true if the error results in
@@ -271,8 +280,9 @@ func (sc *SchemaChanger) ExtendLease(
 	ctx context.Context, existingLease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	// Check if there is still time on this lease.
-	minDesiredExpiration := timeutil.Now().Add(MinSchemaChangeLeaseDuration)
-	if timeutil.Unix(0, existingLease.ExpirationTime).After(minDesiredExpiration) {
+	minDuration := time.Duration(float64(schemaChangeLeaseDuration.Get(&sc.settings.SV)) *
+		schemaChangeLeaseRenewFraction.Get(&sc.settings.SV))
+	if timeutil.Unix(0, existingLease.ExpirationTime).After(timeutil.Now().Add(minDuration)) {
 		return nil
 	}
 	// Update lease.
