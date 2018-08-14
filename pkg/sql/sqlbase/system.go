@@ -533,7 +533,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	nowString = "now()"
+	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{

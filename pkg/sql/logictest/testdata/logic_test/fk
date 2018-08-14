@@ -237,15 +237,15 @@ query TT
 SHOW CREATE TABLE delivery
 ----
 delivery  CREATE TABLE delivery (
-              ts TIMESTAMP NULL DEFAULT now(),
-              "order" INT NULL,
-              shipment INT NULL,
-              item STRING NULL,
-              CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
-              INDEX delivery_item_idx (item ASC),
-              CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
-              INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
-              FAMILY "primary" (ts, "order", shipment, item, rowid)
+          ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
+          "order" INT NULL,
+          shipment INT NULL,
+          item STRING NULL,
+          CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products (upc),
+          INDEX delivery_item_idx (item ASC),
+          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment),
+          INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
+          FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
 statement ok

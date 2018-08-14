@@ -34,10 +34,10 @@ CREATE TABLE t (
 query TTBTTT colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        42:::INT        ·                      {"primary"}
-b            TIMESTAMP  true         now()           ·                      {}
-c            FLOAT      true         random()        ·                      {}
+column_name  data_type  is_nullable  column_default     generation_expression  indices
+a            INT        false        42:::INT           ·                      {"primary"}
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}
+c            FLOAT      true         random()           ·                      {}
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
