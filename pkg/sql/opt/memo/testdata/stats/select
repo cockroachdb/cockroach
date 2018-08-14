@@ -642,3 +642,37 @@ select
            │    ├── variable: order_history.customer_id [type=int, outer=(3)]
            │    └── const: 2 [type=int]
            └── const: 0 [type=int]
+
+exec-ddl
+CREATE TABLE c (x INT, z INT NOT NULL, UNIQUE INDEX x_idx (x))
+----
+TABLE c
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX x_idx
+      ├── x int
+      └── rowid int not null (hidden) (storing)
+
+# Test that the distinct count for x is estimated correctly (since it's a weak
+# key).
+norm
+SELECT * FROM c WHERE x >= 0 AND x < 100
+----
+select
+ ├── columns: x:1(int!null) z:2(int!null)
+ ├── stats: [rows=100, distinct(1)=100]
+ ├── fd: (1)-->(2)
+ ├── scan c
+ │    ├── columns: x:1(int) z:2(int!null)
+ │    ├── stats: [rows=1000, distinct(1)=1000]
+ │    └── fd: (1)~~>(2)
+ └── filters [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
+      ├── ge [type=bool, outer=(1), constraints=(/1: [/0 - ]; tight)]
+      │    ├── variable: c.x [type=int, outer=(1)]
+      │    └── const: 0 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /99]; tight)]
+           ├── variable: c.x [type=int, outer=(1)]
+           └── const: 100 [type=int]
