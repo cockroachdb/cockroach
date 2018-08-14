@@ -397,11 +397,7 @@ func (b *Builder) buildScalarHelper(
 
 	case *tree.UnaryExpr:
 		out = b.buildScalarHelper(t.TypedInnerExpr(), "", inScope, nil)
-
-		// Discard do-nothing unary plus operator.
-		if t.Operator != tree.UnaryPlus {
-			out = unaryOpMap[t.Operator](b.factory, out)
-		}
+		out = unaryOpMap[t.Operator](b.factory, out)
 
 	// NB: this is the exception to the sorting of the case statements. The
 	// tree.Datum case needs to occur after *tree.Placeholder which implements

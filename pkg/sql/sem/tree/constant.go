@@ -495,7 +495,6 @@ func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 var unaryOpToToken = map[UnaryOperator]token.Token{
-	UnaryPlus:  token.ADD,
 	UnaryMinus: token.SUB,
 }
 var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{

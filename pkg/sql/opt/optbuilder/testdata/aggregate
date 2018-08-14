@@ -2449,27 +2449,41 @@ build
 SELECT +k * (-w) AS r FROM kv GROUP BY +k, -w
 ----
 project
- ├── columns: r:7(int)
+ ├── columns: r:6(int)
  ├── group-by
- │    ├── columns: column5:5(int) column6:6(int)
- │    ├── grouping columns: column5:5(int) column6:6(int)
+ │    ├── columns: k:1(int!null) column5:5(int)
+ │    ├── grouping columns: k:1(int!null) column5:5(int)
  │    └── project
- │         ├── columns: column5:5(int) column6:6(int)
+ │         ├── columns: column5:5(int) k:1(int!null)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         └── projections
- │              ├── variable: kv.k [type=int]
  │              └── unary-minus [type=int]
  │                   └── variable: kv.w [type=int]
  └── projections
       └── mult [type=int]
-           ├── variable: column5 [type=int]
-           └── variable: column6 [type=int]
+           ├── variable: kv.k [type=int]
+           └── variable: column5 [type=int]
 
 build
 SELECT k * (-w) FROM kv GROUP BY +k, -w
 ----
-error (42803): column "k" must appear in the GROUP BY clause or be used in an aggregate function
+project
+ ├── columns: "?column?":6(int)
+ ├── group-by
+ │    ├── columns: k:1(int!null) column5:5(int)
+ │    ├── grouping columns: k:1(int!null) column5:5(int)
+ │    └── project
+ │         ├── columns: column5:5(int) k:1(int!null)
+ │         ├── scan kv
+ │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │         └── projections
+ │              └── unary-minus [type=int]
+ │                   └── variable: kv.w [type=int]
+ └── projections
+      └── mult [type=int]
+           ├── variable: kv.k [type=int]
+           └── variable: column5 [type=int]
 
 build
 SELECT +k * (-w) AS r FROM kv GROUP BY k, w
