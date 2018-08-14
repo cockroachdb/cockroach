@@ -884,8 +884,8 @@ message WindowerSpec {
       UNBOUNDED_PRECEDING = 0;
       UNBOUNDED_FOLLOWING = 1;
       // Offsets are stored within Bound.
-      OFFSET_PRECEDING = 2;     // currently supported only in ROWS mode
-      OFFSET_FOLLOWING = 3;     // currently supported only in ROWS mode
+      OFFSET_PRECEDING = 2;
+      OFFSET_FOLLOWING = 3;
       CURRENT_ROW = 4;
     }
 
@@ -894,8 +894,7 @@ message WindowerSpec {
       optional BoundType boundType = 1 [(gogoproto.nullable) = false];
       // For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
       // is ignored. Integer offset for ROWS mode is stored in int_offset while
-      // an encoded datum and the type information are stored for RANGE mode
-      // (the support for the latter will be added soon).
+      // an encoded datum and the type information are stored for RANGE mode.
       optional uint32 int_offset = 2 [(gogoproto.nullable) = false];
       optional bytes typed_offset = 3;
       optional DatumInfo offset_type = 4 [(gogoproto.nullable) = false];

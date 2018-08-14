@@ -21,10 +21,12 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -486,13 +488,61 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			startBound, endBound := windowFn.frame.Bounds.Start, windowFn.frame.Bounds.End
 			if startBound.BoundType == WindowerSpec_Frame_OFFSET_PRECEDING ||
 				startBound.BoundType == WindowerSpec_Frame_OFFSET_FOLLOWING {
-				frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
+				switch windowFn.frame.Mode {
+				case WindowerSpec_Frame_ROWS:
+					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
+				case WindowerSpec_Frame_RANGE:
+					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
+					if err != nil {
+						return errors.Wrapf(err, "error decoding %d bytes", len(startBound.TypedOffset))
+					}
+					if len(rem) != 0 {
+						return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+					}
+					frameRun.StartBoundOffset = datum
+				default:
+					panic("unexpected WindowFrameMode")
+				}
 			}
 			if endBound != nil {
 				if endBound.BoundType == WindowerSpec_Frame_OFFSET_PRECEDING ||
 					endBound.BoundType == WindowerSpec_Frame_OFFSET_FOLLOWING {
-					frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
+					switch windowFn.frame.Mode {
+					case WindowerSpec_Frame_ROWS:
+						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
+					case WindowerSpec_Frame_RANGE:
+						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
+						if err != nil {
+							return errors.Wrapf(err, "error decoding %d bytes", len(endBound.TypedOffset))
+						}
+						if len(rem) != 0 {
+							return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+						}
+						frameRun.EndBoundOffset = datum
+					default:
+						panic("unexpected WindowFrameMode")
+					}
 				}
+			}
+			if frameRun.RangeModeWithOffsets() {
+				ordCol := windowFn.ordering.Columns[0]
+				frameRun.OrdColIdx = int(ordCol.ColIdx)
+				// We need this +1 because encoding.Direction has extra value "_"
+				// as zeroth "entry" which its proto equivalent doesn't have.
+				frameRun.OrdDirection = encoding.Direction(ordCol.Direction + 1)
+
+				colTyp := w.inputTypes[ordCol.ColIdx].ToDatumType()
+				// Type of offset depends on the ordering column's type.
+				offsetTyp := colTyp
+				if types.IsDateTimeType(colTyp) {
+					// For datetime related ordering columns, offset must be an Interval.
+					offsetTyp = types.Interval
+				}
+				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
+				if !found {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
+				}
+				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
 			}
 		}
 

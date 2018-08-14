@@ -71,6 +71,7 @@ const (
 	CodeCharacterNotInRepertoireError              = "22021"
 	CodeDatetimeFieldOverflowError                 = "22008"
 	CodeDivisionByZeroError                        = "22012"
+	CodeInvalidWindowFrameOffsetError              = "22013"
 	CodeErrorInAssignmentError                     = "22005"
 	CodeEscapeCharacterConflictError               = "2200B"
 	CodeIndicatorOverflowError                     = "22022"

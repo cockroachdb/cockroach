@@ -183,8 +183,8 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 			if err != nil {
 				t.Errorf("Unexpected error received when converting avg from DDecimal to float64: %+v", err)
 			}
-			if a != float64(naiveSum)/float64(wfr.FrameSize()) {
-				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(wfr.FrameSize()), a)
+			if a != float64(naiveSum)/float64(wfr.FrameSize(evalCtx)) {
+				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(wfr.FrameSize(evalCtx)), a)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Errorf(partitionToString(wfr.Rows))
 				panic("")

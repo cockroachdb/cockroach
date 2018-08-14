@@ -1906,7 +1906,6 @@ SELECT max(i) * (1/j) * (row_number() OVER (ORDER BY max(i))) FROM (SELECT 1 AS 
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) OVER (PARTITION BY k) FROM kv
 
-
 statement ok
 CREATE TABLE products (
   group_id serial PRIMARY KEY,
@@ -1914,22 +1913,27 @@ CREATE TABLE products (
   product_name VARCHAR (255) NOT NULL,
   price DECIMAL (11, 2),
   priceInt INT,
-  priceFloat FLOAT
+  priceFloat FLOAT,
+  pDate DATE,
+  pTime TIME,
+  pTimestamp TIMESTAMP,
+  pTimestampTZ TIMESTAMPTZ,
+  pInterval INTERVAL
 )
 
 statement ok
-INSERT INTO products (group_name, product_name, price, priceInt, priceFloat) VALUES
-('Smartphone', 'Microsoft Lumia', 200, 200, 200),
-('Smartphone', 'HTC One', 400, 400, 400),
-('Smartphone', 'Nexus', 500, 500, 500),
-('Smartphone', 'iPhone', 900, 900, 900),
-('Laptop', 'HP Elite', 1200, 1200, 1200),
-('Laptop', 'Lenovo Thinkpad', 700, 700, 700),
-('Laptop', 'Sony VAIO', 700, 700, 700),
-('Laptop', 'Dell', 800, 800, 800),
-('Tablet', 'iPad', 700, 700, 700),
-('Tablet', 'Kindle Fire', 150, 150, 150),
-('Tablet', 'Samsung', 200, 200, 200)
+INSERT INTO products (group_name, product_name, price, priceInt, priceFloat, pDate, pTime, pTimestamp, pTimestampTZ, pInterval) VALUES
+('Smartphone', 'Microsoft Lumia', 200, 200, 200, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Smartphone', 'HTC One', 400, 400, 400, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Smartphone', 'Nexus', 500, 500, 500, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds'),
+('Smartphone', 'iPhone', 900, 900, 900, '2018-07-31', TIME '07:34:56', TIMESTAMP '2018-07-31 07:34:56', TIMESTAMPTZ '2018-07-31 07:34:56', INTERVAL '1 minutes 2 seconds'),
+('Laptop', 'HP Elite', 1200, 1200, 1200, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Laptop', 'Lenovo Thinkpad', 700, 700, 700, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Laptop', 'Sony VAIO', 700, 700, 700, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds'),
+('Laptop', 'Dell', 800, 800, 800, '2018-07-31', TIME '07:34:56', TIMESTAMP '2018-07-31 07:34:56', TIMESTAMPTZ '2018-07-31 07:34:56', INTERVAL '1 minutes 2 seconds'),
+('Tablet', 'iPad', 700, 700, 700, '2018-07-30', TIME '01:23:45', TIMESTAMP '2018-07-30 01:23:45', TIMESTAMPTZ '2018-07-30 01:23:45', INTERVAL '1 months 2 days 3 hours 4 minutes 5 seconds'),
+('Tablet', 'Kindle Fire', 150, 150, 150, '2018-07-31', TIME '12:34:56', TIMESTAMP '2018-07-31 12:34:56', TIMESTAMPTZ '2018-07-31 12:34:56', INTERVAL '1 days 2 hours 3 minutes 4 seconds'),
+('Tablet', 'Samsung', 200, 200, 200, '2018-07-30', TIME '11:23:45', TIMESTAMP '2018-07-30 11:23:45', TIMESTAMPTZ '2018-07-30 11:23:45', INTERVAL '1 hours 2 minutes 3 seconds')
 
 statement error cannot copy window "w" because it has a frame clause
 SELECT avg(price) OVER (w) FROM products WINDOW w AS (ROWS 1 PRECEDING)
@@ -2300,3 +2304,480 @@ NULL                   200.00   200.00                 200.00
 737.50                 NULL     575.00                 350.00
 737.50                 NULL     575.00                 150.00
 737.50                 NULL     500.00                 175.00
+
+statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
+SELECT sum(price) OVER (RANGE 100 PRECEDING) FROM products
+
+statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
+SELECT sum(price) OVER (ORDER BY price, priceint RANGE 100 PRECEDING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY pdate RANGE '-1 days' PRECEDING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY ptime RANGE BETWEEN '-1 hours' PRECEDING AND '1 hours' FOLLOWING) FROM products
+
+statement error invalid preceding or following size in window function
+SELECT sum(price) OVER (ORDER BY ptime RANGE BETWEEN '1 hours' PRECEDING AND '-1 hours' FOLLOWING) FROM products
+
+statement error incompatible window frame start type: decimal
+SELECT sum(price) OVER (ORDER BY ptimestamp RANGE 123.4 PRECEDING) FROM products
+
+statement error incompatible window frame start type: int
+SELECT sum(price) OVER (ORDER BY ptimestamptz RANGE BETWEEN 123 PRECEDING AND CURRENT ROW) FROM products
+
+statement error could not parse "1 days" as type decimal
+SELECT sum(price) OVER (ORDER BY price RANGE BETWEEN 123.4 PRECEDING AND '1 days' FOLLOWING) FROM products
+
+statement error RANGE with offset PRECEDING/FOLLOWING is not supported for column type string
+SELECT sum(price) OVER (ORDER BY product_name RANGE 'foo' PRECEDING) FROM products
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE 200 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400
+Laptop      Sony VAIO        700.00   1400
+Laptop      Dell             800.00   2200
+Laptop      HP Elite         1200.00  1200
+Smartphone  Microsoft Lumia  200.00   200
+Smartphone  HTC One          400.00   600
+Smartphone  Nexus            500.00   900
+Smartphone  iPhone           900.00   900
+Tablet      Kindle Fire      150.00   150
+Tablet      Samsung          200.00   350
+Tablet      iPad             700.00   700
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE 200.002 PRECEDING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400.00
+Laptop      Sony VAIO        700.00   1400.00
+Laptop      Dell             800.00   2200.00
+Laptop      HP Elite         1200.00  1200.00
+Smartphone  Microsoft Lumia  200.00   200.00
+Smartphone  HTC One          400.00   600.00
+Smartphone  Nexus            500.00   900.00
+Smartphone  iPhone           900.00   900.00
+Tablet      Kindle Fire      150.00   150.00
+Tablet      Samsung          200.00   350.00
+Tablet      iPad             700.00   700.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 200.01 PRECEDING AND 99.99 FOLLOWING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   1400
+Laptop      Sony VAIO        700.00   1400
+Laptop      Dell             800.00   2200
+Laptop      HP Elite         1200.00  1200
+Smartphone  Microsoft Lumia  200.00   200
+Smartphone  HTC One          400.00   600
+Smartphone  Nexus            500.00   900
+Smartphone  iPhone           900.00   900
+Tablet      Kindle Fire      150.00   350
+Tablet      Samsung          200.00   350
+Tablet      iPad             700.00   700
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE BETWEEN 99.99 PRECEDING AND 100.00 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Laptop      Dell             800.00   NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Smartphone  HTC One          400.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      iPad             700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE BETWEEN 300 PRECEDING AND 50 PRECEDING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Laptop      Dell             800.00   1400
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Smartphone  HTC One          400.00   200
+Smartphone  Nexus            500.00   600
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+Tablet      Samsung          200.00   150
+Tablet      iPad             700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, priceint, group_id
+----
+Laptop      Lenovo Thinkpad  700.00   800
+Laptop      Sony VAIO        700.00   800
+Laptop      Dell             800.00   NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia  200.00   900
+Smartphone  HTC One          400.00   500
+Smartphone  Nexus            500.00   NULL
+Smartphone  iPhone           900.00   NULL
+Tablet      Kindle Fire      150.00   200
+Tablet      Samsung          200.00   NULL
+Tablet      iPad             700.00   NULL
+
+query TRR
+SELECT group_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price RANGE BETWEEN 49.999 FOLLOWING AND 300.001 FOLLOWING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      700.00   800.00
+Laptop      700.00   800.00
+Laptop      800.00   NULL
+Laptop      1200.00  NULL
+Smartphone  200.00   900.00
+Smartphone  400.00   500.00
+Smartphone  500.00   NULL
+Smartphone  900.00   NULL
+Tablet      150.00   200.00
+Tablet      200.00   NULL
+Tablet      700.00   NULL
+
+query TRR
+SELECT group_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, price, group_id
+----
+Laptop      700.00   800
+Laptop      700.00   800
+Laptop      800.00   NULL
+Laptop      1200.00  NULL
+Smartphone  200.00   900
+Smartphone  400.00   500
+Smartphone  500.00   NULL
+Smartphone  900.00   NULL
+Tablet      150.00   200
+Tablet      200.00   NULL
+Tablet      700.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, nth_value(pricefloat, 2) OVER (PARTITION BY group_name ORDER BY pricefloat RANGE BETWEEN 1.23 FOLLOWING AND 500.23 FOLLOWING) FROM products ORDER BY group_name, pricefloat, group_id
+----
+Laptop      Lenovo Thinkpad   700.00  1200
+Laptop      Sony VAIO         700.00  1200
+Laptop      Dell              800.00  NULL
+Laptop      HP Elite         1200.00  NULL
+Smartphone  Microsoft Lumia   200.00  500
+Smartphone  HTC One           400.00  900
+Smartphone  Nexus             500.00  NULL
+Smartphone  iPhone            900.00  NULL
+Tablet      Kindle Fire       150.00  NULL
+Tablet      Samsung           200.00  NULL
+Tablet      iPad              700.00  NULL
+
+query TTTRR
+SELECT group_name, product_name, pdate, price, sum(price) OVER (ORDER BY pdate RANGE '1 days' PRECEDING) FROM products ORDER BY pdate, group_id
+----
+Smartphone  Microsoft Lumia  2018-07-30 00:00:00 +0000 +0000  200.00   3500.00
+Smartphone  Nexus            2018-07-30 00:00:00 +0000 +0000  500.00   3500.00
+Laptop      HP Elite         2018-07-30 00:00:00 +0000 +0000  1200.00  3500.00
+Laptop      Sony VAIO        2018-07-30 00:00:00 +0000 +0000  700.00   3500.00
+Tablet      iPad             2018-07-30 00:00:00 +0000 +0000  700.00   3500.00
+Tablet      Samsung          2018-07-30 00:00:00 +0000 +0000  200.00   3500.00
+Smartphone  HTC One          2018-07-31 00:00:00 +0000 +0000  400.00   6450.00
+Smartphone  iPhone           2018-07-31 00:00:00 +0000 +0000  900.00   6450.00
+Laptop      Lenovo Thinkpad  2018-07-31 00:00:00 +0000 +0000  700.00   6450.00
+Laptop      Dell             2018-07-31 00:00:00 +0000 +0000  800.00   6450.00
+Tablet      Kindle Fire      2018-07-31 00:00:00 +0000 +0000  150.00   6450.00
+
+query TTRR
+SELECT product_name, ptime, price, avg(price) OVER (ORDER BY ptime RANGE BETWEEN '1 hours 15 minutes' PRECEDING AND '1 hours 15 minutes' FOLLOWING) FROM products ORDER BY ptime, group_id
+----
+Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   700.00
+HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+iPad             0000-01-01 01:23:45 +0000 UTC  700.00   700.00
+iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   850.00
+Dell             0000-01-01 07:34:56 +0000 UTC  800.00   850.00
+Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   441.66666666666666667
+Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   441.66666666666666667
+Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   441.66666666666666667
+HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   441.66666666666666667
+Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   441.66666666666666667
+Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   441.66666666666666667
+
+query TTTRR
+SELECT group_name, product_name, ptime, price, min(price) OVER (PARTITION BY group_name ORDER BY ptime RANGE BETWEEN '1 hours' FOLLOWING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_name, ptime
+----
+Laptop      HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+Laptop      Dell             0000-01-01 07:34:56 +0000 UTC  800.00   700.00
+Laptop      Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   700.00
+Laptop      Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   NULL
+Smartphone  Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   400.00
+Smartphone  iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   400.00
+Smartphone  Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   400.00
+Smartphone  HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   NULL
+Tablet      iPad             0000-01-01 01:23:45 +0000 UTC  700.00   150.00
+Tablet      Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   150.00
+Tablet      Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, ptimestamp, price, first_value(price) OVER (PARTITION BY group_name ORDER BY ptimestamp RANGE BETWEEN '12 hours' PRECEDING AND '6 hours' FOLLOWING) FROM products ORDER BY group_name, ptimestamp
+----
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  1200.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   1200.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   800.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   800.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   200.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   200.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   900.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   900.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   700.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   700.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
+
+query TTTRR
+SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz
+----
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  1200.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   950.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   900.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   850.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   200.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   350.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   533.33333333333333333
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   500.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   700.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   450.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   350.00
+
+query TTRR
+SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval, group_id
+----
+iPhone           1m2s          900.00   586.36363636363636364
+Dell             1m2s          800.00   586.36363636363636364
+Nexus            1h2m3s        500.00   586.36363636363636364
+Sony VAIO        1h2m3s        700.00   586.36363636363636364
+Samsung          1h2m3s        200.00   586.36363636363636364
+HTC One          1d2h3m4s      400.00   558.33333333333333333
+Lenovo Thinkpad  1d2h3m4s      700.00   558.33333333333333333
+Kindle Fire      1d2h3m4s      150.00   558.33333333333333333
+Microsoft Lumia  1mon2d3h4m5s  200.00   700.00
+HP Elite         1mon2d3h4m5s  1200.00  700.00
+iPad             1mon2d3h4m5s  700.00   700.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE 200 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200
+Laptop      Dell             800.00   800
+Laptop      Lenovo Thinkpad  700.00   2200
+Laptop      Sony VAIO        700.00   2200
+Smartphone  iPhone           900.00   900
+Smartphone  Nexus            500.00   500
+Smartphone  HTC One          400.00   900
+Smartphone  Microsoft Lumia  200.00   600
+Tablet      iPad             700.00   700
+Tablet      Samsung          200.00   200
+Tablet      Kindle Fire      150.00   350
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE 200.002 PRECEDING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200.00
+Laptop      Dell             800.00   800.00
+Laptop      Lenovo Thinkpad  700.00   2200.00
+Laptop      Sony VAIO        700.00   2200.00
+Smartphone  iPhone           900.00   900.00
+Smartphone  Nexus            500.00   500.00
+Smartphone  HTC One          400.00   900.00
+Smartphone  Microsoft Lumia  200.00   600.00
+Tablet      iPad             700.00   700.00
+Tablet      Samsung          200.00   200.00
+Tablet      Kindle Fire      150.00   350.00
+
+query TTRR
+SELECT group_name, product_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 200.01 PRECEDING AND 99.99 FOLLOWING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  1200
+Laptop      Dell             800.00   800
+Laptop      Lenovo Thinkpad  700.00   2200
+Laptop      Sony VAIO        700.00   2200
+Smartphone  iPhone           900.00   900
+Smartphone  Nexus            500.00   500
+Smartphone  HTC One          400.00   900
+Smartphone  Microsoft Lumia  200.00   600
+Tablet      iPad             700.00   700
+Tablet      Samsung          200.00   350
+Tablet      Kindle Fire      150.00   350
+
+query TTRR
+SELECT group_name, product_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE BETWEEN 99.99 PRECEDING AND 100.00 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   NULL
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  HTC One          400.00   NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE BETWEEN 300 PRECEDING AND 50 PRECEDING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   NULL
+Laptop      Lenovo Thinkpad  700.00   800
+Laptop      Sony VAIO        700.00   800
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   NULL
+Smartphone  HTC One          400.00   500
+Smartphone  Microsoft Lumia  200.00   900
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   200
+
+query TTRR
+SELECT group_name, product_name, price, sum(priceint) OVER (PARTITION BY group_name ORDER BY priceint DESC RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, priceint DESC, group_id
+----
+Laptop      HP Elite         1200.00  NULL
+Laptop      Dell             800.00   1400
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   NULL
+Smartphone  Nexus            500.00   600
+Smartphone  HTC One          400.00   200
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   150
+Tablet      Kindle Fire      150.00   NULL
+
+query TRR
+SELECT group_name, price, sum(price) OVER (PARTITION BY group_name ORDER BY price DESC RANGE BETWEEN 49.999 FOLLOWING AND 300.001 FOLLOWING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      1200.00  NULL
+Laptop      800.00   1400.00
+Laptop      700.00   NULL
+Laptop      700.00   NULL
+Smartphone  900.00   NULL
+Smartphone  500.00   600.00
+Smartphone  400.00   200.00
+Smartphone  200.00   NULL
+Tablet      700.00   NULL
+Tablet      200.00   150.00
+Tablet      150.00   NULL
+
+query TRR
+SELECT group_name, price, sum(pricefloat) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 50 FOLLOWING AND 300 FOLLOWING) FROM products ORDER BY group_name, price DESC, group_id
+----
+Laptop      1200.00  NULL
+Laptop      800.00   1400
+Laptop      700.00   NULL
+Laptop      700.00   NULL
+Smartphone  900.00   NULL
+Smartphone  500.00   600
+Smartphone  400.00   200
+Smartphone  200.00   NULL
+Tablet      700.00   NULL
+Tablet      200.00   150
+Tablet      150.00   NULL
+
+query TTRR
+SELECT group_name, product_name, price, nth_value(pricefloat, 2) OVER (PARTITION BY group_name ORDER BY pricefloat DESC RANGE BETWEEN 1.23 FOLLOWING AND 500.23 FOLLOWING) FROM products ORDER BY group_name, pricefloat DESC, group_id
+----
+Laptop      HP Elite         1200.00  700
+Laptop      Dell             800.00   700
+Laptop      Lenovo Thinkpad  700.00   NULL
+Laptop      Sony VAIO        700.00   NULL
+Smartphone  iPhone           900.00   400
+Smartphone  Nexus            500.00   200
+Smartphone  HTC One          400.00   NULL
+Smartphone  Microsoft Lumia  200.00   NULL
+Tablet      iPad             700.00   NULL
+Tablet      Samsung          200.00   NULL
+Tablet      Kindle Fire      150.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, pdate, price, sum(price) OVER (ORDER BY pdate DESC RANGE '1 days' PRECEDING) FROM products ORDER BY pdate DESC, group_id
+----
+Smartphone  HTC One          2018-07-31 00:00:00 +0000 +0000  400.00   2950.00
+Smartphone  iPhone           2018-07-31 00:00:00 +0000 +0000  900.00   2950.00
+Laptop      Lenovo Thinkpad  2018-07-31 00:00:00 +0000 +0000  700.00   2950.00
+Laptop      Dell             2018-07-31 00:00:00 +0000 +0000  800.00   2950.00
+Tablet      Kindle Fire      2018-07-31 00:00:00 +0000 +0000  150.00   2950.00
+Smartphone  Microsoft Lumia  2018-07-30 00:00:00 +0000 +0000  200.00   6450.00
+Smartphone  Nexus            2018-07-30 00:00:00 +0000 +0000  500.00   6450.00
+Laptop      HP Elite         2018-07-30 00:00:00 +0000 +0000  1200.00  6450.00
+Laptop      Sony VAIO        2018-07-30 00:00:00 +0000 +0000  700.00   6450.00
+Tablet      iPad             2018-07-30 00:00:00 +0000 +0000  700.00   6450.00
+Tablet      Samsung          2018-07-30 00:00:00 +0000 +0000  200.00   6450.00
+
+query TTRR
+SELECT product_name, ptime, price, avg(price) OVER (ORDER BY ptime DESC RANGE BETWEEN '1 hours 15 minutes' PRECEDING AND '1 hours 15 minutes' FOLLOWING) FROM products ORDER BY ptime DESC, group_id
+----
+HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   441.66666666666666667
+Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   441.66666666666666667
+Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   441.66666666666666667
+Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   441.66666666666666667
+Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   441.66666666666666667
+Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   441.66666666666666667
+iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   850.00
+Dell             0000-01-01 07:34:56 +0000 UTC  800.00   850.00
+Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   700.00
+HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  700.00
+iPad             0000-01-01 01:23:45 +0000 UTC  700.00   700.00
+
+query TTTRR
+SELECT group_name, product_name, ptime, price, min(price) OVER (PARTITION BY group_name ORDER BY ptime DESC RANGE BETWEEN '1 hours' FOLLOWING AND UNBOUNDED FOLLOWING) FROM products ORDER BY group_name, ptime DESC
+----
+Laptop      Lenovo Thinkpad  0000-01-01 12:34:56 +0000 UTC  700.00   700.00
+Laptop      Sony VAIO        0000-01-01 11:23:45 +0000 UTC  700.00   800.00
+Laptop      Dell             0000-01-01 07:34:56 +0000 UTC  800.00   1200.00
+Laptop      HP Elite         0000-01-01 01:23:45 +0000 UTC  1200.00  NULL
+Smartphone  HTC One          0000-01-01 12:34:56 +0000 UTC  400.00   200.00
+Smartphone  Nexus            0000-01-01 11:23:45 +0000 UTC  500.00   200.00
+Smartphone  iPhone           0000-01-01 07:34:56 +0000 UTC  900.00   200.00
+Smartphone  Microsoft Lumia  0000-01-01 01:23:45 +0000 UTC  200.00   NULL
+Tablet      Kindle Fire      0000-01-01 12:34:56 +0000 UTC  150.00   200.00
+Tablet      Samsung          0000-01-01 11:23:45 +0000 UTC  200.00   700.00
+Tablet      iPad             0000-01-01 01:23:45 +0000 UTC  700.00   NULL
+
+query TTTRR
+SELECT group_name, product_name, ptimestamp, price, first_value(price) OVER (PARTITION BY group_name ORDER BY ptimestamp DESC RANGE BETWEEN '12 hours' PRECEDING AND '6 hours' FOLLOWING) FROM products ORDER BY group_name, ptimestamp DESC
+----
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   700.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   700.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   700.00
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  700.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   400.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   400.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   500.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   500.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   200.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   200.00
+
+query TTTRR
+SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz DESC RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz DESC
+----
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   700.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   750.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   733.33333333333333333
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  850.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   400.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   650.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   600.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   500.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   175.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   350.00
+
+query TTRR
+SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval DESC RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval DESC, group_id
+----
+Microsoft Lumia  1mon2d3h4m5s  200.00   586.36363636363636364
+HP Elite         1mon2d3h4m5s  1200.00  586.36363636363636364
+iPad             1mon2d3h4m5s  700.00   586.36363636363636364
+HTC One          1d2h3m4s      400.00   543.75
+Lenovo Thinkpad  1d2h3m4s      700.00   543.75
+Kindle Fire      1d2h3m4s      150.00   543.75
+Nexus            1h2m3s        500.00   620.00
+Sony VAIO        1h2m3s        700.00   620.00
+Samsung          1h2m3s        200.00   620.00
+iPhone           1m2s          900.00   620.00
+Dell             1m2s          800.00   620.00

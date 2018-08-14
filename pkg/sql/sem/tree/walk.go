@@ -246,7 +246,7 @@ func (node *WindowFrameBound) copyNode() *WindowFrameBound {
 
 func walkWindowFrameBound(v Visitor, bound *WindowFrameBound) (*WindowFrameBound, bool) {
 	ret := bound
-	if bound.OffsetExpr != nil {
+	if bound.HasOffset() {
 		e, changed := WalkExpr(v, bound.OffsetExpr)
 		if changed {
 			if ret == bound {
