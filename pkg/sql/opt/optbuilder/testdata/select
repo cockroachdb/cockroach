@@ -1217,3 +1217,27 @@ SELECT rowid FROM [54(3) as t]
 ----
 scan num_ref_hidden
  └── columns: rowid:3(int!null)
+
+# Regression test for #28388. Ensure that selecting from a table with no
+# columns does not cause a panic.
+exec-ddl
+CREATE TABLE no_cols_table ()
+----
+TABLE no_cols_table
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM no_cols_table
+----
+project
+ └── scan no_cols_table
+      └── columns: rowid:1(int!null)
+
+build
+SELECT * FROM [54(3) as t]
+----
+project
+ └── scan num_ref_hidden
+      └── columns: rowid:3(int!null)
