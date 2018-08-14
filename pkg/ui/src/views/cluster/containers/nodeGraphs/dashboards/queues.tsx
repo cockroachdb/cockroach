@@ -68,6 +68,13 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Merge Queue" sources={storeSources}>
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric name="cr.store.queue.merge.process.success" title="Successful Actions / sec" nonNegativeRate />
+        <Metric name="cr.store.queue.merge.pending" title="Pending Actions" downsampleMax />
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="GC Queue" sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
         <Metric name="cr.store.queue.gc.process.success" title="Successful Actions / sec" nonNegativeRate />
