@@ -99,8 +99,10 @@ const (
 	// fmtUnicodeStrings prints strings and JSON in their unicode representation.
 	fmtUnicodeStrings
 
-	// FmtParsableNumerics produces decimal and float representations that are
-	// always parsable, even if they require a string representation like -Inf.
+	// FmtParsableNumerics produces decimal and float representations
+	// that are always parsable, even if they require a string
+	// representation like -Inf. Negative values are preserved "inside"
+	// the numeric by enclosing them within parentheses.
 	FmtParsableNumerics
 )
 
