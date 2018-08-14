@@ -565,4 +565,7 @@ type sqlStatsCollector interface {
 
 	// SQLStats provides access to the global sqlStats object.
 	SQLStats() *sqlStats
+
+	// Reset resets this stats collector with the given phaseTimes array.
+	Reset(sqlStats *sqlStats, appStats *appStats, times *phaseTimes)
 }
