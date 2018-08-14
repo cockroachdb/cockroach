@@ -4767,16 +4767,20 @@ func TestAllocatorError(t *testing.T) {
 		ae       allocatorError
 		expected string
 	}{
-		{allocatorError{nil, 1},
-			"0 of 1 store with attributes matching []; likely not enough nodes in cluster"},
-		{allocatorError{constraint, 1},
-			"0 of 1 store with attributes matching [{0 [+one]}]"},
-		{allocatorError{constraint, 2},
-			"0 of 2 stores with attributes matching [{0 [+one]}]"},
-		{allocatorError{constraints, 1},
-			"0 of 1 store with attributes matching [{0 [+one +two]}]"},
-		{allocatorError{constraints, 2},
-			"0 of 2 stores with attributes matching [{0 [+one +two]}]"},
+		{allocatorError{constraints: nil, existingReplicas: 1, aliveStores: 1},
+			"0 of 1 live stores are able to take a new replica for the range (1 already has a replica); likely not enough nodes in cluster"},
+		{allocatorError{constraints: nil, existingReplicas: 1, aliveStores: 2, throttledStores: 1},
+			"0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica)"},
+		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 1},
+			"0 of 1 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one]}]"},
+		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2},
+			"0 of 2 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one]}]"},
+		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 1},
+			"0 of 1 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one +two]}]"},
+		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 2},
+			"0 of 2 live stores are able to take a new replica for the range (1 already has a replica); must match constraints [{0 [+one +two]}]"},
+		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2, throttledStores: 1},
+			"0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica); must match constraints [{0 [+one]}]"},
 	}
 
 	for i, testCase := range testCases {
