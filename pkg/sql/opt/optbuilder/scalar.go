@@ -165,7 +165,7 @@ func (b *Builder) buildScalarHelper(
 			panic(builderError{err})
 		}
 		for i := range t.Exprs {
-			texpr := inScope.resolveType(t.Exprs[i], elementType)
+			texpr := t.Exprs[i].(tree.TypedExpr)
 			els[i] = b.buildScalarHelper(texpr, "", inScope, nil)
 		}
 		elements := b.factory.InternList(els)
@@ -255,28 +255,25 @@ func (b *Builder) buildScalarHelper(
 		)
 
 	case *tree.CaseExpr:
-		var condType types.T
 		var input memo.GroupID
 		if t.Expr != nil {
-			condType = types.Any
-			texpr := inScope.resolveType(t.Expr, types.Any)
+			texpr := t.Expr.(tree.TypedExpr)
 			input = b.buildScalarHelper(texpr, "", inScope, nil)
 		} else {
-			condType = types.Bool
 			input = b.factory.ConstructTrue()
 		}
 
 		whens := make([]memo.GroupID, 0, len(t.Whens)+1)
 		for i := range t.Whens {
-			texpr := inScope.resolveType(t.Whens[i].Cond, condType)
+			texpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalarHelper(texpr, "", inScope, nil)
-			texpr = inScope.resolveType(t.Whens[i].Val, types.Any)
+			texpr = t.Whens[i].Val.(tree.TypedExpr)
 			val := b.buildScalarHelper(texpr, "", inScope, nil)
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		if t.Else != nil {
-			texpr := inScope.resolveType(t.Else, types.Any)
+			texpr := t.Else.(tree.TypedExpr)
 			elseExpr := b.buildScalarHelper(texpr, "", inScope, nil)
 			whens = append(whens, elseExpr)
 		} else {
@@ -285,7 +282,7 @@ func (b *Builder) buildScalarHelper(
 		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
 
 	case *tree.CastExpr:
-		texpr := inScope.resolveType(t.Expr, types.Any)
+		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalarHelper(texpr, "", inScope, nil)
 		out = b.factory.ConstructCast(arg, b.factory.InternColType(t.Type.(coltypes.T)))
 
@@ -297,7 +294,7 @@ func (b *Builder) buildScalarHelper(
 		out = b.factory.ConstructCoalesce(b.factory.InternList(args))
 
 	case *tree.ColumnAccessExpr:
-		input := b.buildScalarHelper(inScope.resolveType(t.Expr, types.Any), "", inScope, nil)
+		input := b.buildScalarHelper(t.Expr.(tree.TypedExpr), "", inScope, nil)
 		out = b.factory.ConstructColumnAccess(
 			input, b.factory.InternTupleOrdinal(memo.TupleOrdinal(t.ColIndex)),
 		)

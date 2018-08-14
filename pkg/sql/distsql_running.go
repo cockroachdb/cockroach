@@ -21,7 +21,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -193,7 +192,7 @@ func (dsp *DistSQLPlanner) Run(
 		req.Flow = flowSpec
 		runReq := runnerRequest{
 			ctx:        ctx,
-			nodeDialer: nodedialer.New(dsp.rpcContext, gossip.AddressResolver(dsp.gossip)),
+			nodeDialer: dsp.nodeDialer,
 			flowReq:    &req,
 			nodeID:     nodeID,
 			resultChan: resultChan,

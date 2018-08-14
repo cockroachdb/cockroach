@@ -240,6 +240,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.grpc,
 		s.stopper,
 		s.registry,
+		s.cfg.Locality,
 	)
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
 
@@ -270,6 +271,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 		TestingKnobs:    clientTestingKnobs,
+		NodeDialer:      s.nodeDialer,
 	}
 	s.distSender = kv.NewDistSender(distSenderCfg, s.gossip)
 	s.registry.AddMetricStruct(s.distSender.Metrics())
@@ -501,6 +503,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		JobRegistry: s.jobRegistry,
 		Gossip:      s.gossip,
+		NodeDialer:  s.nodeDialer,
 	}
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*distsqlrun.TestingKnobs)
@@ -589,6 +592,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.stopper,
 			s.nodeLiveness,
 			sqlExecutorTestingKnobs.DistSQLPlannerKnobs,
+			s.nodeDialer,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
@@ -1445,6 +1449,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
+		s.cfg.LocalityIPAddresses,
 		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err

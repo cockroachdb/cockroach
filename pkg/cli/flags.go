@@ -48,6 +48,7 @@ import (
 var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var clientConnHost, clientConnPort string
+var localityAdvertiseHosts localityList
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -61,6 +62,7 @@ func initPreFlagsDefaults() {
 
 	clientConnHost = ""
 	clientConnPort = base.DefaultPort
+	localityAdvertiseHosts = localityList{}
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -269,6 +271,7 @@ func init() {
 		_ = f.MarkDeprecated(cliflags.AdvertiseHost.Name, "use --advertise-addr instead.")
 
 		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
+		VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 		_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
 
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
@@ -493,6 +496,7 @@ func extraServerFlagInit() {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+	serverCfg.LocalityIPAddresses = localityAdvertiseHosts
 }
 
 func extraClientFlagInit() {

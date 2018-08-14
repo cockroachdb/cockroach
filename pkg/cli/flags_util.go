@@ -26,11 +26,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
+
+type localityList []roachpb.LocalityAddress
+
+// Type implements the pflag.Value interface.
+func (l *localityList) Type() string { return "localityList" }
+
+// String implements the pflag.Value interface.=
+func (l *localityList) String() string {
+	string := ""
+	for _, loc := range []roachpb.LocalityAddress(*l) {
+		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + ":" + loc.Address.String() + ","
+	}
+
+	return string
+}
+
+// String implements the pflag.Value interface.
+func (l *localityList) Set(value string) error {
+	*l = []roachpb.LocalityAddress{}
+
+	values := strings.Split(value, ",")
+
+	for _, value := range values {
+		split := strings.Split(value, "@")
+		if len(split) != 2 {
+			return fmt.Errorf("invalid value for --locality-advertise-address: %s", l)
+		}
+
+		tierSplit := strings.Split(split[0], "=")
+		if len(tierSplit) != 2 {
+			return fmt.Errorf("invalid value for --locality-advertise-address: %s", l)
+		}
+
+		tier := roachpb.Tier{}
+		tier.Key = tierSplit[0]
+		tier.Value = tierSplit[1]
+
+		locAddress := roachpb.LocalityAddress{}
+		locAddress.LocalityTier = tier
+		locAddress.Address = util.MakeUnresolvedAddr("tcp", split[1])
+
+		*l = append(*l, locAddress)
+	}
+
+	return nil
+}
 
 // This file contains definitions for data types suitable for use by
 // the flag+pflag packages.

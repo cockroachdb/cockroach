@@ -38,7 +38,7 @@ namespace protobuf_roachpb_2fmetadata_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[13];
+  static const ::google::protobuf::internal::ParseTable schema[14];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -52,6 +52,9 @@ extern AttributesDefaultTypeInternal _Attributes_default_instance_;
 class Locality;
 class LocalityDefaultTypeInternal;
 extern LocalityDefaultTypeInternal _Locality_default_instance_;
+class LocalityAddress;
+class LocalityAddressDefaultTypeInternal;
+extern LocalityAddressDefaultTypeInternal _LocalityAddress_default_instance_;
 class NodeDescriptor;
 class NodeDescriptorDefaultTypeInternal;
 extern NodeDescriptorDefaultTypeInternal _NodeDescriptor_default_instance_;
@@ -91,6 +94,7 @@ namespace google {
 namespace protobuf {
 template<> ::cockroach::roachpb::Attributes* Arena::CreateMaybeMessage<::cockroach::roachpb::Attributes>(Arena*);
 template<> ::cockroach::roachpb::Locality* Arena::CreateMaybeMessage<::cockroach::roachpb::Locality>(Arena*);
+template<> ::cockroach::roachpb::LocalityAddress* Arena::CreateMaybeMessage<::cockroach::roachpb::LocalityAddress>(Arena*);
 template<> ::cockroach::roachpb::NodeDescriptor* Arena::CreateMaybeMessage<::cockroach::roachpb::NodeDescriptor>(Arena*);
 template<> ::cockroach::roachpb::Percentiles* Arena::CreateMaybeMessage<::cockroach::roachpb::Percentiles>(Arena*);
 template<> ::cockroach::roachpb::RangeDescriptor* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeDescriptor>(Arena*);
@@ -1233,6 +1237,17 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
 
   // accessors -------------------------------------------------------
 
+  int locality_address_size() const;
+  void clear_locality_address();
+  static const int kLocalityAddressFieldNumber = 8;
+  ::cockroach::roachpb::LocalityAddress* mutable_locality_address(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress >*
+      mutable_locality_address();
+  const ::cockroach::roachpb::LocalityAddress& locality_address(int index) const;
+  ::cockroach::roachpb::LocalityAddress* add_locality_address();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress >&
+      locality_address() const;
+
   bool has_build_tag() const;
   void clear_build_tag();
   static const int kBuildTagFieldNumber = 6;
@@ -1323,6 +1338,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress > locality_address_;
   ::google::protobuf::internal::ArenaStringPtr build_tag_;
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
@@ -1330,6 +1346,136 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Version* serverversion_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int32 node_id_;
+  friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class LocalityAddress : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.LocalityAddress) */ {
+ public:
+  LocalityAddress();
+  virtual ~LocalityAddress();
+
+  LocalityAddress(const LocalityAddress& from);
+
+  inline LocalityAddress& operator=(const LocalityAddress& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  LocalityAddress(LocalityAddress&& from) noexcept
+    : LocalityAddress() {
+    *this = ::std::move(from);
+  }
+
+  inline LocalityAddress& operator=(LocalityAddress&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const LocalityAddress& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const LocalityAddress* internal_default_instance() {
+    return reinterpret_cast<const LocalityAddress*>(
+               &_LocalityAddress_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    8;
+
+  void Swap(LocalityAddress* other);
+  friend void swap(LocalityAddress& a, LocalityAddress& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline LocalityAddress* New() const final {
+    return CreateMaybeMessage<LocalityAddress>(NULL);
+  }
+
+  LocalityAddress* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<LocalityAddress>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const LocalityAddress& from);
+  void MergeFrom(const LocalityAddress& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(LocalityAddress* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_address() const;
+  void clear_address();
+  static const int kAddressFieldNumber = 1;
+  private:
+  const ::cockroach::util::UnresolvedAddr& _internal_address() const;
+  public:
+  const ::cockroach::util::UnresolvedAddr& address() const;
+  ::cockroach::util::UnresolvedAddr* release_address();
+  ::cockroach::util::UnresolvedAddr* mutable_address();
+  void set_allocated_address(::cockroach::util::UnresolvedAddr* address);
+
+  bool has_locality_tier() const;
+  void clear_locality_tier();
+  static const int kLocalityTierFieldNumber = 2;
+  private:
+  const ::cockroach::roachpb::Tier& _internal_locality_tier() const;
+  public:
+  const ::cockroach::roachpb::Tier& locality_tier() const;
+  ::cockroach::roachpb::Tier* release_locality_tier();
+  ::cockroach::roachpb::Tier* mutable_locality_tier();
+  void set_allocated_locality_tier(::cockroach::roachpb::Tier* locality_tier);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.LocalityAddress)
+ private:
+  void set_has_address();
+  void clear_has_address();
+  void set_has_locality_tier();
+  void clear_has_locality_tier();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  ::cockroach::util::UnresolvedAddr* address_;
+  ::cockroach::roachpb::Tier* locality_tier_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1375,7 +1521,7 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_StoreDescriptor_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(StoreDescriptor* other);
   friend void swap(StoreDescriptor& a, StoreDescriptor& b) {
@@ -1528,7 +1674,7 @@ class StoreDeadReplicas : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_StoreDeadReplicas_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(StoreDeadReplicas* other);
   friend void swap(StoreDeadReplicas& a, StoreDeadReplicas& b) {
@@ -1651,7 +1797,7 @@ class Locality : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
                &_Locality_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(Locality* other);
   friend void swap(Locality& a, Locality& b) {
@@ -1765,7 +1911,7 @@ class Tier : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
                &_Tier_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(Tier* other);
   friend void swap(Tier& a, Tier& b) {
@@ -1901,7 +2047,7 @@ class Version : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
                &_Version_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(Version* other);
   friend void swap(Version& a, Version& b) {
@@ -3298,6 +3444,149 @@ inline void NodeDescriptor::set_started_at(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.NodeDescriptor.started_at)
 }
 
+inline int NodeDescriptor::locality_address_size() const {
+  return locality_address_.size();
+}
+inline void NodeDescriptor::clear_locality_address() {
+  locality_address_.Clear();
+}
+inline ::cockroach::roachpb::LocalityAddress* NodeDescriptor::mutable_locality_address(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.locality_address)
+  return locality_address_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress >*
+NodeDescriptor::mutable_locality_address() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.NodeDescriptor.locality_address)
+  return &locality_address_;
+}
+inline const ::cockroach::roachpb::LocalityAddress& NodeDescriptor::locality_address(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.locality_address)
+  return locality_address_.Get(index);
+}
+inline ::cockroach::roachpb::LocalityAddress* NodeDescriptor::add_locality_address() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.NodeDescriptor.locality_address)
+  return locality_address_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::LocalityAddress >&
+NodeDescriptor::locality_address() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.NodeDescriptor.locality_address)
+  return locality_address_;
+}
+
+// -------------------------------------------------------------------
+
+// LocalityAddress
+
+inline bool LocalityAddress::has_address() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void LocalityAddress::set_has_address() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void LocalityAddress::clear_has_address() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline const ::cockroach::util::UnresolvedAddr& LocalityAddress::_internal_address() const {
+  return *address_;
+}
+inline const ::cockroach::util::UnresolvedAddr& LocalityAddress::address() const {
+  const ::cockroach::util::UnresolvedAddr* p = address_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LocalityAddress.address)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::UnresolvedAddr*>(
+      &::cockroach::util::_UnresolvedAddr_default_instance_);
+}
+inline ::cockroach::util::UnresolvedAddr* LocalityAddress::release_address() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LocalityAddress.address)
+  clear_has_address();
+  ::cockroach::util::UnresolvedAddr* temp = address_;
+  address_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::UnresolvedAddr* LocalityAddress::mutable_address() {
+  set_has_address();
+  if (address_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::UnresolvedAddr>(GetArenaNoVirtual());
+    address_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LocalityAddress.address)
+  return address_;
+}
+inline void LocalityAddress::set_allocated_address(::cockroach::util::UnresolvedAddr* address) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(address_);
+  }
+  if (address) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      address = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, address, submessage_arena);
+    }
+    set_has_address();
+  } else {
+    clear_has_address();
+  }
+  address_ = address;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LocalityAddress.address)
+}
+
+inline bool LocalityAddress::has_locality_tier() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void LocalityAddress::set_has_locality_tier() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void LocalityAddress::clear_has_locality_tier() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void LocalityAddress::clear_locality_tier() {
+  if (locality_tier_ != NULL) locality_tier_->Clear();
+  clear_has_locality_tier();
+}
+inline const ::cockroach::roachpb::Tier& LocalityAddress::_internal_locality_tier() const {
+  return *locality_tier_;
+}
+inline const ::cockroach::roachpb::Tier& LocalityAddress::locality_tier() const {
+  const ::cockroach::roachpb::Tier* p = locality_tier_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LocalityAddress.locality_tier)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Tier*>(
+      &::cockroach::roachpb::_Tier_default_instance_);
+}
+inline ::cockroach::roachpb::Tier* LocalityAddress::release_locality_tier() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LocalityAddress.locality_tier)
+  clear_has_locality_tier();
+  ::cockroach::roachpb::Tier* temp = locality_tier_;
+  locality_tier_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Tier* LocalityAddress::mutable_locality_tier() {
+  set_has_locality_tier();
+  if (locality_tier_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Tier>(GetArenaNoVirtual());
+    locality_tier_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LocalityAddress.locality_tier)
+  return locality_tier_;
+}
+inline void LocalityAddress::set_allocated_locality_tier(::cockroach::roachpb::Tier* locality_tier) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete locality_tier_;
+  }
+  if (locality_tier) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      locality_tier = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, locality_tier, submessage_arena);
+    }
+    set_has_locality_tier();
+  } else {
+    clear_has_locality_tier();
+  }
+  locality_tier_ = locality_tier;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LocalityAddress.locality_tier)
+}
+
 // -------------------------------------------------------------------
 
 // StoreDescriptor
@@ -3818,6 +4107,8 @@ inline void Version::set_unstable(::google::protobuf::int32 value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
