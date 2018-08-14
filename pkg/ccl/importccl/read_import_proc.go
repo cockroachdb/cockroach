@@ -38,14 +38,6 @@ import (
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
 
-type ctxProvider struct {
-	context.Context
-}
-
-func (c ctxProvider) Ctx() context.Context {
-	return c
-}
-
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
 // the IMPORT. progressFn, if not nil, is periodically invoked with a percentage

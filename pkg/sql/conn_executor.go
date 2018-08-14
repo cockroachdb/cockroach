@@ -1031,6 +1031,8 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
+	pinfo := &tree.PlaceholderInfo{}
+
 	var draining bool
 	for {
 		ex.curStmt = nil
@@ -1045,8 +1047,10 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			}
 			return err
 		}
-		ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
-			ex.machine.CurState(), pos, cmd)
+		if log.ExpensiveLogEnabled(ex.Ctx(), 2) || ex.eventLog != nil {
+			ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
+				ex.machine.CurState(), pos, cmd)
+		}
 
 		var ev fsm.Event
 		var payload fsm.EventPayload
@@ -1088,10 +1092,12 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				res = ex.clientComm.CreateErrorResult(pos)
 				break
 			}
-			log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
+			if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
+				log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
+			}
 			ex.curStmt = portal.Stmt.Statement
 
-			pinfo := &tree.PlaceholderInfo{
+			*pinfo = tree.PlaceholderInfo{
 				TypeHints: portal.Stmt.TypeHints,
 				Types:     portal.Stmt.Types,
 				Values:    portal.Qargs,
@@ -1725,7 +1731,7 @@ func (ex *connExecutor) evalCtx(
 			TxnReadOnly:      ex.state.readOnly,
 			TxnImplicit:      ex.implicitTxn(),
 			Settings:         ex.server.cfg.Settings,
-			CtxProvider:      ex,
+			Context:          ex.Ctx(),
 			Mon:              ex.state.mon,
 			TestingKnobs:     ex.server.cfg.EvalContextTestingKnobs,
 			TxnTimestamp:     ex.state.sqlTimestamp,
@@ -1995,7 +2001,9 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 // sessionEventf logs a message to the session event log (if any).
 func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
-	log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, format, args...)
+	if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
+		log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, format, args...)
+	}
 	if ex.eventLog != nil {
 		ex.eventLog.Printf(format, args...)
 	}

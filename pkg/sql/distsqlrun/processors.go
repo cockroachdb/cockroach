@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -431,7 +430,6 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   func (p *concatProcessor) Start(ctx context.Context) context.Context {
 //     p.l.Start(ctx)
 //     p.r.Start(ctx)
-//     // Don't forget to declare a name for the proc and add it to procNameToLogTag.
 //     return p.StartInternal(ctx, concatProcName)
 //   }
 //
@@ -743,29 +741,6 @@ func (pb *ProcessorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-var procNameToLogTag = map[string]string{
-	distinctProcName:                "distinct",
-	hashAggregatorProcName:          "hashAgg",
-	hashJoinerProcName:              "hashJoiner",
-	indexJoinerProcName:             "indexJoiner",
-	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
-	joinReaderProcName:              "joinReader",
-	mergeJoinerProcName:             "mergeJoiner",
-	metadataTestReceiverProcName:    "metaReceiver",
-	metadataTestSenderProcName:      "metaSender",
-	noopProcName:                    "noop",
-	orderedAggregatorProcName:       "orderedAgg",
-	samplerProcName:                 "sampler",
-	scrubTableReaderProcName:        "scrub",
-	sortAllProcName:                 "sortAll",
-	sortTopKProcName:                "sortTopK",
-	sortedDistinctProcName:          "sortedDistinct",
-	sortChunksProcName:              "sortChunks",
-	tableReaderProcName:             "tableReader",
-	valuesProcName:                  "values",
-	zigzagJoinerProcName:            "zigzagJoiner",
-}
-
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions
 // that deal with draining and trailing metadata: the ProcessorBase implements
 // generic useful functionality that needs to call back into the Processor.
@@ -803,16 +778,14 @@ func (pb *ProcessorBase) Init(
 // StartInternal prepares the ProcessorBase for execution. It returns the
 // annotated context that's also stored in pb.ctx.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
-	pb.Ctx = log.WithLogTag(
-		ctx, fmt.Sprintf("%s/%d", procNameToLogTag[name], pb.processorID), nil,
-	)
+	pb.Ctx = ctx
 
 	pb.origCtx = pb.Ctx
 	pb.Ctx, pb.span = processorSpan(pb.Ctx, name)
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}
-	pb.evalCtx.CtxProvider = tree.FixedCtxProvider{Context: pb.Ctx}
+	pb.evalCtx.Context = pb.Ctx
 	return pb.Ctx
 }
 
