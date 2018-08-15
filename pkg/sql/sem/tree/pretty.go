@@ -1102,3 +1102,20 @@ func (node *UnionClause) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return pretty.Stack(p.Doc(node.Left), p.nestUnder(pretty.Text(op), p.Doc(node.Right)))
 }
+
+func (node *IfErrExpr) doc(p *PrettyCfg) pretty.Doc {
+	var s string
+	if node.Else != nil {
+		s = "IFERROR("
+	} else {
+		s = "ISERROR("
+	}
+	d := []pretty.Doc{p.Doc(node.Cond)}
+	if node.Else != nil {
+		d = append(d, p.Doc(node.Else))
+	}
+	if node.ErrCode != nil {
+		d = append(d, p.Doc(node.ErrCode))
+	}
+	return pretty.Bracket(s, pretty.Join(",", d...), ")")
+}
