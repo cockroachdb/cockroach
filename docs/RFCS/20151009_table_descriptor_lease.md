@@ -1,4 +1,4 @@
-- Feature Name: table_descriptor_lease
+- Feature Name: schema_lease
 - Status: completed
 - Start Date: 2015-10-09
 - RFC PR: [#2810](https://github.com/cockroachdb/cockroach/pull/2036)
@@ -6,8 +6,8 @@
 
 # Summary
 
-Implement a table descriptor lease mechanism to allow safe usage of
-cached table descriptors.
+Implement a schema lease mechanism to allow safe usage of
+cached schema.
 
 # Motivation
 
@@ -75,61 +75,147 @@ the state machine for a schema change and update the table descriptor.
 
 Before using a table descriptor for a DML operation (i.e. `SELECT`,
 `INSERT`, `UPDATE`, `DELETE`, etc), the operation needs to obtain a
-table lease for the descriptor. The lease will be guaranteed valid for
-a significant period of time (on the order of minutes). When the operation completes it will release the table lease.
+valid lease for the schema that the descriptor is a part of. The lease
+will be guaranteed valid until an expiration time
+(on the order of minutes). When the operation completes it will release
+the schema lease.
+
+# New Requirements: September 2018
+
+The initial implementation of table leases would maintain a lease per table,
+and refresh the lease every 5 minutes. There are some new requirements
+that have encouraged us to rethinking this mechanism. These new requirements
+are:
+
+1. Scale: Clusters need to scale to cache thousands of descriptors and hundreds
+of nodes while using less than 1% of resources on managing leases. (#23510)
+From a product statndpoint, we'd like to demo cockroach as a multi-tenant
+database supporting 100s of `CREATE DATABASE` each holding 100s of
+`CREATE TABLE`.
+2. Long deadlines: Leasing should aim to reduce the chance of a error/retry due to a
+transaction deadline exceeded error. Leases that are close to their expiration
+time are more likely to trigger this error/retry. (#18684)
+In particular, we'd like to have a scheme that continuously extends the
+deadline of the lease without renewing the lease.
+3. Lease databases: There is a need to lease database descriptors. The
+original implementation only leased table descriptors and had a rather
+flimsy implementation of a database cache. (#14332)
+4. Timestamp view of the entire schema: The old leasing mechanism was
+developed at a time when there were no relationships between tables.
+Once FKs were added, it became apparent that it would be better if both
+sides of the FK relationship were consistent on a particular node.
+This also holds for the parent relationship between a table and a
+database. Moving to a model where a transaction is using an entire
+schema at a timestamp will make transactions easier to reason about.
+The current implementation doesn't necessarily preclude this but it
+certainly makes it more difficult.
+
+It's time to transform the original table leasing mechanism to a more
+general, more efficient, schema leasing mechanism. The system proposed here
+in the steady state with no schema changes and no changes in node liveness epoch
+will have each node lease the schema once.
+
+For the rest of the discussion parts of the schema like databases and
+tables are called schema elements.
 
 # Detailed design
 
+The new design scales the older mechanism by:
+1. Introducing a lease on the entire schema, thereby scaling well with
+the number of tables/nodes, and also providing a consistent schema on
+a node with all the relationships (parent database, fk, etc) within the
+schema, reflected consistently at a particular timestamp.
+2. Introduces a leasing mechanism on top of node liveness epochs to
+prevent needing to continuously refresh the leases. The leases are
+extended automatically as time marches forward.
+
 The design maintains two invariant:
 * Two safe versions: A transaction at a particular timestamp is allowed to use
-one of two versions of a table descriptor.
-* Two leased version: There can be valid leases on at most the 2 latest
-versions of a table in the cluster at any time. Leases are usually granted
-on the latest version.
+one of two versions of a schema element.
+* Two leased version: There can be valid schema leases with at most 2 latest
+versions of any schema element in the cluster at any time. Leases are usually
+granted on a schema with the latest version of a schema element.
 
-Table descriptors will be extended with a version number that is
+Table/Database descriptors will be extended with a version number that is
 incremented on every change to the descriptor:
 
 ```proto
 message TableDescriptor {
   ...
   optional uint32 id;
+  // The version is strictly not needed because one can version
+  // the descriptor using the MVCC write timestamp. This is left
+  // as a debugging tool.
   optional uint32 version;
-  optional util.hlc.Timestamp modification_time;
+  // The modification_time will be deprecated.
   ...
 }
 ```
 
-A table descriptor at a version `v` has a validity period spanning from
-its `ModificationTime` until the `ModificationTime` of the table descriptor at
+The `ModificationTime` below is the database hlc timestamp at which
+a descriptor is modified. If there were no caching of schema on the
+cluster, a schema element at a version `v` would have a validity
+period spanning from its `ModificationTime` until the `ModificationTime`
+of the element at version `v + 1`: [`ModificationTime`, `ModificationTime[v+1]`),
+where the validity window is the span of timestamps for transactions
+that are allowed to use the schema.
+
+However, we want to support caching of schema, therefore the validity
+period of a schema element is extended, to allow one update to
+the schema without locking/flushing the cache.
+A schema element at version `v` has a validity window spanning from
+its `ModificationTime` until the `ModificationTime` of the element at
 version `v + 2`: [`ModificationTime`, `ModificationTime[v+2]`). A transaction
-at time `T` can safely use one of two table descriptors versions: the two
+at time `T` can safely use one of two versions: the two
 versions with highest `ModificationTime` less than or equal to `T`.
-Once a table descriptor at `v` has been written, the validity period of the
-table descriptor at `v - 2` is fixed. A node can cache a copy of
+
+Once a schema element at `v` has been written, the validity window of the
+element at `v - 2` is fixed. A node can cache a copy of
 `v-2` along with its fixed validity window and use it for
 transactions whose timestamps fall within its validity window.
 
 Leases are needed because the validity window of the latest versions
 (`v` and `v - 1` ) are unknown (`v + 1` hasn't yet been written).
-Since table descriptors can be written at any time, this design is
+Since schema can be written at any time, this design is
 about defining a frontier for an undefined validity window,
 and guaranteeing that the frontier lies within the as of yet
 to be defined validity window. We call such a validity window
 a temporary validity window for the version. The use of a cached copy
-of a table descriptor is allowed while enforcing the temporary
+of a schema element is allowed while enforcing the temporary
 validity window.
 
-Leases will be tied to a specific version of the descriptor. Lease
-state will be stored in a new `system.lease` table:
+A lease is defined for the entire schema:
+1. The name to id map for the databases and tables.
+2. The database descriptors.
+3. The table descriptors.
+
+Leases will be tied to a specific database timestamp. A table or database
+that is part of this lease must be read at the hlc timestamp of the lease,
+therefore a lease represents specific versions of databases and tables.
+Leases will be stored in a new `system.schemalease` table:
 
 ```sql
+CREATE TABLE system.schemalease (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  // The node id of the lease holder.
+  NodeID     INT,
+  # The latest node liveness epoch of the node creating this lease.
+  # The lease expiration is a moving hlc.Timestamp frontier:
+  # F = last_known_epoch_expiration + lease_duration
+  Epoch      INT,
+)
+```
+
+The previous implementation of a leasing schema used to be stored in
+`system.lease`
+
+``sql
 CREATE TABLE system.lease (
   DescID     INT,
   Version    INT,
   NodeID     INT,
-  # Expiration is a wall time in microseconds. This is a
-  # microsecond rounded timestamp produced from the timestamp
+  # Expiration is a wall time in microseconds. This used to
+  # be a microsecond rounded timestamp produced from the timestamp
   # of the transaction inserting a new row. It would ideally
   # be an hlc.timestamp but cannot be changed now without much
   # difficulty.
@@ -139,133 +225,246 @@ CREATE TABLE system.lease (
 ```
 
 Entries in the lease table will be added and removed as leases are
-acquired and released. A background goroutine running on the lease holder
-for the system range will periodically delete expired leases
- (not yet implemented).
+acquired and released.
 
-Leases will be granted for a duration measured in minutes (we'll
+All nodes will assume a fixed `lease_duration` in minutes (we'll
 assume 5m for the rest of this doc, though experimentation may tune
 this number). A node will acquire a lease before using it in an
 operation and may release the lease when the last local operation
-completes that was using the lease and a new version of the descriptor
+completes that was using the lease and a new version of any descriptor
 exists. When a new version exists all new transactions use a new lease
 on the new version even when the older lease is still in use by older
 transactions.
 
-The lease holder of the range containing a table descriptor will gossip the
-most recent version of that table descriptor using the gossip key
-`"table-<descID>"` and the value will be the version number. The
-gossiping of the most recent table versions allows nodes to
-asynchronously discover when a new table version is written. But note
+The lease holder of the range containing descriptors will gossip the
+most recent version of the descriptors through the SystemConfig. The
+gossiping of the most recent schema versions allows nodes to
+asynchronously discover when a new version is written. But note
 that it is not necessary for correctness as the protocol for acquiring
 a lease ensures that only the two recent versions of a descriptor can
-have a new lease granted on it.
+have a new lease granted on it. In particular, gossip not functioning
+properly will only slow down a schema change.
 
 All timestamps discussed in this document are references to database
 timestamps.
 
-## Lease acquisition
+## Lease acquisition/release
 
-Lease acquisition will perform the following steps in a transaction with
-timestamp `L`:
+Lease acquisition will perform the following steps in a transaction:
 
-* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* `lease.expiration = L + lease_duration` rounded to microseconds (SQL DTimestamp).
-* `INSERT INTO system.lease VALUES (<desc.ID>, <desc.version>, <nodeID>,<lease.expiration>)`
+* `liveness := nodeLiveness.Self()`
+* `INSERT INTO system.schemalease VALUES (<nodeID>, <liveness.Epoch>) RETURNING id`
 
-The `lease` is used by transactions that fall within its temporary
-validity window. Nodes will maintain a map from `<descID, version>` to
-a lease: `<TableDescriptor, expiration, localRefCount>`. The local
-reference count will be incremented when a transaction first uses a table
-and decremented when the transaction commits/aborts. When the node
-discovers a new version of the table, either via gossip or by
-acquiring a lease and discovering the version has changed it can
-release the lease on the old version when there are no more local
-references:
+Where a lease is associated with the write timestamp `L` of the lease
+and the set of descriptors at a timestamp `L`. Note that this lease
+acquisition mechanism doesn't read any descriptors, and doesn't required
+that the descriptors be cached by the node. It also doesn't read
+any timestamp and depends on the node reading back the lease to know
+when it was written.
 
-* `DELETE FROM system.lease WHERE (DescID, Version, NodeID, Expiration) = (<descID>, <version>, <nodeID>, <lease.expiration>)`
+The temporary validity window of a descriptor with this lease
+is: [`ModificationTime`, `F`), where `ModificationTime` is the
+modification time of a descriptor in the lease and
+`F = last_known_epoch_expiration + lease_duration`.
+Note: an old epoch doesn't update its `last_known_epoch_expiration`
+and therefore its frontier `F` will eventually expire.
 
-## Incrementing the version
+The lease is used by transactions that fall within its temporary
+validity window. A node will need to renew a lease whenever:
+1. The epoch of the node changes or,
+2. One of the descriptors is modified. A node discovers a new version
+of a descriptor via gossip.
+
+A node will release an older lease when it is not in use through:
+
+* `DELETE FROM system.schemalease WHERE (id, NodeID, Epoch) = (<id>, <nodeID>, <epoch>)`
+
+## Using leases
+
+A transaction with commit timestamp `T` is allowed to use a lease as
+long as `T` lies within its moving temporary validity
+window: [`ModificationTime`, `F`), where
+`F = last_known_epoch_expiration + lease_duration`.
+Nodes will maintain a map from `<id, descID>` to
+a lease: `<TableDescriptor, localRefCount>`. The local
+reference count will be incremented when a transaction first uses a lease
+and decremented after the transaction commits/aborts.
+
+A transaction can check that it is using a valid lease using its
+origTimestamp <= `T`. But it might get pushed later with a greater
+commitTimestamp = `T`. To ensure that the commit timestamp doesn't get
+pushed beyond `F` the transaction sets its deadline to `F`.
+Since `F` is always marching forward, it is best that a transaction
+set its deadline at the very end just before commit time, so as to
+pick up the greatest possible deadline.
+
+The lease should never be released while a transaction using it
+is still executing because the deadline `F` is only valid as long as
+the lease is valid, and the commit timestamp of the transaction
+must be less than the commit time of the lease deletion. 
+A transaction using a fixed-timestamp on the other hand can
+have its lease released before completion because it is guaranteed
+to be using a timestamp less than the commit timestamp of the lease
+deletion.
+
+Once a lease is no longer referred by any transaction it can be released
+using a transaction with timestamp `D`. A transaction at
+timestamp `T` that used the lease and saw a table at version `v`
+had committed/aborted or used a fixed timestamp `T`. It follows that `T < D`.
+We will later discuss how a schema change modifying the table to version
+`v+2` with a timestamp `SC` has to wait such that `D < SC`. Therefore it
+follows that `T < SC`, ensuring the correct use of the descriptor.
+
+## Incrementing the version via a schema change
 
 A schema change operation needs to ensure that there is only one version of
 a descriptor in use in the cluster before incrementing the version of the
 descriptor. The operation will perform the following steps transactionally
 using timestamp `SC`:
 
-* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* Set `desc.ModificationTime` to `SC`
-* `SELECT COUNT(DISTINCT version) FROM system.lease WHERE descID = <descID> AND version = <prevVersion> AND expiration > DTimestamp(SC)` == 0
+* Get (descriptor, modificationTimestamp) for id = <descID>
+* Ensure that no leases written before the modificationTimestamp exist 
 * Perform the edits to the descriptor.
 * Increment `desc.Version`.
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
 
-The schema change operation only scans the leases with the previous
-version so as to not cause a lot of aborted transactions trying to
-acquire leases on the new version of the table. The above schema change
-transaction is retried in a loop until it suceeds.
+The above schema change transaction is retried in a loop until it suceeds.
 
-Note that the updating of the table descriptor will cause the table
+Note that the updating of the schema element will cause the table
 version to be gossiped alerting nodes to the new version and causing
-them to release leases on the old version. The expectation is that
-nodes will fairly quickly transition to using the new version and
-release all leases to the old version allowing another step in the
-schema change operation to take place.
+them to release leases. The expectation is that nodes will fairly
+quickly acquire new leases and transition to using the new version and
+release all leases to the old version allowing the next step
+(upgrade to next version) in the schema change operation to take place.
 
 When a node holding leases dies permanently or becomes unresponsive
 (e.g. detached from the network) schema change operations will have to
-wait for any leases that node held to expire. This will result in an
+wait for any leases that node held to be deleted. This will result in an
 inability to perform more than one schema modification step to the
 descriptors referred to by those leases. The maximum amount of time
-this condition can exist is the lease duration (5m).
+this condition can exist is the lease-duration (5m) when another
+node will delete the lease at a prior epoch for the disconnected node.
+This is explained below.
 
-As described above, leases will be retained for the lifetime of a
+As described above, a lease will be retained for the lifetime of a
 transaction. In a multi-statement transaction we need to ensure that
-the same version of each table is used throughout the transaction. To
-do this we will add the descriptor IDs and versions to the transaction
-structure. When a node receives a SQL statement within a
-multi-statement transaction, it will attempt to use the table version
-specified.
+the same lesse is used throughout the transaction. To
+do this we will add the lease to the SQL transaction structure.
+When a node receives a SQL statement within a multi-statement
+transaction, it will use schema from the same lease.
 
-While we normally acquire a lease at the latest version, occasionally a
-transaction might require a lease on a previous version because it falls
-before the validity window of the latest version:
+## Transactions with a timestamp before the lease timestamp
 
-A table descriptor at version `v - 1` can be read using timestamp
-`ModificationTime - 1ns` where `ModificationTime` is for table descriptor
-at version `v`. Note that this method can be used to read a table descriptor
-at any version.
+While normally a transaction can use descriptors from the latest
+lease, occasionally a transaction might fall before the lease
+timestamp. It is allowed to use a descriptor from the lease as
+long as the `ModificationTime` of the descriptor is less than or
+equal to the transaction's timestamp. If the lease is unable to
+satisfy this the descriptor cache will need to read all versions
+of a descriptor greater than the timestamp of the transaction.
+The transaction will pick the correct descriptor version and set
+its deadline to the `ModificationTime` of the next to next version
+This is possible because older descriptor versions have fixed validity
+window.
 
-A lease can be acquired on a previous version using a transaction at
-timestamp `P` by running the following:
-* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* check that `desc.version == v + 1`
-* `lease.expiration = P + lease_duration` rounded to microseconds (DTimestamp).
-* `INSERT INTO system.lease VALUES (<desc.ID>, <v>, <nodeID>, <lease.expiration>)`
+## Using the MVCC timestamp as the ModificationTime
+
+The KV API will be extended to suport a new scan operation:
+
+`ScanTimestampWindow(startKey, endKey, fromTimestamp, toTimestamp)` which returns all the KV
+entries along with their timestamps, for all keys from `startKey` to
+`endKey` and with a `fromTimestamp <= writeTimestamp < toTimestamp`.
+`ScanTimestampWindow` will be used by:
+1. Scan descriptors that have been modified since the last lease:
+Whenever a descriptor has been modified and a node needs to renew a lease
+on the entire schema, it would be inefficient to read all the descriptors
+from the prior lease at the new lease timestamp. ScanTimestampWindow allows
+the node to see the diff from the last lease.
+2. Scan all descriptor versions: When a transaction needs to access a descriptor
+from a prior version (a long running transaction with an old timestamp), it is
+more efficient to read all versions of a descriptor using a single operation.
+2. Scan leases that were created before a certain timestamp: When a schema
+changer wants to modify a descriptor, it reads the descriptor at the latest
+`ModificationTime`. Before modifying the descriptor it needs to check that no
+outstanding leases exist at `timestamp < ModificationTime`
+
+## Deleting abandoned leases
+
+Normally a node owing a lease will delete a lease whose `F` has
+expired on its own, however this might not happen when a node crashes.
+A background goroutine running on all nodes will periodically delete leases
+whose frontier `F` have expired. A node reads the node liveness records from
+the entire cluster. If it sees a liveness record for node `N` :
+`{Epoch: E, Expiration: Q}`, it is allowed to delete all leases
+for node `N` with `epoch < E` using a transaction with timestamp
+`A`, where `A > Q + lease_duration`.
+
+The correctness of this approach follows from the observation that
+`Q > P` where `P` is the highest expiration timestamp for epoch `E-1`.
+This is a property offered to us by node liveness records. Therefore,
+`Q + lease_duration > P + lease_duration`, and `Q + lease_duration`
+is greater than any frontier `F` used by the node.
+
+Note: `Q` is the lowest expiration time seen by a node for epoch `E`,
+so `A` will come to pass.
+
+Note: `Q` already incorporates time uncertainty by having the clock
+offset added to it.
+
+## Configuring lease_duration
+
+We'll provide two cluster settings for the lease_duration:
+1. `tablecache.lease.duration`: To be used by all transactions using a lease
+to set their deadlines with.
+2. `tablecache.lease.abandoned_duration`: To be used by the background
+periodic abandoned lease deletion mechanism to delete leases on old epochs.
+
+Normally both these parameters are the same value. To increase them first
+increase `tablecache.lease.abandoned_duration` wait for the cluster to
+converge to using it and then increase `tablecache.lease.duration`.
+To decrease them first decrease `tablecache.lease.duration` wait until
+only the new value is in use (how?) and then
+decrease `tablecache.lease.abandoned_duration`
+
+## Backward compatibility with expiration based leases
+
+A cluster that has been restarted with the latest version and not yet upgraded
+to the latest version will:
+1. Continue to write expiration based leases.
+2. The schema change operations will lookup leases in both `system.lease` and
+`system.schemalease`
+
+Once the cluster has been upgraded the nodes will start creating epoch leases
+and will not renew existing expiration based leases.
+
+The above scheme has the complexity that it needs to support both the expiration
+and new epoch based leases for one version.
+
+A following version of the software will delete table `system.lease`, freeing
+its descriptor-id for the future.
 
 ## Correctness
 
 It is valuable to consider various scenarios to check lease usage correctness.
-Assume `SC` is the timestamp of the latest schema change descriptor modification
+Assume `M` is the timestamp of the latest schema change descriptor modification
 time, while `L` is the timestamp of a transaction that has acquired a lease:
-* `L < SC`: The lease will contain a table descriptor with the previous version
+* `L < M`: The lease will contain a table descriptor with the previous version
 and will write a row in the lease table using timestamp `L` which will be seen
-by the schema change which uses a timestamp `SC`. As long as the lease is not
-released another schema change cannot use a `timestamp <= lease.expiration`
-* `L > SC`: The lease will read the version of the table descriptor written by the
-schema change.
-* `L == SC`: If the lease reads the descriptor first, the schema change will see
-the read in the read timestamp cache and will get restarted. If the schema
-change writes the descriptor at the new version first, the lease will read the new
-descriptor and create a lease with the new version.
+by a schema change using a timestamp > `M`. As long as the lease is not
+released the schema change cannot execute.
+* `L >= M`: The lease will use the latest version of the table descriptor.
+A schema changer can move forward and update the descriptor.
 
 Temporary validity window for a leased table descriptor is either one of:
-1. `[ModificationTime, D)`: where `D` is the timestamp of the lease
-release transaction. Since a transaction with timestamp `T` using a lease
+1. Explicitly deleted by the node owner `[ModificationTime, D)`: where `D`
+is the timestamp of the lease release transaction. Since a
+transaction with timestamp `T` using a lease
 and a release transaction originate on the same node, the release follows
 the last transaction using the lease, `T < D` is always true.
-2. `[ModificationTime, hlc.Timestamp(lease.expiration))` is valid
-because the actual stored table version during the window is guaranteed
-to be at most off by 1.
+2. `[ModificationTime, F)` is valid because the actual stored table
+version during the window is guaranteed to be at most greater by 1.
+A schema changer seeing the lease will not be able to increment the version
+for the descriptor.
 
 Note that two transactions with timestamp T~1~ and T~2~ using versions
 `v` and `v+2` respectively that touch some data in common, are guaranteed
@@ -297,7 +496,7 @@ the WRITE_ONLY state and the transaction commits when the index is readable
 via a SELECT. The UPDATE is either guaranteed to be seen by the SELECT,
 or be aborted.
 
-# Accommodating schema changes within transactions
+## Accommodating schema changes within transactions
 
 A node acquires a lease on a table descriptor using a transaction created
 for this purpose (instead of using the transaction that triggered the
