@@ -1107,7 +1107,7 @@ func (n *Node) setupSpanForIncomingRPC(
 
 // RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.InternalTODO_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(stream.Context())
 	pErr := n.stores.RangeFeed(ctx, args, stream)

@@ -32,7 +32,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// testStream is a mock implementation of roachpb.InternalTODO_RangeFeedServer.
+// testStream is a mock implementation of roachpb.Internal_RangeFeedServer.
 type testStream struct {
 	ctx    context.Context
 	cancel func()
