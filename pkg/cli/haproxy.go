@@ -17,9 +17,12 @@ package cli
 import (
 	"context"
 	"flag"
+	"fmt"
 	"html/template"
 	"io"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 
 	"io/ioutil"
@@ -29,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 var haProxyPath string
+var haProxyLocality roachpb.Locality
 
 var genHAProxyCmd = &cobra.Command{
 	Use:   "haproxy",
@@ -44,6 +49,15 @@ The file is written to --out. Use "--out -" for stdout.
 The addresses used are those advertized by the nodes themselves. Make sure haproxy
 can resolve the hostnames in the configuration file, either by using full-qualified names, or
 running haproxy in the same network.
+
+Nodes to include can be filtered by localities matching the '--locality' regular expression. eg:
+  --locality=region=us-east                  # Nodes in region "us-east"
+  --locality=region=us.*                     # Nodes in the US
+  --locality=region=us.*,deployment=testing  # Nodes in the US AND in deployment tier "testing"
+
+A regular expression can be specified per locality tier and all specified tiers must match.
+The key (eg: 'region') must be fully specified, only values (eg: 'us-east1') can be regular expressions.
+An error is returned if no nodes match the locality filter.
 `,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
@@ -54,6 +68,7 @@ type haProxyNodeInfo struct {
 	NodeAddr string
 	// The port on which health checks are performed.
 	CheckPort string
+	Locality  roachpb.Locality
 }
 
 func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
@@ -67,6 +82,7 @@ func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 	for i, status := range statuses {
 		nodeInfos[i].NodeID = status.Desc.NodeID
 		nodeInfos[i].NodeAddr = status.Desc.Address.AddressField
+		nodeInfos[i].Locality = status.Desc.Locality
 
 		*checkPort = base.DefaultHTTPPort
 		// Iterate over the arguments until the ServerHTTPPort flag is found and
@@ -82,6 +98,84 @@ func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 		nodeInfos[i].CheckPort = *checkPort
 	}
 	return nodeInfos
+}
+
+func localityMatches(locality roachpb.Locality, desired roachpb.Locality) (bool, error) {
+	for _, filterTier := range desired.Tiers {
+		// It's a little silly to recompile the regexp for each node, but not a big deal.
+		var b strings.Builder
+		b.WriteString("^")
+		b.WriteString(filterTier.Value)
+		b.WriteString("$")
+		re, err := regexp.Compile(b.String())
+		if err != nil {
+			return false, errors.Wrapf(err, "could not compile regular expression for %q", filterTier)
+		}
+
+		keyFound := false
+		for _, nodeTier := range locality.Tiers {
+			if filterTier.Key != nodeTier.Key {
+				continue
+			}
+
+			keyFound = true
+			if !re.MatchString(nodeTier.Value) {
+				// Mismatched tier value.
+				return false, nil
+			}
+
+			break
+		}
+
+		if !keyFound {
+			// Tier not found.
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func filterByLocality(nodeInfos []haProxyNodeInfo) ([]haProxyNodeInfo, error) {
+	if len(haProxyLocality.Tiers) == 0 {
+		// No filter.
+		return nodeInfos, nil
+	}
+
+	result := make([]haProxyNodeInfo, 0)
+	availableLocalities := make(map[string]struct{})
+
+	for _, info := range nodeInfos {
+		l := info.Locality
+		if len(l.Tiers) == 0 {
+			continue
+		}
+
+		// Save seen locality.
+		availableLocalities[l.String()] = struct{}{}
+
+		matches, err := localityMatches(l, haProxyLocality)
+		if err != nil {
+			return nil, err
+		}
+
+		if matches {
+			result = append(result, info)
+		}
+	}
+
+	if len(result) == 0 {
+		seenLocalities := make([]string, len(availableLocalities))
+		i := 0
+		for l := range availableLocalities {
+			seenLocalities[i] = l
+			i++
+		}
+		sort.Strings(seenLocalities)
+		return nil, fmt.Errorf("no nodes match locality filter %s. Found localities: %v", haProxyLocality.String(), seenLocalities)
+	}
+
+	return result, nil
 }
 
 func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
@@ -115,7 +209,13 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		w = f
 	}
 
-	err = configTemplate.Execute(w, nodeStatusesToNodeInfos(nodeStatuses.Nodes))
+	nodeInfos := nodeStatusesToNodeInfos(nodeStatuses.Nodes)
+	filteredNodeInfos, err := filterByLocality(nodeInfos)
+	if err != nil {
+		return err
+	}
+
+	err = configTemplate.Execute(w, filteredNodeInfos)
 	if err != nil {
 		// Return earliest error, but still close the file.
 		_ = f.Close()
