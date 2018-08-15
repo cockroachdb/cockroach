@@ -815,3 +815,11 @@ func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.Grou
 
 	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
 }
+func (c *CustomFuncs) MakeCountStarTableOpDef(scanOpDef, colList memo.PrivateID) memo.PrivateID {
+	optTableID := c.f.mem.LookupPrivate(scanOpDef).(*memo.ScanOpDef).Table
+	optColList := c.f.mem.LookupPrivate(colList).(opt.ColList)
+	return c.f.mem.InternCountStarTableOpDef(&memo.CountStarTableOpDef{
+		Col:   optColList[0],
+		Table: optTableID,
+	})
+}

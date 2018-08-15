@@ -1051,6 +1051,12 @@ func newProcessor(
 		err := processor.InitWithOutput(post, outputs[0])
 		return processor, err
 	}
+	if core.CountStarTableSpec != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newCountStarTable(flowCtx, processorID, core.CountStarTableSpec, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 

@@ -60,6 +60,7 @@
 		SampleAggregatorSpec
 		InterleavedReaderJoinerSpec
 		ProjectSetSpec
+		CountStarTableSpec
 		WindowerSpec
 		InputStats
 		TableReaderStats

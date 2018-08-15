@@ -104,6 +104,11 @@ type ScanOpDef struct {
 	Flags ScanFlags
 }
 
+type CountStarTableOpDef struct {
+	Col   opt.ColumnID
+	Table opt.TableID
+}
+
 // ScanLimit is used for a limited table or index scan and stores the limit as
 // well as the desired scan direction. A value of 0 means that there is no
 // limit.

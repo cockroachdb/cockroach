@@ -484,3 +484,8 @@ define Zip {
     Funcs ExprList
     Cols  ColList
 }
+
+[Relational]
+define CountStarTable {
+    Def CountStarTableOpDef
+}

@@ -44,6 +44,8 @@ func mapType(typ string) string {
 
 func mapPrivateType(typ string) string {
 	switch typ {
+	case "CountStarTableOpDef":
+		return "*memo.CountStarTableOpDef"
 	case "ColumnID":
 		return "opt.ColumnID"
 	case "ColSet":

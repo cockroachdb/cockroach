@@ -257,6 +257,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		return sb.colStatGroupBy(colSet, ev)
 
+	case opt.CountStarTableOp:
+		return &props.ColumnStatistic{}
+
 	case opt.LimitOp:
 		return sb.colStatLimit(colSet, ev)
 

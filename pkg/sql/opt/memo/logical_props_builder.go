@@ -83,6 +83,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
 		logical = b.buildGroupByProps(ev)
 
+	case opt.CountStarTableOp:
+		logical = b.buildCountStarTableProps(ev)
+
 	case opt.LimitOp:
 		logical = b.buildLimitProps(ev)
 
@@ -798,6 +801,43 @@ func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
 	// Statistics
 	// ----------
 	// Zero value for Stats is ok for ShowTrace.
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildCountStarTableProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
+
+	// Output Columns
+	// --------------
+	// Output columns are inherited from input.
+	relational.OutputCols = util.MakeFastIntSet(int(ev.Private().(*CountStarTableOpDef).Col))
+
+	// Not Null Columns
+	// ----------------
+	// CountStarTable can't output null.
+	relational.NotNullCols = relational.OutputCols
+
+	// Outer Columns
+	// -------------
+	// Inherit outer columns from input, and add any outer columns from the limit
+	// expression,
+	relational.OuterCols = opt.ColSet{}
+
+	// Functional Dependencies
+	// -----------------------
+	// TODO(justin jaffray)
+
+	// Cardinality
+	// -----------
+	// Limit puts a cap on the number of rows returned by input.
+	relational.Cardinality = props.OneCardinality
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &keyBuffer{})
+	//b.sb.buildLimit(ev, relational)
 
 	return logical
 }

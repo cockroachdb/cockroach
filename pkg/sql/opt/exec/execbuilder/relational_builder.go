@@ -103,6 +103,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		ep, err = b.buildGroupBy(ev)
 
+	case opt.CountStarTableOp:
+		ep, err = b.buildCountStarTable(ev)
+
 	case opt.DistinctOnOp:
 		ep, err = b.buildDistinct(ev)
 
@@ -556,6 +559,21 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+	return ep, nil
+}
+
+func (b *Builder) buildCountStarTable(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.CountStarTableOpDef)
+	tab := ev.Metadata().Table(def.Table)
+
+	node, err := b.factory.ConstructCountStarTable(tab)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{
+		root: node,
+	}
+	ep.outputCols.Set(int(def.Col), 0)
 	return ep, nil
 }
 

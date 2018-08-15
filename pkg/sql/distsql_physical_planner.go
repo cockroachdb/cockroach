@@ -432,6 +432,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *windowNode:
 		return dsp.checkSupportForNode(n.plan)
 
+	case *countStarTable:
+		return canDistribute, nil
+
 	default:
 		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node %T", node)
 	}
@@ -2244,6 +2247,33 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
+
+	case *countStarTable:
+		types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+
+		s := distsqlrun.CountStarTableSpec{
+			Table: *n.desc,
+		}
+
+		plan := distsqlplan.PhysicalPlan{
+			Processors: []distsqlplan.Processor{{
+				Node: dsp.nodeDesc.NodeID,
+				Spec: distsqlrun.ProcessorSpec{
+					Core:   distsqlrun.ProcessorCoreUnion{CountStarTableSpec: &s},
+					Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				},
+			}},
+			ResultRouters: []distsqlplan.ProcessorIdx{0},
+			ResultTypes:   types,
+		}
+
+		return PhysicalPlan{
+			PhysicalPlan:       plan,
+			PlanToStreamColMap: identityMapInPlace(make([]int, 1)),
+		}, nil
 
 	case *groupNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)

@@ -139,6 +139,7 @@ message ProcessorCoreUnion {
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
   optional LocalPlanNodeSpec localPlanNode = 24;
+  optional CountStarTableSpec countStarTableSpec = 25;
 
   reserved 6, 12;
 }
@@ -836,6 +837,10 @@ message ProjectSetSpec {
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;
+}
+
+message CountStarTableSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 }
 
 // WindowerSpec is the specification of a processor that performs computations

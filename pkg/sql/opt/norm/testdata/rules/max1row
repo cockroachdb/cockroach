@@ -59,14 +59,9 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    └── scalar-group-by
-           │         ├── columns: count:6(int)
-           │         ├── cardinality: [1 - 1]
-           │         ├── key: ()
-           │         ├── fd: ()-->(6)
-           │         ├── scan a
-           │         └── aggregations
-           │              └── count-rows [type=int]
+           │    └── count-star-table
+           │         ├── columns: count:6(int!null)
+           │         └── cardinality: [1 - 1]
            └── const: 100 [type=int]
 
 opt

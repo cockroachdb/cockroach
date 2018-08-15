@@ -1032,16 +1032,10 @@ SELECT * FROM (SELECT count(*) c FROM a) a WHERE $1<'2000-01-01T10:00:00' AND c=
 select
  ├── columns: c:6(int!null)
  ├── cardinality: [0 - 1]
- ├── key: ()
  ├── fd: ()-->(6)
- ├── scalar-group-by
- │    ├── columns: c:6(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(6)
- │    ├── scan a
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: c:6(int!null)
+ │    └── cardinality: [1 - 1]
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0]), fd=()-->(6)]
       ├── $1 < '2000-01-01T10:00:00' [type=bool]
       └── c = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]

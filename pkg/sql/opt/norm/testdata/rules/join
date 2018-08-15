@@ -1044,21 +1044,15 @@ opt
 SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
 inner-join
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) count:8(int)
- ├── key: (1)
- ├── fd: ()-->(8), (1)-->(2-5)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) count:8(int!null)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scalar-group-by
- │    ├── columns: count:8(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(8)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:8(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # Full-join.
@@ -1066,22 +1060,16 @@ opt
 SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 ----
 right-join
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
  ├── cardinality: [1 - ]
- ├── key: (1)
- ├── fd: ()-->(8), (1)-->(2-5)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scalar-group-by
- │    ├── columns: count:8(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(8)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:8(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # Left-join-apply.
@@ -1134,22 +1122,16 @@ opt
 SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 ----
 right-join
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
  ├── cardinality: [1 - ]
- ├── key: (1)
- ├── fd: ()-->(8), (1)-->(2-5)
+ ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── scalar-group-by
- │    ├── columns: count:8(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(8)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:8(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # --------------------------------------------------
@@ -1159,21 +1141,15 @@ opt
 SELECT * FROM (SELECT count(*) FROM b) RIGHT JOIN a ON True
 ----
 inner-join
- ├── columns: count:3(int) k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
+ ├── columns: count:3(int!null) k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ ├── fd: (4)-->(5-8)
  ├── scan a
  │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count:3(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:3(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # Full-join.
@@ -1181,22 +1157,16 @@ opt
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 right-join
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
+ ├── fd: (4)-->(5-8)
  ├── scan a
  │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count:3(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:3(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # Don't simplify left join
@@ -1204,22 +1174,16 @@ opt
 SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
 right-join
- ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── columns: count:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
- ├── key: (4)
- ├── fd: ()-->(3), (4)-->(5-8)
+ ├── fd: (4)-->(5-8)
  ├── scan a
  │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- ├── scalar-group-by
- │    ├── columns: count:3(int)
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(3)
- │    ├── scan b
- │    └── aggregations
- │         └── count-rows [type=int]
+ ├── count-star-table
+ │    ├── columns: count:3(int!null)
+ │    └── cardinality: [1 - 1]
  └── true [type=bool]
 
 # --------------------------------------------------
@@ -1600,13 +1564,23 @@ select
 opt
 SELECT s FROM a INNER JOIN (SELECT count(*) FROM b) ON s='foo'
 ----
-select
+project
  ├── columns: s:4(string!null)
  ├── fd: ()-->(4)
- ├── scan a
- │    └── columns: s:4(string)
- └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── inner-join
+      ├── columns: s:4(string!null) count:8(int!null)
+      ├── fd: ()-->(4)
+      ├── select
+      │    ├── columns: s:4(string!null)
+      │    ├── fd: ()-->(4)
+      │    ├── scan a
+      │    │    └── columns: s:4(string)
+      │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── count-star-table
+      │    ├── columns: count:8(int!null)
+      │    └── cardinality: [1 - 1]
+      └── true [type=bool]
 
 # --------------------------------------------------
 # HoistJoinProject

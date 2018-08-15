@@ -326,6 +326,21 @@ func (ef *execFactory) ConstructMergeJoin(
 }
 
 // ConstructScalarGroupBy is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCountStarTable(
+	table opt.Table,
+) (exec.Node, error) {
+	tabDesc := table.(*optTable).desc
+
+	n := &countStarTable{
+		desc:    tabDesc,
+		columns: make(sqlbase.ResultColumns, 1),
+	}
+	n.columns[0].Name = "count"
+	n.columns[0].Typ = types.Int
+	return n, nil
+}
+
+// ConstructScalarGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,
 ) (exec.Node, error) {

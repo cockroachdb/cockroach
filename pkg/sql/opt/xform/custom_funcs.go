@@ -40,17 +40,6 @@ type CustomFuncs struct {
 //
 // ----------------------------------------------------------------------
 
-// CanGenerateIndexScans returns true if new index Scan operators can be
-// generated, based on the given ScanOpDef. Index scans should only be generated
-// from the original unaltered primary index Scan operator (i.e. unconstrained
-// and not limited).
-func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Index == opt.PrimaryIndex &&
-		scanOpDef.Constraint == nil &&
-		scanOpDef.HardLimit == 0
-}
-
 // CanGenerateInvertedIndexScans returns true if new index Scan operators can
 // be generated on inverted indexes. Same as CanGenerateIndexScans, but with
 // the additional check that we have at least one inverted index on the table.

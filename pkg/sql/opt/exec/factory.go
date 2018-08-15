@@ -116,6 +116,8 @@ type Factory interface {
 	// group) and has exactly one result row (even when there are no input rows).
 	ConstructScalarGroupBy(input Node, aggregations []AggInfo) (Node, error)
 
+	ConstructCountStarTable(table opt.Table) (Node, error)
+
 	// ConstructDistinct returns a node that filters out rows such that only the
 	// first row is kept for each set of values along the distinct columns.
 	// The orderedCols are a subset of distinctCols; the input is required to be

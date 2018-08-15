@@ -124,6 +124,8 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *windowNode:
 		p.setUnlimited(n.plan)
 
+	case *countStarTable:
+
 	case *joinNode:
 		p.setUnlimited(n.left.plan)
 		p.setUnlimited(n.right.plan)

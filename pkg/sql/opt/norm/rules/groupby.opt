@@ -76,3 +76,15 @@ $input
     (RemoveAggDistinctForKeys $aggregations $def $input)
     $def
 )
+
+# ConvertGroupByToCountStarTable converts a GroupBy operator that blabh lbah
+[ConvertGroupByToCountStarTable, Normalize]
+(ScalarGroupBy
+    $input:(Scan
+                 $scanOpDef:(CanGenerateIndexScans $scanOpDef)
+           )
+    $aggregations:(Aggregations [(CountRows)] $cols:*)
+    $def:*
+)
+=>
+(CountStarTable (MakeCountStarTableOpDef $scanOpDef $cols))

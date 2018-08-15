@@ -27,7 +27,7 @@ import (
 // countAggregator is a simple processor that counts the number of rows it
 // receives. It's a specialized aggregator that can be used for COUNT(*).
 type countAggregator struct {
-	processorBase
+	ProcessorBase
 
 	input RowSource
 	count int
@@ -57,12 +57,9 @@ func newCountAggregator(
 			if !ok {
 				return
 			}
-			sp := opentracing.SpanFromContext(ag.ctx)
+			sp := opentracing.SpanFromContext(ag.Ctx)
 			if sp == nil {
 				return
-			}
-			if ag.flowCtx.testingKnobs.OverrideStallTime {
-				isc.InputStats.StallTime = 0
 			}
 			tracing.SetSpanStats(
 				sp,
@@ -73,14 +70,16 @@ func newCountAggregator(
 		}
 	}
 
-	if err := ag.init(
+	if err := ag.Init(
+		ag,
 		post,
 		outputTypes,
 		flowCtx,
 		processorID,
 		output,
-		procStateOpts{
-			inputsToDrain: []RowSource{ag.input},
+		nil, /* memMonitor */
+		ProcStateOpts{
+			InputsToDrain: []RowSource{ag.input},
 		},
 	); err != nil {
 		return nil, err
@@ -91,36 +90,36 @@ func newCountAggregator(
 
 func (ag *countAggregator) Start(ctx context.Context) context.Context {
 	ag.input.Start(ctx)
-	return ag.startInternal(ctx, countRowsProcName)
+	return ag.StartInternal(ctx, countRowsProcName)
 }
 
 func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for ag.state == stateRunning {
+	for ag.State == StateRunning {
 		row, meta := ag.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
-				ag.moveToDraining(meta.Err)
+				ag.MoveToDraining(meta.Err)
 				break
 			}
 			return nil, meta
 		}
 		if row == nil {
-			ag.moveToDraining(nil /* err */)
+			ag.MoveToDraining(nil /* err */)
 			ret := make(sqlbase.EncDatumRow, 1)
 			ret[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
 			return ret, nil
 		}
 		ag.count++
 	}
-	return nil, ag.drainHelper()
+	return nil, ag.DrainHelper()
 }
 
 func (ag *countAggregator) ConsumerDone() {
-	ag.moveToDraining(nil /* err */)
+	ag.MoveToDraining(nil /* err */)
 }
 
 func (ag *countAggregator) ConsumerClosed() {
-	ag.internalClose()
+	ag.InternalClose()
 }
 
 func (ag *countAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
