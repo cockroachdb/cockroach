@@ -3948,7 +3948,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: generate_series:8(int) _pg_expandarray:13(tuple{int AS x, int AS n})
+ ├── columns: generate_series:8(int) information_schema._pg_expandarray:13(tuple{int AS x, int AS n})
  ├── side-effects
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) v:7(int) column8:8(int) xy.x:9(int) x:11(int) n:12(int)

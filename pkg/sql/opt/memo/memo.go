@@ -15,6 +15,8 @@
 package memo
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -395,6 +397,5 @@ func (m *Memo) String() string {
 // FormatString returns a string representation of this memo for testing
 // and debugging. The given flags control which properties are shown.
 func (m *Memo) FormatString(flags FmtFlags) string {
-	formatter := m.makeMemoFormatter(flags)
-	return formatter.format()
+	return m.format(&memoFmtCtx{buf: &bytes.Buffer{}, flags: flags})
 }

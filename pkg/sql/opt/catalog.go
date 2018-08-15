@@ -29,9 +29,6 @@ import (
 // This file contains interfaces that are used by the query optimizer to avoid
 // including specifics of sqlbase structures in the opt code.
 
-// ColumnName is the type of a column name.
-type ColumnName string
-
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.
@@ -128,7 +125,7 @@ type View interface {
 // needed by the query optimizer.
 type Column interface {
 	// ColName returns the name of the column.
-	ColName() ColumnName
+	ColName() tree.Name
 
 	// DatumType returns the data type of the column.
 	DatumType() types.T

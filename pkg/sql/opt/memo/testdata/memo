@@ -158,7 +158,7 @@ memo (optimized)
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
  │         └── cost: 41568.75
- ├── G3: (projections G6 a.y b.x)
+ ├── G3: (projections G6 y x)
  ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
@@ -238,7 +238,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.05
- ├── G3: (projections a.x)
+ ├── G3: (projections x)
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)
@@ -277,7 +277,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G15 G14)
  │         └── cost: 1.05
- ├── G11: (projections a.x)
+ ├── G11: (projections x)
  ├── G12: (project G10 G11)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G10 G11)

@@ -173,7 +173,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// Only add columns that aren't already part of index.
 		found := false
 		for _, colDef := range def.Columns {
-			if pkCol.Column.ColName() == opt.ColumnName(colDef.Column) {
+			if pkCol.Column.ColName() == colDef.Column {
 				found = true
 			}
 		}
@@ -206,7 +206,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// key columns.
 		found := false
 		for _, pkCol := range pkCols {
-			if opt.ColumnName(name) == pkCol.Column.ColName() {
+			if name == pkCol.Column.ColName() {
 				found = true
 			}
 		}

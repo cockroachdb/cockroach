@@ -181,25 +181,25 @@ render          ·         ·                  (x)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
-render               ·         ·                                       (x, two, plus1)                             ·
- │                   render 0  COALESCE("onecolumn.x", "twocolumn.x")  ·                                           ·
- │                   render 1  two                                     ·                                           ·
- │                   render 2  plus1                                   ·                                           ·
- └── join            ·         ·                                       (two, "onecolumn.x", plus1, "twocolumn.x")  ·
-      │              type      full outer                              ·                                           ·
-      │              equality  ("onecolumn.x") = ("twocolumn.x")       ·                                           ·
-      ├── render     ·         ·                                       (two, "onecolumn.x")                        ·
-      │    │         render 0  2                                       ·                                           ·
-      │    │         render 1  x                                       ·                                           ·
-      │    └── scan  ·         ·                                       (x)                                         ·
-      │              table     onecolumn@primary                       ·                                           ·
-      │              spans     ALL                                     ·                                           ·
-      └── render     ·         ·                                       (plus1, "twocolumn.x")                      ·
-           │         render 0  y + 1                                   ·                                           ·
-           │         render 1  x                                       ·                                           ·
-           └── scan  ·         ·                                       (x, y)                                      ·
-·                    table     twocolumn@primary                       ·                                           ·
-·                    spans     ALL                                     ·                                           ·
+render               ·         ·                  (x, two, plus1)     ·
+ │                   render 0  COALESCE(x, x)     ·                   ·
+ │                   render 1  two                ·                   ·
+ │                   render 2  plus1              ·                   ·
+ └── join            ·         ·                  (two, x, plus1, x)  ·
+      │              type      full outer         ·                   ·
+      │              equality  (x) = (x)          ·                   ·
+      ├── render     ·         ·                  (two, x)            ·
+      │    │         render 0  2                  ·                   ·
+      │    │         render 1  x                  ·                   ·
+      │    └── scan  ·         ·                  (x)                 ·
+      │              table     onecolumn@primary  ·                   ·
+      │              spans     ALL                ·                   ·
+      └── render     ·         ·                  (plus1, x)          ·
+           │         render 0  y + 1              ·                   ·
+           │         render 1  x                  ·                   ·
+           └── scan  ·         ·                  (x, y)              ·
+·                    table     twocolumn@primary  ·                   ·
+·                    spans     ALL                ·                   ·
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query TTTTT
@@ -401,27 +401,27 @@ join       ·      ·               (a, b, n, sq)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
-render                    ·         ·                  (a, b, n, sq)                                         ·
- │                        render 0  "pairs.a"          ·                                                     ·
- │                        render 1  "pairs.b"          ·                                                     ·
- │                        render 2  "square.n"         ·                                                     ·
- │                        render 3  "square.sq"        ·                                                     ·
- └── filter               ·         ·                  (div, "pairs.a", "pairs.b", "square.n", "square.sq")  ·
-      │                   filter    div = "square.sq"  ·                                                     ·
-      └── render          ·         ·                  (div, "pairs.a", "pairs.b", "square.n", "square.sq")  ·
-           │              render 0  (a * b) / 2        ·                                                     ·
-           │              render 1  a                  ·                                                     ·
-           │              render 2  b                  ·                                                     ·
-           │              render 3  n                  ·                                                     ·
-           │              render 4  sq                 ·                                                     ·
-           └── join       ·         ·                  (a, b, n, sq)                                         ·
-                │         type      cross              ·                                                     ·
-                ├── scan  ·         ·                  (a, b)                                                ·
-                │         table     pairs@primary      ·                                                     ·
-                │         spans     ALL                ·                                                     ·
-                └── scan  ·         ·                  (n, sq)                                               ·
-·                         table     square@primary     ·                                                     ·
-·                         spans     ALL                ·                                                     ·
+render                    ·         ·               (a, b, n, sq)       ·
+ │                        render 0  a               ·                   ·
+ │                        render 1  b               ·                   ·
+ │                        render 2  n               ·                   ·
+ │                        render 3  sq              ·                   ·
+ └── filter               ·         ·               (div, a, b, n, sq)  ·
+      │                   filter    div = sq        ·                   ·
+      └── render          ·         ·               (div, a, b, n, sq)  ·
+           │              render 0  (a * b) / 2     ·                   ·
+           │              render 1  a               ·                   ·
+           │              render 2  b               ·                   ·
+           │              render 3  n               ·                   ·
+           │              render 4  sq              ·                   ·
+           └── join       ·         ·               (a, b, n, sq)       ·
+                │         type      cross           ·                   ·
+                ├── scan  ·         ·               (a, b)              ·
+                │         table     pairs@primary   ·                   ·
+                │         spans     ALL             ·                   ·
+                └── scan  ·         ·               (n, sq)             ·
+·                         table     square@primary  ·                   ·
+·                         spans     ALL             ·                   ·
 
 # The filter expression must stay on top of the outer join.
 query TTTTT
