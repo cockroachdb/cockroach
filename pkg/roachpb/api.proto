@@ -1568,3 +1568,7 @@ service Internal {
   // TODO(nvanbenschoten): Uncomment when the RangeFeed API is introduced.
   // rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
 }
+
+service InternalTODO {
+  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+}
