@@ -832,14 +832,9 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		lResult.MaybeGossipNodeLiveness = nil
 	}
 
-	if lResult.LeaseMetricsResult != nil {
-		switch metric := *lResult.LeaseMetricsResult; metric {
-		case result.LeaseRequestSuccess, result.LeaseRequestError:
-			r.store.metrics.leaseRequestComplete(metric == result.LeaseRequestSuccess)
-		case result.LeaseTransferSuccess, result.LeaseTransferError:
-			r.store.metrics.leaseTransferComplete(metric == result.LeaseTransferSuccess)
-		}
-		lResult.LeaseMetricsResult = nil
+	if lResult.Metrics != nil {
+		r.store.metrics.handleMetricsResult(ctx, *lResult.Metrics)
+		lResult.Metrics = nil
 	}
 
 	if lResult.UpdatedTxns != nil {

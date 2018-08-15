@@ -37,11 +37,11 @@ func declareKeysRequestLease(
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	var trigger result.Result
-	trigger.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
+	trigger.Local.Metrics = new(result.Metrics)
 	if isTransfer {
-		*trigger.Local.LeaseMetricsResult = result.LeaseTransferError
+		trigger.Local.Metrics.LeaseTransferError = 1
 	} else {
-		*trigger.Local.LeaseMetricsResult = result.LeaseRequestError
+		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
 }
@@ -157,11 +157,11 @@ func evalNewLease(
 	// the merge aborts.)
 	pd.Local.MaybeWatchForMerge = true
 
-	pd.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
+	pd.Local.Metrics = new(result.Metrics)
 	if isTransfer {
-		*pd.Local.LeaseMetricsResult = result.LeaseTransferSuccess
+		pd.Local.Metrics.LeaseTransferSuccess = 1
 	} else {
-		*pd.Local.LeaseMetricsResult = result.LeaseRequestSuccess
+		pd.Local.Metrics.LeaseRequestSuccess = 1
 	}
 	return pd, nil
 }
