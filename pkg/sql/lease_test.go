@@ -122,19 +122,23 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
+	table, _, expiration, err := t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
+	return table, expiration, err
 }
 
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	return t.node(nodeID).AcquireAndAssertMinVersion(
+	// TODO(vivek): use epoch expiration.
+	table, _, expiration, err := t.node(nodeID).AcquireAndAssertMinVersion(
 		context.TODO(), t.server.Clock().Now(), descID, minVersion)
+	return table, expiration, err
 }
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp) {
+	// TODO(vivek): use epoch expiration.
 	table, expiration, err := t.acquire(nodeID, descID)
 	if err != nil {
 		t.Fatal(err)
@@ -145,6 +149,7 @@ func (t *leaseTest) mustAcquire(
 func (t *leaseTest) mustAcquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp) {
+	// TODO(vivek): use epoch expiration.
 	table, expiration, err := t.acquireMinVersion(nodeID, descID, minVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -581,8 +586,9 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	return s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
+) (*sqlbase.TableDescriptor, error) {
+	table, _, _, err := s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
+	return table, err
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -637,11 +643,11 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	ctx := context.TODO()
 
-	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lease2, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease2, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -664,7 +670,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	<-deleted
 
 	// We should still be able to acquire, because we have an active lease.
-	lease3, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	lease3, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -680,7 +686,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 	// Now we shouldn't be able to acquire any more.
-	_, _, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID)
+	_, err = acquire(ctx, s.(*server.TestServer), tableDesc.ID)
 	if !testutils.IsError(err, "table is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
@@ -1107,7 +1113,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager := t.node(1)
 
 	// Acquire the lease so it is put into the tableNameCache.
-	_, _, err := leaseManager.AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, tableName)
+	_, _, _, err := leaseManager.AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, tableName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1116,7 +1122,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, err := leaseManager.AcquireByName(
+			_, _, _, err := leaseManager.AcquireByName(
 				context.TODO(),
 				t.server.Clock().Now(),
 				dbID,
@@ -1182,7 +1188,7 @@ CREATE TABLE t.test2 ();
 	dbID := test2Desc.ParentID
 
 	// Acquire a lease on test1 by name.
-	ts1, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	ts1, _, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts1); err != nil {
@@ -1193,7 +1199,7 @@ CREATE TABLE t.test2 ();
 	}
 
 	// Acquire a lease on test2 by ID.
-	ts2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	ts2, _, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts2); err != nil {
@@ -1210,7 +1216,7 @@ CREATE TABLE t.test2 ();
 		// Acquire another lease by name on test1. At first this will be the
 		// same lease, but eventually we will asynchronously renew a lease and
 		// our acquire will get a newer lease.
-		ts1, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+		ts1, _, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1236,7 +1242,7 @@ CREATE TABLE t.test2 ();
 		// Acquire another lease by ID on test2. At first this will be the same
 		// lease, but eventually we will asynchronously renew a lease and our
 		// acquire will get a newer lease.
-		ts2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+		ts2, _, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1332,7 +1338,7 @@ CREATE TABLE t.test2 ();
 	dbID := test2Desc.ParentID
 
 	// Acquire a lease on test1 by name.
-	ts1, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	ts1, epoch1, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts1); err != nil {
@@ -1340,10 +1346,12 @@ CREATE TABLE t.test2 ();
 	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
 		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
 			count)
+	} else if epoch1 != 1 {
+		t.Fatalf("expected epoch 1 got %d", epoch1)
 	}
 
 	// Acquire a lease on test2 by ID.
-	ts2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	ts2, epoch2, eo2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts2); err != nil {
@@ -1351,6 +1359,8 @@ CREATE TABLE t.test2 ();
 	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 2 {
 		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
 			count)
+	} else if epoch2 != 1 {
+		t.Fatalf("expected epoch 1 got %d", epoch2)
 	}
 
 	// Reset testAcquisitionBlockCount as the first acquisition will always block.
@@ -1362,7 +1372,7 @@ CREATE TABLE t.test2 ();
 	testutils.SucceedsSoon(t, func() error {
 		// Acquire another lease by name on test1. At first this will be the
 		// same lease, but eventually we will see a renewed lease.
-		ts1, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+		ts1, epoch1, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1379,6 +1389,8 @@ CREATE TABLE t.test2 ();
 		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 3 {
 			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
 				count)
+		} else if epoch1 != 2 {
+			return errors.Errorf("expected epoch 1 got %d", epoch1)
 		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
 			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
 		}
@@ -1386,7 +1398,7 @@ CREATE TABLE t.test2 ();
 		// Acquire another lease by ID on test2. At first this will be the same
 		// lease, but eventually we will asynchronously renew a lease and our
 		// acquire will get a newer lease.
-		ts2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+		ts2, epoch2, en2, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1403,6 +1415,8 @@ CREATE TABLE t.test2 ();
 		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 4 {
 			return errors.Errorf("expected at least 3 leases to be acquired, but acquired %d times",
 				count)
+		} else if epoch2 != 2 {
+			return errors.Errorf("expected epoch 1 got %d", epoch2)
 		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
 			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
 		}

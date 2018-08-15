@@ -269,7 +269,8 @@ func (tc *TableCollection) getTableVersion(
 	}
 
 	origTimestamp := flags.txn.OrigTimestamp()
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
+	// TODO(vivek): use epoch's expiration time.
+	table, _, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			if flags.required {
@@ -339,7 +340,8 @@ func (tc *TableCollection) getTableVersionByID(
 	}
 
 	origTimestamp := txn.OrigTimestamp()
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
+	// TODO(vivek): use epoch's expiration time.
+	table, _, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the

@@ -52,6 +52,8 @@ import (
 var errRenewLease = errors.New("renew lease on id")
 var errReadOlderTableVersion = errors.New("read older table version from store")
 
+const invalidEpoch = 0
+
 // A lease stored in system.lease.
 type storedTableLease struct {
 	id         sqlbase.ID
@@ -110,17 +112,24 @@ func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 	return !timestamp.Less(s.expiration)
 }
 
-func (s *tableVersionState) incRefcount() {
+// increment the reference count and return the epoch if any.
+func (s *tableVersionState) incRefcount() int64 {
 	s.mu.Lock()
-	s.incRefcountLocked()
+	epoch := s.incRefcountLocked()
 	s.mu.Unlock()
+	return epoch
 }
 
-func (s *tableVersionState) incRefcountLocked() {
+// increment the reference count and return the epoch if any.
+func (s *tableVersionState) incRefcountLocked() int64 {
 	s.mu.refcount++
 	if log.V(2) {
 		log.VEventf(context.TODO(), 2, "tableVersionState.incRef: %s", s.stringLocked())
 	}
+	if s.mu.lease != nil {
+		return s.mu.lease.epoch
+	}
+	return invalidEpoch
 }
 
 // The lease expiration stored in the database is of a different type.
@@ -719,13 +728,13 @@ func ensureVersion(
 // of the descriptor.
 func (t *tableState) findForTimestamp(
 	ctx context.Context, timestamp hlc.Timestamp,
-) (*tableVersionState, bool, error) {
+) (*tableVersionState, int64, bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	// Acquire a lease if no table descriptor exists in the cache.
 	if len(t.mu.active.data) == 0 {
-		return nil, false, errRenewLease
+		return nil, invalidEpoch, false, errRenewLease
 	}
 
 	// Walk back the versions to find one that is valid for the timestamp.
@@ -735,20 +744,20 @@ func (t *tableState) findForTimestamp(
 			latest := i+1 == len(t.mu.active.data)
 			if !table.hasExpired(timestamp) {
 				// Existing valid table version.
-				table.incRefcount()
-				return table, latest, nil
+				epoch := table.incRefcount()
+				return table, epoch, latest, nil
 			}
 
 			if latest {
 				// Renew the lease if the lease has expired
 				// The latest descriptor always has a lease.
-				return nil, false, errRenewLease
+				return nil, invalidEpoch, false, errRenewLease
 			}
 			break
 		}
 	}
 
-	return nil, false, errReadOlderTableVersion
+	return nil, invalidEpoch, false, errReadOlderTableVersion
 }
 
 // Read an older table descriptor version for the particular timestamp
@@ -1095,7 +1104,7 @@ func purgeOldVersions(
 	// Acquire a refcount on the table on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	table, _, err := t.findForTimestamp(ctx, m.execCfg.Clock.Now())
+	table, _, _, err := t.findForTimestamp(ctx, m.execCfg.Clock.Now())
 	if dropped := err == errTableDropped; dropped || err == nil {
 		removeInactives(dropped)
 		if table != nil {
@@ -1223,17 +1232,18 @@ type tableNameCache struct {
 // Returns a valid tableVersionState for the table with that name,
 // if the name had been previously cached and the cache has a table
 // version that has not expired. Returns nil otherwise.
+// Also returns an epoch if the descriptor is leased.
 // This method handles normalizing the table name.
 // The table's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
 func (c *tableNameCache) get(
 	dbID sqlbase.ID, tableName string, timestamp hlc.Timestamp,
-) *tableVersionState {
+) (*tableVersionState, int64) {
 	c.mu.Lock()
 	table, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
 	c.mu.Unlock()
 	if !ok {
-		return nil
+		return nil, invalidEpoch
 	}
 	table.mu.Lock()
 	if table.mu.lease == nil {
@@ -1241,7 +1251,7 @@ func (c *tableNameCache) get(
 		// This get() raced with a release operation. Remove this cache
 		// entry if needed.
 		c.remove(table)
-		return nil
+		return nil, invalidEpoch
 	}
 
 	defer table.mu.Unlock()
@@ -1254,11 +1264,11 @@ func (c *tableNameCache) get(
 
 	// Expired table. Don't hand it out.
 	if table.hasExpired(timestamp) {
-		return nil
+		return nil, invalidEpoch
 	}
 
-	table.incRefcountLocked()
-	return table
+	epoch := table.incRefcountLocked()
+	return table, epoch
 }
 
 func (c *tableNameCache) insert(table *tableVersionState) {
@@ -1415,11 +1425,12 @@ func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 // the returned descriptor. Renewal of a lease may begin in the
 // background. Renewal is done in order to prevent blocking on future
 // acquisitions.
+// An epoch for a lease if any is also returned. This is currently not used.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, int64, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
-	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
+	tableVersion, epoch := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
 			// If this lease is nearly expired, ensure a renewal is queued.
@@ -1428,21 +1439,21 @@ func (m *LeaseManager) AcquireByName(
 				if t := m.findTableState(tableVersion.ID, false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, tableVersion.ID, tableName); err != nil {
-						return nil, hlc.Timestamp{}, err
+						return nil, invalidEpoch, hlc.Timestamp{}, err
 					}
 				}
 			}
-			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
+			return &tableVersion.TableDescriptor, epoch, tableVersion.expiration, nil
 		}
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, invalidEpoch, hlc.Timestamp{}, err
 		}
 		// Return a valid table descriptor for the timestamp.
-		table, expiration, err := m.Acquire(ctx, timestamp, tableVersion.ID)
+		table, newEpoch, expiration, err := m.Acquire(ctx, timestamp, tableVersion.ID)
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, invalidEpoch, hlc.Timestamp{}, err
 		}
-		return table, expiration, nil
+		return table, newEpoch, expiration, nil
 	}
 
 	// We failed to find something in the cache, or what we found is not
@@ -1452,11 +1463,11 @@ func (m *LeaseManager) AcquireByName(
 	var err error
 	tableID, err := m.resolveName(ctx, timestamp, dbID, tableName)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, invalidEpoch, hlc.Timestamp{}, err
 	}
-	table, expiration, err := m.Acquire(ctx, timestamp, tableID)
+	table, newEpoch, expiration, err := m.Acquire(ctx, timestamp, tableID)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, invalidEpoch, hlc.Timestamp{}, err
 	}
 	if !nameMatchesTable(table, dbID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
@@ -1496,11 +1507,11 @@ func (m *LeaseManager) AcquireByName(
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
 		if err := m.acquireFreshestFromStore(ctx, tableID); err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, invalidEpoch, hlc.Timestamp{}, err
 		}
-		table, expiration, err = m.Acquire(ctx, timestamp, tableID)
+		table, newEpoch, expiration, err = m.Acquire(ctx, timestamp, tableID)
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, invalidEpoch, hlc.Timestamp{}, err
 		}
 		if !nameMatchesTable(table, dbID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
@@ -1508,10 +1519,10 @@ func (m *LeaseManager) AcquireByName(
 			if err := m.Release(table); err != nil {
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
-			return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
+			return nil, invalidEpoch, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
 		}
 	}
-	return table, expiration, nil
+	return table, newEpoch, expiration, nil
 }
 
 // resolveName resolves a table name to a descriptor ID at a particular
@@ -1548,29 +1559,30 @@ func (m *LeaseManager) resolveName(
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
 // the returned descriptor.
+// An epoch for a lease if any is also returned. This is currently not used.
 func (m *LeaseManager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, int64, hlc.Timestamp, error) {
 	for {
 		t := m.findTableState(tableID, true /*create*/)
-		table, latest, err := t.findForTimestamp(ctx, timestamp)
+		table, epoch, latest, err := t.findForTimestamp(ctx, timestamp)
 		if err == nil {
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
 				durationUntilExpiry := time.Duration(table.expiration.WallTime - timestamp.WallTime)
 				if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, tableID, table.Name); err != nil {
-						return nil, hlc.Timestamp{}, err
+						return nil, 0, hlc.Timestamp{}, err
 					}
 				}
 			}
-			return &table.TableDescriptor, table.expiration, nil
+			return &table.TableDescriptor, epoch, table.expiration, nil
 		}
 		switch err {
 		case errRenewLease:
 			// Renew lease and retry. This will block until the lease is acquired.
 			if _, errLease := acquireNodeLease(ctx, m, tableID); errLease != nil {
-				return nil, hlc.Timestamp{}, errLease
+				return nil, 0, hlc.Timestamp{}, errLease
 			}
 			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
 				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(
@@ -1582,12 +1594,12 @@ func (m *LeaseManager) Acquire(
 			// old table versions from the store.
 			versions, errRead := m.readOlderVersionForTimestamp(ctx, tableID, timestamp)
 			if errRead != nil {
-				return nil, hlc.Timestamp{}, errRead
+				return nil, 0, hlc.Timestamp{}, errRead
 			}
 			m.insertTableVersions(tableID, versions)
 
 		default:
-			return nil, hlc.Timestamp{}, err
+			return nil, 0, hlc.Timestamp{}, err
 		}
 	}
 }

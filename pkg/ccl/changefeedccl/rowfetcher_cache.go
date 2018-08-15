@@ -50,7 +50,7 @@ func (c *rowFetcherCache) TableDescForKey(
 		// TODO(dan): We don't really need a lease, this is just a convenient way to
 		// get the right descriptor for a timestamp, so release it immediately after
 		// we acquire it. Avoid the lease entirely.
-		tableDesc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		tableDesc, _, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
 			return nil, err
 		}

@@ -155,16 +155,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	var tables []sqlbase.TableDescriptor
 	var expiration hlc.Timestamp
+	var epoch int64
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
 			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
 				t.Fatal(err)
 			}
-			table, exp, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
+			table, ep, exp, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tables = append(tables, *table)
+			epoch = ep
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -209,7 +211,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
 	correctExpiration := ts.mu.active.data[0].expiration == expiration
 	ts.mu.active.data[0].mu.Lock()
-	correctEpoch := ts.mu.active.data[0].mu.lease.epoch == 1
+	correctEpoch := ts.mu.active.data[0].mu.lease.epoch == epoch
 	ts.mu.active.data[0].mu.Unlock()
 	ts.mu.Unlock()
 	if !correctLease {
@@ -271,16 +273,19 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock().Now()) != nil {
+	if table, _ := leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock().Now()); table != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now())
+	lease, epoch := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now())
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+	}
+	if epoch != 1 {
+		t.Fatalf("invalid epoch returned %d", epoch)
 	}
 	if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
 		t.Fatal(err)
@@ -298,13 +303,16 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now()) != nil {
+	if table, _ := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now()); table != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease = leaseManager.tableNames.get(newTableDesc.ParentID, "test2", s.Clock().Now())
+	lease, epoch = leaseManager.tableNames.get(newTableDesc.ParentID, "test2", s.Clock().Now())
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
+	}
+	if epoch != 1 {
+		t.Fatalf("invalid epoch: %d", epoch)
 	}
 	if lease.ID != tableDesc.ID {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
@@ -339,9 +347,12 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease == nil {
+	if lease, epoch := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
+		if epoch != 1 {
+			t.Fatalf("invalid epoch returned %d", epoch)
+		}
 		if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
 			t.Fatal(err)
 		}
@@ -350,7 +361,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease != nil {
+	if lease, _ := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease != nil {
 		t.Fatalf("name cache has unexpired entry for (%d, %s): %s", tableDesc.ParentID, tableName, lease)
 	}
 }
@@ -377,7 +388,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock().Now()) != nil {
+	if table, _ := leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock().Now()); table != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
@@ -414,7 +425,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Populate the name cache.
 	ctx := context.TODO()
-	table, _, err := leaseManager.AcquireByName(
+	table, _, _, err := leaseManager.AcquireByName(
 		ctx, leaseManager.execCfg.Clock.Now(), tableDesc.ParentID, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -439,7 +450,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < 50; i++ {
 		timestamp := leaseManager.execCfg.Clock.Now()
 		ctx := context.TODO()
-		table, _, err := leaseManager.AcquireByName(ctx, timestamp, tableDesc.ParentID, "test")
+		table, _, _, err := leaseManager.AcquireByName(ctx, timestamp, tableDesc.ParentID, "test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -454,7 +465,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		// Start the race: signal the other guy to release, and we do another
 		// acquire at the same time.
 		tableChan <- table
-		tableByName, _, err := leaseManager.AcquireByName(ctx, timestamp, tableDesc.ParentID, "test")
+		tableByName, _, _, err := leaseManager.AcquireByName(ctx, timestamp, tableDesc.ParentID, "test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -520,7 +531,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
 				t.Error(err)
 			}
-			table, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
+			table, _, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -570,7 +581,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			table, _, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+			table, _, _, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -610,6 +621,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
 		table *sqlbase.TableDescriptor
+		epoch int64
 		exp   hlc.Timestamp
 		err   error
 	}
@@ -622,8 +634,8 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		m *LeaseManager,
 		acquireChan chan Result,
 	) {
-		table, e, err := m.Acquire(ctx, m.execCfg.Clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table}
+		table, epoch, e, err := m.Acquire(ctx, m.execCfg.Clock.Now(), descID)
+		acquireChan <- Result{err: err, epoch: epoch, exp: e, table: table}
 	}
 
 	testCases := []struct {
@@ -723,11 +735,11 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			if test.isSecondCallAcquireFreshest {
 				go func(ctx context.Context, m *LeaseManager, acquireChan chan Result) {
 					if err := m.acquireFreshestFromStore(ctx, descID); err != nil {
-						acquireChan <- Result{err: err, exp: hlc.Timestamp{}, table: nil}
+						acquireChan <- Result{err: err, epoch: invalidEpoch, exp: hlc.Timestamp{}, table: nil}
 						return
 					}
-					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table}
+					table, epoch, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
+					acquireChan <- Result{err: err, epoch: epoch, exp: e, table: table}
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {
@@ -780,6 +792,9 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			if result1.table == result2.table && result1.exp == result2.exp {
 				t.Fatalf("Expected the leases to be different. TableDescriptor pointers are equal and both the same expiration")
+			}
+			if result1.epoch != result2.epoch {
+				t.Fatalf("incompatible epochs= %d, %d", result1.epoch, result2.epoch)
 			}
 			if count := atomic.LoadInt32(&leasesAcquiredCount); count != 2 {
 				t.Fatalf("Expected to acquire 2 leases, instead got %d", count)

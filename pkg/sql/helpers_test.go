@@ -111,19 +111,20 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 // AcquireAndAssertMinVersion acquires a read lease for the specified table ID.
 // The lease is grabbed on the latest version if >= specified version.
 // It returns a table descriptor and an expiration time valid for the timestamp.
+// The epoch return is still not in use.
 func (m *LeaseManager) AcquireAndAssertMinVersion(
 	ctx context.Context,
 	timestamp hlc.Timestamp,
 	tableID sqlbase.ID,
 	minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+) (*sqlbase.TableDescriptor, int64, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, invalidEpoch, hlc.Timestamp{}, err
 	}
-	table, _, err := t.findForTimestamp(ctx, timestamp)
+	table, epoch, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, invalidEpoch, hlc.Timestamp{}, err
 	}
-	return &table.TableDescriptor, table.expiration, nil
+	return &table.TableDescriptor, epoch, table.expiration, nil
 }
