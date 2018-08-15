@@ -528,6 +528,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.mu.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	needsSplitBySize := r.needsSplitBySizeRLocked()
+	needsMergeBySize := r.needsMergeBySizeRLocked()
 	r.mu.Unlock()
 
 	r.store.metrics.addMVCCStats(deltaStats)
@@ -535,6 +536,9 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+	if needsMergeBySize {
+		r.store.mergeQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
 	// The above are always present. The following are not always present but
