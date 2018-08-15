@@ -90,6 +90,9 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Remember the new descriptor for further uses in the same transaction.
+	params.p.Tables().addCreatedTable(id)
+
 	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
 	b := &client.Batch{}
@@ -185,6 +188,10 @@ func MakeSequenceTableDesc(
 		return desc, err
 	}
 	desc.SequenceOpts = opts
+
+	// A sequence doesn't have dependencies and thus can be made public
+	// immediately.
+	desc.State = sqlbase.TableDescriptor_PUBLIC
 
 	return desc, desc.ValidateTable(settings)
 }
