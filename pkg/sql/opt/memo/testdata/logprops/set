@@ -77,7 +77,7 @@ intersect
       │    └── interesting orderings: (+5)
       └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
            └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                ├── variable: uv.u [type=int, outer=(3)]
+                ├── variable: u [type=int, outer=(3)]
                 └── const: 1 [type=int]
 
 build
@@ -117,7 +117,7 @@ except
            │    └── interesting orderings: (+5)
            └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
                 └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                     ├── variable: uv.u [type=int, outer=(3)]
+                     ├── variable: u [type=int, outer=(3)]
                      └── const: 1 [type=int]
 
 # Propagate outer columns.

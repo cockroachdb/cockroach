@@ -133,7 +133,7 @@ memo (optimized)
  │         └── cost: 1050.00
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
- ├── G7: (variable a.s)
+ ├── G7: (variable s)
  └── G8: (const 'foo')
 
 # --------------------------------------------------

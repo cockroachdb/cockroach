@@ -70,7 +70,7 @@ explain
       │         └── const: 4 [type=int]
       └── filters [type=bool]
            └── eq [type=bool]
-                ├── variable: xy.x [type=int]
+                ├── variable: x [type=int]
                 └── variable: column1 [type=int]
 
 build

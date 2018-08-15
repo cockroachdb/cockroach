@@ -222,9 +222,7 @@ func (md *Metadata) ColumnOrdinal(id ColumnID) int {
 //
 // If the column label is qualified, the table is prefixed to it and separated
 // by a "." character.
-//
-// TODO(andyk): useTable is a hack that will be removed in the next commit.
-func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool, useTable bool) string {
+func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string {
 	col := md.cols[id-1]
 	if col.tabID == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
@@ -247,10 +245,6 @@ func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool, useTabl
 				break
 			}
 		}
-	}
-
-	if useTable {
-		ambiguous = true
 	}
 
 	if !ambiguous {
