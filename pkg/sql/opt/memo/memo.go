@@ -119,6 +119,10 @@ type Memo struct {
 	// expression to indicate that it did not originate from the memo.
 	groups []group
 
+	// logPropsBuilder is inlined in the memo so that it can be reused each time
+	// scalar or relational properties need to be built.
+	logPropsBuilder logicalPropsBuilder
+
 	// Some memoExprs have a variable number of children. The Expr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
 	// listStorage. Note that ListID 0 is invalid in order to indicate an
@@ -258,8 +262,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	}
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	logPropsFactory := logicalPropsBuilder{evalCtx: evalCtx}
-	mgrp.logical = logPropsFactory.buildProps(ev)
+	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
 	return mgrp.id
 }
 
