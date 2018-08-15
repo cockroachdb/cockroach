@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cenk/backoff"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/rubyist/circuitbreaker"
 )
 
 const (
@@ -336,6 +338,14 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
+	}
+
+	// Create a breaker which never trips and never backs off to avoid
+	// introducing timing-based flakes.
+	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
+		return circuit.NewBreakerWithOptions(&circuit.Options{
+			BackOff: &backoff.ZeroBackOff{},
+		})
 	}
 
 	// Our context must be shared with our server.
