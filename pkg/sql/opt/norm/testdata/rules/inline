@@ -96,7 +96,7 @@ project
  │    ├── scan a
  │    │    └── columns: f:3(float)
  │    └── filters [type=bool, outer=(3)]
- │         └── (a.f + 1.0) = (a.f + 1.0) [type=bool, outer=(3)]
+ │         └── (a.f + 1.0) IS NOT NULL [type=bool, outer=(3)]
  └── projections [outer=(3)]
       └── a.f + 1.0 [type=float, outer=(3)]
 

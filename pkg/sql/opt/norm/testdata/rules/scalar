@@ -140,6 +140,142 @@ project
       └── COALESCE(a.i, NULL, NULL) [type=int, outer=(2)]
 
 # --------------------------------------------------
+# SimplifySelfComparison
+# --------------------------------------------------
+opt
+SELECT i = i FROM a
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections [outer=(2)]
+      └── a.i IS NOT NULL [type=bool, outer=(2)]
+
+opt
+SELECT
+  i = i,
+  i >= i,
+  i <= i,
+  i <> i,
+  i > i,
+  i < i
+FROM a
+----
+project
+ ├── columns: "?column?":7(bool) "?column?":8(bool) "?column?":9(bool) "?column?":10(bool) "?column?":11(bool) "?column?":12(bool)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections [outer=(2)]
+      ├── a.i IS NOT NULL [type=bool, outer=(2)]
+      ├── a.i IS NOT NULL [type=bool, outer=(2)]
+      ├── a.i IS NOT NULL [type=bool, outer=(2)]
+      ├── a.i IS NULL [type=bool, outer=(2)]
+      ├── a.i IS NULL [type=bool, outer=(2)]
+      └── a.i IS NULL [type=bool, outer=(2)]
+
+opt
+SELECT x = x FROM (SELECT (i, i) x FROM a)
+----
+project
+ ├── columns: "?column?":8(bool)
+ ├── project
+ │    ├── columns: x:7(tuple{int, int})
+ │    ├── scan a
+ │    │    └── columns: i:2(int)
+ │    └── projections [outer=(2)]
+ │         └── (a.i, a.i) [type=tuple{int, int}, outer=(2)]
+ └── projections [outer=(7)]
+      └── x = x [type=bool, outer=(7)]
+
+opt
+SELECT i FROM a WHERE i = i
+----
+select
+ ├── columns: i:2(int!null)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── a.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+opt
+SELECT i FROM a WHERE i <> i
+----
+select
+ ├── columns: i:2(int)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+      └── a.i IS NULL [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
+
+opt
+SELECT i FROM a WHERE (i, 1) = (i, 1)
+----
+select
+ ├── columns: i:2(int!null)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── a.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+opt
+SELECT uuid_v4() = uuid_v4()
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections [side-effects]
+      └── uuid_v4() = uuid_v4() [type=bool, side-effects]
+
+# --------------------------------------------------
+# SimplifySelfInequality
+# --------------------------------------------------
+opt
+SELECT i <> i FROM a
+----
+project
+ ├── columns: "?column?":7(bool)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections [outer=(2)]
+      └── a.i IS NULL [type=bool, outer=(2)]
+
+opt
+SELECT i FROM a WHERE i <> i
+----
+select
+ ├── columns: i:2(int)
+ ├── fd: ()-->(2)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+      └── a.i IS NULL [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
+
+opt
+SELECT uuid_v4() <> uuid_v4()
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections [side-effects]
+      └── uuid_v4() != uuid_v4() [type=bool, side-effects]
+
+# --------------------------------------------------
 # EliminateCast
 # --------------------------------------------------
 opt

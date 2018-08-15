@@ -189,6 +189,12 @@ func (c *CustomFuncs) IsString(group memo.GroupID) bool {
 	return c.LookupScalar(group).Type == types.String
 }
 
+// IsTuple returns whether the type of the scalar expression is a tuple.
+func (c *CustomFuncs) IsTuple(in memo.GroupID) bool {
+	_, isTuple := c.LookupScalar(in).Type.(types.TTuple)
+	return isTuple
+}
+
 // ColTypeToDatumType maps the given column type to a datum type.
 func (c *CustomFuncs) ColTypeToDatumType(colTyp memo.PrivateID) memo.PrivateID {
 	datumTyp := coltypes.CastTargetToDatumType(c.mem.LookupPrivate(colTyp).(coltypes.T))
@@ -307,6 +313,12 @@ func (c *CustomFuncs) HasOuterCols(group memo.GroupID) bool {
 func (c *CustomFuncs) OnlyConstants(group memo.GroupID) bool {
 	scalar := c.LookupScalar(group)
 	return scalar.OuterCols.Empty() && !scalar.CanHaveSideEffects
+}
+
+// CanHaveSideEffects returns true if the scalar expression can possibly have
+// side effects.  See the comment in Logical.CanHaveSideEffects for details.
+func (c *CustomFuncs) CanHaveSideEffects(group memo.GroupID) bool {
+	return c.LookupScalar(group).CanHaveSideEffects
 }
 
 // HasNoCols returns true if the group has zero output columns.
@@ -755,6 +767,11 @@ func (c *CustomFuncs) SimplifyFilters(conditions memo.ListID) memo.GroupID {
 	return c.f.ConstructFilters(lb.BuildList())
 }
 
+// SameGroup returns true only if the two inputs are equivalent.
+func (c *CustomFuncs) SameGroup(left, right memo.GroupID) bool {
+	return left == right
+}
+
 // NegateConditions negates all the conditions in a list like:
 //   a = 5 AND b < 10
 // to:
@@ -961,6 +978,19 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 	leftType := c.LookupScalar(left).Type
 	rightType := c.LookupScalar(right).Type
 	return c.f.ConstructNull(c.f.InternType(memo.InferBinaryType(op, leftType, rightType)))
+}
+
+// SimplifySelfComparison replaces a comparison of a scalar with itself with a
+// comparison to NULL.
+func (c *CustomFuncs) SimplifySelfComparison(op opt.Operator, group memo.GroupID) memo.GroupID {
+	nullVal := c.f.ConstructNull(c.f.InternType(types.Unknown))
+	switch op {
+	case opt.EqOp, opt.LeOp, opt.GeOp:
+		return c.f.ConstructIsNot(group, nullVal)
+	case opt.NeOp, opt.LtOp, opt.GtOp:
+		return c.f.ConstructIs(group, nullVal)
+	}
+	panic(fmt.Sprintf("unhandled op %s", op))
 }
 
 // ----------------------------------------------------------------------
