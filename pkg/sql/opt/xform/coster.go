@@ -66,6 +66,11 @@ const (
 	hugeCost = 1e100
 )
 
+// Init initializes a new coster structure with the given memo.
+func (c *coster) Init(mem *memo.Memo) {
+	c.mem = mem
+}
+
 // computeCost calculates the estimated cost of the candidate best expression,
 // based on its logical properties as well as the cost of its children. Each
 // expression's cost must always be >= the total costs of its children, so that

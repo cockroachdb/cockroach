@@ -58,7 +58,8 @@ func TestNormRules(t *testing.T) {
 // IN/NOT IN in SQL, so do it here.
 func TestRuleFoldNullInEmpty(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := norm.NewFactory(&evalCtx)
+	var f norm.Factory
+	f.Init(&evalCtx)
 
 	null := f.ConstructNull(f.InternType(types.Unknown))
 	empty := f.ConstructTuple(memo.EmptyList, f.InternType(memo.EmptyTupleType))
