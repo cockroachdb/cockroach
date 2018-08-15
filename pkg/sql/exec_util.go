@@ -1605,12 +1605,12 @@ var _ sqlStatsCollector = &sqlStatsCollectorImpl{}
 //
 // note that phaseTimes is an array, not a slice, so this performs a copy-by-value.
 func newSQLStatsCollectorImpl(
-	sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes,
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
 ) *sqlStatsCollectorImpl {
 	return &sqlStatsCollectorImpl{
 		sqlStats:   sqlStats,
 		appStats:   appStats,
-		phaseTimes: phaseTimes,
+		phaseTimes: *phaseTimes,
 	}
 }
 
@@ -1637,4 +1637,14 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 // SQLStats is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
 	return s.sqlStats
+}
+
+func (s *sqlStatsCollectorImpl) Reset(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes,
+) {
+	*s = sqlStatsCollectorImpl{
+		sqlStats:   sqlStats,
+		appStats:   appStats,
+		phaseTimes: *phaseTimes,
+	}
 }
