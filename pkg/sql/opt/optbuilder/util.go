@@ -329,13 +329,13 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 }
 
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
-	exprTransformCtx := transform.ExprTransformContext{}
-	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
+	b.exprTransformCtx = transform.ExprTransformContext{}
+	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
 		})
 	}
-	if exprTransformCtx.WindowFuncInExpr(expr) {
+	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
