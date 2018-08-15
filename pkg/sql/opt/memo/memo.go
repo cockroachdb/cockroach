@@ -106,7 +106,7 @@ const (
 type Memo struct {
 	// metadata provides information about the columns and tables used in this
 	// particular query.
-	metadata *opt.Metadata
+	metadata opt.Metadata
 
 	// exprMap maps from expression fingerprint (Expr.fingerprint()) to
 	// that expression's group. Multiple different fingerprints can map to the
@@ -145,9 +145,8 @@ func New() *Memo {
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
 	m := &Memo{
-		metadata: opt.NewMetadata(),
-		exprMap:  make(map[Fingerprint]GroupID),
-		groups:   make([]group, 1, 8),
+		exprMap: make(map[Fingerprint]GroupID),
+		groups:  make([]group, 1, 8),
 	}
 
 	m.privateStorage.init()
@@ -156,7 +155,7 @@ func New() *Memo {
 
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
-	return m.metadata
+	return &m.metadata
 }
 
 // Root returns the root of the memo's lowest cost expression tree. It can only
