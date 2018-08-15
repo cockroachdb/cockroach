@@ -22,12 +22,12 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
+	"github.com/shirou/gopsutil/net"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/shirou/gopsutil/net"
 )
 
 var (
