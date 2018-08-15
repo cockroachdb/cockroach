@@ -459,7 +459,8 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, equivReps, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, ev, relProps)
+	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -612,7 +613,8 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, equivReps, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, ev, relProps)
+	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -1350,9 +1352,9 @@ const (
 	unknownDistinctCountRatio = 0.7
 )
 
-// applyFilter uses constraints and FD equivalencies to update the distinct
-// counts for the constrained columns in the filter. These distinct counts
-// will be used later to determine the selectivity of the filter.
+// applyFilter uses constraints to update the distinct counts for the
+// constrained columns in the filter. These distinct counts will be used later
+// to determine the selectivity of the filter.
 //
 // Some filters can be translated directly to distinct counts using the
 // constraint set. For example, the tight constraint `/a: [/1 - /1]` indicates
@@ -1368,7 +1370,7 @@ const (
 // See applyEquivalencies and selectivityFromEquivalencies for details.
 //
 func (sb *statisticsBuilder) applyFilter(
-	filter ExprView, equivReps opt.ColSet, ev ExprView, relProps *props.Relational,
+	filter ExprView, ev ExprView, relProps *props.Relational,
 ) (numUnappliedConstraints int, constrainedCols opt.ColSet) {
 	constraintSet := filter.Logical().Scalar.Constraints
 	tight := filter.Logical().Scalar.TightConstraints
@@ -1409,8 +1411,6 @@ func (sb *statisticsBuilder) applyFilter(
 		}
 	}
 
-	filterFD := &filter.Logical().Scalar.FuncDeps
-	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 	return numUnappliedConstraints, constrainedCols
 }
 
