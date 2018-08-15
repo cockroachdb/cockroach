@@ -298,6 +298,10 @@ type Replica struct {
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
+	// refCount tracks the count of outstanding references to this
+	// replica. It is atomically incremented and decremented.
+	refCount int32
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -1207,6 +1211,29 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
 
 		r.mu.proposalQuota.add(int64(sum))
+	}
+}
+
+// RefCount returns the number of references to the replica.
+func (r *Replica) RefCount() int32 {
+	return atomic.LoadInt32(&r.refCount)
+}
+
+// Ref increments the count of replica references. Every
+// call to Ref() must be paired with a call to Unref() after
+// the replica will no longer be used by the caller.
+func (r *Replica) Ref() {
+	if r != nil {
+		atomic.AddInt32(&r.refCount, 1)
+	}
+}
+
+// Unref decrements the count of replica references.
+func (r *Replica) Unref() {
+	if r != nil {
+		if val := atomic.AddInt32(&r.refCount, -1); val < 0 {
+			log.Fatalf(context.TODO(), "%s reference count is negative", r)
+		}
 	}
 }
 
@@ -3818,12 +3845,6 @@ func (r *Replica) quiesceLocked() bool {
 	return true
 }
 
-func (r *Replica) unquiesce() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.unquiesceLocked()
-}
-
 func (r *Replica) unquiesceLocked() {
 	r.unquiesceWithOptionsLocked(true /* campaignOnWake */)
 }
@@ -4508,11 +4529,7 @@ func (r *Replica) maybeTransferRaftLeader(
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context,
-	q quiescer,
-	now hlc.Timestamp,
-	numProposals int,
-	livenessMap IsLiveMap,
+	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
 	if numProposals != 0 {
 		if log.V(4) {
@@ -5463,6 +5480,7 @@ func (r *Replica) processRaftCommand(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
+		defer rightReplica.Unref()
 
 		rhsStatsMS := rightReplica.GetMVCCStats()
 		rhsComputedMS, err := rditer.ComputeStatsForRange(&split.RightDesc, r.store.Engine(), rhsStatsMS.LastUpdateNanos)
@@ -5523,6 +5541,7 @@ func (r *Replica) acquireSplitLock(
 	// treat splits differently).
 
 	return func(rResult storagebase.ReplicatedEvalResult) {
+		defer rightRng.Unref()
 		if rResult.Split == nil && created && !rightRng.IsInitialized() {
 			// An error occurred during processing of the split and the RHS is still
 			// uninitialized. Mark the RHS destroyed and remove it from the replica's
@@ -5567,6 +5586,7 @@ func (r *Replica) acquireMergeLock(
 			merge.LeftDesc, merge.RightDesc, rightDesc)
 	}
 	return func(storagebase.ReplicatedEvalResult) {
+		defer rightRepl.Unref()
 		rightRepl.raftMu.Unlock()
 	}, nil
 }
@@ -6672,10 +6692,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context,
-	storeID roachpb.StoreID,
-	now hlc.Timestamp,
-	livenessMap IsLiveMap,
+	ctx context.Context, storeID roachpb.StoreID, now hlc.Timestamp, livenessMap IsLiveMap,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	numReplicas := r.mu.zone.NumReplicas
@@ -6782,10 +6799,7 @@ func calcReplicaMetrics(
 // scenario seems rare as it requires the partitioned node to be alive enough
 // to be performing liveness heartbeats.
 func calcRangeCounter(
-	storeID roachpb.StoreID,
-	desc *roachpb.RangeDescriptor,
-	livenessMap IsLiveMap,
-	numReplicas int32,
+	storeID roachpb.StoreID, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap, numReplicas int32,
 ) (rangeCounter, unavailable, underreplicated bool) {
 	for _, rd := range desc.Replicas {
 		if livenessMap[rd.NodeID].IsLive {

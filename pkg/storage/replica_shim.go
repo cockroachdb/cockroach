@@ -52,7 +52,7 @@ var _ btree.Item = &ReplicaShim{}
 // RangeID returns the shim range ID.
 func (rs *ReplicaShim) RangeID() roachpb.RangeID {
 	rs.mu.Lock()
-	rs.mu.Unlock()
+	defer rs.mu.Unlock()
 	if rs.mu.replica != nil {
 		return rs.mu.replica.RangeID
 	}
@@ -84,25 +84,26 @@ func (rs *ReplicaShim) QuiescentButBehind() bool {
 }
 
 // MaybeMakeNonResident frees the replica and reduces the shim to
-// holding just the range descriptor, if possible. Returns whether the
-// shim was dehydrated.
-func (rs *ReplicaShim) MaybeMakeNonResident() bool {
+// holding just the minimum data to accurately compute metrics, as.
+// long as all conditions enabling replica dehydration hold.
+func (rs *ReplicaShim) MaybeMakeNonResident() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	repl := rs.mu.replica
 	if repl == nil {
-		return false
+		return
 	}
 	repl.mu.RLock()
-	defer repl.mu.RLock()
+	defer repl.mu.RUnlock()
 
 	// Only make non-resident if the replica is in a proper state.
-	if !repl.mu.quiescent ||
+	if repl.RefCount() > 0 ||
+		!repl.mu.quiescent ||
 		repl.mu.draining ||
 		repl.mu.destroyStatus.reason != destroyReasonAlive ||
 		repl.mu.state.Lease.Type() != roachpb.LeaseEpoch ||
 		repl.mu.mergeComplete != nil {
-		return false
+		return
 	}
 
 	rs.mu.replica = nil
@@ -112,8 +113,6 @@ func (rs *ReplicaShim) MaybeMakeNonResident() bool {
 	rs.mu.lease = *repl.mu.state.Lease
 	rs.mu.zone = repl.mu.zone
 	rs.mu.quiescentButBehind = repl.mu.quiescentButBehind
-
-	return true
 }
 
 // Capacity returns the replica's latest capacity info if resident.
@@ -140,10 +139,7 @@ func (rs *ReplicaShim) Capacity(
 // synthesized from information the shim has about the non-resident
 // replica.
 func (rs *ReplicaShim) Metrics(
-	ctx context.Context,
-	storeID roachpb.StoreID,
-	timestamp hlc.Timestamp,
-	livenessMap IsLiveMap,
+	ctx context.Context, storeID roachpb.StoreID, timestamp hlc.Timestamp, livenessMap IsLiveMap,
 ) (*Replica, ReplicaMetrics) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()

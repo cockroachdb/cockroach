@@ -267,6 +267,7 @@ func (s *statusServer) Allocator(
 					if err != nil {
 						return true, err
 					}
+					defer rep.Unref()
 					if !rep.OwnsValidLease(store.Clock().Now()) {
 						return false, nil
 					}
@@ -290,6 +291,7 @@ func (s *statusServer) Allocator(
 				// Not found: continue.
 				continue
 			}
+			defer rep.Unref()
 			if !rep.OwnsValidLease(store.Clock().Now()) {
 				continue
 			}
@@ -1161,6 +1163,7 @@ func (s *statusServer) Ranges(
 					if err != nil {
 						return true, err
 					}
+					defer rep.Unref()
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
 							desc,
@@ -1180,6 +1183,7 @@ func (s *statusServer) Ranges(
 				// Not found: continue.
 				continue
 			}
+			defer rep.Unref()
 			desc := rep.Desc()
 			output.Ranges = append(output.Ranges,
 				constructRangeInfo(
@@ -1259,6 +1263,7 @@ func (s *statusServer) CommandQueue(
 		return nil, roachpb.NewRangeNotFoundError(rangeID)
 	}
 
+	defer replica.Unref()
 	return &serverpb.CommandQueueResponse{
 		Snapshot: replica.GetCommandQueueSnapshot(),
 	}, nil

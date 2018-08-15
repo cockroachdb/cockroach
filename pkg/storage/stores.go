@@ -133,8 +133,10 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	return err
 }
 
-// GetReplicaForRangeID returns the replica which contains the specified range,
-// or nil if it's not found.
+// GetReplicaForRangeID returns the replica which contains the
+// specified range, or nil if it's not found. The caller is
+// responsible for ensuring that the returned replica's Unref()
+// method is invoked after use.
 func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error) {
 	var replica *Replica
 

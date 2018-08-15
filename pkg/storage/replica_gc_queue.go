@@ -261,6 +261,7 @@ func (rgcq *replicaGCQueue) process(
 		// merges, and it is thus safe to remove this replica.
 		leftRepl := repl.store.lookupPrecedingReplica(desc.StartKey)
 		if leftRepl != nil {
+			defer leftRepl.Unref()
 			leftDesc := leftRepl.Desc()
 			rs, _, err := client.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), leftDesc.StartKey.AsRawKey(),
 				roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
