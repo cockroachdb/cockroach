@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -69,10 +70,12 @@ type Builder struct {
 	factory *norm.Factory
 	stmt    tree.Statement
 
-	ctx     context.Context
-	semaCtx *tree.SemaContext
-	evalCtx *tree.EvalContext
-	catalog opt.Catalog
+	ctx              context.Context
+	semaCtx          *tree.SemaContext
+	evalCtx          *tree.EvalContext
+	catalog          opt.Catalog
+	exprTransformCtx transform.ExprTransformContext
+	scopeAlloc       []scope
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
@@ -182,4 +185,15 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	default:
 		panic(unimplementedf("unsupported statement: %T", stmt))
 	}
+}
+
+func (b *Builder) allocScope() *scope {
+	if len(b.scopeAlloc) == 0 {
+		// scope is relatively large (~250 bytes), so only allocate in small
+		// chunks.
+		b.scopeAlloc = make([]scope, 4)
+	}
+	r := &b.scopeAlloc[0]
+	b.scopeAlloc = b.scopeAlloc[1:]
+	return r
 }

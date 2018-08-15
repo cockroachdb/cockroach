@@ -100,12 +100,16 @@ func (s *scope) inGroupingContext() bool {
 
 // push creates a new scope with this scope as its parent.
 func (s *scope) push() *scope {
-	return &scope{builder: s.builder, parent: s}
+	r := s.builder.allocScope()
+	*r = scope{builder: s.builder, parent: s}
+	return r
 }
 
 // replace creates a new scope with the parent of this scope as its parent.
 func (s *scope) replace() *scope {
-	return &scope{builder: s.builder, parent: s.parent}
+	r := s.builder.allocScope()
+	*r = scope{builder: s.builder, parent: s.parent}
+	return r
 }
 
 // appendColumns adds newly bound variables to this scope.

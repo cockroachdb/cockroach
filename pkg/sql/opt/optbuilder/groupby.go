@@ -96,23 +96,23 @@ func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy)
 		return true
 	}
 
-	exprTransformCtx := transform.ExprTransformContext{}
+	b.exprTransformCtx = transform.ExprTransformContext{}
 	for _, sel := range sel.Exprs {
 		// TODO(rytaft): This function does not recurse into subqueries, so this
 		// will be incorrect for correlated subqueries.
-		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
 
 	for _, on := range sel.DistinctOn {
-		if exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
 
 	for _, ob := range orderBy {
-		if exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
