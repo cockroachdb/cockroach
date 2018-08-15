@@ -43,12 +43,12 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db0 := tc.ServerConn(0)
-	// Every 0.01s=10ms, try close out a timestamp ~300ms in the past.
+	// Every 0.1s=100ms, try close out a timestamp ~300ms in the past.
 	// We don't want to be more aggressive than that since it's also
 	// a limit on how long transactions can run.
 	if _, err := db0.Exec(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '300ms';
-SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.01/0.3;
+SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.1/0.3;
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 CREATE DATABASE cttest;
 CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
