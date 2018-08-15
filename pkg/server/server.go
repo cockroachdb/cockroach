@@ -41,6 +41,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
+	"github.com/cenk/backoff"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -85,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/rubyist/circuitbreaker"
 )
 
 var (
@@ -227,6 +229,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatal(ctx, err)
+		}
+	}
+
+	if storeTestingKnobs := s.cfg.TestingKnobs.Store; storeTestingKnobs != nil {
+		if storeTestingKnobs.(*storage.StoreTestingKnobs).DisableCircuitBreaker {
+			// Create a breaker which never trips and never backs off to avoid
+			// introducing timing-based flakes.
+			s.rpcContext.BreakerFactory = func() *circuit.Breaker {
+				return circuit.NewBreakerWithOptions(&circuit.Options{
+					BackOff: &backoff.ZeroBackOff{},
+				})
+			}
 		}
 	}
 

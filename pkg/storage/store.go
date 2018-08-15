@@ -819,6 +819,9 @@ type StoreTestingKnobs struct {
 	DisableLeaseCapacityGossip bool
 	// BootstrapVersion overrides the version the stores will be bootstrapped with.
 	BootstrapVersion *cluster.ClusterVersion
+	// DisableCircuitBreaker overrides the rpcContext circuit breaker to never
+	// break.
+	DisableCircuitBreaker bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}

@@ -109,6 +109,10 @@ type TestServerArgs struct {
 	// accumulates results set. Results are flushed to the network when this
 	// buffer overflows.
 	ConnResultsBufferBytes int
+
+	// EnableCircuitBreaker can be set to true to turn on the rpcContext circuit
+	// breaker like it would be in a real server.
+	EnableCircuitBreaker bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

@@ -209,6 +209,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.ConnResultsBufferBytes = params.ConnResultsBufferBytes
 	}
 
+	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).DisableCircuitBreaker = !params.EnableCircuitBreaker
+
 	return cfg
 }
 
