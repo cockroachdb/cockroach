@@ -440,9 +440,13 @@ func (p *Processor) syncEventC() {
 func (p *Processor) handleCatchUpScanRes(ctx context.Context, res catchUpResult) {
 	if res.pErr == nil {
 		res.r.SetCaughtUp()
-		if p.rts.IsInit() {
-			p.reg.PublishToReg(res.r, p.newCheckpointEvent())
-		}
+
+		// Publish checkpoint to processor even if the resolved timestamp is
+		// not initialized. In that case, the timestamp will be empty but the
+		// checkpoint event is still useful to indicate that the catch-up scan
+		// has completed. This allows clients to rely on stronger ordering
+		// semantics once they observe the first checkpoint event.
+		p.reg.PublishToReg(res.r, p.newCheckpointEvent())
 	} else {
 		p.reg.DisconnectRegWithError(res.r, res.pErr)
 	}
