@@ -993,8 +993,6 @@ func (t *tableState) release(
 
 // releaseLease associated with the table version.
 func releaseLease(table *tableVersionState, m *LeaseManager) {
-	m.tableNames.remove(table)
-
 	ctx := context.TODO()
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
@@ -1201,17 +1199,19 @@ func (c *tableNameCache) get(
 		return nil
 	}
 	table.mu.Lock()
+	if !table.mu.leased {
+		table.mu.Unlock()
+		// This get() raced with a release operation. Remove this cache
+		// entry.
+		c.remove(table)
+		return nil
+	}
+
 	defer table.mu.Unlock()
 	if !nameMatchesTable(&table.TableDescriptor, dbID, tableName) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
 			dbID, tableName, table.ID, table.ParentID, table.Name))
-	}
-
-	if !table.mu.leased {
-		// This get() raced with a release operation. The leaseManager should remove
-		// this cache entry soon.
-		return nil
 	}
 
 	// Expired table. Don't hand it out.
