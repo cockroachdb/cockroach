@@ -44,14 +44,14 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	roachpb.InternalTODO_RangeFeedServer
+	roachpb.Internal_RangeFeedServer
 	sendMu syncutil.Mutex
 }
 
 func (s *lockedRangefeedStream) Send(e *roachpb.RangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	return s.InternalTODO_RangeFeedServer.Send(e)
+	return s.Internal_RangeFeedServer.Send(e)
 }
 
 // rangefeedTxnPusher is a shim around intentResolver that implements the
@@ -110,7 +110,7 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (r *Replica) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.InternalTODO_RangeFeedServer,
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
 	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds are not enabled. See kv.rangefeed.enabled.")
@@ -132,7 +132,7 @@ func (r *Replica) RangeFeed(
 		checkTS = r.Clock().Now()
 	}
 
-	lockedStream := &lockedRangefeedStream{InternalTODO_RangeFeedServer: stream}
+	lockedStream := &lockedRangefeedStream{Internal_RangeFeedServer: stream}
 	errC := make(chan *roachpb.Error)
 
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
