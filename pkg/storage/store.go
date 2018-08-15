@@ -3771,13 +3771,6 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	}
 	livenessMap, _ := s.livenessMap.Load().(map[roachpb.NodeID]bool)
 
-	// Make sure we ask all live nodes for closed timestamp updates.
-	for nodeID, live := range livenessMap {
-		if live {
-			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
-		}
-	}
-
 	start := timeutil.Now()
 	r := (*Replica)(value)
 	exists, err := r.tick(livenessMap)
@@ -3842,6 +3835,8 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 				nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
 				for nodeID, isLive := range nextMap {
 					if isLive {
+						// Make sure we ask all live nodes for closed timestamp updates.
+						s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 						continue
 					}
 					// Liveness claims that this node is down, but ConnHealth gets the last say
