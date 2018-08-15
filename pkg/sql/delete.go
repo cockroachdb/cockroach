@@ -179,7 +179,7 @@ type deleteRun struct {
 	fastPath bool
 
 	// fastPathInterleaved indicates whether the delete operation can run
-	// the interleaved fast path (all interleaved tables have no indexes and ON DELETE CASCADE)
+	// the interleaved fast path (all interleaved tables have no indexes and ON DELETE CASCADE).
 	fastPathInterleaved bool
 
 	// rowCount is the total row count if fastPath is set,

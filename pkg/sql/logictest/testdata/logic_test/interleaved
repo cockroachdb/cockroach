@@ -366,6 +366,23 @@ INSERT INTO c20067 VALUES (1, 1, 'John Doe')
 # constraint on a non-interleaved column.
 
 subtest interleaved_join_on_other_columns
+statement ok
+CREATE TABLE users (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE documents (id INT PRIMARY KEY, user_id INT NOT NULL) INTERLEAVE IN PARENT users (id)
+
+statement ok
+INSERT INTO users(id) VALUES(1)
+
+statement ok
+INSERT INTO documents(id, user_id) VALUES (0, 1)
+
+query I
+SELECT count(*) FROM users JOIN documents ON users.id=documents.user_id WHERE documents.id=0
+----
+1
+
 subtest InterleavedDeleteFastPath
 
 statement ok
@@ -741,3 +758,6 @@ output row: [8]
 output row: [9]
 output row: [10]
 rows affected: 10
+
+statement ok
+DROP TABLE c; DROP TABLE b; DROP TABLE a
