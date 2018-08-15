@@ -143,7 +143,6 @@ sort
 
 # Check that ORDER BY chokes on ambiguity if no table less columns
 # were introduced by USING. (#12239)
-# TODO(rytaft): This is a bug. This query is invalid.
 build
 SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
 ----
