@@ -370,6 +370,7 @@ type intentResolver struct {
 		// directly after EndTransaction evaluation or during GC of txn spans.
 		inFlightTxnCleanups map[uuid.UUID]struct{}
 	}
+	every log.EveryN
 }
 
 func newIntentResolver(store *Store, taskLimit int) *intentResolver {
@@ -377,6 +378,7 @@ func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 		store:       store,
 		sem:         make(chan struct{}, taskLimit),
 		contentionQ: newContentionQueue(store),
+		every:       log.Every(time.Minute),
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
@@ -662,7 +664,9 @@ func (ir *intentResolver) cleanupIntentsAsync(
 	for _, item := range intents {
 		if err := ir.runAsyncTask(ctx, r, allowSyncProcessing, func(ctx context.Context) {
 			if _, err := ir.cleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH); err != nil {
-				log.Warning(ctx, err)
+				if ir.every.ShouldLog() {
+					log.Warning(ctx, err)
+				}
 			}
 		}); err != nil {
 			return err
@@ -730,7 +734,9 @@ func (ir *intentResolver) cleanupTxnIntentsAsync(
 			defer release()
 			intents := roachpb.AsIntents(et.Txn.Intents, &et.Txn)
 			if err := ir.cleanupFinishedTxnIntents(ctx, &et.Txn, intents, now, et.Poison); err != nil {
-				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+				if ir.every.ShouldLog() {
+					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+				}
 			}
 		}); err != nil {
 			return err
@@ -821,7 +827,9 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 			}
 
 			if err := ir.cleanupFinishedTxnIntents(ctx, txn, intents, now, false /* poison */); err != nil {
-				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+				if ir.every.ShouldLog() {
+					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+				}
 			} else {
 				ir.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
 			}
