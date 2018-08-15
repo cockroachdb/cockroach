@@ -142,7 +142,7 @@ build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
 project
- ├── columns: bar:1(int!null) b:2(int)
+ ├── columns: foo.bar:1(int!null) b:2(int)
  ├── ordering: -1
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)

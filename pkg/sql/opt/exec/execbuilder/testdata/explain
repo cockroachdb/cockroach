@@ -486,15 +486,15 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-render                 ·            ·                               (z int, v int)          ·
- │                     render 0     ((agg0)[int] * (2)[int])[int]   ·                       ·
- │                     render 1     (agg1)[int]                     ·                       ·
- └── filter            ·            ·                               (agg0 int, agg1 int)    ·
-      │                filter       ((agg0)[int] > (1)[int])[bool]  ·                       ·
-      └── group        ·            ·                               (agg0 int, agg1 int)    ·
-           │           aggregate 0  count(t.k)                      ·                       ·
-           │           aggregate 1  any_not_null(t.v)               ·                       ·
-           └── norows  ·            ·                               ("t.k" int, "t.v" int)  ·
+render                 ·            ·                               (z int, v int)        ·
+ │                     render 0     ((agg0)[int] * (2)[int])[int]   ·                     ·
+ │                     render 1     (agg1)[int]                     ·                     ·
+ └── filter            ·            ·                               (agg0 int, agg1 int)  ·
+      │                filter       ((agg0)[int] > (1)[int])[bool]  ·                     ·
+      └── group        ·            ·                               (agg0 int, agg1 int)  ·
+           │           aggregate 0  count(k)                        ·                     ·
+           │           aggregate 1  any_not_null(v)                 ·                     ·
+           └── norows  ·            ·                               (k int, v int)        ·
 
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1

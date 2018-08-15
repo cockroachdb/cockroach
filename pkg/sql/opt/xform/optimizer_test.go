@@ -17,7 +17,7 @@ package xform_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -30,7 +30,7 @@ import (
 func TestCoster(t *testing.T) {
 	runDataDrivenTest(
 		t, "testdata/coster/",
-		opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
 
@@ -39,7 +39,7 @@ func TestCoster(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/", opt.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
 }
 
 // TestRuleProps files can be run separately like this:
@@ -50,8 +50,8 @@ func TestRuleProps(t *testing.T) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = opt.ExprFmtHideStats | opt.ExprFmtHideCost |
-				opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
+			tester.Flags.ExprFormat = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
+				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
 			return tester.RunCommand(t, d)
 		})
 	})
@@ -65,8 +65,8 @@ func TestRules(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/rules/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
-			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
 
@@ -81,8 +81,8 @@ func TestExternal(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/external/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
-			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
 
@@ -93,7 +93,7 @@ func TestExternal(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, path string, fmtFlags opt.ExprFmtFlags) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
