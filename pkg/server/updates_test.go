@@ -107,6 +107,7 @@ func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const elemName = "somestring"
+	const internalAppName = sql.InternalAppNamePrefix + "foo"
 	ctx := context.TODO()
 
 	r := makeMockRecorder(t)
@@ -252,6 +253,10 @@ func TestReportUsage(t *testing.T) {
 			if _, err := db.Exec(fmt.Sprintf(q, elemName)); err != nil {
 				t.Fatal(err)
 			}
+		}
+		// Application names with the '$ ' prefix should not be scrubbed.
+		if _, err := db.Exec(`SET application_name = $1`, internalAppName); err != nil {
+			t.Fatal(err)
 		}
 		// Set cluster to an internal testing cluster
 		q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
@@ -546,6 +551,7 @@ func TestReportUsage(t *testing.T) {
 		`[false,false,false] SET CLUSTER SETTING "cluster.organization" = _`,
 		`[false,false,false] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[false,false,false] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+		`[false,false,false] SET application_name = $1`,
 		`[false,false,false] SET application_name = DEFAULT`,
 		`[false,false,false] SET application_name = _`,
 		`[false,false,false] UPDATE _ SET _ = _ + _`,
@@ -576,7 +582,7 @@ func TestReportUsage(t *testing.T) {
 		bucketByApp[s.Key.App] = append(bucketByApp[s.Key.App], s)
 	}
 
-	if expected, actual := 2, len(bucketByApp); expected != actual {
+	if expected, actual := 3, len(bucketByApp); expected != actual {
 		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 	}
 
@@ -604,15 +610,22 @@ func TestReportUsage(t *testing.T) {
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 			`UPDATE _ SET _ = _ + _`,
+			`SET application_name = $1`,
+		},
+		internalAppName: {
 			`SET CLUSTER SETTING "cluster.organization" = _`,
 			`SET application_name = DEFAULT`,
 		},
 	} {
-		hashedAppName := sql.HashForReporting(clusterSecret, appName)
-		if hashedAppName == sql.FailedHashedValue {
-			t.Fatalf("expected hashedAppName to not be 'unknown'")
+		maybeHashedAppName := sql.HashForReporting(clusterSecret, appName)
+		if appName == internalAppName {
+			// Exempted from hashing due to '$ ' prefix.
+			maybeHashedAppName = internalAppName
 		}
-		if app, ok := bucketByApp[hashedAppName]; !ok {
+		if maybeHashedAppName == sql.FailedHashedValue {
+			t.Fatalf("expected maybeHashedAppName to not be 'unknown'")
+		}
+		if app, ok := bucketByApp[maybeHashedAppName]; !ok {
 			t.Fatalf("missing stats for app %q %+v", appName, bucketByApp)
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {

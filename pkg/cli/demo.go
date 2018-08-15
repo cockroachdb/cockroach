@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 
 	// Force at least the example workloads to exist
@@ -91,7 +92,7 @@ func setupTransientServer(
 
 	options := url.Values{}
 	options.Add("sslmode", "disable")
-	options.Add("application_name", "cockroach demo")
+	options.Add("application_name", sql.InternalAppNamePrefix+"cockroach demo")
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
