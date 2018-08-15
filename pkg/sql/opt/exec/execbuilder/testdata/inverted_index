@@ -1,8 +1,5 @@
 # LogicTest: local-opt
 
-# TODO(justin): presently these all fall back to the heuristic planner. Update
-# them when we support inverted index queries in the optimizer.
-
 statement ok
 CREATE TABLE d (
   a INT PRIMARY KEY,
