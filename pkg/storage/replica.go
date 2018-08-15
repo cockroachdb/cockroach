@@ -4209,7 +4209,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if len(e.Data) == 0 {
 				// Overwrite unconditionally since this is the most aggressive
 				// reproposal mode.
-				refreshReason = reasonNewLeaderOrConfigChange
+				if !r.store.TestingKnobs().DisableRefreshReasonNewLeaderOrConfigChange {
+					refreshReason = reasonNewLeaderOrConfigChange
+				}
 				commandID = "" // special-cased value, command isn't used
 			} else {
 				var encodedCommand []byte
