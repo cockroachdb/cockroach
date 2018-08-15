@@ -24,7 +24,7 @@ import (
 )
 
 func TestLogicalProps(t *testing.T) {
-	md := opt.NewMetadata()
+	var md opt.Metadata
 	i := md.AddColumn("i", types.Int)
 	d := md.AddColumn("d", types.Decimal)
 	s := md.AddColumn("s", types.String)
@@ -53,7 +53,7 @@ func TestLogicalProps(t *testing.T) {
 		Scalar: &props.Scalar{OuterCols: outerCols},
 	}
 
-	f := opt.MakeExprFmtCtx(md, 0 /* flags */)
+	f := opt.MakeExprFmtCtx(&md, 0 /* flags */)
 	relational.FormatColSet(&f, nd, "output:", relational.Relational.OutputCols)
 	relational.FormatColSet(&f, nd, "outer relational:", relational.OuterCols())
 	relational.FormatColList(&f, nd, "list:", colList)

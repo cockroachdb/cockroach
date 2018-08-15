@@ -39,7 +39,7 @@ func TestScanCanProvideOrdering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	md := opt.NewMetadata()
+	var md opt.Metadata
 	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
 
 	// PRIMARY KEY (k)
@@ -73,7 +73,7 @@ func TestScanCanProvideOrdering(t *testing.T) {
 	for _, tc := range testcases {
 		def := &memo.ScanOpDef{Table: a, Index: tc.index}
 		required := props.ParseOrderingChoice(tc.ordering)
-		ok, reverse := def.CanProvideOrdering(md, &required)
+		ok, reverse := def.CanProvideOrdering(&md, &required)
 		res := "no"
 		if ok {
 			if reverse {

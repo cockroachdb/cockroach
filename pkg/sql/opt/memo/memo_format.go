@@ -279,7 +279,7 @@ func (f exprFormatter) formatPrivate(
 		} else {
 			fmt.Fprintf(f.buf, " %s@%s", tab.Name().TableName, tab.Index(t.Index).IdxName())
 		}
-		if _, reverse := t.CanProvideOrdering(f.mem.metadata, &physProps.Ordering); reverse {
+		if _, reverse := t.CanProvideOrdering(f.mem.Metadata(), &physProps.Ordering); reverse {
 			f.buf.WriteString(",rev")
 		}
 		if mode == formatMemo {
