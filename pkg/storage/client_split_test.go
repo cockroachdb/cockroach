@@ -2081,7 +2081,6 @@ func TestLeaderAfterSplit(t *testing.T) {
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
-	ctx := context.Background()
 	var mtc multiTestContext
 	mtc.Start(b, 1)
 	defer mtc.Stop()
