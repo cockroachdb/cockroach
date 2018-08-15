@@ -153,8 +153,14 @@ message ChangefeedDetails {
   reserved 1, 2;
 }
 
+message ResolvedSpan {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 message ChangefeedProgress {
   reserved 1;
+  repeated ResolvedSpan resolved_spans = 2 [(gogoproto.nullable) = false];
 }
 
 message Payload {

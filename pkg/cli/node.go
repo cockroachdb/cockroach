@@ -190,9 +190,9 @@ GROUP BY node_id`
 
 	decommissionQuery := `
 SELECT node_id AS id,
+       ranges AS gossiped_replicas,
        decommissioning AS is_decommissioning,
-       draining AS is_draining,
-       ranges AS gossiped_replicas
+       draining AS is_draining
 FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach node status")

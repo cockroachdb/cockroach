@@ -614,6 +614,7 @@ func shouldCampaignOnWake(
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
 	anotherOwnsLease := leaseStatus.State == LeaseState_VALID && !lease.OwnedBy(storeID)
+
 	// If we're already campaigning or know who the leader is, don't
 	// start a new term.
 	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
@@ -1939,6 +1940,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
@@ -3652,7 +3654,7 @@ func (r *Replica) propose(
 	}
 
 	// Must not use `proposal` in the closure below as a proposal which is not
-	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
+	// present in r.mu.localProposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
 	// command to Raft, ownership passes to the "below Raft" machinery. In
 	// particular, endCmds will be invoked when the command is applied. There are
@@ -3673,7 +3675,7 @@ func (r *Replica) propose(
 	return proposalCh, tryAbandon, maxLeaseIndex, nil
 }
 
-// submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
+// submitProposalLocked proposes or re-proposes a command in r.mu.localProposals.
 // The replica lock must be held.
 func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	p.proposedAtTicks = r.mu.ticks
@@ -3815,6 +3817,10 @@ func (r *Replica) unquiesce() {
 }
 
 func (r *Replica) unquiesceLocked() {
+	r.unquiesceWithOptionsLocked(true /* campaignOnWake */)
+}
+
+func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
@@ -3824,7 +3830,9 @@ func (r *Replica) unquiesceLocked() {
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
-		r.maybeCampaignOnWakeLocked(ctx)
+		if campaignOnWake {
+			r.maybeCampaignOnWakeLocked(ctx)
+		}
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
 }
@@ -3855,7 +3863,9 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
-		r.unquiesceLocked()
+		// Note that we avoid campaigning when receiving raft messages, because
+		// we expect the originator to campaign instead.
+		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
 		if req.Message.Type == raftpb.MsgProp {
 			// A proposal was forwarded to this replica.
@@ -4722,7 +4732,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		} else if cannotApplyAnyMore := !p.command.ReplicatedEvalResult.IsLeaseRequest &&
 			p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex; cannotApplyAnyMore {
 			// The command's designated lease index slot was filled up. We got to
-			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
+			// LeaseAppliedIndex and p is still pending in r.mu.localProposals; generally
 			// this means that proposal p didn't commit, and it will be sent back to
 			// the proposer for a retry - the request needs to be re-evaluated and the
 			// command re-proposed with a new MaxLeaseIndex. Note that this branch is not
@@ -4733,9 +4743,9 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// reasonSnapshotApplied - in that case we don't know if p or some other
 			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
 			// applied, but we're not watching for every proposal when applying a
-			// snapshot, so nobody removed p from r.mu.proposals). In this ambiguous
-			// case, we'll also send the command back to the proposer for a retry, but
-			// the proposer needs to be aware that, if the retry fails, an
+			// snapshot, so nobody removed p from r.mu.localProposals). In this
+			// ambiguous case, we'll also send the command back to the proposer for a
+			// retry, but the proposer needs to be aware that, if the retry fails, an
 			// AmbiguousResultError needs to be returned to the higher layers.
 			// We're relying on the fact that all commands are either idempotent
 			// (generally achieved through the wonders of MVCC) or, if they aren't,
@@ -4794,7 +4804,8 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
 	//
-	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should be a list/slice.
+	// TODO(tschottdorf): evaluate whether `r.mu.localProposals` should
+	// be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)

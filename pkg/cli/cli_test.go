@@ -2083,6 +2083,13 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		baseIdx += len(statusNodesColumnHeadersForStats)
 	}
 
+	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
+		testcases = append(testcases,
+			testCase{"gossiped_replicas", baseIdx, 30},
+		)
+		baseIdx++
+	}
+
 	for _, tc := range testcases {
 		val, err := strconv.ParseInt(fields[tc.idx], 10, 64)
 		if err != nil {
@@ -2095,6 +2102,16 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		}
 		if val > tc.maxval {
 			t.Errorf("value for %s (%d) greater than max (%d)", tc.name, val, tc.maxval)
+		}
+	}
+
+	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
+		names := []string{"is_decommissioning", "is_draining"}
+		for i := range names {
+			if fields[baseIdx] != "false" {
+				t.Errorf("value for %s (%s) should be false", names[i], fields[baseIdx])
+			}
+			baseIdx++
 		}
 	}
 }
