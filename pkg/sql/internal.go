@@ -390,7 +390,7 @@ func (ie *internalExecutorImpl) execInternal(
 	qargs ...interface{},
 ) (retRes result, retErr error) {
 	if sargs != nil && sargs.ApplicationName == "" {
-		sargs.ApplicationName = "internal-" + opName
+		sargs.ApplicationName = InternalAppNamePrefix + "internal-" + opName
 	}
 
 	defer func() {

@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -293,6 +294,12 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 	return s.getStmtStats(vt, false /* scrub */)
 }
 
+// InternalAppNamePrefix designates that an application name is internal to
+// CockroachDB and therefore can be reported without scrubbing. (Note this only
+// applies to the application name itself. Query data is still scrubbed as
+// usual.)
+const InternalAppNamePrefix = "$ "
+
 func (s *sqlStats) getStmtStats(
 	vt *VirtualSchemaHolder, scrub bool,
 ) []roachpb.CollectedStatementStatistics {
@@ -312,7 +319,9 @@ func (s *sqlStats) getStmtStats(
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
-				maybeHashedAppName = HashForReporting(salt, appName)
+				if !strings.HasPrefix(appName, InternalAppNamePrefix) {
+					maybeHashedAppName = HashForReporting(salt, appName)
+				}
 			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
