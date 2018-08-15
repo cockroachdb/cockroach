@@ -166,6 +166,17 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 	return false
 }
 
+// AggregateIsOrderingSensitive returns true if the given aggregate operator is
+// non-commutative. That is, it can give different results based on the order
+// values are fed to it.
+func AggregateIsOrderingSensitive(op Operator) bool {
+	switch op {
+	case ArrayAggOp, ConcatAggOp, JsonAggOp, JsonbAggOp:
+		return true
+	}
+	return false
+}
+
 // AggregateIgnoresNulls returns true if the given aggregate operator has a
 // single input, and if it always evaluates to the same result regardless of
 // how many NULL values are included in that input, in any order.
