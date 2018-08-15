@@ -28,7 +28,7 @@ CREATE TABLE `SECOND` (
   PRIMARY KEY (`i`),
   UNIQUE KEY `ik` (`i`,`k`),
   KEY `ki` (`k`,`i`),
-  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`)
+  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -51,4 +51,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-08-13 23:18:32
+-- Dump completed on 2018-08-15 18:49:41

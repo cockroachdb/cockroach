@@ -238,8 +238,19 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 
 	for _, schema := range []string{
 		`CREATE TABLE simple (i INT PRIMARY KEY, s text, b binary(200))`,
-		`CREATE TABLE SECOND (i INT PRIMARY KEY, k INT, FOREIGN KEY (k) REFERENCES simple (i), UNIQUE KEY ik (i, k), KEY ki (k, i))`,
-		`CREATE TABLE third (i INT PRIMARY KEY, a INT, b INT, C INT, FOREIGN KEY (a, b) REFERENCES second (i, k), FOREIGN KEY (c) REFERENCES third (i))`,
+		`CREATE TABLE SECOND (
+			i INT PRIMARY KEY,
+			k INT,
+			FOREIGN KEY (k) REFERENCES simple (i) ON UPDATE CASCADE,
+			UNIQUE KEY ik (i, k),
+			KEY ki (k, i)
+		)`,
+		`CREATE TABLE third (
+			i INT PRIMARY KEY,
+			a INT, b INT, C INT,
+			FOREIGN KEY (a, b) REFERENCES second (i, k) ON DELETE RESTRICT ON UPDATE RESTRICT,
+			FOREIGN KEY (c) REFERENCES third (i) ON UPDATE CASCADE
+		)`,
 		`CREATE TABLE everything (
 				i INT PRIMARY KEY,
 
