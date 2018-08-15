@@ -17,6 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -133,9 +134,12 @@ message MergeTrigger {
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
-  // A snapshot of the replicated data from the right-hand side of the merge
-  // as a serialized RocksDB write batch.
-  bytes right_data = 3;
+  reserved 3;
+
+  storage.engine.enginepb.MVCCStats right_mvcc_stats = 4 [
+    (gogoproto.customname) = "RightMVCCStats",
+    (gogoproto.nullable) = false
+  ];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -487,7 +491,7 @@ message TxnCoordMeta {
   repeated Span refresh_writes = 5 [(gogoproto.nullable) = false];
   // refresh_invalid indicates that spans were discarded or not collected
   // (i.e. because of a dist SQL processor running a version before refreshing
-  // was introduced). This is false if all spans encountered during the 
+  // was introduced). This is false if all spans encountered during the
   // transaction which need refreshing have been collected to the refresh_reads
   // and refresh_writes span slices.
   bool refresh_invalid = 7;

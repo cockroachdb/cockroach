@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 
@@ -124,28 +123,7 @@ func GetSnapshotForMerge(
 	// but the check is too expensive as it would involve a network roundtrip on
 	// most nodes.
 
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	defer eng.Close()
-
-	// TODO(benesch): This command reads the whole replica into memory. We'll need
-	// to be more careful when merging large ranges.
-	snapBatch := eng.NewBatch()
-	defer snapBatch.Close()
-
-	iter := rditer.NewReplicaDataIterator(desc, batch, true /* replicatedOnly */)
-	defer iter.Close()
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return result.Result{}, err
-		} else if !ok {
-			break
-		}
-		if err := snapBatch.Put(iter.Key(), iter.Value()); err != nil {
-			return result.Result{}, err
-		}
-	}
-	reply.Data = snapBatch.Repr()
-
+	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
 
 	return result.Result{
