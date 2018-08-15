@@ -50,6 +50,7 @@ import (
 	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -301,8 +302,6 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
-	//
-	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu struct {
 		syncutil.Mutex
 
@@ -311,6 +310,11 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
+
+		// rangefeed is an instance of a rangefeed Processor that is capable of
+		// routing rangefeed events to a set of subscribers. Will be nil if no
+		// subscribers are registered.
+		rangefeed *rangefeed.Processor
 	}
 
 	// Contains the lease history when enabled.
@@ -854,6 +858,9 @@ func (r *Replica) destroyRaftMuLocked(
 			return err
 		}
 	}
+
+	// TODO(nvanbenschoten)
+	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
 
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
@@ -5408,6 +5415,17 @@ func (r *Replica) processRaftCommand(
 			lResult = proposal.Local
 		}
 
+		// Provide the command's corresponding logical operations to the
+		// Replica's rangefeed. Only do so if the WriteBatch is non-nil,
+		// otherwise it's valid for the logical op log to be nil, which
+		// would shut down all rangefeeds. If no rangefeed is running,
+		// this call will be a no-op.
+		if raftCmd.WriteBatch != nil {
+			r.handleLogicalOpLogRaftMuLocked(ctx, raftCmd.LogicalOpLog)
+		} else if raftCmd.LogicalOpLog != nil {
+			log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", raftCmd)
+		}
+
 		// Handle the Result, executing any side effects of the last
 		// state machine transition.
 		//
@@ -5415,13 +5433,6 @@ func (r *Replica) processRaftCommand(
 		// before notifying a potentially waiting client.
 		r.handleEvalResultRaftMuLocked(ctx, lResult,
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
-
-		// Provide the command's corresponding logical operations to the
-		// Replica's rangefeed. If no rangefeed is running, this will be a
-		// no-op.
-		// TODO(nvanbenschoten): consume the logical ops when we have
-		// rangefeed plugged in.
-		// r.mu.rangefeed.ConsumeLogicalOps(raftCmd.LogicalOps)
 	}
 
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
@@ -5849,30 +5860,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 		}
 		batch = r.store.Engine().NewBatch()
 		var opLogger *engine.OpLoggerBatch
-		if false /* enable cdc */ {
-			// TODO(nvanbenschoten): we need a way to turn this on when any
-			// replica (not just the leaseholder) wants it and off when no
-			// replicas want it. This turns out to be pretty involved.
-			//
-			// The current plan is to:
-			// - create a range-id local key that stores all replicas that are
-			//   subscribed to logical operations, along with their corresponding
-			//   liveness epoch.
-			// - create a new command that adds or subtracts replicas from this
-			//   structure. The command will be a write across the entire replica
-			//   span so that it is serialized with all writes.
-			// - each replica will add itself to this set when it first needs
-			//   logical ops. It will then wait until it sees the replicated command
-			//   that added itself pop out through Raft so that it knows all
-			//   commands that are missing logical ops are gone.
-			// - It will then proceed as normal, relying on the logical ops to
-			//   always be included on the raft commands. When its no longer
-			//   needs logical ops, it will remove itself from the set.
-			// - The leaseholder will have a new queue to detect registered
-			//   replicas that are no longer live and remove them from the
-			//   set to prevent "leaking" subscriptions.
-			// - The condition here to add logical logging will be:
-			//     if len(replicaState.logicalOpsSubs) > 0 { ... }
+		if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 			opLogger = engine.NewOpLoggerBatch(batch)
 			batch = opLogger
 		}
@@ -5891,9 +5879,9 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
 		}
-		if ops := opLogger.LogicalOps(); len(ops) > 0 {
+		if opLogger != nil {
 			res.LogicalOpLog = &storagebase.LogicalOpLog{
-				Ops: ops,
+				Ops: opLogger.LogicalOps(),
 			}
 		}
 		break
