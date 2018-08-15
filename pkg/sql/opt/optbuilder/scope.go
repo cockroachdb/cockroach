@@ -491,7 +491,7 @@ func (s *scope) FindSourceProvidingColumn(
 		// with a matching non-hidden column, use that.
 		if moreThanOneCandidateFromAnonSource {
 			return nil, nil, -1, s.newAmbiguousColumnError(
-				&colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
+				colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
 			)
 		}
 		if candidateFromAnonSource != nil {
@@ -505,7 +505,7 @@ func (s *scope) FindSourceProvidingColumn(
 		}
 		if moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
 			return nil, nil, -1, s.newAmbiguousColumnError(
-				&colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
+				colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
 			)
 		}
 
@@ -516,7 +516,11 @@ func (s *scope) FindSourceProvidingColumn(
 		}
 	}
 
-	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&colName))
+	// Make a copy of colName so that passing a reference to tree.ErrString does
+	// not cause colName to be allocated on the heap in the happy (no error) path
+	// above.
+	tmpName := colName
+	return nil, nil, -1, sqlbase.NewUndefinedColumnError(tree.ErrString(&tmpName))
 }
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
@@ -884,10 +888,10 @@ func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // newAmbiguousColumnError returns an error with a helpful error message to be
 // used in case of an ambiguous column reference.
 func (s *scope) newAmbiguousColumnError(
-	n *tree.Name,
+	n tree.Name,
 	allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate bool,
 ) error {
-	colString := tree.ErrString(n)
+	colString := tree.ErrString(&n)
 	var msgBuf bytes.Buffer
 	sep := ""
 	fmtCandidate := func(tn tree.TableName) {
@@ -900,7 +904,7 @@ func (s *scope) newAmbiguousColumnError(
 	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name == *n && (allowHidden || !col.hidden) {
+		if col.name == n && (allowHidden || !col.hidden) {
 			if col.table.TableName == "" && !col.hidden {
 				if moreThanOneCandidateFromAnonSource {
 					// Only print first anonymous source, since other(s) are identical.
