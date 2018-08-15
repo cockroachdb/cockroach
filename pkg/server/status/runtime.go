@@ -115,6 +115,12 @@ var (
 		Measurement: "RSS",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRSSPct = metric.Metadata{
+		Name:        "sys.rss.percent",
+		Help:        "Current process RSS as a percentage of total system memory",
+		Measurement: "RSS Percent",
+		Unit:        metric.Unit_PERCENT,
+	}
 	metaFDOpen = metric.Metadata{
 		Name:        "sys.fd.open",
 		Help:        "Process open file descriptors",
@@ -255,7 +261,8 @@ type RuntimeStatSampler struct {
 	CPUSysNS       *metric.Gauge
 	CPUSysPercent  *metric.GaugeFloat64
 	// Memory stats.
-	Rss *metric.Gauge
+	Rss    *metric.Gauge
+	RssPct *metric.GaugeFloat64
 	// File descriptor stats.
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
@@ -328,6 +335,7 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 		CPUSysNS:            metric.NewGauge(metaCPUSysNS),
 		CPUSysPercent:       metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:                 metric.NewGauge(metaRSS),
+		RssPct:              metric.NewGaugeFloat64(metaRSSPct),
 		HostDiskReadBytes:   metric.NewGauge(metaHostDiskReadBytes),
 		HostDiskReadTime:    metric.NewGauge(metaHostDiskReadTime),
 		HostDiskReadCount:   metric.NewGauge(metaHostDiskReadCount),
@@ -418,6 +426,13 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 
 	goAllocated := ms.Alloc
 	goTotal := ms.Sys - ms.HeapReleased
+
+	totalMemory, err := GetTotalMemory(ctx)
+	if err != nil {
+		log.Warningf(ctx, "problem fetching total memory available to process: %s; memory percent metric will be empty.", err)
+	} else {
+		rsr.RssPct.Update(float64(mem.Resident) / float64(totalMemory))
+	}
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
