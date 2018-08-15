@@ -15,9 +15,14 @@
 package binfetcher
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +69,9 @@ func TestDownload(t *testing.T) {
 			Version: "LATEST",
 			GOOS:    "windows",
 		},
-		// TODO(tschottdorf): seems like SHAs get removed from edge-binaries.cockroachdb.com?
+		// TODO(tschottdorf): This bucket has a one week GC policy, so
+		// hard-coding particular SHAs isn't a good idea.
+		//
 		// {
 		// 	Binary:  "cockroach",
 		// 	Dir:     dir,
@@ -99,11 +106,37 @@ func TestDownload(t *testing.T) {
 			GOOS:      "linux",
 		},
 	}
+
+	checkScriptEquivalent := func(t *testing.T, opts Options) {
+		if err := opts.init(); err != nil {
+			t.Fatal(err)
+		}
+
+		script, cleanup := generateForTesting(t, opts)
+		defer cleanup()
+
+		exp := opts.URL.String()
+
+		out, err := exec.Command(script,
+			"-o", opts.GOOS, "-a", opts.GOARCH, "-d", opts.Dir, "-c", opts.Component, "-s", opts.Suffix,
+			opts.Binary, opts.Version,
+		).CombinedOutput()
+
+		outS := strings.TrimSpace(string(out))
+
+		if err != nil {
+			t.Fatalf("error: %s\noutput:\n%s", err, out)
+		} else if exp != outS {
+			t.Fatalf("wanted %q, got %q", exp, outS)
+		}
+	}
+
 	// Run twice to check that that doesn't cause errors.
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 2; i++ {
 		for j, opts := range tests {
 			t.Run(fmt.Sprintf("num=%d,case=%d", i, j), func(t *testing.T) {
 				ctx := context.Background()
+
 				s, err := Download(ctx, opts)
 				if err != nil {
 					t.Fatal(err)
@@ -113,7 +146,66 @@ func TestDownload(t *testing.T) {
 				} else if stat.Size() == 0 {
 					t.Fatal("empty file")
 				}
+
+				checkScriptEquivalent(t, opts)
 			})
+		}
+	}
+}
+
+func generateForTesting(t *testing.T, opts Options) (filename string, cleanup func()) {
+	dir, err := ioutil.TempDir("", "generate")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newFile := filepath.Join(dir, "url.sh")
+
+	if err := ioutil.WriteFile(newFile, []byte(opts.Generated()), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	return newFile, func() {
+		_ = os.RemoveAll(dir)
+	}
+}
+
+func TestGenerateNoChange(t *testing.T) {
+	newFileGeneric, cleanupGeneric := generateForTesting(t, Options{})
+	defer cleanupGeneric()
+
+	newFileCockroach, cleanupCockroach := generateForTesting(t, Options{Binary: "cockroach"})
+	defer cleanupCockroach()
+
+	{
+		orig, err := ioutil.ReadFile(OutputFileGeneric)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gen, err := ioutil.ReadFile(newFileGeneric)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(orig, gen) {
+			t.Errorf("need to run `go generate` for this package to update %s", OutputFileGeneric)
+		}
+	}
+
+	{
+		orig, err := ioutil.ReadFile(OutputFileCockroach)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gen, err := ioutil.ReadFile(newFileCockroach)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !bytes.Equal(orig, gen) {
+			t.Errorf("need to run `go generate` for this package to update %s", OutputFileCockroach)
 		}
 	}
 }
