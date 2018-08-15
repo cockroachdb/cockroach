@@ -53,12 +53,10 @@ func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 }
 
 var serialIntTypes = map[string]struct{}{
-	SmallSerial.Name: {},
-	Serial.Name:      {},
-	BigSerial.Name:   {},
-	Serial2.Name:     {},
-	Serial4.Name:     {},
-	Serial8.Name:     {},
+	Serial.Name:  {},
+	Serial2.Name: {},
+	Serial4.Name: {},
+	Serial8.Name: {},
 }
 
 // IsSerial returns true when this column should be given a DEFAULT of a unique,

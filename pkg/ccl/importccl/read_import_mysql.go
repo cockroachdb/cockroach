@@ -304,6 +304,12 @@ func mysqlTableToCockroach(
 		if err != nil {
 			return nil, nil, err
 		}
+		// The new types in the table imported from MySQL do not (yet?)
+		// use SERIAL so we need not process SERIAL types here.
+		//
+		// If/when we extend this functionality to support MySQL'sAUTO
+		// INCREMENT, this will need to be extended -- see the comments on
+		// MakeColumnDefDescs().
 		col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, evalCtx)
 		if err != nil {
 			return nil, nil, err

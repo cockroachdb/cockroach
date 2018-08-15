@@ -161,6 +161,8 @@ func Load(
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
 			var txn *client.Txn
+			// At this point the CREATE statements in the loaded SQL do not
+			// use the SERIAL type so we need not process SERIAL types here.
 			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID,
 				0 /* table ID */, ts, privs, affected, nil, &evalCtx)
 			if err != nil {

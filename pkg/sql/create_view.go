@@ -228,6 +228,8 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
+		// The new types in the CREATE VIEW column specs never use
+		// SERIAL so we need not process SERIAL types here.
 		col, _, _, err := sqlbase.MakeColumnDefDescs(
 			&columnTableDef, &params.p.semaCtx, params.EvalContext())
 		if err != nil {

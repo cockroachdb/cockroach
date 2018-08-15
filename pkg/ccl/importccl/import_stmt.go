@@ -136,6 +136,10 @@ var NoFKs = fkHandler{}
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
+//
+// Any occurrence of SERIAL in the column definitions is handled using
+// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
+// unique_rowid().
 func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -145,7 +149,6 @@ func MakeSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
-
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
 		return nil, errors.New("unsupported IF NOT EXISTS")
@@ -156,6 +159,12 @@ func MakeSimpleTableDescriptor(
 	if create.AsSource != nil {
 		return nil, errors.New("CREATE AS not supported")
 	}
+
+	tableName, err := create.Table.Normalize()
+	if err != nil {
+		return nil, err
+	}
+
 	filteredDefs := create.Defs[:0]
 	for i := range create.Defs {
 		switch def := create.Defs[i].(type) {
@@ -168,6 +177,11 @@ func MakeSimpleTableDescriptor(
 			if def.Computed.Expr != nil {
 				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
 			}
+
+			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, tableName); err != nil {
+				return nil, err
+			}
+
 		case *tree.ForeignKeyConstraintTableDef:
 			if !fks.allowed {
 				return nil, errors.Errorf("this IMPORT format does not support foreign keys")
@@ -175,8 +189,14 @@ func MakeSimpleTableDescriptor(
 			if fks.skip {
 				continue
 			}
-			n := tree.MakeTableName("", tree.Name(def.Table.TableNameReference.String()))
-			def.Table.TableNameReference = &n
+			// Strip the schema/db prefix.
+			refTable, err := def.Table.Normalize()
+			if err != nil {
+				return nil, err
+			}
+			*refTable = tree.MakeUnqualifiedTableName(refTable.TableName)
+			def.Table.TableNameReference = refTable
+
 		default:
 			return nil, errors.Errorf("unsupported table definition: %s", tree.AsString(def))
 		}
@@ -191,6 +211,7 @@ func MakeSimpleTableDescriptor(
 		Sequence: &importSequenceOperators{},
 	}
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */

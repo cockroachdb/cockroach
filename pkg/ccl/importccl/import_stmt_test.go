@@ -1274,29 +1274,43 @@ func TestImportCSVStmt(t *testing.T) {
 			nullif = ` WITH nullif=''`
 		)
 
-		data = ",5,e,,,"
-		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `row 1: parse "a" as INT: could not parse ""`) {
-			t.Fatalf("unexpected: %v", err)
-		}
-		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "a" violates not-null constraint`) {
-			t.Fatalf("unexpected: %v", err)
-		}
+		data = ",5,e,7,,"
+		t.Run(data, func(t *testing.T) {
+			if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `row 1: parse "a" as INT: could not parse ""`) {
+				t.Fatalf("unexpected: %v", err)
+			}
+			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "a" violates not-null constraint`) {
+				t.Fatalf("unexpected: %v", err)
+			}
+		})
+		data = "2,5,e,,,"
+		t.Run(data, func(t *testing.T) {
+			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `row 1: generate insert row: null value in column "d" violates not-null constraint`) {
+				t.Fatalf("unexpected: %v", err)
+			}
+		})
 		data = "2,,e,,,"
-		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"b" violates not-null constraint`) {
-			t.Fatalf("unexpected: %v", err)
-		}
+		t.Run(data, func(t *testing.T) {
+			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"b" violates not-null constraint`) {
+				t.Fatalf("unexpected: %v", err)
+			}
+		})
 
 		data = "2,5,,,,"
-		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"c" violates not-null constraint`) {
-			t.Fatalf("unexpected: %v", err)
-		}
+		t.Run(data, func(t *testing.T) {
+			if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"c" violates not-null constraint`) {
+				t.Fatalf("unexpected: %v", err)
+			}
+		})
 
-		data = "2,5,e,,,"
-		sqlDB.Exec(t, query+nullif, srv.URL)
-		sqlDB.CheckQueryResults(t,
-			`SELECT * FROM t`,
-			sqlDB.QueryStr(t, `SELECT 2, 5, 'e', NULL, NULL, NULL`),
-		)
+		data = "2,5,e,-1,,"
+		t.Run(data, func(t *testing.T) {
+			sqlDB.Exec(t, query+nullif, srv.URL)
+			sqlDB.CheckQueryResults(t,
+				`SELECT * FROM t`,
+				sqlDB.QueryStr(t, `SELECT 2, 5, 'e', -1, NULL, NULL`),
+			)
+		})
 	})
 }
 

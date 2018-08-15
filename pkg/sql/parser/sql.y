@@ -5932,7 +5932,7 @@ const_typename:
   }
 | SMALLSERIAL
   {
-    $$.val = coltypes.SmallSerial
+    $$.val = coltypes.Serial2
   }
 | UUID
   {
@@ -5944,7 +5944,7 @@ const_typename:
   }
 | BIGSERIAL
   {
-    $$.val = coltypes.BigSerial
+    $$.val = coltypes.Serial8
   }
 | OID
   {
