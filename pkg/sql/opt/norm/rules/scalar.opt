@@ -50,6 +50,19 @@
 [SimplifyCoalesce, Normalize]
 (Coalesce $args:[ (ConstValue) ... ]) => (SimplifyCoalesce $args)
 
+# SimplifySelfComparison converts x <cmp> x to x IS [NOT] NULL. This allows
+# better constraints to be generated in the presence of this kind of NULL
+# check. This is valid because all values (including NaN) are equal to
+# themselves except for NULL. Cockroach's rules around NULLs and tuples are
+# subtle and may change (see #12022) and so tuples are excluded from this rule.
+[SimplifySelfComparison, Normalize]
+(Eq | Le | Ge | Ne | Lt | Gt
+    $left:^(CanHaveSideEffects $left) & ^(IsTuple $left)
+    $right:(SameGroup $left $right)
+)
+=>
+(SimplifySelfComparison (OpName) $left)
+
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.
 [EliminateCast, Normalize]

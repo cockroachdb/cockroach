@@ -1498,8 +1498,8 @@ full-join (merge)
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,3,6,8), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           ├── a.f = a.f [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-           └── a.f = a.f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
+           ├── a.f IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+           └── a.f IS NOT NULL [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
 
 # Can't simplify: equality conditions have columns from different tables.
 opt
