@@ -545,7 +545,7 @@ func (ds *DistSender) initAndVerifyBatch(
 var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
 // splitBatchAndCheckForRefreshSpans splits the batch according to the
-// canSplitET parmeter and checks whether the final request is an
+// canSplitET parameter and checks whether the final request is an
 // EndTransaction. If so, the EndTransactionRequest.NoRefreshSpans
 // flag is reset to indicate whether earlier parts of the split may
 // result in refresh spans.
@@ -615,9 +615,15 @@ func (ds *DistSender) Send(
 
 	var rplChunks []*roachpb.BatchResponse
 	splitET := false
+	var require1PC bool
+	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
+	if et, ok := lastReq.(*roachpb.EndTransactionRequest); ok && et.Require1PC {
+		require1PC = true
+	}
 	// To ensure that we lay down intents to prevent starvation, always
 	// split the end transaction request into its own batch on retries.
-	if ba.Txn != nil && ba.Txn.Epoch > 0 {
+	// Txns requiring 1PC are an exception and should never be split.
+	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
 		splitET = true
 	}
 	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
@@ -650,6 +656,8 @@ func (ds *DistSender) Send(
 			// here and try again.
 			if len(parts) != 1 {
 				panic("EndTransaction not in last chunk of batch")
+			} else if require1PC {
+				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
 			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
 			// Restart transaction of the last chunk as multiple parts
