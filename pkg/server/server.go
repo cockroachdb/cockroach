@@ -1637,10 +1637,12 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
-				// Report the error on this connection's context, so that we
-				// know which remote client caused the error when looking at
-				// the logs.
+			// Unless this is a simple disconnect or context timeout, report the error on
+			// this connection's context, so that we know which remote client caused the
+			// error when looking at the logs. Note that we pass a non-cancelable context
+			// in, but the callee eventually wraps the context so that it can get
+			// canceled and it may return the error here.
+			if err := errors.Cause(s.pgServer.ServeConn(connCtx, conn)); err != nil && !netutil.IsClosedConnection(err) && err != context.Canceled && err != context.DeadlineExceeded {
 				log.Error(connCtx, err)
 			}
 		}))
