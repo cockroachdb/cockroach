@@ -52,6 +52,7 @@ author_aliases = {
     'marc': "Marc Berhault",
     'Lauren': "Lauren Hirata",
     'lhirata' : "Lauren Hirata",
+    'Emmanuel': "Emmanuel Sales",
     'MBerhault': "Marc Berhault",
     'Nate': "Nathaniel Stewart",
     'a6802739': "Song Hao",
@@ -59,6 +60,7 @@ author_aliases = {
     'rytaft': "Rebecca Taft",
     'songhao': "Song Hao",
     'solongordon': "Solon Gordon",
+    'tim-o': "Tim O'Brien",
     'Amruta': "Amruta Ranade",
     'yuzefovich': "Yahor Yuzefovich",
     'madhavsuresh': "Madhav Suresh",
@@ -81,8 +83,10 @@ crdb_folk = set([
     "Daniel Harrison",
     "David Taylor",
     "Diana Hsieh",
+    "Emmanuel Sales",
     "Jesse Seldess",
     "Jessica Edwards",
+    "Joseph Lowinske",
     "Joey Pereira",
     "Jordan Lewis",
     "Justin Jaffray",
@@ -108,6 +112,7 @@ crdb_folk = set([
     "Solon Gordon",
     "Spencer Kimball",
     "Tamir Duberstein",
+    "Tim O'Brien",
     "Tobias Schottdorf",
     "Victor Chen",
     "Vivek Menezes",
@@ -578,13 +583,16 @@ def analyze_standalone_commit(commit):
 while commit != firstCommit:
     spin()
 
+    ctime = datetime.datetime.fromtimestamp(commit.committed_date).ctime()
     numbermatch = merge_numbers.search(commit.message)
     # Analyze the commit
     if numbermatch is not None:
         prs = numbermatch.group("numbers").strip().split(" ")
         for pr in prs:
+            print("                                \r%s (%s) " % (pr, ctime), end='', file=sys.stderr)
             analyze_pr(commit, pr)
     else:
+        print("                                \r%s (%s) " % (commit.hexsha[:shamin], ctime), end='', file=sys.stderr)
         analyze_standalone_commit(commit)
 
     if len(commit.parents) == 0:
@@ -593,6 +601,8 @@ while commit != firstCommit:
 
 allgroups = list(per_group_history.keys())
 allgroups.sort(key=lambda x:x.lower())
+
+print("\b\nComputing first-time contributors...", end='', file=sys.stderr)
 
 ext_contributors = individual_authors - crdb_folk
 firsttime_contributors = []
@@ -727,30 +737,21 @@ print()
 print("This release includes %d merged PR%s by %s author%s." %
       (len(allprs), len(allprs) != 1 and "s" or "",
        len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
-      ), end='')
+      ))
 
 ext_contributors = individual_authors - crdb_folk
 
-if len(ext_contributors) > 0:
-    ext_contributors = sorted(ext_contributors)
-    # # Note: CRDB folk can be first-time contributors too, so
-    # # not part of the if ext_contributors above.
-    if len(firsttime_contributors) > 0:
-        print(" We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
-        for i, n in enumerate(sorted(firsttime_contributors)):
-            if i > 0 and i < len(firsttime_contributors)-1:
-                print(', ', end='')
-            elif i > 0:
-                print(', and ', end='')
-            print(n, end='')
-        print('.')
-    else:
-        print(" We would like to thank the following contributors from the CockroachDB community:")
+notified_authors = sorted(set(ext_contributors) | set(firsttime_contributors))
+if len(notified_authors) > 0:
+        print("We would like to thank the following contributors from the CockroachDB community:")
         print()
-    for a in ext_contributors:
-        print("-", a)
-else:
-    print()
+        for person in notified_authors:
+            print("-", person, end='')
+            if person in firsttime_contributors:
+                if person in crdb_folk:
+                    annot = ", CockroachDB team member"
+                print(" (first-time contributor%s)" % annot, end='')
+            print()
 print()
 
 ## Print the per-author contribution list.
