@@ -305,7 +305,10 @@ CREATE TABLE test.dupe_named_constraints (
 )
 
 statement ok
-CREATE TABLE test.alltypes (
+SET database = test
+
+statement ok
+CREATE TABLE alltypes (
   cbigint BIGINT,
   cbigserial BIGSERIAL,
   cbit BIT,
@@ -351,11 +354,11 @@ CREATE TABLE test.alltypes (
   )
 
 query TTBTTT colnames
-SHOW COLUMNS FROM test.alltypes
+SHOW COLUMNS FROM alltypes
 ----
 column_name       data_type                 is_nullable  column_default  generation_expression  indices
 cbigint           BIGINT                    true         NULL            ·                      {}
-cbigserial        INT                       true         unique_rowid()  ·                      {}
+cbigserial        INT                       false        unique_rowid()  ·                      {}
 cbit              BIT(1)                    true         NULL            ·                      {}
 cbit12            BIT(12)                   true         NULL            ·                      {}
 cblob             BYTES                     true         NULL            ·                      {}
@@ -386,9 +389,9 @@ cnumeric          DECIMAL                   true         NULL            ·     
 cnumeric1         DECIMAL(1)                true         NULL            ·                      {}
 cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}
 creal             REAL                      true         NULL            ·                      {}
-cserial           INT                       true         unique_rowid()  ·                      {}
+cserial           INT                       false        unique_rowid()  ·                      {}
 csmallint         SMALLINT                  true         NULL            ·                      {}
-csmallserial      INT                       true         unique_rowid()  ·                      {}
+csmallserial      INT                       false        unique_rowid()  ·                      {}
 cstring           STRING                    true         NULL            ·                      {}
 cstring12         STRING(12)                true         NULL            ·                      {}
 ctext             STRING                    true         NULL            ·                      {}

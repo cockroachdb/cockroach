@@ -49,6 +49,8 @@ type SessionData struct {
 	// OptimizerMode indicates whether to use the experimental optimizer for
 	// query planning.
 	OptimizerMode OptimizerMode
+	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
+	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
@@ -260,6 +262,47 @@ func OptimizerModeFromString(val string) (_ OptimizerMode, ok bool) {
 		return OptimizerLocal, true
 	case "ALWAYS":
 		return OptimizerAlways, true
+	default:
+		return 0, false
+	}
+}
+
+// SerialNormalizationMode controls if and when the Executor uses DistSQL.
+type SerialNormalizationMode int64
+
+const (
+	// SerialUsesRowID means use INT NOT NULL DEFAULT unique_rowid().
+	SerialUsesRowID SerialNormalizationMode = iota
+	// SerialUsesVirtualSequences means create a virtual sequence and
+	// use INT NOT NULL DEFAULT nextval(...).
+	SerialUsesVirtualSequences
+	// SerialUsesSQLSequences means create a regular SQL sequence and
+	// use INT NOT NULL DEFAULT nextval(...).
+	SerialUsesSQLSequences
+)
+
+func (m SerialNormalizationMode) String() string {
+	switch m {
+	case SerialUsesRowID:
+		return "rowid"
+	case SerialUsesVirtualSequences:
+		return "virtual_sequence"
+	case SerialUsesSQLSequences:
+		return "sql_sequence"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// SerialNormalizationModeFromString converts a string into a SerialNormalizationMode
+func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "ROWID":
+		return SerialUsesRowID, true
+	case "VIRTUAL_SEQUENCE":
+		return SerialUsesVirtualSequences, true
+	case "SQL_SEQUENCE":
+		return SerialUsesSQLSequences, true
 	default:
 		return 0, false
 	}

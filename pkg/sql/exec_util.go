@@ -125,6 +125,19 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	},
 )
 
+// SerialNormalizationMode controls how the SERIAL type is interpreted in table
+// definitions.
+var SerialNormalizationMode = settings.RegisterEnumSetting(
+	"sql.defaults.serial_normalization",
+	"default handling of SERIAL in table definitions",
+	"rowid",
+	map[int64]string{
+		int64(sessiondata.SerialUsesRowID):            "rowid",
+		int64(sessiondata.SerialUsesVirtualSequences): "virtual_sequence",
+		int64(sessiondata.SerialUsesSQLSequences):     "sql_sequence",
+	},
+)
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -1558,6 +1571,10 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
 	m.data.OptimizerMode = val
+}
+
+func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {
+	m.data.SerialNormalizationMode = val
 }
 
 func (m *sessionDataMutator) SetSafeUpdates(val bool) {
