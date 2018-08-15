@@ -93,6 +93,9 @@ func (m *mockEvalCtx) GetFirstIndex() (uint64, error) {
 func (m *mockEvalCtx) GetTerm(uint64) (uint64, error) {
 	panic("unimplemented")
 }
+func (m *mockEvalCtx) GetLeaseAppliedIndex() uint64 {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) Desc() *roachpb.RangeDescriptor {
 	return m.desc
 }

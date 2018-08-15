@@ -29,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -504,6 +506,11 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.GetSnapshotForMergeResponse)
 
+		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		if err != nil {
+			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
+		}
+
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
 		// transaction manually in order to provide a merge trigger.
@@ -550,6 +557,32 @@ func (r *Replica) AdminMerge(
 			return reply, nil
 		}
 	}
+}
+
+func waitForApplication(
+	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
+) error {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range desc.Replicas {
+		repl := repl
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            desc.RangeID,
+				LeaseIndex:         leaseIndex,
+			})
+			return err
+		})
+	}
+	return g.Wait()
 }
 
 type snapshotError struct {
