@@ -466,3 +466,14 @@ CREATE TABLE test2(b INT PRIMARY KEY)
 query I
 SELECT * FROM test2 WHERE 0 = CASE WHEN true THEN (SELECT a FROM test LIMIT 1) ELSE 10 END
 ----
+
+# Regression test for #28335.
+query I
+SELECT (SELECT ARRAY(SELECT 1))[1]
+----
+1
+
+query B
+SELECT (SELECT 123 IN (VALUES (1), (2)))
+----
+false
