@@ -75,8 +75,9 @@ the state machine for a schema change and update the table descriptor.
 
 Before using a table descriptor for a DML operation (i.e. `SELECT`,
 `INSERT`, `UPDATE`, `DELETE`, etc), the operation needs to obtain a
-table lease for the descriptor. The lease will be guaranteed valid for
-a significant period of time (on the order of minutes). When the operation completes it will release the table lease.
+table lease for the descriptor. The lease will be guaranteed valid
+until an expiration time (on the order of minutes). When the
+operation completes it will release the table lease.
 
 # Detailed design
 
@@ -128,22 +129,25 @@ CREATE TABLE system.lease (
   DescID     INT,
   Version    INT,
   NodeID     INT,
-  # Expiration is a wall time in microseconds. This is a
-  # microsecond rounded timestamp produced from the timestamp
+  # Expiration is a wall time in microseconds. This used to
+  # be a microsecond rounded timestamp produced from the timestamp
   # of the transaction inserting a new row. It would ideally
   # be an hlc.timestamp but cannot be changed now without much
-  # difficulty.
+  # difficulty. Ever since epoch based leases were introduced
+  # this expiration is now a rounded version of hlc.MaxTimestamp.
   Expiration TIMESTAMP,
+  # The latest node liveness epoch of the node creating this lease.
+  # The lease expiration is a moving hlc.Timestamp frontier:
+  # F = last_known_epoch_expiration + lease_duration
+  epoch,
   PRIMARY KEY (DescID, Version, Expiration, NodeID)
 )
 ```
 
 Entries in the lease table will be added and removed as leases are
-acquired and released. A background goroutine running on the lease holder
-for the system range will periodically delete expired leases
- (not yet implemented).
+acquired and released.
 
-Leases will be granted for a duration measured in minutes (we'll
+All nodes will assume a fixed `lease_duration` in minutes (we'll
 assume 5m for the rest of this doc, though experimentation may tune
 this number). A node will acquire a lease before using it in an
 operation and may release the lease when the last local operation
@@ -169,13 +173,19 @@ timestamps.
 Lease acquisition will perform the following steps in a transaction with
 timestamp `L`:
 
+* `liveness := nodeLiveness.Self()`
+* `if L >= liveness.Expiration + lease_duration then return error`
 * `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* `lease.expiration = L + lease_duration` rounded to microseconds (SQL DTimestamp).
-* `INSERT INTO system.lease VALUES (<desc.ID>, <desc.version>, <nodeID>,<lease.expiration>)`
+* `lease.expiration = hlc.MaxTimestamp` rounded to microseconds (SQL DTimestamp).
+* `INSERT INTO system.lease VALUES (<desc.ID>, <desc.version>, <nodeID>,<lease.expiration>, <liveness.Epoch>)`
 
+The temporary validity window of this lease is: [`ModificationTime`, `F`),
+where `F = last_known_epoch_expiration + lease_duration`.
+Note: an old epoch doesn't update its `last_known_epoch_expiration`
+and therefore its frontier `F` will eventually expire.
 The `lease` is used by transactions that fall within its temporary
 validity window. Nodes will maintain a map from `<descID, version>` to
-a lease: `<TableDescriptor, expiration, localRefCount>`. The local
+a lease: `<TableDescriptor, epoch, localRefCount>`. The local
 reference count will be incremented when a transaction first uses a table
 and decremented when the transaction commits/aborts. When the node
 discovers a new version of the table, either via gossip or by
@@ -183,7 +193,27 @@ acquiring a lease and discovering the version has changed it can
 release the lease on the old version when there are no more local
 references:
 
-* `DELETE FROM system.lease WHERE (DescID, Version, NodeID, Expiration) = (<descID>, <version>, <nodeID>, <lease.expiration>)`
+* `DELETE FROM system.lease WHERE (DescID, Version, NodeID, Expiration) = (<descID>, <version>, <nodeID>, <lease.expiration>, <epoch>)`
+
+## deleting abandoned leases
+
+Normally a node owing a lease will delete a lease whose `F` has
+expired on its own, however this might not happen when a node crashes.
+A background goroutine running on all nodes will periodically delete leases
+whose frontier `F` have expired. A node reads the node liveness records from
+the entire cluster. If it sees a liveness record for node `N` :
+`{Epoch: E, Expiration: Q}`, it is allowed to delete all leases
+for node `N` with `epoch < E` using a transaction with timestamp
+`T`, where `T > Q + lease_duration`.
+
+The correctness of this approach follows from the observation that
+`Q > P` where `P` is the highest expiration timestamp for epoch `E-1`.
+This is a property offered to us by node liveness records. Therefore,
+`Q + lease_duration > P + lease_duration`, and `Q + lease_duration`
+is greater than any frontier `F` used by the node.
+
+Note: `Q` is the lowest expiration time seen by a node for epoch `E`, so
+`T` will come to pass.
 
 ## Incrementing the version
 
@@ -194,7 +224,7 @@ using timestamp `SC`:
 
 * `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
 * Set `desc.ModificationTime` to `SC`
-* `SELECT COUNT(DISTINCT version) FROM system.lease WHERE descID = <descID> AND version = <prevVersion> AND expiration > DTimestamp(SC)` == 0
+* `SELECT COUNT(DISTINCT version) FROM system.lease WHERE descID = <descID> AND version = <prevVersion>` == 0
 * Perform the edits to the descriptor.
 * Increment `desc.Version`.
 * `UPDATE system.descriptor WHERE id = <descID> SET descriptor = <desc>`
@@ -213,10 +243,11 @@ schema change operation to take place.
 
 When a node holding leases dies permanently or becomes unresponsive
 (e.g. detached from the network) schema change operations will have to
-wait for any leases that node held to expire. This will result in an
+wait for any leases that node held. This will result in an
 inability to perform more than one schema modification step to the
 descriptors referred to by those leases. The maximum amount of time
-this condition can exist is the lease duration (5m).
+this condition can exist is the lease duration (5m) when another
+node will delete the lease at a prior epoch for the disconnected node.
 
 As described above, leases will be retained for the lifetime of a
 transaction. In a multi-statement transaction we need to ensure that
@@ -227,20 +258,15 @@ multi-statement transaction, it will attempt to use the table version
 specified.
 
 While we normally acquire a lease at the latest version, occasionally a
-transaction might require a lease on a previous version because it falls
+transaction might require a descriptor on a previous version because it falls
 before the validity window of the latest version:
 
 A table descriptor at version `v - 1` can be read using timestamp
-`ModificationTime - 1ns` where `ModificationTime` is for table descriptor
-at version `v`. Note that this method can be used to read a table descriptor
-at any version.
-
-A lease can be acquired on a previous version using a transaction at
-timestamp `P` by running the following:
-* `SELECT descriptor FROM system.descriptor WHERE id = <descID>`
-* check that `desc.version == v + 1`
-* `lease.expiration = P + lease_duration` rounded to microseconds (DTimestamp).
-* `INSERT INTO system.lease VALUES (<desc.ID>, <v>, <nodeID>, <lease.expiration>)`
+`ModificationTime - 1` where `ModificationTime` is for table descriptor
+at version `v` and `1` is a logical decrement. Note that this method can
+be used to read a table descriptor at any version and doesn't need to go
+through the leasing mechanism because the frontier F for version `v-1`
+is always allowed to be set to the `ModificationTime` of version `v`
 
 ## Correctness
 
@@ -250,7 +276,7 @@ time, while `L` is the timestamp of a transaction that has acquired a lease:
 * `L < SC`: The lease will contain a table descriptor with the previous version
 and will write a row in the lease table using timestamp `L` which will be seen
 by the schema change which uses a timestamp `SC`. As long as the lease is not
-released another schema change cannot use a `timestamp <= lease.expiration`
+released another schema change cannot execute.
 * `L > SC`: The lease will read the version of the table descriptor written by the
 schema change.
 * `L == SC`: If the lease reads the descriptor first, the schema change will see
@@ -259,13 +285,15 @@ change writes the descriptor at the new version first, the lease will read the n
 descriptor and create a lease with the new version.
 
 Temporary validity window for a leased table descriptor is either one of:
-1. `[ModificationTime, D)`: where `D` is the timestamp of the lease
-release transaction. Since a transaction with timestamp `T` using a lease
+1. Explicitly deleted by the node owner `[ModificationTime, D)`: where `D`
+is the timestamp of the lease release transaction. Since a
+transaction with timestamp `T` using a lease
 and a release transaction originate on the same node, the release follows
 the last transaction using the lease, `T < D` is always true.
-2. `[ModificationTime, hlc.Timestamp(lease.expiration))` is valid
-because the actual stored table version during the window is guaranteed
-to be at most off by 1.
+2. `[ModificationTime, F)` is valid because the actual stored table
+version during the window is guaranteed to be at most off by 1. A schema
+changer seeing the lease will not be able to increment the version for
+the descriptor.
 
 Note that two transactions with timestamp T~1~ and T~2~ using versions
 `v` and `v+2` respectively that touch some data in common, are guaranteed
