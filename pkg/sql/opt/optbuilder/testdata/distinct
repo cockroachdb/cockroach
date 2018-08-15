@@ -115,8 +115,8 @@ sort
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
                 └── plus [type=int]
-                     ├── variable: xyz.y [type=int]
-                     └── variable: xyz.x [type=int]
+                     ├── variable: y [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT DISTINCT y + x AS r FROM xyz ORDER BY y + x
@@ -133,8 +133,8 @@ sort
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
                 └── plus [type=int]
-                     ├── variable: xyz.y [type=int]
-                     └── variable: xyz.x [type=int]
+                     ├── variable: y [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT DISTINCT y + z FROM xyz ORDER BY y + z
@@ -176,8 +176,8 @@ distinct-on
       │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
            └── tuple [type=tuple{int, float}]
-                ├── variable: xyz.y [type=int]
-                └── variable: xyz.z [type=float]
+                ├── variable: y [type=int]
+                └── variable: z [type=float]
 
 build
 SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
@@ -209,7 +209,7 @@ distinct-on
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── filters [type=bool]
                 └── gt [type=bool]
-                     ├── variable: xyz.x [type=int]
+                     ├── variable: x [type=int]
                      └── const: 0 [type=int]
 
 build
@@ -226,7 +226,7 @@ distinct-on
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── filters [type=bool]
                 └── gt [type=bool]
-                     ├── variable: xyz.x [type=int]
+                     ├── variable: x [type=int]
                      └── const: 0 [type=int]
 
 build
@@ -246,7 +246,7 @@ distinct-on
            │         └── columns: x:1(int!null) y:2(int) z:3(float)
            └── aggregations
                 └── max [type=int]
-                     └── variable: xyz.x [type=int]
+                     └── variable: x [type=int]
 
 build
 SELECT DISTINCT x+y AS r FROM xyz
@@ -260,8 +260,8 @@ distinct-on
       │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
            └── plus [type=int]
-                ├── variable: xyz.x [type=int]
-                └── variable: xyz.y [type=int]
+                ├── variable: x [type=int]
+                └── variable: y [type=int]
 
 build
 SELECT DISTINCT 3 r FROM xyz
@@ -306,15 +306,15 @@ distinct-on
       │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
       │    │    └── aggregations
       │    │         └── max [type=float]
-      │    │              └── variable: xyz.z [type=float]
+      │    │              └── variable: z [type=float]
       │    └── filters [type=bool]
       │         └── gt [type=bool]
-      │              ├── variable: xyz.y [type=int]
+      │              ├── variable: y [type=int]
       │              └── const: 4 [type=int]
       └── projections
            ├── plus [type=int]
-           │    ├── variable: xyz.x [type=int]
-           │    └── variable: xyz.y [type=int]
+           │    ├── variable: x [type=int]
+           │    └── variable: y [type=int]
            └── const: 3 [type=int]
 
 exec-ddl

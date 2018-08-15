@@ -70,10 +70,10 @@ select
  │         └── fd: (1)-->(2)
  └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
       ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
-      │    ├── variable: a.y [type=int, outer=(2)]
+      │    ├── variable: y [type=int, outer=(2)]
       │    └── const: 0 [type=int]
       └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
-           ├── variable: a.y [type=int, outer=(2)]
+           ├── variable: y [type=int, outer=(2)]
            └── const: 10 [type=int]
 
 norm

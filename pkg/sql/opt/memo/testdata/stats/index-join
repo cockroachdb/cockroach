@@ -76,8 +76,8 @@ project
       │    └── filters [type=bool, outer=(1,2)]
       │         └── eq [type=bool, outer=(1,2)]
       │              ├── plus [type=int, outer=(1,2)]
-      │              │    ├── variable: a.x [type=int, outer=(1)]
-      │              │    └── variable: a.y [type=int, outer=(2)]
+      │              │    ├── variable: x [type=int, outer=(1)]
+      │              │    └── variable: y [type=int, outer=(2)]
       │              └── const: 10 [type=int]
       └── aggregations
            └── count-rows [type=int]

@@ -74,12 +74,12 @@ project
       │    │    ├── scan a
       │    │    │    └── columns: i:2(int) f:3(float)
       │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    └── projections [outer=(2,3), side-effects]
-      │         └── a.i + (random() * 10.0)::INT [type=int, outer=(2), side-effects]
+      │         └── i + (random() * 10.0)::INT [type=int, outer=(2), side-effects]
       └── aggregations [outer=(3)]
            └── avg [type=float, outer=(3)]
-                └── variable: a.f [type=float, outer=(3)]
+                └── variable: f [type=float, outer=(3)]
 
 # Allow elimination of side effecting expressions during column pruning.
 opt
@@ -109,7 +109,7 @@ inner-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
  │    └── filters [type=bool, outer=(1), side-effects, constraints=(/1: (/NULL - ])]
- │         └── a.k = random() [type=bool, outer=(1), side-effects, constraints=(/1: (/NULL - ])]
+ │         └── k = random() [type=bool, outer=(1), side-effects, constraints=(/1: (/NULL - ])]
  ├── select
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── side-effects
@@ -122,12 +122,12 @@ inner-join (merge)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
  │    └── filters [type=bool, outer=(6), side-effects, constraints=(/6: (/NULL - ])]
- │         └── xy.x = random() [type=bool, outer=(6), side-effects, constraints=(/6: (/NULL - ])]
+ │         └── x = random() [type=bool, outer=(6), side-effects, constraints=(/6: (/NULL - ])]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Decorrelate CASE WHEN branch if there are no side effects.
 opt
@@ -145,9 +145,9 @@ project
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
  │    └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
- │         └── xy.x = a.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │         └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
  └── projections [outer=(2,7)]
-      └── CASE WHEN a.i < 0 THEN xy.y ELSE 5 END [type=int, outer=(2,7)]
+      └── CASE WHEN i < 0 THEN y ELSE 5 END [type=int, outer=(2,7)]
 
 # Decorrelate CASE ELSE branch if there are no side effects.
 opt
@@ -173,9 +173,9 @@ project
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7)
       │    └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-      │         └── xy.x = a.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      │         └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
       └── filters [type=bool, outer=(1,2,7), constraints=(/1: (/NULL - ])]
-           └── a.k = CASE WHEN a.i < 0 THEN 5 ELSE xy.y END [type=bool, outer=(1,2,7), constraints=(/1: (/NULL - ])]
+           └── k = CASE WHEN i < 0 THEN 5 ELSE y END [type=bool, outer=(1,2,7), constraints=(/1: (/NULL - ])]
 
 # Don't decorrelate CASE WHEN branch if there are side effects.
 opt
@@ -190,7 +190,7 @@ project
       └── case [type=int, outer=(2), side-effects]
            ├── true [type=bool]
            ├── when [type=int, outer=(2), side-effects]
-           │    ├── a.i < 0 [type=bool, outer=(2)]
+           │    ├── i < 0 [type=bool, outer=(2)]
            │    └── subquery [type=int, outer=(2), side-effects]
            │         └── project
            │              ├── columns: y:7(int)
@@ -217,7 +217,7 @@ project
            │                   │    │    ├── key: (6)
            │                   │    │    └── fd: (6)-->(7)
            │                   │    └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-           │                   │         └── xy.x = a.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+           │                   │         └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
            │                   └── (random() * 10.0)::INT [type=int, side-effects]
            └── const: 5 [type=int]
 
@@ -236,11 +236,11 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ])]
       └── eq [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ])]
-           ├── variable: a.k [type=int, outer=(1)]
+           ├── variable: k [type=int, outer=(1)]
            └── case [type=int, outer=(2), side-effects]
                 ├── true [type=bool]
                 ├── when [type=int, outer=(2)]
-                │    ├── a.i < 0 [type=bool, outer=(2)]
+                │    ├── i < 0 [type=bool, outer=(2)]
                 │    └── const: 5 [type=int]
                 └── subquery [type=int, outer=(2), side-effects]
                      └── project
@@ -262,5 +262,5 @@ select
                                │    ├── key: (6)
                                │    └── fd: (6)-->(7)
                                └── filters [type=bool, outer=(2,6,7), side-effects, constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-                                    ├── xy.x = a.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-                                    └── (5 / xy.y) > 1 [type=bool, outer=(7), side-effects]
+                                    ├── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+                                    └── (5 / y) > 1 [type=bool, outer=(7), side-effects]

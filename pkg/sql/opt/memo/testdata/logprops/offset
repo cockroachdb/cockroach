@@ -145,7 +145,7 @@ project
                      │    │    └── interesting orderings: (+5)
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
-                     └── variable: xyzs.y [type=int, outer=(2)]
+                     └── variable: y [type=int, outer=(2)]
 
 # Reduce cardinality of input set.
 build
@@ -227,6 +227,6 @@ offset
  │    │    └── interesting orderings: (+1) (-4)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- │              ├── variable: xyzs.s [type=string, outer=(4)]
+ │              ├── variable: s [type=string, outer=(4)]
  │              └── const: 'foo' [type=string]
  └── const: 4294967296 [type=int]

@@ -57,7 +57,7 @@ project
  │    │         └── interesting orderings: (+1) (-4,+3,+1)
  │    └── aggregations [outer=(3)]
  │         └── sum [type=float, outer=(3)]
- │              └── variable: xyzs.z [type=float, outer=(3)]
+ │              └── variable: z [type=float, outer=(3)]
  └── projections [outer=(1,2,5)]
       └── false [type=bool]
 
@@ -88,9 +88,9 @@ scalar-group-by
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations [outer=(1,2)]
       ├── sum [type=decimal, outer=(1)]
-      │    └── variable: xyzs.x [type=int, outer=(1)]
+      │    └── variable: x [type=int, outer=(1)]
       └── max [type=int, outer=(2)]
-           └── variable: xyzs.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # Group by unique index columns.
 build
@@ -148,7 +148,7 @@ project
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations [outer=(3)]
            └── sum [type=float, outer=(3)]
-                └── variable: xyzs.z [type=float, outer=(3)]
+                └── variable: z [type=float, outer=(3)]
 
 # Group by column that is subset of unique index.
 build
@@ -175,7 +175,7 @@ group-by
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations [outer=(4)]
       └── max [type=string, outer=(4)]
-           └── variable: xyzs.s [type=string, outer=(4)]
+           └── variable: s [type=string, outer=(4)]
 
 # Group by all columns.
 build
@@ -316,6 +316,6 @@ group-by
  │    └── interesting orderings: (+1)
  └── aggregations [outer=(1,3)]
       ├── count [type=int, outer=(3)]
-      │    └── variable: xyzs.z [type=float, outer=(3)]
+      │    └── variable: z [type=float, outer=(3)]
       └── const-agg [type=int, outer=(1)]
-           └── variable: xyzs.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]

@@ -73,7 +73,7 @@ project
  ├── scan a
  │    └── columns: i:2(int) s:4(string)
  └── projections [outer=(2,4)]
-      └── (a.i = 5) AND (a.s < 'foo') [type=bool, outer=(2,4)]
+      └── (i = 5) AND (s < 'foo') [type=bool, outer=(2,4)]
 
 # --------------------------------------------------
 # SimplifyAnd
@@ -110,7 +110,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections [outer=(1)]
-      └── a.k = 1 [type=bool, outer=(1)]
+      └── k = 1 [type=bool, outer=(1)]
 
 opt
 SELECT k=1 AND i=2 AND true AS r FROM a
@@ -122,7 +122,7 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
-      └── (a.k = 1) AND (a.i = 2) [type=bool, outer=(1,2)]
+      └── (k = 1) AND (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
 opt
@@ -144,7 +144,7 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(3,4)
  └── projections [outer=(1,3,4)]
-      └── (((a.k > 1) AND (a.k < 5)) AND (a.f = 3.5)) AND (a.s = 'foo') [type=bool, outer=(1,3,4)]
+      └── (((k > 1) AND (k < 5)) AND (f = 3.5)) AND (s = 'foo') [type=bool, outer=(1,3,4)]
 
 # --------------------------------------------------
 # SimplifyOr
@@ -181,7 +181,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections [outer=(1)]
-      └── a.k = 1 [type=bool, outer=(1)]
+      └── k = 1 [type=bool, outer=(1)]
 
 opt
 SELECT * FROM a WHERE k=1 OR i=2 OR false
@@ -195,7 +195,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2)]
-      └── (a.k = 1) OR (a.i = 2) [type=bool, outer=(1,2)]
+      └── (k = 1) OR (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
 opt
@@ -220,7 +220,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-4)]
-      └── (((a.k = 1) OR (a.i = 2)) OR (a.f = 3.5)) OR (a.s = 'foo') [type=bool, outer=(1-4)]
+      └── (((k = 1) OR (i = 2)) OR (f = 3.5)) OR (s = 'foo') [type=bool, outer=(1-4)]
 
 # --------------------------------------------------
 # SimplifyAnd + SimplifyOr
@@ -234,7 +234,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections [outer=(1)]
-      └── (a.k = 1) AND (a.k = 2) [type=bool, outer=(1)]
+      └── (k = 1) AND (k = 2) [type=bool, outer=(1)]
 
 # Use parentheses to make and/or tree right-heavy instead of left-heavy.
 opt
@@ -247,7 +247,7 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── projections [outer=(1-4)]
-      └── ((((a.k = 1) OR (a.i = 2)) OR (a.f = 3.5)) AND (a.s = 'foo')) AND (a.s != 'bar') [type=bool, outer=(1-4)]
+      └── ((((k = 1) OR (i = 2)) OR (f = 3.5)) AND (s = 'foo')) AND (s != 'bar') [type=bool, outer=(1-4)]
 
 # --------------------------------------------------
 # SimplifyFilters
@@ -331,8 +331,8 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections [outer=(1)]
-      ├── NULL OR (a.k = 1) [type=bool, outer=(1)]
-      └── NULL AND (a.k = 1) [type=bool, outer=(1)]
+      ├── NULL OR (k = 1) [type=bool, outer=(1)]
+      └── NULL AND (k = 1) [type=bool, outer=(1)]
 
 # --------------------------------------------------
 # NegateComparison
@@ -351,12 +351,12 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: [/2 - ]; /3: [/1.0 - ]), fd=(2)==(3), (3)==(2)]
-      ├── a.i != 1 [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
-      ├── a.f = a.i [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      ├── a.i <= a.k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── a.i < a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      ├── a.f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
-      └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+      ├── i != 1 [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
+      ├── f = i [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      ├── i <= k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i < f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      ├── f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
+      └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
 
 # IN and IS comparisons.
 opt
@@ -373,10 +373,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2-4), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; /4: [/NULL - /NULL]), fd=()-->(4)]
-      ├── a.i NOT IN (1, 2) [type=bool, outer=(2)]
-      ├── a.f IN (3.0, 4.0) [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
-      ├── a.f IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-      └── a.s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight)]
+      ├── i NOT IN (1, 2) [type=bool, outer=(2)]
+      ├── f IN (3.0, 4.0) [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
+      ├── f IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight)]
 
 # Like comparisons.
 opt
@@ -393,10 +393,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
-      ├── a.s NOT LIKE 'foo' [type=bool, outer=(4)]
-      ├── a.s LIKE 'foo' [type=bool, outer=(4)]
-      ├── a.s NOT ILIKE 'foo' [type=bool, outer=(4)]
-      └── a.s ILIKE 'foo' [type=bool, outer=(4)]
+      ├── s NOT LIKE 'foo' [type=bool, outer=(4)]
+      ├── s LIKE 'foo' [type=bool, outer=(4)]
+      ├── s NOT ILIKE 'foo' [type=bool, outer=(4)]
+      └── s ILIKE 'foo' [type=bool, outer=(4)]
 
 # SimilarTo comparisons.
 opt
@@ -411,8 +411,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
-      ├── a.s NOT SIMILAR TO 'foo' [type=bool, outer=(4)]
-      └── a.s SIMILAR TO 'foo' [type=bool, outer=(4)]
+      ├── s NOT SIMILAR TO 'foo' [type=bool, outer=(4)]
+      └── s SIMILAR TO 'foo' [type=bool, outer=(4)]
 
 # RegMatch comparisons.
 opt
@@ -427,10 +427,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
-      ├── a.s !~ 'foo' [type=bool, outer=(4)]
-      ├── a.s ~ 'foo' [type=bool, outer=(4)]
-      ├── a.s !~* 'foo' [type=bool, outer=(4)]
-      └── a.s ~* 'foo' [type=bool, outer=(4)]
+      ├── s !~ 'foo' [type=bool, outer=(4)]
+      ├── s ~ 'foo' [type=bool, outer=(4)]
+      ├── s !~* 'foo' [type=bool, outer=(4)]
+      └── s ~* 'foo' [type=bool, outer=(4)]
 
 opt
 SELECT * FROM a WHERE
@@ -448,11 +448,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(5)]
-      ├── NOT ('[1, 2]' @> a.j) [type=bool, outer=(5)]
-      ├── NOT ('[3, 4]' @> a.j) [type=bool, outer=(5)]
-      ├── NOT (a.j ? 'foo') [type=bool, outer=(5)]
-      ├── NOT (a.j ?| ARRAY['foo']) [type=bool, outer=(5)]
-      └── NOT (a.j ?& ARRAY['foo']) [type=bool, outer=(5)]
+      ├── NOT ('[1, 2]' @> j) [type=bool, outer=(5)]
+      ├── NOT ('[3, 4]' @> j) [type=bool, outer=(5)]
+      ├── NOT (j ? 'foo') [type=bool, outer=(5)]
+      ├── NOT (j ?| ARRAY['foo']) [type=bool, outer=(5)]
+      └── NOT (j ?& ARRAY['foo']) [type=bool, outer=(5)]
 
 # --------------------------------------------------
 # EliminateNot
@@ -469,7 +469,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(5), constraints=(/5: [/'{}' - /'{}']; tight), fd=()-->(5)]
-      └── a.j = '{}' [type=bool, outer=(5), constraints=(/5: [/'{}' - /'{}']; tight)]
+      └── j = '{}' [type=bool, outer=(5), constraints=(/5: [/'{}' - /'{}']; tight)]
 
 # --------------------------------------------------
 # NegateAnd + NegateComparison
@@ -486,7 +486,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
-      └── (a.k < a.i) OR (a.i >= a.f) [type=bool, outer=(1-3)]
+      └── (k < i) OR (i >= f) [type=bool, outer=(1-3)]
 
 opt
 SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
@@ -500,7 +500,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
-      └── ((((a.k < a.i) OR (a.i >= a.f)) OR (a.i <= 5)) OR (a.i >= 10)) OR (a.f <= 1.0) [type=bool, outer=(1-3)]
+      └── ((((k < i) OR (i >= f)) OR (i <= 5)) OR (i >= 10)) OR (f <= 1.0) [type=bool, outer=(1-3)]
 
 
 # --------------------------------------------------
@@ -518,9 +518,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
-      ├── a.k < a.i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── a.i >= a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      └── a.f <= (a.k + a.i) [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
+      ├── k < i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── f <= (k + i) [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
 
 opt
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 10 OR i < 5 OR f > 1))
@@ -534,11 +534,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: [/5 - /10]; /3: (/NULL - /1.0])]
-      ├── a.k < a.i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── a.i >= a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      ├── a.i <= 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
-      ├── a.i >= 5 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
-      └── a.f <= 1.0 [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
+      ├── k < i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      ├── i <= 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
+      ├── i >= 5 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+      └── f <= 1.0 [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
 
 # --------------------------------------------------
 # NegateAnd + NegateOr + NegateComparison
@@ -555,7 +555,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
-      └── ((a.k < a.i) AND (a.i >= a.f)) OR ((a.i <= 5) AND (a.f <= 1.0)) [type=bool, outer=(1-3)]
+      └── ((k < i) AND (i >= f)) OR ((i <= 5) AND (f <= 1.0)) [type=bool, outer=(1-3)]
 
 opt
 SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
@@ -569,8 +569,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1-3)]
-      ├── (a.k < a.i) OR (a.i >= a.f) [type=bool, outer=(1-3)]
-      └── (a.i <= 5) OR (a.f <= 1.0) [type=bool, outer=(2,3)]
+      ├── (k < i) OR (i >= f) [type=bool, outer=(1-3)]
+      └── (i <= 5) OR (f <= 1.0) [type=bool, outer=(2,3)]
 
 # --------------------------------------------------
 # ExtractRedundantClause + ExtractRedundantSubclause
@@ -583,7 +583,7 @@ project
  ├── scan c
  │    └── columns: b:2(bool)
  └── projections [outer=(2)]
-      └── variable: c.b [type=bool, outer=(2)]
+      └── variable: b [type=bool, outer=(2)]
 
 opt
 SELECT a OR (a AND b) OR (a AND c) FROM c
@@ -593,7 +593,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool)
  └── projections [outer=(1)]
-      └── variable: c.a [type=bool, outer=(1)]
+      └── variable: a [type=bool, outer=(1)]
 
 opt
 SELECT (a AND b) OR a OR (a AND c) FROM c
@@ -603,7 +603,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool)
  └── projections [outer=(1)]
-      └── variable: c.a [type=bool, outer=(1)]
+      └── variable: a [type=bool, outer=(1)]
 
 opt
 SELECT (a AND b) OR (b AND a) FROM c
@@ -613,7 +613,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool)
  └── projections [outer=(1,2)]
-      └── c.a AND c.b [type=bool, outer=(1,2)]
+      └── a AND b [type=bool, outer=(1,2)]
 
 opt
 SELECT (a AND b) OR (c AND a) FROM c
@@ -623,7 +623,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool)
  └── projections [outer=(1-3)]
-      └── c.a AND (c.b OR c.c) [type=bool, outer=(1-3)]
+      └── a AND (b OR c) [type=bool, outer=(1-3)]
 
 opt
 SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
@@ -634,8 +634,8 @@ select
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/true - /true]; /2: [/true - /true]; tight), fd=()-->(1,2)]
-      ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
-      └── variable: c.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
+      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
 opt
 SELECT * FROM c WHERE (b AND a AND c) OR (d AND e AND a)
@@ -646,8 +646,8 @@ select
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── filters [type=bool, outer=(1-5), constraints=(/1: [/true - /true]), fd=()-->(1)]
-      ├── variable: c.a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
-      └── (c.b AND c.c) OR (c.d AND c.e) [type=bool, outer=(2-5)]
+      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
+      └── (b AND c) OR (d AND e) [type=bool, outer=(2-5)]
 
 opt
 SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
@@ -662,8 +662,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /1])]
-      ├── a.i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
-      └── (a.i > 0) OR (a.s = 'foo') [type=bool, outer=(2,4)]
+      ├── i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
+      └── (i > 0) OR (s = 'foo') [type=bool, outer=(2,4)]
 
 opt
 SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
@@ -694,7 +694,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections [outer=(1)]
-      └── NULL AND ((a.k = 2) OR (a.k = 1)) [type=bool, outer=(1)]
+      └── NULL AND ((k = 2) OR (k = 1)) [type=bool, outer=(1)]
 
 # Check that we don't match non-redundant cases.
 opt
@@ -705,7 +705,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool)
  └── projections [outer=(1,2)]
-      └── (c.a OR c.b) OR c.b [type=bool, outer=(1,2)]
+      └── (a OR b) OR b [type=bool, outer=(1,2)]
 
 opt
 SELECT (a AND b) OR (a OR c) FROM c
@@ -715,7 +715,7 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool)
  └── projections [outer=(1-3)]
-      └── ((c.a AND c.b) OR c.a) OR c.c [type=bool, outer=(1-3)]
+      └── ((a AND b) OR a) OR c [type=bool, outer=(1-3)]
 
 opt
 SELECT (a AND b) OR (NOT a AND c) FROM c
@@ -725,4 +725,4 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool)
  └── projections [outer=(1-3)]
-      └── (c.a AND c.b) OR ((NOT c.a) AND c.c) [type=bool, outer=(1-3)]
+      └── (a AND b) OR ((NOT a) AND c) [type=bool, outer=(1-3)]

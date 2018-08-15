@@ -449,7 +449,7 @@ func formatCol(f *ExprFmtCtx, label string, id opt.ColumnID, notNullCols opt.Col
 	md := f.Memo.metadata
 	if label == "" {
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label = md.QualifiedColumnLabel(id, fullyQualify, false /* useTable */)
+		label = md.QualifiedColumnLabel(id, fullyQualify)
 	}
 
 	if !isSimpleColumnName(label) {
@@ -506,7 +506,7 @@ func formatPrivate(f *ExprFmtCtx, private interface{}, physProps *props.Physical
 
 	case opt.ColumnID:
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label := f.Memo.metadata.QualifiedColumnLabel(t, fullyQualify, true /* useTable */)
+		label := f.Memo.metadata.QualifiedColumnLabel(t, fullyQualify)
 		fmt.Fprintf(f.Buffer, " %s", label)
 
 	case *IndexJoinDef:

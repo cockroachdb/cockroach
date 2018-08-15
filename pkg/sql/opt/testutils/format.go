@@ -59,7 +59,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) b
 	fmtCtx := tree.MakeFmtCtx(f.Buffer, tree.FmtSimple)
 	fmtCtx.WithIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
-		label := md.QualifiedColumnLabel(opt.ColumnID(idx+1), fullyQualify, true /* useTable */)
+		label := md.QualifiedColumnLabel(opt.ColumnID(idx+1), fullyQualify)
 		ctx.WriteString(label)
 	})
 	expr.Format(&fmtCtx)
