@@ -188,6 +188,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
     const statsByNode = this.props.statement.byNode;
+    const sensitiveInfo = this.props.statement.stats.sensitive_info;
 
     return (
       <div className="content l-columns">
@@ -196,6 +197,12 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             <SqlBox value={ statement } />
           </section>
           <section className="section">
+            <h3>Plan</h3>
+            <pre>
+              {sensitiveInfo && sensitiveInfo.most_recent_plan
+                ? JSON.stringify(sensitiveInfo.most_recent_plan, null, 2)
+                : <p>No plan captured yet.</p>}
+            </pre>
             <h3>Execution Count</h3>
             <table className="numeric-stats-table">
               <tbody>
