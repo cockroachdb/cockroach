@@ -773,9 +773,13 @@ type StoreTestingKnobs struct {
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder.
 	DisableLeaderFollowsLeaseholder bool
-	// DisableRefreshReasonTicks disables refreshing pending commands when a new
+	// DisableRefreshReasonNewLeader disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool
+	// DisableRefreshReasonNewLeaderOrConfigChange disables refreshing pending
+	// commands when a new leader is discovered or when a config change is
+	// dropped.
+	DisableRefreshReasonNewLeaderOrConfigChange bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a
 	// snapshot is applied.
 	DisableRefreshReasonSnapshotApplied bool
