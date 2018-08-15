@@ -84,10 +84,10 @@ project
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── ordering: -1
 
-# TODO(rytaft): This query causes an error in Postgres, but it is supported by
-# CockroachDB with the semantics:
+# This query causes an error in Postgres, and the optimizer has followed
+# that lead. However, it is supported by the heuristic planner in CockroachDB
+# with the semantics:
 #   SELECT c FROM t GROUP BY c ORDER BY max(b) DESC;
-# We may decide to support this later, but for now this should cause an error.
 build
 SELECT DISTINCT c FROM t ORDER BY b DESC
 ----
@@ -741,8 +741,6 @@ sort
                      ├── variable: abc.b [type=int]
                      └── const: 2 [type=int]
 
-# Verify that the ordering of the primary index is still used for the outer sort.
-# TODO(rytaft): Verify that the sort node is removed before execution.
 build
 SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----

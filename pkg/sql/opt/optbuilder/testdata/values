@@ -49,7 +49,6 @@ limit
  │              └── const: 3 [type=int]
  └── const: 3 [type=int]
 
-# TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
 build
 VALUES (1), (1), (2), (3) ORDER BY z
 ----
