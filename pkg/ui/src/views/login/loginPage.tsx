@@ -12,10 +12,10 @@ import { trustIcon } from "src/util/trust";
 
 import logo from "assets/crdb.png";
 import docsIcon from "!!raw-loader!assets/docs.svg";
+import newFeatureIcon from "!!raw-loader!assets/paperPlane.svg";
+import "./loginPage.styl";
 
 const version = getDataFromServer().Tag || "UNKNOWN";
-
-import "./loginPage.styl";
 
 interface LoginPageProps {
   loginState: LoginAPIState;
@@ -91,44 +91,67 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         </Helmet>
         <div className="content">
           <section className="section login-page__info">
+            <img className="logo" alt="CockroachDB" src={logo} />
+            <div className="login-new-feature">
+              <div className="login-new-feature-heading">
+                <span dangerouslySetInnerHTML={trustIcon(newFeatureIcon)} />
+                <span className="login-new-feature-heading__text">New in v2.1</span>
+              </div>
+              <p className="login-new-feature__blurb">
+                A user with a password is required to log in to the UI
+                on secure clusters.
+              </p>
+            </div>
+            <div className="login-note-box">
+              <div className="login-note-box__heading">Note:</div>
+              <p className="login-note-box__blurb">
+                Create a user with this SQL command:
+              </p>
+              <pre className="login-note-box__sql-command">
+                <span className="sql-keyword">CREATE USER</span>
+                {" "}craig{" "}
+                <span className="sql-keyword">WITH PASSWORD</span>
+                {" "}
+                <span className="sql-string">'cockroach'</span>
+              </pre>
+              <p className="aside">
+                <a href={docsURL.adminUILogin} className="login-docs-link">
+                  <span className="login-docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
+                  <span className="login-docs-link__text">Read more about configuring login</span>
+                </a>
+              </p>
+            </div>
+          </section>
+          <section className="section login-page__form">
             <p className="version">
               Version: <span className="version-tag">{ version }</span>
             </p>
-            <img className="logo" alt="CockroachDB" src={logo} />
-            <p className="aside">
-              Please contact your database administrator for
-              account access and password restoration.
-            </p>
-            <p className="aside">
-              <a href={docsURL.adminUIOverview} className="docs-link">
-                <span className="docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
-                <span className="docs-link__text">Read the documentation</span>
-              </a>
-            </p>
-          </section>
-          <section className="section login-page__form">
-            <h1 className="heading">Sign in to the Console</h1>
-            {this.renderError()}
-            <form onSubmit={this.handleSubmit}>
-              <input
-                type="text"
-                className={inputClasses}
-                onChange={this.handleUpdateUsername}
-                value={this.state.username}
-              />
-              <input
-                type="password"
-                className={inputClasses}
-                onChange={this.handleUpdatePassword}
-                value={this.state.password}
-              />
-              <input
-                type="submit"
-                className="submit-button"
-                disabled={this.props.loginState.inProgress}
-                value={this.props.loginState.inProgress ? "Signing in..." : "Sign In"}
-              />
-            </form>
+            <div className="form-container">
+              <h1 className="heading">Log in to the Web UI</h1>
+              {this.renderError()}
+              <form onSubmit={this.handleSubmit} className="form-internal">
+                <input
+                  type="text"
+                  className={inputClasses}
+                  onChange={this.handleUpdateUsername}
+                  value={this.state.username}
+                  placeholder="Username"
+                />
+                <input
+                  type="password"
+                  className={inputClasses}
+                  onChange={this.handleUpdatePassword}
+                  value={this.state.password}
+                  placeholder="Password"
+                />
+                <input
+                  type="submit"
+                  className="submit-button"
+                  disabled={this.props.loginState.inProgress}
+                  value={this.props.loginState.inProgress ? "Logging in..." : "Log In"}
+                />
+              </form>
+            </div>
           </section>
         </div>
       </div>

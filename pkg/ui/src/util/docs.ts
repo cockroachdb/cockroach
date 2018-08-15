@@ -7,7 +7,7 @@ function docsURL(pageName: string): string {
   return `${docsURLBase}/${pageName}`;
 }
 
-export const adminUIOverview = docsURL("admin-ui-overview.html");
+export const adminUILogin = docsURL("admin-ui-access-and-navigate.html#secure-the-admin-ui");
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
 export const cancelJob = docsURL("cancel-job.html");
