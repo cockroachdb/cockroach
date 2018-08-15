@@ -355,18 +355,17 @@ CREATE TABLE crdb_internal.leases (
 					}
 
 					state.mu.Lock()
-					leased := state.mu.leased
+					lease := state.mu.lease
 					state.mu.Unlock()
-					if !leased {
+					if lease == nil {
 						continue
 					}
-					expCopy := state.leaseExpiration()
 					if err := addRow(
 						nodeID,
 						tableID,
 						tree.NewDString(state.Name),
 						tree.NewDInt(tree.DInt(int64(state.GetParentID()))),
-						&expCopy,
+						&lease.expiration,
 						dropped,
 					); err != nil {
 						return err
