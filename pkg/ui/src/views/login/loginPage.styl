@@ -11,18 +11,22 @@
 
   .content
     border thin solid $table-border-color
-    position relative
+    display flex
 
   &__info.section
     width 486px
-    display inline-block
     padding 24px
 
   &__form.section
-    background-color $table-border-color
+    background-color $background-color
     width 486px
-    display inline-block
-    padding 108px 53px 138px
+
+  .form-container
+    padding-left 50px
+    padding-right 50px
+
+  .form-internal
+    margin-bottom 140px
 
   .heading
     text-transform none
@@ -32,36 +36,23 @@
   .aside
     margin-top 12px
     line-height 24px
-    letter-spacing 1px
     color $body-color
     width 350px
+    font-size 14px
 
   .version
     color $body-color
-    position absolute
-    left 12px
-    top 12px
+    text-align right
+    margin-top 10px
+    margin-bottom 100px
 
   .version-tag
     color #54b30e
 
   .logo
     height 32px
-
-  .docs-link
-    display block
-    margin-top 32px
-    text-decoration none
-    color $link-color
-
-    &__icon
-      position relative
-      top 6px
-
-    &__text
-      font-size 17px
-      line-height 30px
-      margin-left 6px
+    position relative
+    margin-bottom 80px
 
   .input-text
     width 100%
@@ -74,6 +65,9 @@
     margin 12px 0
     color $body-color
     display block
+
+    &::placeholder
+      color lightgrey
 
     &--error
       border-color $alert-color
@@ -100,3 +94,63 @@
   &__error
     color $alert-color
     margin 12px 0
+
+.login-new-feature
+  margin-left 30px
+
+  &__blurb
+    margin-top 5px
+    line-height 24px
+    color $body-color
+
+.login-new-feature-heading
+  &__text
+    color #3a7de1
+
+.login-note-box
+  margin-top 20px
+  padding 10px
+  padding-left 25px
+  background-color #ecf7ff
+  border-left 5px solid #357eea
+
+  &__sql-command
+    border 1px solid lightgrey
+    background #f6f6f6
+    padding 5px
+    padding-left 9px
+    border-radius 4px
+    margin-top 10px
+
+    // These colors match the SQL examples in our docs.
+    // They don't match the colors in the table details or statement
+    // details page, since those display SQL on a dark blue background.
+    .sql-keyword
+      color #a0247a
+
+    .sql-string
+      color #3c80e1
+
+  &__heading
+    font-weight bold
+    color #3e7bde
+
+  &__blurb
+    margin-top 10px
+    color $body-color
+
+.login-docs-link
+  display block
+  margin-top 10px
+  text-decoration none
+  color $link-color
+
+  &__icon
+    display inline-block
+    position relative
+    top 3px
+
+  &__text
+    display inline-block
+    line-height 30px
+    margin-left 6px

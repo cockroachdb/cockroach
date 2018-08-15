@@ -94,7 +94,7 @@ function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
         >
           { user[0] }
         </div>
-        <Link to={LOGOUT_PAGE} onClick={handleLogout}>Sign Out</Link>
+        <Link to={LOGOUT_PAGE} onClick={handleLogout}>Log Out</Link>
     </li>
   );
 }
