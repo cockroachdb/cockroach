@@ -348,8 +348,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 
 func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
 	// If there are no interleaved tables then don't take the fast path.
-	// Otherwise, the modifications that the delete node would do to the spans would result in
-	// errant behavior.
+	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
 	hasInterleaved := false
 	for _, idx := range table.AllNonDropIndexes() {
 		if len(idx.InterleavedBy) > 0 {
