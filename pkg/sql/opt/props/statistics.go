@@ -17,6 +17,7 @@ package props
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -100,6 +101,38 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// ApplySelectivity applies a given selectivity to the statistics. RowCount and
+// Selectivity are updated. Note that DistinctCounts are not updated, other than
+// limiting them to the new RowCount. See ColumnStatistic.ApplySelectivity for
+// updating distinct counts.
+func (s *Statistics) ApplySelectivity(selectivity float64) {
+	if selectivity == 0 {
+		s.RowCount = 0
+		for i := range s.ColStats {
+			s.ColStats[i].DistinctCount = 0
+		}
+		for i := range s.MultiColStats {
+			s.MultiColStats[i].DistinctCount = 0
+		}
+		return
+	}
+
+	s.RowCount *= selectivity
+	s.Selectivity *= selectivity
+
+	// Make sure none of the distinct counts are larger than the row count.
+	for _, colStat := range s.ColStats {
+		if colStat.DistinctCount > s.RowCount {
+			colStat.DistinctCount = s.RowCount
+		}
+	}
+	for _, colStat := range s.MultiColStats {
+		if colStat.DistinctCount > s.RowCount {
+			colStat.DistinctCount = s.RowCount
+		}
+	}
+}
+
 // ColumnStatistic is a collection of statistics that applies to a particular
 // set of columns. In theory, a table could have a ColumnStatistic object
 // for every possible subset of columns. In practice, it is only worth
@@ -113,6 +146,29 @@ type ColumnStatistic struct {
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
 	DistinctCount float64
+}
+
+// ApplySelectivity updates the distinct count according to a given selectivity.
+func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
+	if selectivity == 1 || c.DistinctCount == 0 {
+		return
+	}
+	if selectivity == 0 {
+		c.DistinctCount = 0
+		return
+	}
+
+	n := inputRows
+	d := c.DistinctCount
+
+	// If each distinct value appears n/d times, and the probability of a
+	// row being filtered out is (1 - selectivity), the probability that all
+	// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
+	// number of values that are filtered out is d*(1 - selectivity)^(n/d).
+	//
+	// This formula returns d * selectivity when d=n but is closer to d
+	// when d << n.
+	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
 }
 
 // ColumnStatistics is a slice of ColumnStatistic values.
