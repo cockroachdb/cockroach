@@ -201,14 +201,16 @@ func (s *scope) makeOrderingChoice() props.OrderingChoice {
 func (s *scope) makePhysicalProps() props.Physical {
 	p := props.Physical{}
 
-	p.Presentation = make(props.Presentation, 0, len(s.cols))
-	for i := range s.cols {
-		col := &s.cols[i]
-		if !col.hidden {
-			p.Presentation = append(p.Presentation, opt.LabeledColumn{
-				Label: string(col.name),
-				ID:    col.id,
-			})
+	if len(s.cols) > 0 {
+		p.Presentation = make(props.Presentation, 0, len(s.cols))
+		for i := range s.cols {
+			col := &s.cols[i]
+			if !col.hidden {
+				p.Presentation = append(p.Presentation, opt.LabeledColumn{
+					Label: string(col.name),
+					ID:    col.id,
+				})
+			}
 		}
 	}
 
