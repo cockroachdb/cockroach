@@ -507,6 +507,7 @@ func TestShowQueries(t *testing.T) {
 		if stmt == selectStmt {
 			found = true
 			const showQuery = "SELECT node_id, (now() - start)::FLOAT, query FROM [SHOW CLUSTER QUERIES]"
+			const showVersionQuery = "SHOW CLUSTER SETTING VERSION"
 
 			rows, err := conn1.Query(showQuery)
 			if err != nil {
@@ -526,7 +527,7 @@ func TestShowQueries(t *testing.T) {
 					return
 				}
 				switch sql {
-				case showQuery, expectedSelectStmt:
+				case showQuery, showVersionQuery, expectedSelectStmt:
 				default:
 					failure = fmt.Errorf(
 						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
