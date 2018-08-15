@@ -3314,9 +3314,9 @@ func (r *Replica) evaluateProposal(
 		intents := res.Local.DetachIntents()
 		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			Intents:            &intents,
-			EndTxns:            &endTxns,
-			LeaseMetricsResult: res.Local.LeaseMetricsResult,
+			Intents: &intents,
+			EndTxns: &endTxns,
+			Metrics: res.Local.Metrics,
 		}
 		res.Replicated.Reset()
 		return &res, false /* needConsensus */, pErr
