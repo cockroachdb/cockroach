@@ -158,9 +158,7 @@ func (p *planner) Delete(
 		},
 	}
 
-	interleaveFastPathCheck := canDeleteFastInterleaved(*desc, fkTables)
-	dn.run.fastPath = interleaveFastPathCheck
-	dn.run.fastPathInterleaved = interleaveFastPathCheck
+	dn.run.fastPathInterleaved = canDeleteFastInterleaved(*desc, fkTables)
 
 	// Finally, handle RETURNING, if any.
 	r, err := p.Returning(ctx, dn, n.Returning, desiredTypes, alias)
@@ -180,7 +178,8 @@ type deleteRun struct {
 	// completion during startExec.
 	fastPath bool
 
-	// fastPathInterleaved
+	// fastPathInterleaved indicates whether the delete operation can run
+	// the interleaved fast path (all interleaved tables have no indexes and ON DELETE CASCADE)
 	fastPathInterleaved bool
 
 	// rowCount is the total row count if fastPath is set,
@@ -431,7 +430,7 @@ func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNod
 	// Check that there are no secondary indexes, interleaving, FK
 	// references checks, etc., ie. there is no extra work to be done
 	// per row deleted.
-	if !r.td.fastPathAvailable(ctx) && !r.fastPath {
+	if !r.td.fastPathAvailable(ctx) && !r.fastPathInterleaved {
 		return nil, false
 	}
 
