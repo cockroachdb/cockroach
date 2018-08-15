@@ -153,11 +153,6 @@ type mdColumn struct {
 	typ types.T
 }
 
-// NewMetadata constructs a new instance of metadata for the optimizer.
-func NewMetadata() *Metadata {
-	return &Metadata{}
-}
-
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {

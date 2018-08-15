@@ -173,7 +173,7 @@ func (ev ExprView) Private() interface{} {
 // operator types refer to the metadata in their private fields. For example,
 // the Scan operator holds a metadata table index.
 func (ev ExprView) Metadata() *opt.Metadata {
-	return ev.mem.metadata
+	return ev.mem.Metadata()
 }
 
 // Cost returns the cost of executing this expression tree, as estimated by the
