@@ -100,6 +100,37 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// ApplySelectivity applies a given selectivity to the statistics. RowCount and
+// Selectivity are updated, as well as any DistinctCounts that are larger than
+// the RowCount.
+func (s *Statistics) ApplySelectivity(selectivity float64) {
+	if selectivity == 0 {
+		s.RowCount = 0
+		for i := range s.ColStats {
+			s.ColStats[i].DistinctCount = 0
+		}
+		for i := range s.MultiColStats {
+			s.MultiColStats[i].DistinctCount = 0
+		}
+		return
+	}
+
+	s.RowCount *= selectivity
+	s.Selectivity *= selectivity
+
+	// Make sure none of the distinct counts are larger than the row count.
+	for _, colStat := range s.ColStats {
+		if colStat.DistinctCount > s.RowCount {
+			colStat.DistinctCount = s.RowCount
+		}
+	}
+	for _, colStat := range s.MultiColStats {
+		if colStat.DistinctCount > s.RowCount {
+			colStat.DistinctCount = s.RowCount
+		}
+	}
+}
+
 // ColumnStatistic is a collection of statistics that applies to a particular
 // set of columns. In theory, a table could have a ColumnStatistic object
 // for every possible subset of columns. In practice, it is only worth
