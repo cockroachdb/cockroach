@@ -231,6 +231,8 @@ func initVirtualTableDesc(
 		}
 	}
 
+	// Virtual tables never use SERIAL so we need not process SERIAL
+	// types here.
 	return MakeTableDesc(
 		ctx,
 		nil, /* txn */
