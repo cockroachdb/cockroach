@@ -1125,7 +1125,7 @@ func (r *RangeStatsRequest) flags() int {
 }
 
 func (*CountKeysRequest) flags() int {
-	return isRead | isTxn | updatesReadTSCache
+	return isRead | isTxn | updatesReadTSCache | isRange
 }
 
 // Keys returns credentials in an aws.Config.

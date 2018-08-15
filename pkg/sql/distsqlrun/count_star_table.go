@@ -3,7 +3,10 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type countStarTable struct {
@@ -37,13 +40,31 @@ func newCountStarTable(
 	return ag, nil
 }
 
-func (c *countStarTable) Start(context.Context) context.Context {
+func (c *countStarTable) Start(ctx context.Context) context.Context {
 	return c.StartInternal(ctx, countStarTableProcName)
 }
 
 func (c *countStarTable) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	c.flowCtx.txn.
-		panic("implement me")
+	for c.State == StateRunning {
+		c.MoveToDraining(nil)
+		var b roachpb.BatchRequest
+		span := c.table.PrimaryIndexSpan()
+		b.Add(&roachpb.CountKeysRequest{
+			RequestHeader: roachpb.RequestHeader{Key: span.Key, EndKey: span.EndKey},
+		})
+
+		resp, pErr := c.flowCtx.txn.Send(c.flowCtx.EvalCtx.Ctx(), b)
+		if pErr != nil {
+			log.Fatal(c.flowCtx.EvalCtx.Ctx(), pErr)
+		}
+
+		count := resp.Responses[0].GetInner().(*roachpb.CountKeysResponse).Count
+
+		ret := make(sqlbase.EncDatumRow, 1)
+		ret[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}
+		return ret, nil
+	}
+	return nil, nil
 }
 
 func (c *countStarTable) ConsumerDone() {

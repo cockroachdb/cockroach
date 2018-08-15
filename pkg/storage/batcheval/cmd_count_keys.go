@@ -17,6 +17,8 @@ package batcheval
 import (
 	"context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -34,8 +36,11 @@ func CountKeys(
 	reply := resp.(*roachpb.CountKeysResponse)
 
 	desc := cArgs.EvalCtx.Desc()
-	if args.Key.Equal(desc.StartKey.AsRawKey()) && args.Key.Equal(desc.EndKey.AsRawKey()) {
+	fmt.Printf("t1=%t t2=%t\n", args.Key.Equal(desc.StartKey.AsRawKey()), args.EndKey.Equal(desc.EndKey.AsRawKey()))
+	fmt.Println(desc.EndKey.AsRawKey())
+	if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
 		stats := cArgs.EvalCtx.GetMVCCStats()
+		fmt.Printf("t3=%t t4=%t\n", !stats.ContainsEstimates, stats.IntentCount == 0)
 		if !stats.ContainsEstimates && stats.IntentCount == 0 {
 			reply.Count = stats.LiveCount
 			return result.Result{}, nil
