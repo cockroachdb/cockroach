@@ -47,8 +47,8 @@ type AppliedRuleFunc = norm.AppliedRuleFunc
 // output expression tree with the lowest cost.
 type Optimizer struct {
 	evalCtx  *tree.EvalContext
-	f        *norm.Factory
 	mem      *memo.Memo
+	f        norm.Factory
 	explorer explorer
 
 	// coster implements the default cost model. If SetCoster is not called, this
@@ -78,14 +78,13 @@ type Optimizer struct {
 
 // NewOptimizer constructs an instance of the optimizer.
 func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
-	f := norm.NewFactory(evalCtx)
 	o := &Optimizer{
 		evalCtx:  evalCtx,
-		f:        f,
-		mem:      f.Memo(),
-		coster:   coster{mem: f.Memo()},
 		stateMap: make(map[optStateKey]*optState),
 	}
+	o.f.Init(evalCtx)
+	o.mem = o.f.Memo()
+	o.coster.Init(o.f.Memo())
 	o.explorer.init(o)
 	return o
 }
@@ -94,7 +93,7 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 // input expression tree. The root of the resulting tree can be passed to the
 // Optimize method in order to find the lowest cost plan.
 func (o *Optimizer) Factory() *norm.Factory {
-	return o.f
+	return &o.f
 }
 
 // Coster returns the coster instance that the optimizer is currently using to

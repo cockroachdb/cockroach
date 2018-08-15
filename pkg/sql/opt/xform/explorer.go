@@ -101,10 +101,9 @@ type explorer struct {
 func (e *explorer) init(o *Optimizer) {
 	e.o = o
 	e.mem = o.mem
-	e.f = o.f
+	e.f = o.Factory()
 	e.evalCtx = o.evalCtx
-	e.funcs.e = e
-	e.funcs.CustomFuncs = norm.MakeCustomFuncs(e.f)
+	e.funcs.Init(e)
 }
 
 // exploreGroup generates alternate expressions that are logically equivalent

@@ -31,8 +31,9 @@ import (
 // to fully test with data-driven rules tests.
 func TestFactoryProjectColsFromBoth(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
-	pb := projectionsBuilder{f: f}
+	var f Factory
+	f.Init(&evalCtx)
+	pb := projectionsBuilder{f: &f}
 
 	cat := createFiltersCatalog(t)
 	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
@@ -118,7 +119,8 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
+	var f Factory
+	f.Init(&evalCtx)
 
 	cat := createFiltersCatalog(t)
 	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))

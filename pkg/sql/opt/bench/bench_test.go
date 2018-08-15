@@ -125,14 +125,15 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 	bm.executeDDL(b, cat, `CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`)
 	bm.executeDDL(b, cat, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 
+	stmt, err := parser.ParseOne(query)
+	if err != nil {
+		b.Fatalf("%v", err)
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		stmt, err := parser.ParseOne(query)
-		if err != nil {
-			b.Fatalf("%v", err)
-		}
-
 		if bmType == parse {
+			stmt, _ = parser.ParseOne(query)
 			continue
 		}
 
