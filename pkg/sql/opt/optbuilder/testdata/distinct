@@ -141,10 +141,10 @@ SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
 error (22023): unsupported binary operator: <int> + <float>
 
-# TODO(rytaft): This query causes an error in Postgres, but it is supported by
-# CockroachDB with the semantics:
+# This query causes an error in Postgres, and the optimizer has followed
+# that lead. However, it is supported by the heuristic planner in CockroachDB
+# with the semantics:
 #   SELECT y AS w FROM t GROUP BY y ORDER BY min(z);
-# We may decide to support this later, but for now this should cause an error.
 build
 SELECT DISTINCT y AS w FROM xyz ORDER by z
 ----

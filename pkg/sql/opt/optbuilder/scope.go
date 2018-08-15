@@ -718,8 +718,6 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			break
 		}
 
-		// TODO(peter): the ARRAY flatten operator requires a single column from
-		// the subquery.
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t

@@ -34,7 +34,6 @@ import (
 // scanOp operator. Joins will result in the construction of several groups,
 // including two for the left and right table scans, at least one for the join
 // condition, and one for the join itself.
-// TODO(rytaft): Add support for function and join table expressions.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
@@ -500,8 +499,6 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	}
 
 	if outScope == nil {
-		// TODO(peter): This should be a table with 1 row and 0 columns to match
-		// current cockroach behavior.
 		rows := []memo.GroupID{b.factory.ConstructTuple(
 			b.factory.InternList(nil), b.factory.InternType(memo.EmptyTupleType),
 		)}

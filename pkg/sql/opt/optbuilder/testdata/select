@@ -352,15 +352,11 @@ TABLE xyzw
       ├── y int
       └── x int not null
 
-# TODO(rytaft): Fix error message:
-# error: name "x" is not defined
 build
 SELECT * FROM xyzw LIMIT x
 ----
 error (42703): column "x" does not exist
 
-# TODO(rytaft): Fix error message:
-# error: name "y" is not defined
 build
 SELECT * FROM xyzw OFFSET 1 + y
 ----
