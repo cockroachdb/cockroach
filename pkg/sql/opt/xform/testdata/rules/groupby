@@ -33,7 +33,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=string, outer=(1)]
-           └── variable: abc.a [type=string, outer=(1)]
+           └── variable: a [type=string, outer=(1)]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -51,7 +51,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=string, outer=(1)]
-           └── variable: abc.a [type=string, outer=(1)]
+           └── variable: a [type=string, outer=(1)]
 
 opt
 SELECT min(b) FROM abc
@@ -65,7 +65,7 @@ scalar-group-by
  │    └── columns: b:2(float)
  └── aggregations [outer=(2)]
       └── min [type=float, outer=(2)]
-           └── variable: abc.b [type=float, outer=(2)]
+           └── variable: b [type=float, outer=(2)]
 
 exec-ddl
 CREATE TABLE xyz (
@@ -113,7 +113,7 @@ scalar-group-by
  │    └── fd: ()-->(2,3)
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit has the same behavior with max() as
 # the previous min() query because z is the prefix of a unique key
@@ -133,7 +133,7 @@ scalar-group-by
  │    └── fd: ()-->(2,3)
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # We expect ReplaceMinWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -153,7 +153,7 @@ scalar-group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(2)]
       └── min [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -173,7 +173,7 @@ scalar-group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(2)]
       └── max [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 opt
 SELECT max(x) FROM xyz
@@ -190,7 +190,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 opt
 SELECT min(x) FROM xyz
@@ -207,7 +207,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 opt
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
@@ -225,7 +225,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 opt
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
@@ -243,7 +243,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 opt
 SELECT min(y) FROM xyz
@@ -261,7 +261,7 @@ scalar-group-by
  │    └── fd: ()-->(2)
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 opt
 SELECT min(y), min(y) FROM xyz
@@ -279,7 +279,7 @@ scalar-group-by
  │    └── fd: ()-->(2)
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply when there is
 # a grouping column
@@ -297,7 +297,7 @@ project
       │    └── columns: y:2(int)
       └── aggregations [outer=(2)]
            └── min [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit does not apply when there is
 # a grouping column
@@ -315,7 +315,7 @@ project
       │    └── columns: y:2(int)
       └── aggregations [outer=(2)]
            └── max [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply when there is
 # a grouping column
@@ -335,7 +335,7 @@ project
       │    └── fd: (1)-->(2)
       └── aggregations [outer=(2)]
            └── min [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply on multiple aggregations
 # on different columns
@@ -353,9 +353,9 @@ scalar-group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(1,2)]
       ├── min [type=int, outer=(2)]
-      │    └── variable: xyz.y [type=int, outer=(2)]
+      │    └── variable: y [type=int, outer=(2)]
       └── min [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 
 # ReplaceMaxWithLimit does not apply on multiple aggregations
@@ -374,9 +374,9 @@ scalar-group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(1,2)]
       ├── max [type=int, outer=(2)]
-      │    └── variable: xyz.y [type=int, outer=(2)]
+      │    └── variable: y [type=int, outer=(2)]
       └── max [type=int, outer=(1)]
-           └── variable: xyz.x [type=int, outer=(1)]
+           └── variable: x [type=int, outer=(1)]
 
 # ReplaceMinWithLimit does not apply with
 # multiple grouping columns
@@ -394,7 +394,7 @@ group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(2)]
       └── min [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit does not apply with
 # multiple grouping columns
@@ -412,7 +412,7 @@ group-by
  │    └── fd: (1)-->(2)
  └── aggregations [outer=(2)]
       └── max [type=int, outer=(2)]
-           └── variable: xyz.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # ReplaceMinWithLimit does not apply to non-scalar
 # aggregates
@@ -432,9 +432,9 @@ project
       │    └── fd: (1)-->(2)
       └── aggregations [outer=(1,2)]
            ├── min [type=int, outer=(1)]
-           │    └── variable: xyz.x [type=int, outer=(1)]
+           │    └── variable: x [type=int, outer=(1)]
            └── count [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # ReplaceMaxWithLimit does not apply to non-scalar
 # aggregates
@@ -454,9 +454,9 @@ project
       │    └── fd: (1)-->(2)
       └── aggregations [outer=(1,2)]
            ├── max [type=int, outer=(1)]
-           │    └── variable: xyz.x [type=int, outer=(1)]
+           │    └── variable: x [type=int, outer=(1)]
            └── count [type=int, outer=(2)]
-                └── variable: xyz.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 memo
 SELECT min(a) FROM abc
@@ -482,7 +482,7 @@ memo (optimized)
  │         └── cost: 1050.00
  ├── G7: (const 1)
  ├── G8: (const-agg G9)
- └── G9: (variable abc.a)
+ └── G9: (variable a)
 
 memo
 SELECT min(b) FROM abc
@@ -517,7 +517,7 @@ memo (optimized)
  │         └── cost: 1259.32
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
- ├── G12: (variable abc.b)
+ ├── G12: (variable b)
  └── G13: (null)
 
 memo
@@ -544,7 +544,7 @@ memo (optimized)
  │         └── cost: 1149.66
  ├── G7: (const 1)
  ├── G8: (const-agg G9)
- └── G9: (variable abc.a)
+ └── G9: (variable a)
 
 memo
 SELECT max(b) FROM abc
@@ -579,7 +579,7 @@ memo (optimized)
  │         └── cost: 1259.32
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
- ├── G12: (variable abc.b)
+ ├── G12: (variable b)
  └── G13: (null)
 
 # --------------------------------------------------
@@ -601,7 +601,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=string, outer=(1)]
-           └── variable: abc.a [type=string, outer=(1)]
+           └── variable: a [type=string, outer=(1)]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -619,7 +619,7 @@ scalar-group-by
  │    └── fd: ()-->(1)
  └── aggregations [outer=(1)]
       └── const-agg [type=string, outer=(1)]
-           └── variable: abc.a [type=string, outer=(1)]
+           └── variable: a [type=string, outer=(1)]
 
 opt
 select max(b) FROM abc
@@ -633,7 +633,7 @@ scalar-group-by
  │    └── columns: b:2(float)
  └── aggregations [outer=(2)]
       └── max [type=float, outer=(2)]
-           └── variable: abc.b [type=float, outer=(2)]
+           └── variable: b [type=float, outer=(2)]
 
 memo
 select max(b) from abc
@@ -668,5 +668,5 @@ memo (optimized)
  │         └── cost: 1259.32
  ├── G10: (filters G11)
  ├── G11: (is-not G12 G13)
- ├── G12: (variable abc.b)
+ ├── G12: (variable b)
  └── G13: (null)

@@ -56,10 +56,10 @@ project
                      ├── stats: [rows=2]
                      ├── prune: (3)
                      ├── tuple [type=tuple{int}, outer=(1)]
-                     │    └── variable: xy.x [type=int, outer=(1)]
+                     │    └── variable: x [type=int, outer=(1)]
                      └── tuple [type=tuple{int}, outer=(2)]
                           └── plus [type=int, outer=(2)]
-                               ├── variable: xy.y [type=int, outer=(2)]
+                               ├── variable: y [type=int, outer=(2)]
                                └── const: 1 [type=int]
 
 # Single row.

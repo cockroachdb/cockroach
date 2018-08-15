@@ -155,7 +155,7 @@ distinct-on
  │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
  └── aggregations
       └── first-agg [type=string]
-           └── variable: abc.b [type=string]
+           └── variable: b [type=string]
 
 build
 SELECT DISTINCT ON (c, a) b, c, a FROM abc
@@ -167,7 +167,7 @@ distinct-on
  │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
  └── aggregations
       └── first-agg [type=string]
-           └── variable: abc.b [type=string]
+           └── variable: b [type=string]
 
 #################
 # With ORDER BY #
@@ -202,7 +202,7 @@ sort
       │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: xyz.y [type=int]
+                └── variable: y [type=int]
 
 build
 SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
@@ -221,9 +221,9 @@ distinct-on
  │              └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  └── aggregations
       ├── first-agg [type=int]
-      │    └── variable: xyz.y [type=int]
+      │    └── variable: y [type=int]
       └── first-agg [type=int]
-           └── variable: xyz.z [type=int]
+           └── variable: z [type=int]
 
 #####################
 # With aggregations #
@@ -243,9 +243,9 @@ distinct-on
  │    │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  │    └── aggregations
  │         ├── max [type=int]
- │         │    └── variable: xyz.x [type=int]
+ │         │    └── variable: x [type=int]
  │         └── max [type=int]
- │              └── variable: xyz.y [type=int]
+ │              └── variable: y [type=int]
  └── aggregations
       └── first-agg [type=int]
            └── variable: max [type=int]
@@ -262,13 +262,13 @@ distinct-on
  │    │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
  │    └── aggregations
  │         ├── max [type=string]
- │         │    └── variable: abc.a [type=string]
+ │         │    └── variable: a [type=string]
  │         ├── min [type=string]
- │         │    └── variable: abc.a [type=string]
+ │         │    └── variable: a [type=string]
  │         ├── max [type=string]
- │         │    └── variable: abc.b [type=string]
+ │         │    └── variable: b [type=string]
  │         └── min [type=string]
- │              └── variable: abc.c [type=string]
+ │              └── variable: c [type=string]
  └── aggregations
       └── first-agg [type=string]
            └── variable: max [type=string]
@@ -292,7 +292,7 @@ distinct-on
  │    │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  │    └── aggregations
  │         └── min [type=int]
- │              └── variable: xyz.x [type=int]
+ │              └── variable: x [type=int]
  └── aggregations
       └── first-agg [type=int]
            └── variable: min [type=int]
@@ -316,7 +316,7 @@ distinct-on
            │    │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
            │    └── aggregations
            │         └── min [type=int]
-           │              └── variable: xyz.x [type=int]
+           │              └── variable: x [type=int]
            └── filters [type=bool]
                 └── eq [type=bool]
                      ├── variable: column6 [type=int]
@@ -347,9 +347,9 @@ distinct-on
  │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  └── aggregations
       ├── first-agg [type=int]
-      │    └── variable: xyz.y [type=int]
+      │    └── variable: y [type=int]
       └── first-agg [type=int]
-           └── variable: xyz.z [type=int]
+           └── variable: z [type=int]
 
 build
 SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
@@ -377,7 +377,7 @@ distinct-on
  │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  └── aggregations
       └── first-agg [type=int]
-           └── variable: xyz.y [type=int]
+           └── variable: y [type=int]
 
 # Ignores the alias.
 build
@@ -423,7 +423,7 @@ sort
       │    └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: xyz.z [type=int]
+                └── variable: z [type=int]
 
 build
 SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
@@ -440,4 +440,4 @@ sort
       │         └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: xyz.pk1 [type=int]
+                └── variable: pk1 [type=int]

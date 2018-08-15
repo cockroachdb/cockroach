@@ -50,7 +50,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── filters [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
-      └── variable: a.b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight)]
+      └── variable: b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -137,7 +137,7 @@ group-by
  └── aggregations [outer=(2)]
       ├── count-rows [type=int]
       └── const-agg [type=int, outer=(2)]
-           └── variable: a.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # Test calculation of multi-column stats.
 opt
