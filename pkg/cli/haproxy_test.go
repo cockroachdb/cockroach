@@ -106,3 +106,46 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 		}
 	}
 }
+
+func TestMatchLocalityRegexp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		locality string // The locality as passed to `start --locality=xx`
+		desired  string // The desired locality as passed to `gen haproxy --locality=xx`
+		matches  bool
+	}{
+		{"", "", true},
+		{"region=us-east1", "", true},
+		{"country=us,region=us-east1,datacenter=blah", "", true},
+		{"country=us,region=us-east1,datacenter=blah", "country=us", true},
+		{"country=us,region=us-east1,datacenter=blah", "count.*=us", false},
+		{"country=us,region=us-east1,datacenter=blah", "country=u", false},
+		{"country=us,region=us-east1,datacenter=blah", "try=us", false},
+		{"country=us,region=us-east1,datacenter=blah", "region=us-east1", true},
+		{"country=us,region=us-east1,datacenter=blah", "region=us.*", true},
+		{"country=us,region=us-east1,datacenter=blah", "region=us.*,country=us", true},
+		{"country=us,region=us-east1,datacenter=blah", "region=notus", false},
+		{"country=us,region=us-east1,datacenter=blah", "something=else", false},
+		{"country=us,region=us-east1,datacenter=blah", "region=us.*,zone=foo", false},
+	}
+
+	for testNum, testCase := range testCases {
+		// We're not testing locality parsing: fail on error.
+		var locality, desired roachpb.Locality
+		if testCase.locality != "" {
+			if err := locality.Set(testCase.locality); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if testCase.desired != "" {
+			if err := desired.Set(testCase.desired); err != nil {
+				t.Fatal(err)
+			}
+		}
+		matches, _ := localityMatches(locality, desired)
+		if matches != testCase.matches {
+			t.Errorf("#%d: expected match %t, got %t", testNum, testCase.matches, matches)
+		}
+	}
+}
