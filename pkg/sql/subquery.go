@@ -286,6 +286,11 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 	switch t := expr.(type) {
 	case *tree.ArrayFlatten:
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
+			if v.subqueryAlreadyAnalyzed(sub) {
+				// Subquery was already processed. Nothing to do.
+				return false, expr
+			}
+
 			result, err := v.extractSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
 			if err != nil {
 				v.err = err
@@ -325,6 +330,11 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 		switch t.Operator {
 		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
 			if sub, ok := t.Right.(*tree.Subquery); ok {
+				if v.subqueryAlreadyAnalyzed(sub) {
+					// Subquery was already processed. Nothing to do.
+					return false, expr
+				}
+
 				result, err := v.extractSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
 				if err != nil {
 					v.err = err
