@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -96,23 +95,22 @@ func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy)
 		return true
 	}
 
-	exprTransformCtx := transform.ExprTransformContext{}
 	for _, sel := range sel.Exprs {
 		// TODO(rytaft): This function does not recurse into subqueries, so this
 		// will be incorrect for correlated subqueries.
-		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
 
 	for _, on := range sel.DistinctOn {
-		if exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
 
 	for _, ob := range orderBy {
-		if exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
+		if b.exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
 			return true
 		}
 	}
