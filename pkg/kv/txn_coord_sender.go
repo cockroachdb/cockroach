@@ -164,7 +164,7 @@ var _ client.TxnSender = &TxnCoordSender{}
 type lockedSender interface {
 	// SendLocked sends the batch request and receives a batch response. It
 	// requires that the TxnCoordSender lock be held when called, but this lock
-	// is not heldfor the entire duration of the call. Instead, the lock is
+	// is not held for the entire duration of the call. Instead, the lock is
 	// released immediately before the batch is sent to a lower-level Sender and
 	// is re-acquired when the response is returned.
 	// WARNING: because the lock is released when calling this method and
