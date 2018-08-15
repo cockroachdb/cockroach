@@ -63,6 +63,7 @@ type EvalContext interface {
 	IsFirstRange() bool
 	GetFirstIndex() (uint64, error)
 	GetTerm(uint64) (uint64, error)
+	GetLeaseAppliedIndex() uint64
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool

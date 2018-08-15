@@ -108,6 +108,11 @@ func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
 	return rec.i.GetTerm(i)
 }
 
+// GetLeaseAppliedIndex returns the lease index of the last applied command.
+func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
+	return rec.i.GetLeaseAppliedIndex()
+}
+
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()

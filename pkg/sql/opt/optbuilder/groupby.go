@@ -224,18 +224,8 @@ func (b *Builder) buildAggregation(
 
 	aggInfos := aggOutScope.groupby.aggs
 
-	// Copy the ordering from fromScope to aggInScope if needed.
-	// TODO(justin): we should have a whitelist somewhere of ordering-sensitive
-	// aggregations and only propagate the ordering if we have one here.
-	if len(aggOutScope.getAggregateCols()) > 0 {
-		aggInScope.copyOrdering(fromScope)
-	}
-
-	// Construct the pre-projection, which renders the grouping columns and the
-	// aggregate arguments, as well as any additional order by columns.
-	b.constructProjectForScope(fromScope, aggInScope)
-
 	// Construct the aggregation operators.
+	haveOrderingSensitiveAgg := false
 	aggCols := aggOutScope.getAggregateCols()
 	argCols := aggInScope.cols[len(groupings):]
 	for i, agg := range aggInfos {
@@ -249,8 +239,20 @@ func (b *Builder) buildAggregation(
 				argList[j] = b.factory.ConstructAggDistinct(argList[j])
 			}
 		}
-		aggCols[i].group = constructAggLookup[agg.def.Name](b.factory, argList)
+		aggOp := aggOpLookup[agg.def.Name]
+		if opt.AggregateIsOrderingSensitive(aggOp) {
+			haveOrderingSensitiveAgg = true
+		}
+		aggCols[i].group = constructAggLookup[aggOp](b.factory, argList)
 	}
+
+	if haveOrderingSensitiveAgg {
+		aggInScope.copyOrdering(fromScope)
+	}
+
+	// Construct the pre-projection, which renders the grouping columns and the
+	// aggregate arguments, as well as any additional order by columns.
+	b.constructProjectForScope(fromScope, aggInScope)
 
 	var groupingColSet opt.ColSet
 	for i := range groupings {
@@ -437,56 +439,76 @@ func isGenerator(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.GeneratorClass
 }
 
-var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
-	"array_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+var aggOpLookup = map[string]opt.Operator{
+	"array_agg":  opt.ArrayAggOp,
+	"avg":        opt.AvgOp,
+	"bool_and":   opt.BoolAndOp,
+	"bool_or":    opt.BoolOrOp,
+	"concat_agg": opt.ConcatAggOp,
+	"count":      opt.CountOp,
+	"count_rows": opt.CountRowsOp,
+	"max":        opt.MaxOp,
+	"min":        opt.MinOp,
+	"sum_int":    opt.SumIntOp,
+	"sum":        opt.SumOp,
+	"sqrdiff":    opt.SqrDiffOp,
+	"variance":   opt.VarianceOp,
+	"stddev":     opt.StdDevOp,
+	"xor_agg":    opt.XorAggOp,
+	"json_agg":   opt.JsonAggOp,
+	"jsonb_agg":  opt.JsonbAggOp,
+}
+
+var constructAggLookup = map[opt.Operator]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
+	opt.ArrayAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructArrayAgg(argList[0])
 	},
-	"avg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.AvgOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructAvg(argList[0])
 	},
-	"bool_and": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.BoolAndOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructBoolAnd(argList[0])
 	},
-	"bool_or": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.BoolOrOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructBoolOr(argList[0])
 	},
-	"concat_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.ConcatAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructConcatAgg(argList[0])
 	},
-	"count": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.CountOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructCount(argList[0])
 	},
-	"count_rows": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.CountRowsOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructCountRows()
 	},
-	"max": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.MaxOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructMax(argList[0])
 	},
-	"min": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.MinOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructMin(argList[0])
 	},
-	"sum_int": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.SumIntOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructSumInt(argList[0])
 	},
-	"sum": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.SumOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructSum(argList[0])
 	},
-	"sqrdiff": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.SqrDiffOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructSqrDiff(argList[0])
 	},
-	"variance": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.VarianceOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructVariance(argList[0])
 	},
-	"stddev": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.StdDevOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructStdDev(argList[0])
 	},
-	"xor_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.XorAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructXorAgg(argList[0])
 	},
-	"json_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.JsonAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructJsonAgg(argList[0])
 	},
-	"jsonb_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+	opt.JsonbAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructJsonbAgg(argList[0])
 	},
 }

@@ -1999,37 +1999,29 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:10(string)
       │    ├── grouping columns: k:1(int!null)
-      │    ├── internal-ordering: +8 opt(9)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,10)
-      │    ├── sort
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null) column8:8(int) column9:9(string!null)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null) column9:9(string!null)
       │    │    ├── fd: (1)-->(2-5), (7)-->(9), (1)==(7), (7)==(1)
-      │    │    ├── ordering: +8 opt(9)
-      │    │    └── inner-join
-      │    │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null) column8:8(int) column9:9(string!null)
-      │    │         ├── fd: (1)-->(2-5), (7)-->(9), (1)==(7), (7)==(1)
-      │    │         ├── scan a
-      │    │         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │         │    ├── key: (1)
-      │    │         │    └── fd: (1)-->(2-5)
-      │    │         ├── select
-      │    │         │    ├── columns: y:7(int) column8:8(int) column9:9(string!null)
-      │    │         │    ├── fd: (7)-->(9)
-      │    │         │    ├── project
-      │    │         │    │    ├── columns: column9:9(string) column8:8(int) y:7(int)
-      │    │         │    │    ├── fd: (7)-->(9)
-      │    │         │    │    ├── scan xy
-      │    │         │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │         │    │    │    ├── key: (6)
-      │    │         │    │    │    └── fd: (6)-->(7)
-      │    │         │    │    └── projections [outer=(6,7)]
-      │    │         │    │         ├── xy.y::STRING [type=string, outer=(7)]
-      │    │         │    │         └── xy.x + xy.y [type=int, outer=(6,7)]
-      │    │         │    └── filters [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
-      │    │         │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
-      │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │              └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-5)
+      │    │    ├── select
+      │    │    │    ├── columns: y:7(int) column9:9(string!null)
+      │    │    │    ├── fd: (7)-->(9)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column9:9(string) y:7(int)
+      │    │    │    │    ├── fd: (7)-->(9)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: y:7(int)
+      │    │    │    │    └── projections [outer=(7)]
+      │    │    │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    │    └── filters [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,9)]
       │         ├── max [type=string, outer=(9)]
       │         │    └── variable: column9 [type=string, outer=(9)]
