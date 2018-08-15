@@ -89,7 +89,9 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 					log.Warningf(ctx, "unable to connect to n%d: %s", nodeID, err)
 				}
 			} else {
-				log.Infof(ctx, "connection to n%d established", nodeID)
+				if false { // see #28165
+					log.Infof(ctx, "connection to n%d established", nodeID)
+				}
 			}
 		}()
 	}
