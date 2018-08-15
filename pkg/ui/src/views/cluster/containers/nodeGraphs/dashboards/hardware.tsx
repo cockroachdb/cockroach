@@ -50,10 +50,10 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Bytes} label="memory usage">
+      <Axis units={AxisUnits.Percentage} label="memory usage">
         {nodeIDs.map((nid) => (
           <Metric
-            name="cr.node.sys.rss"
+            name="cr.node.sys.rss.percent"
             title={nodeDisplayName(nodesSummary, nid)}
             sources={[nid]}
           />
