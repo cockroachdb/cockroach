@@ -298,6 +298,10 @@ type Replica struct {
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
+	// refCount tracks the count of outstanding references to this
+	// replica. It is atomically incremented and decremented.
+	refCount int32
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -339,6 +343,9 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// Behind indicates the range is quiescent but still has
+		// replica(s) not fully caught up.
+		quiescentButBehind bool
 		// mergeComplete is non-nil if a merge is in-progress, in which case any
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
@@ -385,10 +392,8 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.Timestamp
-		// Min bytes before merge.
-		minBytes int64
-		// Max bytes before split.
-		maxBytes int64
+		// The zone config which applies to this range.
+		zone config.ZoneConfig
 		// localProposals stores the Raft in-flight commands which originated at
 		// this Replica, i.e. all commands for which propose has been called,
 		// but which have not yet applied.
@@ -722,6 +727,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
 	r.mu.internalRaftGroup = nil
+	r.mu.zone = config.DefaultZoneConfig()
 
 	var err error
 
@@ -1208,26 +1214,55 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 }
 
+// RefCount returns the number of references to the replica.
+func (r *Replica) RefCount() int32 {
+	return atomic.LoadInt32(&r.refCount)
+}
+
+// Ref increments the count of replica references. Every
+// call to Ref() must be paired with a call to Unref() after
+// the replica will no longer be used by the caller.
+func (r *Replica) Ref() {
+	if r != nil {
+		atomic.AddInt32(&r.refCount, 1)
+	}
+}
+
+// Unref decrements the count of replica references.
+func (r *Replica) Unref() {
+	if r != nil {
+		if val := atomic.AddInt32(&r.refCount, -1); val < 0 {
+			log.Fatalf(context.TODO(), "%s reference count is negative", r)
+		}
+	}
+}
+
 // GetMinBytes gets the replica's minimum byte threshold.
 func (r *Replica) GetMinBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.minBytes
+	return r.mu.zone.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.maxBytes
+	return r.mu.zone.RangeMaxBytes
 }
 
-// SetByteThresholds sets the minimum and maximum byte thresholds.
-func (r *Replica) SetByteThresholds(minBytes, maxBytes int64) {
+// GetZoneConfig returns the replica's zone config.
+func (r *Replica) GetZoneConfig() config.ZoneConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.zone
+}
+
+// SetZoneConfig sets the replica's zone config.
+func (r *Replica) SetZoneConfig(zone config.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.minBytes = minBytes
-	r.mu.maxBytes = maxBytes
+	r.mu.zone = zone
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -1895,7 +1930,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-	ri.RangeMaxBytes = r.mu.maxBytes
+	ri.RangeMaxBytes = r.mu.zone.RangeMaxBytes
 	return ri
 }
 
@@ -3810,12 +3845,6 @@ func (r *Replica) quiesceLocked() bool {
 	return true
 }
 
-func (r *Replica) unquiesce() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.unquiesceLocked()
-}
-
 func (r *Replica) unquiesceLocked() {
 	r.unquiesceWithOptionsLocked(true /* campaignOnWake */)
 }
@@ -3827,6 +3856,7 @@ func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
 			log.Infof(ctx, "unquiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = false
+		r.mu.quiescentButBehind = false // may not be true, but behind is only valid when quiescent
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
@@ -4342,7 +4372,7 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
-func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
+func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -4454,7 +4484,7 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(livenessMap map[roachpb.NodeID]bool) bool {
+func (r *Replica) maybeQuiesceLocked(livenessMap IsLiveMap) bool {
 	ctx := r.AnnotateCtx(context.TODO())
 	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.localProposals), livenessMap)
 	if !ok {
@@ -4499,11 +4529,7 @@ func (r *Replica) maybeTransferRaftLeader(
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context,
-	q quiescer,
-	now hlc.Timestamp,
-	numProposals int,
-	livenessMap map[roachpb.NodeID]bool,
+	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
 	if numProposals != 0 {
 		if log.V(4) {
@@ -4582,7 +4608,7 @@ func shouldReplicaQuiesce(
 			return nil, false
 		} else if progress.Match != status.Applied {
 			// Skip any node in the descriptor which is not live.
-			if livenessMap != nil && !livenessMap[rep.NodeID] {
+			if livenessMap != nil && !livenessMap[rep.NodeID].IsLive {
 				if log.V(4) {
 					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
 						rep.NodeID, progress)
@@ -4638,6 +4664,7 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 		// assume the replica is considered dead and skip the quiesce
 		// heartbeat.
 		if prog.Match < status.Commit {
+			r.mu.quiescentButBehind = true
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
@@ -5453,6 +5480,7 @@ func (r *Replica) processRaftCommand(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
+		defer rightReplica.Unref()
 
 		rhsStatsMS := rightReplica.GetMVCCStats()
 		rhsComputedMS, err := rditer.ComputeStatsForRange(&split.RightDesc, r.store.Engine(), rhsStatsMS.LastUpdateNanos)
@@ -5513,6 +5541,7 @@ func (r *Replica) acquireSplitLock(
 	// treat splits differently).
 
 	return func(rResult storagebase.ReplicatedEvalResult) {
+		defer rightRng.Unref()
 		if rResult.Split == nil && created && !rightRng.IsInitialized() {
 			// An error occurred during processing of the split and the RHS is still
 			// uninitialized. Mark the RHS destroyed and remove it from the replica's
@@ -5557,6 +5586,7 @@ func (r *Replica) acquireMergeLock(
 			merge.LeftDesc, merge.RightDesc, rightDesc)
 	}
 	return func(storagebase.ReplicatedEvalResult) {
+		defer rightRepl.Unref()
 		rightRepl.raftMu.Unlock()
 	}, nil
 }
@@ -6576,7 +6606,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
-	maxBytes := r.mu.maxBytes
+	maxBytes := r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
@@ -6612,6 +6642,29 @@ func (r *Replica) Less(i btree.Item) bool {
 	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
+// ReplicaCapacity contains details on the replica storage characteristics.
+type ReplicaCapacity struct {
+	Leaseholder bool
+	Stats       enginepb.MVCCStats
+	QPS, WPS    float64
+}
+
+// Capacity returns the current capacity info for the replica.
+func (r *Replica) Capacity(now hlc.Timestamp) ReplicaCapacity {
+	var cap ReplicaCapacity
+	if r.OwnsValidLease(now) {
+		cap.Leaseholder = true
+	}
+	cap.Stats = r.GetMVCCStats()
+	if qps, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		cap.QPS = qps
+	}
+	if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+		cap.WPS = wps
+	}
+	return cap
+}
+
 // ReplicaMetrics contains details on the current status of the replica.
 type ReplicaMetrics struct {
 	Leader      bool
@@ -6639,12 +6692,10 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context,
-	now hlc.Timestamp,
-	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	ctx context.Context, storeID roachpb.StoreID, now hlc.Timestamp, livenessMap IsLiveMap,
 ) ReplicaMetrics {
 	r.mu.RLock()
+	numReplicas := r.mu.zone.NumReplicas
 	raftStatus := r.raftStatusRLocked()
 	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
@@ -6663,12 +6714,12 @@ func (r *Replica) Metrics(
 	return calcReplicaMetrics(
 		ctx,
 		now,
-		cfg,
 		livenessMap,
 		desc,
+		numReplicas,
 		raftStatus,
 		leaseStatus,
-		r.store.StoreID(),
+		storeID,
 		quiescent,
 		ticking,
 		cmdQMetricsLocal,
@@ -6689,9 +6740,9 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
-	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	livenessMap IsLiveMap,
 	desc *roachpb.RangeDescriptor,
+	numReplicas int32,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
 	storeID roachpb.StoreID,
@@ -6715,36 +6766,8 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	// We compute an estimated range count across the cluster by counting the
-	// first live replica in each descriptor. Note that the first live replica is
-	// an arbitrary choice. We want to select one live replica to do the counting
-	// that all replicas can agree on.
-	//
-	// Note that this heuristic can double count. If the first live replica is on
-	// a node that is partitioned from the other replicas in the range, there may
-	// be multiple nodes which believe they are the first live replica. This
-	// scenario seems rare as it requires the partitioned node to be alive enough
-	// to be performing liveness heartbeats.
-	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
-			m.RangeCounter = rd.StoreID == storeID
-			break
-		}
-	}
-
-	// We also compute an estimated per-range count of under-replicated and
-	// unavailable ranges for each range based on the liveness table.
-	if m.RangeCounter {
-		liveReplicas := calcLiveReplicas(desc, livenessMap)
-		if liveReplicas < computeQuorum(len(desc.Replicas)) {
-			m.Unavailable = true
-		}
-		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
-			log.Error(ctx, err)
-		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
-			m.Underreplicated = true
-		}
-	}
+	m.RangeCounter, m.Unavailable, m.Underreplicated =
+		calcRangeCounter(storeID, desc, livenessMap, numReplicas)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -6760,12 +6783,51 @@ func calcReplicaMetrics(
 	return m
 }
 
+// calcRangeCounter returns whether this replica is designated as the
+// replica in the range responsible for range-level metrics, whether
+// the range doesn't have a quorum of live replicas, and whether the
+// range is currently under-replicated.
+//
+// Note: we compute an estimated range count across the cluster by counting the
+// first live replica in each descriptor. Note that the first live replica is
+// an arbitrary choice. We want to select one live replica to do the counting
+// that all replicas can agree on.
+//
+// Note that this heuristic can double count. If the first live replica is on
+// a node that is partitioned from the other replicas in the range, there may
+// be multiple nodes which believe they are the first live replica. This
+// scenario seems rare as it requires the partitioned node to be alive enough
+// to be performing liveness heartbeats.
+func calcRangeCounter(
+	storeID roachpb.StoreID, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap, numReplicas int32,
+) (rangeCounter, unavailable, underreplicated bool) {
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID].IsLive {
+			rangeCounter = rd.StoreID == storeID
+			break
+		}
+	}
+
+	// We also compute an estimated per-range count of under-replicated and
+	// unavailable ranges for each range based on the liveness table.
+	if rangeCounter {
+		liveReplicas := calcLiveReplicas(desc, livenessMap)
+		if liveReplicas < computeQuorum(len(desc.Replicas)) {
+			unavailable = true
+		}
+		if int32(liveReplicas) < numReplicas {
+			underreplicated = true
+		}
+	}
+	return
+}
+
 // calcLiveReplicas returns a count of the live replicas; a live replica is
 // determined by checking its node in the provided liveness map.
-func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool) int {
+func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var goodReplicas int
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
+		if livenessMap[rd.NodeID].IsLive {
 			goodReplicas++
 		}
 	}
@@ -6775,7 +6837,7 @@ func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.Nod
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas {

@@ -55,6 +55,7 @@ func (is Server) CollectChecksum(
 			if err != nil {
 				return err
 			}
+			defer r.Unref()
 			c, err := r.getChecksum(ctx, req.ChecksumID)
 			if err != nil {
 				return err

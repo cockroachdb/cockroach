@@ -49,7 +49,9 @@ import (
 func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.addReplicaInternalLocked(repl); err != nil {
+	var shim ReplicaShim
+	shim.mu.replica = repl
+	if err := s.addReplicaShimInternalLocked(&shim); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
@@ -64,7 +66,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	var err error
 
 	now := s.Clock().PhysicalNow()
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(false /* onlyResident */, func(r *Replica) bool {
 		var stats enginepb.MVCCStats
 		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
@@ -77,7 +79,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 }
 
 func forceScanAndProcess(s *Store, q *baseQueue) {
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(false /* onlyResident */, func(repl *Replica) bool {
 		q.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true
 	})

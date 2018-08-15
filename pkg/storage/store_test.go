@@ -636,9 +636,9 @@ func TestReplicasByKey(t *testing.T) {
 		expectedErrorOnAdd string
 	}{
 		// [a,c) is contained in [KeyMin, e)
-		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping range"},
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping key span"},
 		// [c,f) partially overlaps with [KeyMin, e)
-		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping range"},
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping key span"},
 		// [e, f) is disjoint from [KeyMin, e)
 		{nil, 4, roachpb.RKey("e"), roachpb.RKey("f"), ""},
 	}
@@ -771,7 +771,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		}
 		i := 1
 		seen := make(map[roachpb.RangeID]struct{})
-		visitor.Visit(func(repl *Replica) bool {
+		visitor.Visit(false /* onlyResident */, func(repl *Replica) bool {
 			_, ok := seen[repl.RangeID]
 			if ok {
 				t.Fatalf("already saw %d", repl.RangeID)

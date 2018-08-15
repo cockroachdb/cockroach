@@ -43,7 +43,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -268,6 +267,7 @@ func (s *statusServer) Allocator(
 					if err != nil {
 						return true, err
 					}
+					defer rep.Unref()
 					if !rep.OwnsValidLease(store.Clock().Now()) {
 						return false, nil
 					}
@@ -291,6 +291,7 @@ func (s *statusServer) Allocator(
 				// Not found: continue.
 				continue
 			}
+			defer rep.Unref()
 			if !rep.OwnsValidLease(store.Clock().Now()) {
 				continue
 			}
@@ -1147,15 +1148,6 @@ func (s *statusServer) Ranges(
 		}
 	}
 
-	cfg, ok := s.gossip.GetSystemConfig()
-	if !ok {
-		// Very little on the status pages requires the system config -- as of June
-		// 2017, only the underreplicated range metric does. Refusing to return a
-		// status page (that may help debug why the config isn't available) due to
-		// such a small piece of missing information is overly harsh.
-		log.Error(ctx, "system config not yet available, serving status page without it")
-		cfg = config.SystemConfig{}
-	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
@@ -1171,12 +1163,13 @@ func (s *statusServer) Ranges(
 					if err != nil {
 						return true, err
 					}
+					defer rep.Unref()
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+							rep.Metrics(ctx, store.Ident.StoreID, timestamp, isLiveMap),
 						))
 					return false, nil
 				})
@@ -1190,13 +1183,14 @@ func (s *statusServer) Ranges(
 				// Not found: continue.
 				continue
 			}
+			defer rep.Unref()
 			desc := rep.Desc()
 			output.Ranges = append(output.Ranges,
 				constructRangeInfo(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+					rep.Metrics(ctx, store.Ident.StoreID, timestamp, isLiveMap),
 				))
 		}
 		return nil
@@ -1269,6 +1263,7 @@ func (s *statusServer) CommandQueue(
 		return nil, roachpb.NewRangeNotFoundError(rangeID)
 	}
 
+	defer replica.Unref()
 	return &serverpb.CommandQueueResponse{
 		Snapshot: replica.GetCommandQueueSnapshot(),
 	}, nil

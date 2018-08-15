@@ -634,8 +634,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	if err != nil {
 		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
-
-	r.SetByteThresholds(zone.RangeMinBytes, zone.RangeMaxBytes)
+	r.SetZoneConfig(zone)
 	return nil
 }
 

@@ -394,10 +394,11 @@ func (s *Store) canApplySnapshot(
 func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
 ) (*ReplicaPlaceholder, error) {
-	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
-		(*Replica)(v).IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
-		return nil, nil
+	if v, ok := s.mu.replicaShims.Load(int64(rangeDescriptor.RangeID)); ok {
+		if shim := (*ReplicaShim)(v); shim.mu.replica != nil && shim.mu.replica.IsInitialized() {
+			// We have the range and it's initialized, so let the snapshot through.
+			return nil, nil
+		}
 	}
 
 	// We don't have the range (or we have an uninitialized
@@ -416,6 +417,7 @@ func (s *Store) canApplySnapshotLocked(
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		} else {
+			defer exReplica.Unref()
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {
 					return true

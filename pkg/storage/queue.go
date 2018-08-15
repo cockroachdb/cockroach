@@ -621,7 +621,10 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
 						func(annotatedCtx context.Context) {
 							// Release semaphore when finished processing.
-							defer func() { <-bq.processSem }()
+							defer func() {
+								repl.Unref()
+								<-bq.processSem
+							}()
 
 							start := timeutil.Now()
 							err := bq.processReplica(annotatedCtx, repl)
@@ -856,6 +859,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 							log.Errorf(ctx, "range %s no longer exists on store: %s", id, err)
 							continue
 						}
+						defer repl.Unref()
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if stopper.RunTask(
 							annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
@@ -979,5 +983,6 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 		annotatedCtx := repl.AnnotateCtx(ctx)
 		err := bq.processReplica(annotatedCtx, repl)
 		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+		repl.Unref()
 	}
 }

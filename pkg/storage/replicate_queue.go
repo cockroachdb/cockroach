@@ -178,11 +178,7 @@ func (rq *replicateQueue) shouldQueue(
 
 	// Find the zone config for this range.
 	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Error(ctx, err)
-		return
-	}
+	zone := repl.GetZoneConfig()
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, false)
@@ -272,10 +268,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 	}
 
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return false, err
-	}
+	zone := repl.GetZoneConfig()
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalancing); action {
