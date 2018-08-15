@@ -136,6 +136,9 @@ var NoFKs = fkHandler{}
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
+//
+// The caller is responsible for ensuring there are no SERIAL column
+// definitions in the CreateTable specification.
 func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -191,6 +194,7 @@ func MakeSimpleTableDescriptor(
 		Sequence: &importSequenceOperators{},
 	}
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	// Note: if there is a SERIAL column here, the call will fail.
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */

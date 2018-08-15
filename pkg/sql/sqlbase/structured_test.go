@@ -1319,10 +1319,10 @@ func TestKeysPerRow(t *testing.T) {
 		indexID     IndexID
 		expected    int
 	}{
-		{"(a SERIAL PRIMARY KEY, b INT, INDEX (b))", 1, 1},                         // Primary index
-		{"(a SERIAL PRIMARY KEY, b INT, INDEX (b))", 2, 1},                         // 'b' index
-		{"(a SERIAL PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2}, // Primary index
-		{"(a SERIAL PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1}, // 'b' index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                         // Primary index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                         // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2}, // Primary index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1}, // 'b' index
 	}
 
 	for i, test := range tests {

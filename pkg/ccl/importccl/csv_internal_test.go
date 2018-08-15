@@ -47,10 +47,13 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: `this IMPORT format does not support foreign keys`,
 		},
 		{
+			stmt:  `create table a (c serial)`,
+			error: `SERIAL cannot be used in this context`,
+		},
+		{
 			stmt: `create table a (
 				i int check (i > 0),
 				b int default 1,
-				c serial,
 				constraint a check (i < 0),
 				primary key (i),
 				unique index (i),
