@@ -123,6 +123,12 @@ func (a internalServerAdapter) Batch(
 	return a.InternalClient.Batch(ctx, ba)
 }
 
+func (a internalServerAdapter) RangeFeed(
+	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
 var _ roachpb.InternalServer = internalServerAdapter{}
 
 // IsLocal returns true if the given InternalServer is local.

@@ -3127,7 +3127,7 @@ func (s *Store) Send(
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.InternalTODO_RangeFeedServer,
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
 	ctx = s.AnnotateCtx(ctx)
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
