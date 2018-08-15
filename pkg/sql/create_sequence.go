@@ -56,10 +56,8 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 }
 
 func (n *createSequenceNode) startExec(params runParams) error {
-	seqName := n.n.Name.TableName().Table()
-	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
-	key := tKey.Key()
-	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
+	tKey := getSequenceKey(n.dbDesc, n.n.Name.TableName().Table())
+	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
 			return nil
@@ -69,23 +67,40 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
+	return doCreateSequence(params, n.n.String(), n.dbDesc, n.n.Name.TableName(), n.n.Options)
+}
+
+func getSequenceKey(dbDesc *DatabaseDescriptor, seqName string) tableKey {
+	return tableKey{parentID: dbDesc.ID, name: seqName}
+}
+
+// doCreateSequence performs the creation of a sequence in KV. The
+// context argument is a string to use in the event log.
+func doCreateSequence(
+	params runParams,
+	context string,
+	dbDesc *DatabaseDescriptor,
+	name *ObjectName,
+	opts tree.SequenceOptions,
+) error {
 	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
 		return err
 	}
 
 	// Inherit permissions from the database descriptor.
-	privs := n.dbDesc.GetPrivileges()
+	privs := dbDesc.GetPrivileges()
 
-	desc, err := n.makeSequenceTableDesc(params, seqName, n.dbDesc.ID, id, privs)
+	desc, err := MakeSequenceTableDesc(name.Table(), opts,
+		dbDesc.ID, id, params.p.txn.CommitTimestamp(), privs, params.EvalContext().Settings)
 	if err != nil {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
+	// makeSequenceTableDesc already validates the table. No call to
+	// desc.ValidateTable() needed here.
 
+	key := getSequenceKey(dbDesc, name.Table()).Key()
 	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
@@ -117,7 +132,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{name.FQString(), context, params.SessionData().User},
 	)
 }
 
@@ -129,16 +144,6 @@ const (
 	sequenceColumnID   = 1
 	sequenceColumnName = "value"
 )
-
-func (n *createSequenceNode) makeSequenceTableDesc(
-	params runParams,
-	sequenceName string,
-	parentID sqlbase.ID,
-	id sqlbase.ID,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
-	return MakeSequenceTableDesc(sequenceName, n.n.Options, parentID, id, params.p.txn.CommitTimestamp(), privileges, params.EvalContext().Settings)
-}
 
 // MakeSequenceTableDesc creates a sequence descriptor.
 func MakeSequenceTableDesc(
