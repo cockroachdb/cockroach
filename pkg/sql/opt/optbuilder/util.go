@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -329,13 +328,12 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 }
 
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
-	exprTransformCtx := transform.ExprTransformContext{}
-	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
+	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
 		})
 	}
-	if exprTransformCtx.WindowFuncInExpr(expr) {
+	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
