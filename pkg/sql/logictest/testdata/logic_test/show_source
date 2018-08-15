@@ -23,37 +23,38 @@ UTF8                1
 query TT colnames
 SELECT * FROM [SHOW ALL] WHERE variable != 'experimental_opt'
 ----
-variable                        value
-application_name                ·
-bytea_output                    hex
-client_encoding                 UTF8
-client_min_messages             notice
-database                        test
-datestyle                       ISO
-default_transaction_isolation   serializable
-default_transaction_read_only   off
-distsql                         off
-experimental_force_lookup_join  off
-experimental_force_zigzag_join  off
-extra_float_digits              0
-integer_datetimes               on
-intervalstyle                   postgres
-max_index_keys                  32
-node_id                         1
-search_path                     public
-server_encoding                 UTF8
-server_version                  9.5.0
-server_version_num              90500
-session_user                    root
-sql_safe_updates                false
-standard_conforming_strings     on
-statement_timeout               0s
-timezone                        UTC
-tracing                         off
-transaction_isolation           serializable
-transaction_priority            normal
-transaction_read_only           off
-transaction_status              NoTxn
+variable                           value
+application_name                   ·
+bytea_output                       hex
+client_encoding                    UTF8
+client_min_messages                notice
+database                           test
+datestyle                          ISO
+default_transaction_isolation      serializable
+default_transaction_read_only      off
+distsql                            off
+experimental_force_lookup_join     off
+experimental_force_zigzag_join     off
+experimental_serial_normalization  rowid
+extra_float_digits                 0
+integer_datetimes                  on
+intervalstyle                      postgres
+max_index_keys                     32
+node_id                            1
+search_path                        public
+server_encoding                    UTF8
+server_version                     9.5.0
+server_version_num                 90500
+session_user                       root
+sql_safe_updates                   false
+standard_conforming_strings        on
+statement_timeout                  0s
+timezone                           UTC
+tracing                            off
+transaction_isolation              serializable
+transaction_priority               normal
+transaction_read_only              off
+transaction_status                 NoTxn
 
 query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]

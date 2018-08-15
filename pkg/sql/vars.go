@@ -329,6 +329,35 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`experimental_serial_normalization`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getStringVal(&evalCtx.EvalContext, `experimental_serial_normalization`, values)
+			if err != nil {
+				return err
+			}
+			mode, ok := sessiondata.SerialNormalizationModeFromString(s)
+			if !ok {
+				return newVarValueError(`experimental_serial_normalization`, s,
+					"rowid", "virtual_sequence", "sql_sequence")
+			}
+			m.SetSerialNormalizationMode(mode)
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.SerialNormalizationMode.String()
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetSerialNormalizationMode(sessiondata.SerialNormalizationMode(
+				SerialNormalizationMode.Get(&m.settings.SV)))
+			return nil
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: {
 		Set: func(

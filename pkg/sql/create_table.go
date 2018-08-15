@@ -142,7 +142,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			privs, &params.p.semaCtx, params.EvalContext())
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
 	}
 	if err != nil {
 		return err
@@ -946,6 +946,8 @@ func makeTableDescIfAs(
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
 
+		// The new types in the CREATE TABLE AS column specs never use
+		// SERIAL so we need not process SERIAL types here.
 		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
@@ -1005,6 +1007,11 @@ func dequalifyColumnRefs(
 // to bypass caching and enable visibility of just-added descriptors.
 // This is used to resolve sequence and FK dependencies. Also see the
 // comment at the start of the global scope resolveFK().
+//
+// If the table definition *may* use the SERIAL type, the caller is
+// also responsible for processing serial types using
+// processSerialInColumnDef() on every column definition, and creating
+// the necessary sequences in KV before calling MakeTableDesc().
 func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
@@ -1253,32 +1260,66 @@ func MakeTableDesc(
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.
-func (p *planner) makeTableDesc(
-	ctx context.Context,
+func makeTableDesc(
+	params runParams,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (ret sqlbase.TableDescriptor, err error) {
+	tableName, err := n.Table.Normalize()
+	if err != nil {
+		return ret, err
+	}
+	// Process any SERIAL columns to remove the SERIAL type,
+	// as required by MakeTableDesc.
+	createStmt := n
+	ensureCopy := func() {
+		if createStmt == n {
+			newCreateStmt := *n
+			n.Defs = append(tree.TableDefs(nil), n.Defs...)
+			createStmt = &newCreateStmt
+		}
+	}
+	for i, def := range n.Defs {
+		d, ok := def.(*tree.ColumnTableDef)
+		if !ok {
+			continue
+		}
+		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tableName)
+		if err != nil {
+			return ret, err
+		}
+		if seqName != nil {
+			if err := doCreateSequence(params, n.String(), seqDbDesc, seqName, seqOpts); err != nil {
+				return ret, err
+			}
+		}
+		if d != newDef {
+			ensureCopy()
+			n.Defs[i] = newDef
+		}
+	}
+
 	// We need to run MakeTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
 	// See the comment at the start of MakeTableDesc() and resolveFK().
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+	params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		ret, err = MakeTableDesc(
-			ctx,
-			p.txn,
-			p,
-			p.ExecCfg().Settings,
+			params.ctx,
+			params.p.txn,
+			params.p,
+			params.p.ExecCfg().Settings,
 			n,
 			parentID,
 			id,
 			creationTime,
 			privileges,
 			affected,
-			&p.semaCtx,
-			p.EvalContext(),
+			&params.p.semaCtx,
+			params.p.EvalContext(),
 		)
 	})
 	return ret, err
