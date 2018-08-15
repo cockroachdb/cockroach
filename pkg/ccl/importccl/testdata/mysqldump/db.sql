@@ -28,7 +28,7 @@ CREATE TABLE `SECOND` (
   PRIMARY KEY (`i`),
   UNIQUE KEY `ik` (`i`,`k`),
   KEY `ki` (`k`,`i`),
-  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`)
+  CONSTRAINT `second_ibfk_1` FOREIGN KEY (`k`) REFERENCES `simple` (`i`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -87,7 +87,7 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'Small','bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-08-13 23:18:32',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO `everything` VALUES (1,'c',NULL,NULL,'Small','bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-08-15 18:49:41',NULL,NULL,NULL,-12.345,-2,NULL,NULL,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -132,7 +132,7 @@ CREATE TABLE `third` (
   KEY `a` (`a`,`b`),
   KEY `C` (`C`),
   CONSTRAINT `third_ibfk_1` FOREIGN KEY (`a`, `b`) REFERENCES `second` (`i`, `k`),
-  CONSTRAINT `third_ibfk_2` FOREIGN KEY (`C`) REFERENCES `third` (`i`)
+  CONSTRAINT `third_ibfk_2` FOREIGN KEY (`C`) REFERENCES `third` (`i`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -154,4 +154,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-08-13 23:18:33
+-- Dump completed on 2018-08-15 18:49:41

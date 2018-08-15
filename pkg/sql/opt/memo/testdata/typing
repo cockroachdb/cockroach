@@ -209,24 +209,23 @@ project
       ├── a.x << 3 [type=int]
       └── a.y >> 2 [type=int]
 
-# TODO(justin): re-enable when we support inverted index queries.
 # FetchVal, FetchText, FetchValPath, FetchTextPath
-# build
-# SELECT '[1, 2]'->1 AS r,
-#        '[1, 2]'->>1 AS s,
-#        '{"a": 5}'#>ARRAY['a'] AS t,
-#        '{"a": 5}'#>>ARRAY['a'] AS u
-#   FROM a
-# ----
-# project
-#  ├── columns: r:3(jsonb) s:4(string) t:5(jsonb) u:6(string)
-#  ├── scan a
-#  │    └── columns: x:1(int!null) y:2(int)
-#  └── projections
-#       ├── '[1, 2]'->1 [type=jsonb]
-#       ├── '[1, 2]'->>1 [type=string]
-#       ├── '{"a": 5}'#>ARRAY['a'] [type=jsonb]
-#       └── '{"a": 5}'#>>ARRAY['a'] [type=string]
+build
+SELECT '[1, 2]'->1 AS r,
+       '[1, 2]'->>1 AS s,
+       '{"a": 5}'#>ARRAY['a'] AS t,
+       '{"a": 5}'#>>ARRAY['a'] AS u
+  FROM a
+----
+project
+ ├── columns: r:3(jsonb) s:4(string) t:5(jsonb) u:6(string)
+ ├── scan a
+ │    └── columns: x:1(int!null) y:2(int)
+ └── projections
+      ├── '[1, 2]'->1 [type=jsonb]
+      ├── '[1, 2]'->>1 [type=string]
+      ├── '{"a": 5}'#>ARRAY['a'] [type=jsonb]
+      └── '{"a": 5}'#>>ARRAY['a'] [type=string]
 
 # Concat
 build

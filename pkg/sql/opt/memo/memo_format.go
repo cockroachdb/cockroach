@@ -232,10 +232,8 @@ func (f *memoFormatter) sortGroups(root GroupID) (groups []GroupID) {
 	// If there remains any group with nonzero indegree, we had a cycle.
 	for i := range indegrees {
 		if indegrees[i] != 0 {
-			// TODO(justin): we should handle this case, but there's no good way to
-			// test it yet. Cross this bridge when we come to it (use raw-memo to
-			// bypass this sorting procedure if this is causing you trouble).
-			panic("memo had a cycle, use raw-memo")
+			// The memo should never have a cycle.
+			panic("memo had a cycle, use raw-memo to print")
 		}
 	}
 

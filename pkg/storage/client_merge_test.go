@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -47,8 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -85,11 +82,10 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	lhsDesc, _, err := createSplitRanges(ctx, store)
 	if err != nil {
@@ -124,11 +120,10 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	scan := func() map[string]struct{} {
 		t.Helper()
@@ -385,11 +380,10 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// Merge last range.
 	_, pErr := client.SendWrapped(ctx, store.TestSender(), adminMergeArgs(roachpb.KeyMin))
@@ -420,9 +414,10 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 		return nil
 	}
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 	kvDB := store.DB()
 
 	if err := kvDB.Put(ctx, "aa", "val"); err != nil {
@@ -490,12 +485,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
-	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	mtc := &multiTestContext{}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
@@ -552,14 +545,14 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, lhsDesc, msA, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, lhsDesc, msA, mtc.manualClock.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range A's stats before split: %v", err)
 	}
-	if err := verifyRecomputedStats(snap, rhsDesc, msB, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, rhsDesc, msB, mtc.manualClock.UnixNano()); err != nil {
 		t.Fatalf("failed to verify range B's stats before split: %v", err)
 	}
 
-	manual.Increment(100)
+	mtc.manualClock.Increment(100)
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
@@ -577,7 +570,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	}
 
 	// Merged stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, manual.UnixNano()); err != nil {
+	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, mtc.manualClock.UnixNano()); err != nil {
 		t.Errorf("failed to verify range's stats after merge: %v", err)
 	}
 }
@@ -1236,9 +1229,19 @@ func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Cut off communication with store2 before the merge.
-	circuitBreaker2 := mtc.transport.GetCircuitBreaker(store2.Ident.NodeID)
-	circuitBreaker2.Break()
+	// Wait for store2 to hear about the split.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := store2.GetReplica(rhsDesc.RangeID)
+		return err
+	})
+
+	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
+	// that its LHS isn't aware there's a merge in progress.
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
@@ -1262,48 +1265,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
 
 	// Restore communication with store2. Give it the lease to force all commands
 	// to be applied, including the merge trigger.
-	circuitBreaker2.Reset()
+	lhsRepl2.RaftUnlock()
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
-}
-
-type slowRaftHandler struct {
-	cond struct {
-		blocked bool
-		sync.Cond
-	}
-	storage.RaftMessageHandler
-}
-
-func newSlowRaftHandler(handler storage.RaftMessageHandler) *slowRaftHandler {
-	h := slowRaftHandler{RaftMessageHandler: handler}
-	h.cond.Cond.L = &syncutil.Mutex{}
-	return &h
-}
-
-func (h *slowRaftHandler) block() {
-	h.cond.L.Lock()
-	defer h.cond.L.Unlock()
-	h.cond.blocked = true
-}
-
-func (h *slowRaftHandler) unblock() {
-	h.cond.L.Lock()
-	defer h.cond.L.Unlock()
-	h.cond.blocked = false
-	h.cond.Broadcast()
-}
-
-func (h *slowRaftHandler) HandleRaftRequest(
-	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
-) *roachpb.Error {
-	h.cond.L.Lock()
-	for h.cond.blocked {
-		h.cond.Wait()
-	}
-	h.cond.L.Unlock()
-	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
@@ -1331,11 +1294,13 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 		return err
 	})
 
-	// Queue up all requests destined for store2 before the merge.
-	slowTransport2 := newSlowRaftHandler(store2)
-	mtc.transport.Listen(store2.StoreID(), slowTransport2)
-	slowTransport2.block()
-	defer slowTransport2.unblock() // in case of early t.Fatal
+	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
+	// that its LHS isn't aware there's a merge in progress.
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
@@ -1360,7 +1325,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	}
 
 	// Flush store2's queued requests.
-	slowTransport2.unblock()
+	lhsRepl2.RaftUnlock()
 
 	// Ensure that the unblocked merge eventually applies and subsumes the RHS.
 	testutils.SucceedsSoon(t, func() error {
@@ -1460,6 +1425,32 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
 		t.Fatal("c replica not destroyed")
+	}
+}
+
+func TestStoreRangeMergeDeadFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0 := mtc.Store(0)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, _, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.stopStore(2)
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	expErr := "merge of range into 1 failed: waiting for all right-hand replicas to catch up"
+	if !testutils.IsPError(pErr, expErr) {
+		t.Fatalf("expected %q error, but got %v", expErr, pErr)
 	}
 }
 
@@ -1700,11 +1691,10 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	// A GetSnapshotForMerge request that succeeds when it shouldn't will wedge a
 	// store because it waits for a merge that is not actually in progress. Set a
@@ -1765,11 +1755,10 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	ctx := context.Background()
-	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableSplitQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(b, stopper, storeCfg)
+	var mtc multiTestContext
+	mtc.Start(b, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
 
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	if err != nil {

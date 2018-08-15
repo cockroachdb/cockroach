@@ -358,11 +358,33 @@ func mysqlTableToCockroach(
 				FromCols: toNameList(fromCols),
 				ToCols:   toNameList(toCols),
 			}
+
+			if i.OnDelete != mysql.NoAction {
+				d.Actions.Delete = mysqlActionToCockroach(i.OnDelete)
+			}
+			if i.OnUpdate != mysql.NoAction {
+				d.Actions.Update = mysqlActionToCockroach(i.OnUpdate)
+			}
+
 			d.Table.TableNameReference = &toTable
 			fkDefs = append(fkDefs, delayedFK{&desc, d})
 		}
 	}
 	return &desc, fkDefs, nil
+}
+
+func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
+	switch action {
+	case mysql.Restrict:
+		return tree.Restrict
+	case mysql.Cascade:
+		return tree.Cascade
+	case mysql.SetNull:
+		return tree.SetNull
+	case mysql.SetDefault:
+		return tree.SetDefault
+	}
+	return tree.NoAction
 }
 
 type delayedFK struct {

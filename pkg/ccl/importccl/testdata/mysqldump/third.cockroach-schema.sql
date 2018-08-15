@@ -6,5 +6,5 @@ CREATE TABLE third (
     INDEX a (a, b),
     INDEX "C" ("C"),
     FOREIGN KEY (a, b) REFERENCES second (i, k),
-    FOREIGN KEY (c) REFERENCES third (i)
+    FOREIGN KEY (c) REFERENCES third (i) ON UPDATE CASCADE
 );

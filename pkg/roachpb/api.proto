@@ -1288,6 +1288,10 @@ message GetSnapshotForMergeResponse {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];
+
+  // LeaseAppliedIndex is the lease index of the last applied command at the
+  // time that the GetSnapshotForMerge request executed.
+  uint64 lease_applied_index = 4;
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
@@ -1545,7 +1549,7 @@ message RangeFeedCheckpoint {
 // RangeFeedError is a variant of RangeFeedEvent that indicates that an error
 // occurred during the processing of the RangeFeed. If emitted, a RangeFeedError
 // event will always be the final event on a RangeFeed response stream before
-// it is torn down. 
+// it is torn down.
 message RangeFeedError {
   Error error = 1 [(gogoproto.nullable) = false];
 }

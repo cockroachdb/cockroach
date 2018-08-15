@@ -1056,6 +1056,22 @@ scalar-group-by
            └── variable: kv.k [type=int]
 
 build
+SELECT max(k) FROM (SELECT k FROM kv ORDER BY s)
+----
+scalar-group-by
+ ├── columns: max:5(int)
+ ├── project
+ │    ├── columns: k:1(int!null)
+ │    └── project
+ │         ├── columns: k:1(int!null) s:4(string)
+ │         └── scan kv
+ │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ └── aggregations
+      └── max [type=int]
+           └── variable: kv.k [type=int]
+
+
+build
 SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY s)
 ----
 project
