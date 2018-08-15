@@ -75,12 +75,36 @@ func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
 
-	// TODO(dan): I have no idea how to tune these yet, but we're getting a
-	// "Message was too large, server rejected it to avoid allocation" error
-	// without them.
-	config.Producer.Flush.Bytes = 1000000
+	// When we emit messages to sarama, they're placed in a queue (as does any
+	// reasonable kafka producer client). When our sink's Flush is called, we
+	// have to wait for all buffered and inflight requests to be sent and then
+	// acknowledged. Quite unfortunately, we have no way to hint to the producer
+	// that it should immediately send out whatever is buffered. This
+	// configuration can have a dramatic impact on how quickly this happens
+	// naturally (and some configurations will block forever!).
+	//
+	// We can configure the producer to send out its batches based on number of
+	// messages and/or total buffered message size and/or time. If none of them
+	// are set, it uses some defaults, but if any of the three are set, it does
+	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
+	// nothing else is set, then 9/10 times `Flush` will block forever. We can
+	// work around this by also setting `Flush.Frequency` but a cleaner way is
+	// to set `Flush.Messages` to 1. In the steady state, this sends a request
+	// with some messages, buffers any messages that come in while it is in
+	// flight, then sends those out.
+	config.Producer.Flush.Messages = 1
+
+	// This works around what seems to be a bug in sarama where it isn't
+	// computing the right value to compare against `Producer.MaxMessageBytes`
+	// and the server sends it back with a "Message was too large, server
+	// rejected it to avoid allocation" error. The other flush tunings are
+	// hints, but this one is a hard limit, so it's useful here as a workaround.
+	//
+	// This workaround should probably be something like setting
+	// `Producer.MaxMessageBytes` to 90% of it's value for some headroom, but
+	// this workaround is the one that's been running in roachtests and I'd want
+	// to test this one more before changing it.
 	config.Producer.Flush.MaxMessages = 1000
-	config.Producer.Flush.Frequency = time.Second
 
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)

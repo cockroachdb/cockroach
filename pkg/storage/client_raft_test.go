@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"runtime"
@@ -3925,4 +3926,152 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestStoreRangeWaitForApplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+	distSender := mtc.distSenders[0]
+
+	// Split off a non-system range so we don't have to account for node liveness
+	// traffic.
+	splitArgs := adminSplitArgs(roachpb.Key("a"))
+	if _, pErr := client.SendWrapped(ctx, distSender, splitArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	rangeID := store0.LookupReplica(roachpb.RKey("a")).RangeID
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl0, err := store0.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseIndex0 := repl0.LastAssignedLeaseIndex()
+
+	type target struct {
+		client storage.PerReplicaClient
+		header storage.StoreRequestHeader
+	}
+
+	var targets []target
+	for _, s := range mtc.stores {
+		conn, err := mtc.nodeDialer.Dial(ctx, s.Ident.NodeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		targets = append(targets, target{
+			client: storage.NewPerReplicaClient(conn),
+			header: storage.StoreRequestHeader{NodeID: s.Ident.NodeID, StoreID: s.Ident.StoreID},
+		})
+	}
+
+	// Wait for a command that is already applied. The request should return
+	// immediately.
+	for i, target := range targets {
+		_, err := target.client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+			StoreRequestHeader: target.header,
+			RangeID:            rangeID,
+			LeaseIndex:         leaseIndex0,
+		})
+		if err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+	}
+
+	const count = 5
+
+	// Wait for a command that is `count` indexes later.
+	var errChs []chan error
+	for _, target := range targets {
+		errCh := make(chan error)
+		errChs = append(errChs, errCh)
+		target := target
+		go func() {
+			_, err := target.client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+				StoreRequestHeader: target.header,
+				RangeID:            rangeID,
+				LeaseIndex:         leaseIndex0 + count,
+			})
+			errCh <- err
+		}()
+	}
+
+	// The request should not return when less than `count` commands have
+	// been issued.
+	putArgs := putArgs(roachpb.Key("foo"), []byte("bar"))
+	for i := 0; i < count-1; i++ {
+		if _, pErr := client.SendWrapped(ctx, distSender, putArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		// Wait a little bit to increase the likelihood that we observe an invalid
+		// ordering. This is not intended to be foolproof.
+		time.Sleep(10 * time.Millisecond)
+		for j, errCh := range errChs {
+			select {
+			case err := <-errCh:
+				t.Fatalf("%d: WaitForApplication returned early (request: %d, err: %v)", j, i, err)
+			default:
+			}
+		}
+	}
+
+	// Once the `count`th command has been issued, the request should return.
+	if _, pErr := client.SendWrapped(ctx, distSender, putArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	for i, errCh := range errChs {
+		if err := <-errCh; err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+	}
+
+	// GC the replica while a request is in progress. The request should return
+	// an error.
+	go func() {
+		_, err := targets[2].client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+			StoreRequestHeader: targets[2].header,
+			RangeID:            rangeID,
+			LeaseIndex:         math.MaxUint64,
+		})
+		errChs[2] <- err
+	}()
+	repl2, err := store2.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtc.unreplicateRange(repl2.RangeID, 2)
+	if err := store2.ManualReplicaGC(repl2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repl2.IsDestroyed(); err == nil {
+		t.Fatalf("replica was not destroyed after gc on store2")
+	}
+	err = <-errChs[2]
+	if exp := fmt.Sprintf("r%d was not found", rangeID); !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %v", exp, err)
+	}
+
+	// Allow the client context to time out while a request is in progress. The
+	// request should return an error.
+	{
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		_, err := targets[0].client.WaitForApplication(ctx, &storage.WaitForApplicationRequest{
+			StoreRequestHeader: targets[0].header,
+			RangeID:            rangeID,
+			LeaseIndex:         math.MaxUint64,
+		})
+		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, err)
+		}
+	}
 }
