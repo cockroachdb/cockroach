@@ -690,6 +690,7 @@ func TestSubqueryLeases(t *testing.T) {
 	fooRelease := make(chan struct{}, 10)
 	fooAcquiredCount := int32(0)
 	fooReleaseCount := int32(0)
+	var tableID int64
 
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
@@ -700,8 +701,8 @@ func TestSubqueryLeases(t *testing.T) {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "foo" {
+				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+					if int64(id) == atomic.LoadInt64(&tableID) {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
 						// multiple times, at least once for the first
@@ -713,7 +714,7 @@ func TestSubqueryLeases(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
@@ -726,6 +727,9 @@ CREATE TABLE t.foo (v INT);
 	if atomic.LoadInt32(&fooAcquiredCount) > 0 {
 		t.Fatalf("CREATE TABLE has acquired a lease: got %d, expected 0", atomic.LoadInt32(&fooAcquiredCount))
 	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "foo")
+	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
 
 	if _, err := sqlDB.Exec(`
 SELECT * FROM t.foo;
@@ -766,6 +770,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 
 	fooAcquiredCount := int32(0)
 	fooReleaseCount := int32(0)
+	var tableID int64
 
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
@@ -778,15 +783,15 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "foo" {
+				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+					if int64(id) == atomic.LoadInt64(&tableID) {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
 				},
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
@@ -799,6 +804,9 @@ CREATE TABLE t.foo (v INT);
 	if atomic.LoadInt32(&fooAcquiredCount) > 0 {
 		t.Fatalf("CREATE TABLE has acquired a descriptor")
 	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "foo")
+	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
