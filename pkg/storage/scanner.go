@@ -52,8 +52,9 @@ type replicaQueue interface {
 // ordering of the iteration.
 type replicaSet interface {
 	// Visit calls the given function for every replica in the set btree
-	// until the function returns false.
-	Visit(func(*Replica) bool)
+	// until the function returns false. The boolean indicates whether
+	// every replica is visited, or only those which are already resident.
+	Visit(bool, func(*Replica) bool)
 	// EstimatedCount returns the number of replicas estimated to remain
 	// in the iteration. This value does not need to be exact.
 	EstimatedCount() int
@@ -278,7 +279,7 @@ func (rs *replicaScanner) scanLoop(stopper *stop.Stopper) {
 			}
 			var shouldStop bool
 			count := 0
-			rs.replicas.Visit(func(repl *Replica) bool {
+			rs.replicas.Visit(false /* onlyResident */, func(repl *Replica) bool {
 				count++
 				shouldStop = rs.waitAndProcess(ctx, stopper, start, repl)
 				return !shouldStop

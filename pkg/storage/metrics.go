@@ -62,6 +62,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaResidentCount = metric.Metadata{
+		Name:        "replicas.resident",
+		Help:        "Number of resident replicas",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Replica CommandQueue metrics. Max size metrics track the maximum value
 	// seen for all replicas during a single replica scan.
@@ -959,6 +965,7 @@ type StoreMetrics struct {
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
+	ResidentCount                 *metric.Gauge
 
 	// Replica CommandQueue metrics.
 	MaxCommandQueueSize       *metric.Gauge
@@ -1166,6 +1173,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		ResidentCount:                 metric.NewGauge(metaResidentCount),
 
 		// Replica CommandQueue metrics.
 		MaxCommandQueueSize:       metric.NewGauge(metaMaxCommandQueueSize),

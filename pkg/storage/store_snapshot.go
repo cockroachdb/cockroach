@@ -394,10 +394,11 @@ func (s *Store) canApplySnapshot(
 func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
 ) (*ReplicaPlaceholder, error) {
-	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
-		(*Replica)(v).IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
-		return nil, nil
+	if v, ok := s.mu.replicaShims.Load(int64(rangeDescriptor.RangeID)); ok {
+		if shim := (*ReplicaShim)(v); shim.mu.replica != nil && shim.mu.replica.IsInitialized() {
+			// We have the range and it's initialized, so let the snapshot through.
+			return nil, nil
+		}
 	}
 
 	// We don't have the range (or we have an uninitialized

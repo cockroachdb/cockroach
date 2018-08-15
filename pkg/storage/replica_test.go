@@ -8795,10 +8795,10 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) map[roachpb.NodeID]bool {
-		m := make(map[roachpb.NodeID]bool)
+	live := func(ids ...roachpb.NodeID) IsLiveMap {
+		m := IsLiveMap{}
 		for _, id := range ids {
-			m[id] = true
+			m[id] = IsLiveMapEntry{IsLive: true}
 		}
 		return m
 	}
@@ -8808,7 +8808,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raft.Status
-		liveness    map[roachpb.NodeID]bool
+		liveness    IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -8818,7 +8818,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Leader:          true,
 				RangeCounter:    true,
 				Unavailable:     false,
-				Underreplicated: false,
+				Underreplicated: true,
 				BehindCount:     10,
 			}},
 		// The leader of a 2-replica range is up (only 1 replica present).
@@ -8845,7 +8845,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Leader:          true,
 				RangeCounter:    true,
 				Unavailable:     false,
-				Underreplicated: false,
+				Underreplicated: true,
 				BehindCount:     20,
 			}},
 		// Both replicas of a 2-replica range are up to date (local replica is not leader)
@@ -8862,7 +8862,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Leader:          true,
 				RangeCounter:    true,
 				Unavailable:     false,
-				Underreplicated: false,
+				Underreplicated: true,
 				BehindCount:     21,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
@@ -8986,7 +8986,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Leader:          true,
 				RangeCounter:    true,
 				Unavailable:     false,
-				Underreplicated: false,
+				Underreplicated: true,
 				BehindCount:     10,
 				RaftLogTooLarge: true,
 			}},
@@ -9001,8 +9001,8 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
-				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
+				context.Background(), hlc.Timestamp{},
+				c.liveness, &c.desc, 3, c.raftStatus, LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
@@ -9531,7 +9531,7 @@ type testQuiescer struct {
 	lastIndex      uint64
 	raftReady      bool
 	ownsValidLease bool
-	livenessMap    map[roachpb.NodeID]bool
+	livenessMap    IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9598,10 +9598,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
-				livenessMap: map[roachpb.NodeID]bool{
-					1: true,
-					2: true,
-					3: true,
+				livenessMap: IsLiveMap{
+					1: {IsLive: true},
+					2: {IsLive: true},
+					3: {IsLive: true},
 				},
 			}
 			q = transform(q)
@@ -9682,7 +9682,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// the replica is on a non-live node.
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
-			q.livenessMap[roachpb.NodeID(i)] = false
+			q.livenessMap[roachpb.NodeID(i)] = IsLiveMapEntry{IsLive: false}
 			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
 			return q
 		})

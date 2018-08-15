@@ -43,7 +43,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1147,15 +1146,6 @@ func (s *statusServer) Ranges(
 		}
 	}
 
-	cfg, ok := s.gossip.GetSystemConfig()
-	if !ok {
-		// Very little on the status pages requires the system config -- as of June
-		// 2017, only the underreplicated range metric does. Refusing to return a
-		// status page (that may help debug why the config isn't available) due to
-		// such a small piece of missing information is overly harsh.
-		log.Error(ctx, "system config not yet available, serving status page without it")
-		cfg = config.SystemConfig{}
-	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
@@ -1176,7 +1166,7 @@ func (s *statusServer) Ranges(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+							rep.Metrics(ctx, store.Ident.StoreID, timestamp, isLiveMap),
 						))
 					return false, nil
 				})
@@ -1196,7 +1186,7 @@ func (s *statusServer) Ranges(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+					rep.Metrics(ctx, store.Ident.StoreID, timestamp, isLiveMap),
 				))
 		}
 		return nil
