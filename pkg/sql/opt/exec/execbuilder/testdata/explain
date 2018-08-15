@@ -410,21 +410,17 @@ limit                ·         ·
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
-#TODO(justin): we can't execbuild index joins yet.
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
-#----
-#sort                  ·         ·                 (a, b)                                   a=CONST; +b
-# │                    order     +b                ·                                        ·
-# └── render           ·         ·                 (a, b)                                   a=CONST
-#      │               render 0  test.public.tc.a  ·                                        ·
-#      │               render 1  test.public.tc.b  ·                                        ·
-#      └── index-join  ·         ·                 (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
-#           ├── scan   ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
-#           │          table     tc@c              ·                                        ·
-#           │          spans     /10-/11           ·                                        ·
-#           └── scan   ·         ·                 (a, b, rowid[hidden,omitted])            ·
-#·                     table     tc@primary        ·                                        ·
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+sort             ·      ·           (a, b)              +b
+ │               order  +b          ·                   ·
+ └── index-join  ·      ·           (a, b)              ·
+      ├── scan   ·      ·           (a, rowid[hidden])  ·
+      │          table  tc@c        ·                   ·
+      │          spans  /10-/11     ·                   ·
+      └── scan   ·      ·           (a, b)              ·
+·                table  tc@primary  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
