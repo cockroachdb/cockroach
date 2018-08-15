@@ -723,8 +723,8 @@
     "unix",
     "unix/sigtramp",
   ]
-  revision = "09c6428c201e801ad003ca2bea6daa95ebfc2237"
-  version = "v1.7.1"
+  revision = "a197b52fb6d915176b1e3a1184369758c6adc7c8"
+  version = "v1.7.2"
 
 [[projects]]
   branch = "master"
