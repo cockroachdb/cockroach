@@ -542,8 +542,6 @@ project
            ├── variable: kv.k [type=int]
            └── variable: kv.v [type=int]
 
-# TODO(rytaft): don't qualify the column name in the error message differently
-# than it was qualified in the query.
 build
 SELECT count(*), k+v FROM kv GROUP BY k
 ----

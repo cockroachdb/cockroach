@@ -100,12 +100,16 @@ func (s *scope) inGroupingContext() bool {
 
 // push creates a new scope with this scope as its parent.
 func (s *scope) push() *scope {
-	return &scope{builder: s.builder, parent: s}
+	r := s.builder.allocScope()
+	r.parent = s
+	return r
 }
 
 // replace creates a new scope with the parent of this scope as its parent.
 func (s *scope) replace() *scope {
-	return &scope{builder: s.builder, parent: s.parent}
+	r := s.builder.allocScope()
+	r.parent = s.parent
+	return r
 }
 
 // appendColumns adds newly bound variables to this scope.
@@ -718,8 +722,6 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			break
 		}
 
-		// TODO(peter): the ARRAY flatten operator requires a single column from
-		// the subquery.
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t

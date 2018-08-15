@@ -107,9 +107,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			tab.addIndex(def, nonUniqueIndex)
 		}
 
-		// TODO(rytaft): In the future we will likely want to check for unique
-		// constraints, indexes, and foreign key constraints to determine
-		// nullability, uniqueness, etc.
+		// TODO(rytaft): In the future we will likely want to check for foreign key
+		// constraints.
 	}
 
 	// We need to keep track of the tableID from numeric references. 53 is a magic
