@@ -1305,7 +1305,7 @@
   version = "2017.2.2"
 
 [[projects]]
-  branch = "no-flag"
+  branch = "no-flag-on-delete"
   name = "vitess.io/vitess"
   packages = [
     "go/bytes2",
@@ -1318,12 +1318,12 @@
     "go/vt/sqlparser",
     "go/vt/vterrors",
   ]
-  revision = "9b771c0853f6c6443569a8f14a5e8cdb57ffcbd1"
+  revision = "0ce4a891bcc56213538df72f3b6d85d30e43ceb8"
   source = "https://github.com/cockroachdb/vitess"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "24f1631a158f62585d7805d142405d71312f2609b00cb7a3d268b18b9f5f7f32"
+  inputs-digest = "5a796ea9a2f90290a876f3422b30b8a3fe68fdeb5217309b737e060740b4f070"
   solver-name = "gps-cdcl"
   solver-version = 1
