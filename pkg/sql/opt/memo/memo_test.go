@@ -17,24 +17,24 @@ package memo_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
 func TestMemo(t *testing.T) {
-	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications
 	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
 func TestLogicalProps(t *testing.T) {
-	flags := opt.ExprFmtHideCost | opt.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications
 	runDataDrivenTest(t, "testdata/logprops/", flags)
 }
 
 func TestStats(t *testing.T) {
-	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
@@ -45,7 +45,7 @@ func TestStats(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, path string, fmtFlags opt.ExprFmtFlags) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

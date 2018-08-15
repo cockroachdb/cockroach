@@ -162,38 +162,38 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj7FqxDAQRPt8RZhaELtVde
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
-render               ·         ·                  (y, str, res)                        ·
- │                   render 0  "numtostr.y"       ·                                    ·
- │                   render 1  "numtostr.str"     ·                                    ·
- │                   render 2  res                ·                                    ·
- └── sort            ·         ·                  (res, "numtostr.y", "numtostr.str")  +res
-      │              order     +res               ·                                    ·
-      └── render     ·         ·                  (res, "numtostr.y", "numtostr.str")  ·
-           │         render 0  repeat('test', y)  ·                                    ·
-           │         render 1  y                  ·                                    ·
-           │         render 2  str                ·                                    ·
-           └── scan  ·         ·                  (y, str)                             ·
-·                    table     numtostr@primary   ·                                    ·
-·                    spans     ALL                ·                                    ·
+render               ·         ·                  (y, str, res)  ·
+ │                   render 0  y                  ·              ·
+ │                   render 1  str                ·              ·
+ │                   render 2  res                ·              ·
+ └── sort            ·         ·                  (res, y, str)  +res
+      │              order     +res               ·              ·
+      └── render     ·         ·                  (res, y, str)  ·
+           │         render 0  repeat('test', y)  ·              ·
+           │         render 1  y                  ·              ·
+           │         render 2  str                ·              ·
+           └── scan  ·         ·                  (y, str)       ·
+·                    table     numtostr@primary   ·              ·
+·                    spans     ALL                ·              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-render                    ·         ·                  (y, str, res)                        ·
- │                        render 0  "numtostr.y"       ·                                    ·
- │                        render 1  "numtostr.str"     ·                                    ·
- │                        render 2  res                ·                                    ·
- └── limit                ·         ·                  (res, "numtostr.y", "numtostr.str")  +res
-      │                   count     10                 ·                                    ·
-      └── sort            ·         ·                  (res, "numtostr.y", "numtostr.str")  +res
-           │              order     +res               ·                                    ·
-           └── render     ·         ·                  (res, "numtostr.y", "numtostr.str")  ·
-                │         render 0  repeat('test', y)  ·                                    ·
-                │         render 1  y                  ·                                    ·
-                │         render 2  str                ·                                    ·
-                └── scan  ·         ·                  (y, str)                             ·
-·                         table     numtostr@primary   ·                                    ·
-·                         spans     ALL                ·                                    ·
+render                    ·         ·                  (y, str, res)  ·
+ │                        render 0  y                  ·              ·
+ │                        render 1  str                ·              ·
+ │                        render 2  res                ·              ·
+ └── limit                ·         ·                  (res, y, str)  +res
+      │                   count     10                 ·              ·
+      └── sort            ·         ·                  (res, y, str)  +res
+           │              order     +res               ·              ·
+           └── render     ·         ·                  (res, y, str)  ·
+                │         render 0  repeat('test', y)  ·              ·
+                │         render 1  y                  ·              ·
+                │         render 2  str                ·              ·
+                └── scan  ·         ·                  (y, str)       ·
+·                         table     numtostr@primary   ·              ·
+·                         spans     ALL                ·              ·
 
 # Regression test for #20481.
 query T

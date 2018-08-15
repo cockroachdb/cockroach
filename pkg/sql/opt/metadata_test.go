@@ -94,7 +94,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	label := md.ColumnLabel(colID)
-	if label != "a.x" {
+	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 
@@ -109,7 +109,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	label = md.ColumnLabel(otherTabID.ColumnID(0))
-	if label != "b.x" {
+	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 }

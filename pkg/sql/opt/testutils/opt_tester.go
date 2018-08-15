@@ -63,7 +63,7 @@ type OptTester struct {
 type OptTesterFlags struct {
 	// Format controls the output detail of build / opt/ optsteps command
 	// directives.
-	ExprFormat opt.ExprFmtFlags
+	ExprFormat memo.ExprFmtFlags
 
 	// MemoFormat controls the output detail of memo command directives.
 	MemoFormat memo.FmtFlags
@@ -144,8 +144,9 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //
 //  - format: controls the formatting of expressions for build, opt, and
 //    optsteps commands. Possible values: show-all, hide-all, or any combination
-//    of hide-cost, hide-stats, hide-constraints, hide-scalars. Example:
-//      build format={hide-cost,hide-stats}
+//    of hide-cost, hide-stats, hide-constraints, hide-scalars, hide-qual.
+//    For example:
+//      build format=(hide-cost,hide-stats)
 //
 //  - raw-memo: show the raw memo groups, in the order they were originally
 //	  added, including any "orphaned" groups.
@@ -269,14 +270,15 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("format flag requires value(s)")
 		}
 		for _, v := range arg.Vals {
-			m := map[string]opt.ExprFmtFlags{
-				"show-all":         opt.ExprFmtShowAll,
-				"hide-all":         opt.ExprFmtHideAll,
-				"hide-stats":       opt.ExprFmtHideStats,
-				"hide-cost":        opt.ExprFmtHideCost,
-				"hide-constraints": opt.ExprFmtHideConstraints,
-				"hide-ruleprops":   opt.ExprFmtHideRuleProps,
-				"hide-scalars":     opt.ExprFmtHideScalars,
+			m := map[string]memo.ExprFmtFlags{
+				"show-all":         memo.ExprFmtShowAll,
+				"hide-all":         memo.ExprFmtHideAll,
+				"hide-stats":       memo.ExprFmtHideStats,
+				"hide-cost":        memo.ExprFmtHideCost,
+				"hide-constraints": memo.ExprFmtHideConstraints,
+				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
+				"hide-scalars":     memo.ExprFmtHideScalars,
+				"hide-qual":        memo.ExprFmtHideQualifications,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
@@ -294,7 +296,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 	case "fully-qualify-names":
 		f.FullyQualifyNames = true
 		// Hiding qualifications defeats the purpose.
-		f.ExprFormat &= ^opt.ExprFmtHideQualifications
+		f.ExprFormat &= ^memo.ExprFmtHideQualifications
 
 	case "rule":
 		if len(arg.Vals) != 1 {

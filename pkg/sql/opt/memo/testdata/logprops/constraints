@@ -811,7 +811,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 ----
 scan c@v
@@ -824,7 +824,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
 ----
 scan c@v
@@ -837,7 +837,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
 ----
 scan c@v
@@ -850,7 +850,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
 ----
 scan c@v
@@ -863,7 +863,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
 ----
 scan c@v
@@ -876,7 +876,7 @@ scan c@v
  ├── prune: (1)
  └── interesting orderings: (+1) (+3,+2,+1)
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
 ----
 scan c@v
@@ -1024,7 +1024,7 @@ TABLE d
  └── INDEX primary
       └── k int not null
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
 ----
 select
@@ -1036,7 +1036,7 @@ select
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
- │    ├── columns: d.k:1(int!null) d.p:2(int) d.q:3(int)
+ │    ├── columns: k:1(int!null) p:2(int) q:3(int)
  │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
  │    ├── cost: 1060
  │    ├── key: (1)
@@ -1059,7 +1059,7 @@ select
                      ├── const: 1 [type=int]
                      └── const: 4 [type=int]
 
-opt format=show-all
+opt format=hide-qual
 SELECT * FROM d WHERE (p, q) IN ((2, 1), (3, 1), (4, 1))
 ----
 select
@@ -1071,7 +1071,7 @@ select
  ├── prune: (1)
  ├── interesting orderings: (+1)
  ├── scan d
- │    ├── columns: d.k:1(int!null) d.p:2(int) d.q:3(int)
+ │    ├── columns: k:1(int!null) p:2(int) q:3(int)
  │    ├── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
  │    ├── cost: 1060
  │    ├── key: (1)

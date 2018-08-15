@@ -154,8 +154,8 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 			if !ok {
 				panic(fmt.Errorf(
 					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
-					memo.MakeNormExprView(c.f.mem, src).FormatString(opt.ExprFmtHideScalars),
-					memo.MakeNormExprView(c.f.mem, dst).FormatString(opt.ExprFmtHideScalars),
+					memo.MakeNormExprView(c.f.mem, src).FormatString(memo.ExprFmtHideScalars),
+					memo.MakeNormExprView(c.f.mem, dst).FormatString(memo.ExprFmtHideScalars),
 				))
 			}
 			colMap.Set(srcCol, dstCol)

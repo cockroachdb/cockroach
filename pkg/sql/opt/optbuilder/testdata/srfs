@@ -524,7 +524,7 @@ build
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 project
- ├── columns: _pg_expandarray:3(tuple{string AS x, int AS n})
+ ├── columns: information_schema._pg_expandarray:3(tuple{string AS x, int AS n})
  ├── inner-join-apply
  │    ├── columns: x:1(string) n:2(int)
  │    ├── values

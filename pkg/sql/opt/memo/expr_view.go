@@ -15,6 +15,8 @@
 package memo
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -220,13 +222,13 @@ func (ev ExprView) bestExprID() BestExprID {
 // String returns a string representation of this expression for testing and
 // debugging. The output shows all properties of the expression.
 func (ev ExprView) String() string {
-	return ev.FormatString(opt.ExprFmtShowAll)
+	return ev.FormatString(ExprFmtShowAll)
 }
 
 // FormatString returns a string representation of this expression for testing
 // and debugging. The given flags control which properties are shown.
-func (ev ExprView) FormatString(flags opt.ExprFmtFlags) string {
-	f := opt.MakeExprFmtCtx(ev.Metadata(), flags)
+func (ev ExprView) FormatString(flags ExprFmtFlags) string {
+	f := MakeExprFmtCtx(&bytes.Buffer{}, flags, ev.mem)
 	tp := treeprinter.New()
 	ev.format(&f, tp)
 	return tp.String()
@@ -255,4 +257,4 @@ func MatchesTupleOfConstants(ev ExprView) bool {
 
 // ExprFmtInterceptor is a callback that can be set to a custom formatting
 // function. If the function returns true, the normal formatting code is bypassed.
-var ExprFmtInterceptor func(f *opt.ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool
+var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool

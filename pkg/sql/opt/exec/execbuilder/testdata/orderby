@@ -581,34 +581,34 @@ CREATE TABLE foo(a INT, b CHAR)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-render               ·         ·            (b, a)                       ·
- │                   render 0  "foo.b"      ·                            ·
- │                   render 1  "foo.a"      ·                            ·
- └── sort            ·         ·            (column4, "foo.a", "foo.b")  +column4
-      │              order     +column4     ·                            ·
-      └── render     ·         ·            (column4, "foo.a", "foo.b")  ·
-           │         render 0  a            ·                            ·
-           │         render 1  a            ·                            ·
-           │         render 2  b            ·                            ·
-           └── scan  ·         ·            (a, b)                       ·
-·                    table     foo@primary  ·                            ·
-·                    spans     ALL          ·                            ·
+render               ·         ·            (b, a)           ·
+ │                   render 0  b            ·                ·
+ │                   render 1  a            ·                ·
+ └── sort            ·         ·            (column4, a, b)  +column4
+      │              order     +column4     ·                ·
+      └── render     ·         ·            (column4, a, b)  ·
+           │         render 0  a            ·                ·
+           │         render 1  a            ·                ·
+           │         render 2  b            ·                ·
+           └── scan  ·         ·            (a, b)           ·
+·                    table     foo@primary  ·                ·
+·                    spans     ALL          ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
-render               ·         ·            (b, a)                       ·
- │                   render 0  "foo.b"      ·                            ·
- │                   render 1  "foo.a"      ·                            ·
- └── sort            ·         ·            (column4, "foo.a", "foo.b")  +column4
-      │              order     +column4     ·                            ·
-      └── render     ·         ·            (column4, "foo.a", "foo.b")  ·
-           │         render 0  b            ·                            ·
-           │         render 1  a            ·                            ·
-           │         render 2  b            ·                            ·
-           └── scan  ·         ·            (a, b)                       ·
-·                    table     foo@primary  ·                            ·
-·                    spans     ALL          ·                            ·
+render               ·         ·            (b, a)           ·
+ │                   render 0  b            ·                ·
+ │                   render 1  a            ·                ·
+ └── sort            ·         ·            (column4, a, b)  +column4
+      │              order     +column4     ·                ·
+      └── render     ·         ·            (column4, a, b)  ·
+           │         render 0  b            ·                ·
+           │         render 1  a            ·                ·
+           │         render 2  b            ·                ·
+           └── scan  ·         ·            (a, b)           ·
+·                    table     foo@primary  ·                ·
+·                    spans     ALL          ·                ·
 
 # ------------------------------------------------------------------------------
 # Check star expansion in ORDER BY.
