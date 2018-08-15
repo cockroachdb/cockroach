@@ -346,6 +346,13 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 	return r.raftFirstIndexLocked()
 }
 
+// GetLeaseAppliedIndex returns the lease index of the last applied command.
+func (r *Replica) GetLeaseAppliedIndex() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.LeaseAppliedIndex
+}
+
 // Snapshot implements the raft.Storage interface. Snapshot requires that
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated

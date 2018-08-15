@@ -22,7 +22,6 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -47,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -1231,9 +1229,13 @@ func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Cut off communication with store2 before the merge.
-	circuitBreaker2 := mtc.transport.GetCircuitBreaker(store2.Ident.NodeID)
-	circuitBreaker2.Break()
+	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
+	// that its LHS isn't aware there's a merge in progress.
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
@@ -1257,48 +1259,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
 
 	// Restore communication with store2. Give it the lease to force all commands
 	// to be applied, including the merge trigger.
-	circuitBreaker2.Reset()
+	lhsRepl2.RaftUnlock()
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
-}
-
-type slowRaftHandler struct {
-	cond struct {
-		blocked bool
-		sync.Cond
-	}
-	storage.RaftMessageHandler
-}
-
-func newSlowRaftHandler(handler storage.RaftMessageHandler) *slowRaftHandler {
-	h := slowRaftHandler{RaftMessageHandler: handler}
-	h.cond.Cond.L = &syncutil.Mutex{}
-	return &h
-}
-
-func (h *slowRaftHandler) block() {
-	h.cond.L.Lock()
-	defer h.cond.L.Unlock()
-	h.cond.blocked = true
-}
-
-func (h *slowRaftHandler) unblock() {
-	h.cond.L.Lock()
-	defer h.cond.L.Unlock()
-	h.cond.blocked = false
-	h.cond.Broadcast()
-}
-
-func (h *slowRaftHandler) HandleRaftRequest(
-	ctx context.Context,
-	req *storage.RaftMessageRequest,
-	respStream storage.RaftMessageResponseStream,
-) *roachpb.Error {
-	h.cond.L.Lock()
-	for h.cond.blocked {
-		h.cond.Wait()
-	}
-	h.cond.L.Unlock()
-	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
@@ -1326,11 +1288,13 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 		return err
 	})
 
-	// Queue up all requests destined for store2 before the merge.
-	slowTransport2 := newSlowRaftHandler(store2)
-	mtc.transport.Listen(store2.StoreID(), slowTransport2)
-	slowTransport2.block()
-	defer slowTransport2.unblock() // in case of early t.Fatal
+	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
+	// that its LHS isn't aware there's a merge in progress.
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
@@ -1355,7 +1319,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	}
 
 	// Flush store2's queued requests.
-	slowTransport2.unblock()
+	lhsRepl2.RaftUnlock()
 
 	// Ensure that the unblocked merge eventually applies and subsumes the RHS.
 	testutils.SucceedsSoon(t, func() error {
@@ -1455,6 +1419,32 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
 		t.Fatal("c replica not destroyed")
+	}
+}
+
+func TestStoreRangeMergeDeadFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0 := mtc.Store(0)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, _, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.stopStore(2)
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	expErr := "merge of range into 1 failed: waiting for all right-hand replicas to catch up"
+	if !testutils.IsPError(pErr, expErr) {
+		t.Fatalf("expected %q error, but got %v", expErr, pErr)
 	}
 }
 

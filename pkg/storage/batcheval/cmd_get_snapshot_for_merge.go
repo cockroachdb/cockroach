@@ -146,6 +146,8 @@ func GetSnapshotForMerge(
 	}
 	reply.Data = snapBatch.Repr()
 
+	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
+
 	return result.Result{
 		Local: result.LocalResult{MaybeWatchForMerge: true},
 	}, nil
