@@ -117,7 +117,7 @@
 # an InnerJoin operator.
 #
 # This rule is not useful for DistinctOn: it can only fire if there are no
-# FIrstAgg aggregates, but in that case the filter would have gotten pushed
+# FirstAgg aggregates, but in that case the filter would have gotten pushed
 # through DistinctOn.
 #
 # This rule is marked as low priority so that it runs after Select filter
@@ -125,7 +125,7 @@
 # preferable to synthesizing a new "col IS NOT NULL" filter.
 [RejectNullsGroupBy, Normalize, LowPriority]
 (Select
-    $input:(GroupBy
+    $input:(GroupBy | ScalarGroupBy
         $innerInput:*
         $aggregations:*
         $def:*
