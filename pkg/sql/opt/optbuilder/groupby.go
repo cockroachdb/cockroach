@@ -42,7 +42,6 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -229,21 +228,22 @@ func (b *Builder) buildAggregation(
 	aggCols := aggOutScope.getAggregateCols()
 	argCols := aggInScope.cols[len(groupings):]
 	for i, agg := range aggInfos {
-		argList := make([]memo.GroupID, len(agg.args))
+		var operands memo.DynamicOperands
 		for j := range agg.args {
 			colID := argCols[0].id
 			argCols = argCols[1:]
-			argList[j] = b.factory.ConstructVariable(b.factory.InternColumnID(colID))
+			arg := b.factory.ConstructVariable(b.factory.InternColumnID(colID))
 			if agg.distinct {
 				// Wrap the argument with AggDistinct.
-				argList[j] = b.factory.ConstructAggDistinct(argList[j])
+				arg = b.factory.ConstructAggDistinct(arg)
 			}
+			operands[j] = memo.DynamicID(arg)
 		}
 		aggOp := aggOpLookup[agg.def.Name]
 		if opt.AggregateIsOrderingSensitive(aggOp) {
 			haveOrderingSensitiveAgg = true
 		}
-		aggCols[i].group = constructAggLookup[aggOp](b.factory, argList)
+		aggCols[i].group = b.factory.DynamicConstruct(aggOp, operands)
 	}
 
 	if haveOrderingSensitiveAgg {
@@ -457,58 +457,4 @@ var aggOpLookup = map[string]opt.Operator{
 	"xor_agg":    opt.XorAggOp,
 	"json_agg":   opt.JsonAggOp,
 	"jsonb_agg":  opt.JsonbAggOp,
-}
-
-var constructAggLookup = map[opt.Operator]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
-	opt.ArrayAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructArrayAgg(argList[0])
-	},
-	opt.AvgOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructAvg(argList[0])
-	},
-	opt.BoolAndOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructBoolAnd(argList[0])
-	},
-	opt.BoolOrOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructBoolOr(argList[0])
-	},
-	opt.ConcatAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructConcatAgg(argList[0])
-	},
-	opt.CountOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructCount(argList[0])
-	},
-	opt.CountRowsOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructCountRows()
-	},
-	opt.MaxOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructMax(argList[0])
-	},
-	opt.MinOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructMin(argList[0])
-	},
-	opt.SumIntOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructSumInt(argList[0])
-	},
-	opt.SumOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructSum(argList[0])
-	},
-	opt.SqrDiffOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructSqrDiff(argList[0])
-	},
-	opt.VarianceOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructVariance(argList[0])
-	},
-	opt.StdDevOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructStdDev(argList[0])
-	},
-	opt.XorAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructXorAgg(argList[0])
-	},
-	opt.JsonAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructJsonAgg(argList[0])
-	},
-	opt.JsonbAggOp: func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructJsonbAgg(argList[0])
-	},
 }
