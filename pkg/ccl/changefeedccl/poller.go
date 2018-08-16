@@ -109,6 +109,8 @@ func equalSpanSets(a, b roachpb.Spans) bool {
 	if len(a) != len(b) {
 		return false
 	}
+	a = append(roachpb.Spans(nil), a...)
+	b = append(roachpb.Spans(nil), b...)
 	sort.Sort(a)
 	sort.Sort(b)
 	for i := range a {
