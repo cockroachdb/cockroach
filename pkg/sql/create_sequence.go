@@ -82,11 +82,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
-
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
