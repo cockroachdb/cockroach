@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -354,6 +355,26 @@ func (p *planner) initiateDropTable(
 			Name:     tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
+
+	// Mark all jobs scheduled for schema changes as successful.
+	var id sqlbase.MutationID
+	for _, m := range tableDesc.Mutations {
+		if id != m.MutationID {
+			id = m.MutationID
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, id)
+			if err != nil {
+				return err
+			}
+			job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+			if err != nil {
+				return err
+			}
+			if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+				return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
+			}
+		}
+	}
+
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema

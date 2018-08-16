@@ -343,7 +343,7 @@ func (sc *SchemaChanger) getJobIDForMutation(
 			return makeErrTableVersionMismatch(tableDesc.Version, version)
 		}
 
-		jobID, err = sc.getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
+		jobID, err = getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
 		return err
 	})
 	return jobID, err
@@ -351,7 +351,7 @@ func (sc *SchemaChanger) getJobIDForMutation(
 
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
-func (sc *SchemaChanger) getJobIDForMutationWithDescriptor(
+func getJobIDForMutationWithDescriptor(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) (int64, error) {
 	for _, job := range tableDesc.MutationJobs {
@@ -360,7 +360,7 @@ func (sc *SchemaChanger) getJobIDForMutationWithDescriptor(
 		}
 	}
 
-	return 0, errors.Errorf("job not found for table id %d, mutation %d", sc.tableID, mutationID)
+	return 0, errors.Errorf("job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
 }
 
 // nRanges returns the number of ranges that cover a set of spans.
