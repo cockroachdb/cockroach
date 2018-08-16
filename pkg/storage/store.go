@@ -2345,8 +2345,15 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// txnWaitQueue after we clear it.
 	origRng.txnWaitQueue.Clear(false /* disable */)
 
-	// TODO(nvanbenschoten): fix for rangefeed.
-	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
+	// The rangefeed processor will no longer be provided logical ops for
+	// its entire range, so it needs to be shut down and all registrations
+	// need to retry.
+	// TODO(nvanbenschoten): It should be possible to only reject registrations
+	// that overlap with the new range of the split and keep registrations that
+	// are only interested in keys that are still on the original range running.
+	origRng.disconnectRangefeedWithReasonRaftMuLocked(
+		roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+	)
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
@@ -2401,6 +2408,25 @@ func (s *Store) MergeRange(
 	leftRepl.raftMu.AssertHeld()
 	rightRepl.raftMu.AssertHeld()
 
+	// Shut down rangefeed processors on either side of the merge.
+	//
+	// It isn't strictly necessary to shut-down a rangefeed processor on the
+	// surviving replica in a merge, but we choose to in order to avoid clients
+	// who were monitoring both sides of the merge from establishing multiple
+	// partial rangefeeds to the surviving range.
+	// TODO(nvanbenschoten): does this make sense? We could just adjust the
+	// bounds of the leftRepl.Processor.
+	//
+	// NB: removeReplicaImpl also disconnects any initialized rangefeeds with
+	// REASON_REPLICA_REMOVED. That's ok because we will have already
+	// disconnected the rangefeed here.
+	leftRepl.disconnectRangefeedWithReasonRaftMuLocked(
+		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+	)
+	rightRepl.disconnectRangefeedWithReasonRaftMuLocked(
+		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+	)
+
 	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
 		return err
 	}
@@ -2427,9 +2453,6 @@ func (s *Store) MergeRange(
 	// Clear the wait queue to redirect the queued transactions to the
 	// left-hand replica, if necessary.
 	rightRepl.txnWaitQueue.Clear(true /* disable */)
-
-	// TODO(nvanbenschoten): fix for rangefeed.
-	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
@@ -2597,6 +2620,11 @@ func (s *Store) removeReplicaImpl(
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 	s.mu.Unlock()
+
+	// The replica will no longer exist, so cancel any rangefeed registrations.
+	rep.disconnectRangefeedWithReasonRaftMuLocked(
+		roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+	)
 
 	// Mark the replica as destroyed and (optionally) destroy the on-disk data
 	// while not holding Store.mu. This is safe because we're holding

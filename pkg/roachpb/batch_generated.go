@@ -70,6 +70,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IntentMissing
 	case *ErrorDetail_MergeInProgress:
 		return t.MergeInProgress
+	case *ErrorDetail_RangefeedRetry:
+		return t.RangefeedRetry
 	default:
 		return nil
 	}
@@ -311,6 +313,8 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 		union = &ErrorDetail_IntentMissing{t}
 	case *MergeInProgressError:
 		union = &ErrorDetail_MergeInProgress{t}
+	case *RangeFeedRetryError:
+		union = &ErrorDetail_RangefeedRetry{t}
 	default:
 		return false
 	}

@@ -935,8 +935,12 @@ func (r *Replica) applySnapshot(
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 
-	// TODO(nvanbenschoten): fix for rangefeed.
-	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
+	// The rangefeed processor is listening for the logical ops attached to
+	// each raft command. These will be lost during a snapshot, so disconnect
+	// the rangefeed, if one exists.
+	r.disconnectRangefeedWithReasonRaftMuLocked(
+		roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+	)
 
 	// As the last deferred action after committing the batch, update other
 	// fields which are uninitialized or need updating. This may not happen
