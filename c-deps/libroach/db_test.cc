@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include "db.h"
+#include "file_registry.h"
 #include "include/libroach.h"
 #include "status.h"
 #include "testutils.h"
@@ -30,29 +31,78 @@ TEST(Libroach, DBOpenHook) {
   // Try extra_options with anything at all.
   db_opts.extra_options = ToDBSlice("blah");
   EXPECT_ERR(DBOpenHookOSS(nullptr, "", db_opts, nullptr),
-             "DBOptions has extra_options, but OSS code cannot handle them");
+             "encryption options are not supported in OSS builds");
 }
 
 TEST(Libroach, DBOpen) {
-  DBOptions db_opts = defaultDBOptions();
-  DBEngine* db;
+  // Use a real directory, we need to create a file_registry.
+  TempDirHandler dir;
 
-  EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
-  DBEnvStatsResult stats;
-  EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
-  EXPECT_STREQ(stats.encryption_status.data, NULL);
-  EXPECT_EQ(stats.total_files, 0);
-  EXPECT_EQ(stats.total_bytes, 0);
-  EXPECT_EQ(stats.active_key_files, 0);
-  EXPECT_EQ(stats.active_key_bytes, 0);
+  {
+    DBOptions db_opts = defaultDBOptions();
 
-  // Fetch registries, parse, and check that they're empty.
-  DBEncryptionRegistries result;
-  EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
-  EXPECT_STREQ(result.key_registry.data, NULL);
-  EXPECT_STREQ(result.file_registry.data, NULL);
+    DBEngine* db;
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBEnvStatsResult stats;
+    EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+    EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.total_files, 0);
+    EXPECT_EQ(stats.total_bytes, 0);
+    EXPECT_EQ(stats.active_key_files, 0);
+    EXPECT_EQ(stats.active_key_bytes, 0);
 
-  DBClose(db);
+    // Fetch registries, parse, and check that they're empty.
+    DBEncryptionRegistries result;
+    EXPECT_STREQ(DBGetEncryptionRegistries(db, &result).data, NULL);
+    EXPECT_STREQ(result.key_registry.data, NULL);
+    EXPECT_STREQ(result.file_registry.data, NULL);
+
+    DBClose(db);
+  }
+  {
+    // We're at storage version FileRegistry, but we don't have one.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+
+    DBEngine* db;
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
+    DBClose(db);
+  }
+  {
+    // We're at storage version FileRegistry, and the file_registry file exists:
+    // this is not supported in OSS mode, or without encryption options.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+
+    // Create bogus file registry.
+    ASSERT_OK(rocksdb::WriteStringToFile(rocksdb::Env::Default(), "",
+                                         dir.Path(kFileRegistryFilename), true));
+
+    DBEngine* db;
+    auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
+    EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
+                 "Invalid argument: encryption was used on this store before, but no encryption "
+                 "flags specified. You need a CCL build and must fully specify the "
+                 "--enterprise-encryption flag");
+    ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
+  }
+  {
+    // We're at storage version FileRegistry, and the file_registry file exists.
+    // We do have encryption options, but those are not supported in OSS builds.
+    DBOptions db_opts = defaultDBOptions();
+    db_opts.use_file_registry = true;
+    db_opts.extra_options = ToDBSlice("blah");
+
+    // Create bogus file registry.
+    ASSERT_OK(rocksdb::WriteStringToFile(rocksdb::Env::Default(), "",
+                                         dir.Path(kFileRegistryFilename), true));
+
+    DBEngine* db;
+    auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
+    EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
+                 "Invalid argument: encryption options are not supported in OSS builds");
+    ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
+  }
 }
 
 TEST(Libroach, BatchSSTablesForCompaction) {

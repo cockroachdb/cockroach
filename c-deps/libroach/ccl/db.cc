@@ -126,6 +126,13 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
     return rocksdb::Status::OK();
   }
 
+  // The Go code sets the "file_registry" storage version if we specified encryption flags,
+  // but let's double check anyway.
+  if (!db_opts.use_file_registry) {
+    return rocksdb::Status::InvalidArgument(
+        "on-disk version does not support encryption, but we found encryption flags");
+  }
+
   // We use a logger at V(0) for encryption status instead of the existing info_log.
   // This should only be used to occasional logging (eg: key loading and rotation).
   std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(0));
@@ -144,13 +151,6 @@ rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const s
                   "*** WARNING*** Encryption requested, but could not disable core dumps: %s. Keys "
                   "may be leaked in core dumps!",
                   status.getState());
-  }
-
-  // The Go code sets the "file_registry" storage version if we specified encryption flags,
-  // but let's double check anyway.
-  if (!db_opts.use_file_registry) {
-    return rocksdb::Status::InvalidArgument(
-        "on-disk version does not support encryption, but we found encryption flags");
   }
 
   // Parse extra_options.
