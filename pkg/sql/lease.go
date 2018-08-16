@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1672,4 +1674,78 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 			}
 		}
 	})
+}
+
+// tableLeaseRefreshLimit is the upper-limit on the number of table leases
+// that will continuously have their lease refreshed.
+var tableLeaseRefreshLimit = settings.RegisterIntSetting(
+	"sql.tablecache.lease.refresh_limit",
+	"maximum number of tables to periodically refresh leases for",
+	50,
+)
+
+// PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
+// traffic immediately.
+// TODO(vivek): Remove once epoch based table leases are implemented.
+func (m *LeaseManager) PeriodicallyRefreshSomeLeases() {
+	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		tickDuration := m.leaseDuration / 2
+		if tickDuration <= 0 {
+			return
+		}
+		ticker := time.NewTicker(tickDuration)
+		tickChan := ticker.C
+		defer ticker.Stop()
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+
+			case <-tickChan:
+				m.refreshSomeLeases(ctx)
+			}
+		}
+	})
+}
+
+// Refresh some of the current leases.
+func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
+	limit := tableLeaseRefreshLimit.Get(&m.execCfg.Settings.SV)
+	if limit <= 0 {
+		return
+	}
+	// Construct a list of tables needing their leases to be reacquired.
+	m.mu.Lock()
+	ids := make([]sqlbase.ID, 0, len(m.mu.tables))
+	var i int64
+	for k, table := range m.mu.tables {
+		if i++; i > limit {
+			break
+		}
+		table.mu.Lock()
+		dropped := table.mu.dropped
+		table.mu.Unlock()
+		if !dropped {
+			ids = append(ids, k)
+		}
+	}
+	m.mu.Unlock()
+	// Limit the number of concurrent lease refreshes.
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
+	for i := range ids {
+		id := ids[i]
+		wg.Add(1)
+		if err := m.stopper.RunLimitedAsyncTask(
+			ctx, fmt.Sprintf("refresh table:%d lease", id), sem, true /*wait*/, func(ctx context.Context) {
+				defer wg.Done()
+				if _, err := acquireNodeLease(ctx, m, id); err != nil {
+					log.Infof(ctx, "refreshing table: %d lease failed: %s", id, err)
+				}
+			}); err != nil {
+			log.Infof(ctx, "didnt refresh table: %d lease: %s", id, err)
+			wg.Done()
+		}
+	}
+	wg.Wait()
 }
