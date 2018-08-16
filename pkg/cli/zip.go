@@ -25,6 +25,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -103,6 +104,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		eventsName    = base + "/events"
 		gossipLName   = base + "/gossip/liveness"
 		gossipNName   = base + "/gossip/nodes"
+		alertsName    = base + "/alerts"
 		livenessName  = base + "/liveness"
 		metricsName   = base + "/metrics"
 		nodesPrefix   = base + "/nodes"
@@ -204,19 +206,16 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	{
-		queryLiveness := "SELECT * FROM crdb_internal.gossip_liveness;"
-		queryNodes := "SELECT * FROM crdb_internal.gossip_nodes;"
-		queryMetrics := "SELECT * FROM crdb_internal.node_metrics;"
-
-		if err := dumpTableDataForZip(z, sqlConn, queryLiveness, gossipLName); err != nil {
-			return err
-		}
-		if err := dumpTableDataForZip(z, sqlConn, queryNodes, gossipNName); err != nil {
-			return err
-		}
-		if err := dumpTableDataForZip(z, sqlConn, queryMetrics, metricsName); err != nil {
-			return err
+	for _, item := range []struct {
+		query, name string
+	}{
+		{"SELECT * FROM crdb_internal.gossip_liveness;", gossipLName},
+		{"SELECT * FROM crdb_internal.gossip_nodes;", gossipNName},
+		{"SELECT * FROM crdb_internal.node_metrics;", metricsName},
+		{"SELECT * FROM crdb_internal.gossip_alerts;", alertsName},
+	} {
+		if err := dumpTableDataForZip(z, sqlConn, item.query, item.name); err != nil {
+			return errors.Wrap(err, item.name)
 		}
 	}
 
