@@ -619,10 +619,10 @@ func TestShowSessions(t *testing.T) {
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
 
 	// We'll skip "internal" sessions, as those are unpredictable.
-	const showSessions = `
+	var showSessions = fmt.Sprintf(`
 	select node_id, (now() - session_start)::float from
-		[show cluster sessions] where application_name not like 'internal-%'
-	`
+		[show cluster sessions] where application_name not like '%s%%'
+	`, sql.InternalAppNamePrefix)
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {
