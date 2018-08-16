@@ -70,7 +70,19 @@ type Statistics struct {
 func (s *Statistics) String() string {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	fmt.Fprintf(&buf, "[rows=%.9g]", s.RowCount)
+
+	return buf.String()
+}
+
+func (s *Statistics) ColStatCount() int {
+	return len(s.ColStats) + len(s.MultiColStats)
+}
+
+func (s *Statistics) ColStatString(i int) string {
+	var buf bytes.Buffer
+	// TODO(madhavsuresh): This seems expensive, but is only for test. However,
+	// this can lead to tests that become heavy.
 	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
 	for _, colStat := range s.ColStats {
 		colStats = append(colStats, *colStat)
@@ -79,11 +91,18 @@ func (s *Statistics) String() string {
 		colStats = append(colStats, *colStat)
 	}
 	sort.Sort(colStats)
-	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
-	}
-	buf.WriteString("]")
 
+	colStat := colStats[i]
+	fmt.Fprintf(&buf, "distinct%s=%.9g", colStat.Cols.String(), colStat.GetDistinctCount())
+	// distinctCountUpdates always have one element
+	for index, update := range colStat.distinctCountUpdates {
+		if index == 0 {
+			fmt.Fprintf(&buf, "[%.9g-{%d}-%.9g", update.before, update.desc, update.after)
+		} else {
+			fmt.Fprintf(&buf, "-{%d}-%.9g", update.desc, update.after)
+		}
+	}
+	fmt.Fprintf(&buf, "]")
 	return buf.String()
 }
 
@@ -112,7 +131,35 @@ type ColumnStatistic struct {
 
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
-	DistinctCount float64
+	distinctCount float64
+
+	distinctCountUpdates []DistinctUpdate
+}
+
+func (c ColumnStatistic) GetDistinctCount() float64 {
+	return c.distinctCount
+}
+
+func (c *ColumnStatistic) UpdateDistinctCount(distinctCount float64, updateType DistinctUpdateCtx) {
+	// TODO(madhavsuresh): maybe update this to take in the expression view
+	// TODO(madhavsuresh): consider do not track options
+	c.distinctCountUpdates = append(c.distinctCountUpdates, DistinctUpdate{updateType, c.distinctCount, distinctCount})
+	c.distinctCount = distinctCount
+}
+
+type UpdateContext struct {
+	Distinct DistinctUpdateCtx
+}
+
+type DistinctUpdate struct {
+	// What kind of distinct update is this?
+	desc DistinctUpdateCtx
+
+	// What was the value before the update
+	before float64
+
+	// What was the value after the update
+	after float64
 }
 
 // ColumnStatistics is a slice of ColumnStatistic values.
@@ -150,3 +197,19 @@ func (c ColumnStatistics) Less(i, j int) bool {
 func (c ColumnStatistics) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
 }
+
+type DistinctUpdateCtx uint32
+
+const (
+	DistinctUpdateUnannotated DistinctUpdateCtx = iota
+	DistinctUpdateDontTrack
+	DistinctUpdateFromTableStats
+	DistinctUpdateFromConstraints
+	DistinctUpdateFromEquivalency
+	DistinctUpdateFromSelectivityRadu
+	DistinctUpdateZeroSelectivity
+	DistinctUpdateFromSelectivity
+	DistinctCountMinRowCount
+	DistinctUpdateLaxRowCount
+	DistinctUpdateBooleanType
+)

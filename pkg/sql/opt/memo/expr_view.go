@@ -383,6 +383,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(opt.ExprFmtHideStats) {
+		ev.formatStats(f, tp)
 		tp.Childf("stats: %s", &logProps.Relational.Stats)
 	}
 
@@ -424,6 +425,13 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 
 	for i := 0; i < ev.ChildCount(); i++ {
 		ev.Child(i).format(f, tp)
+	}
+}
+
+func (ev ExprView) formatStats(f *opt.ExprFmtCtx, tp treeprinter.Node) {
+	logProps := ev.Logical()
+	for i := 0; i < logProps.Relational.Stats.ColStatCount(); i++ {
+		tp.Childf(logProps.Relational.Stats.ColStatString(i))
 	}
 }
 
