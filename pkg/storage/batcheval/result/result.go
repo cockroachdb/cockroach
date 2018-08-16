@@ -48,14 +48,9 @@ type LocalResult struct {
 	// commit fails, or we may accidentally make uncommitted values
 	// live.
 	EndTxns *[]EndTxnIntents
-	// Whether we successfully or non-successfully requested a lease.
-	//
-	// TODO(tschottdorf): Update this counter correctly with prop-eval'ed KV
-	// in the following case:
-	// - proposal does not fail fast and goes through Raft
-	// - downstream-of-Raft logic identifies a conflict and returns an error
-	// The downstream-of-Raft logic does not exist at time of writing.
-	LeaseMetricsResult *LeaseMetricsType
+	// Metrics contains counters which are to be passed to the
+	// metrics subsystem.
+	Metrics *Metrics
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -309,12 +304,12 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Local.EndTxns = nil
 
-	if p.Local.LeaseMetricsResult == nil {
-		p.Local.LeaseMetricsResult = q.Local.LeaseMetricsResult
-	} else if q.Local.LeaseMetricsResult != nil {
-		return errors.New("conflicting LeaseMetricsResult")
+	if p.Local.Metrics == nil {
+		p.Local.Metrics = q.Local.Metrics
+	} else if q.Local.Metrics != nil {
+		p.Local.Metrics.Add(*q.Local.Metrics)
 	}
-	q.Local.LeaseMetricsResult = nil
+	q.Local.Metrics = nil
 
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness
