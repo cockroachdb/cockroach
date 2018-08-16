@@ -348,7 +348,8 @@ func (ot *OptTester) Optimize() (memo.ExprView, error) {
 // Memo returns a string that shows the memo data structure that is constructed
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
-	o := xform.NewOptimizer(&ot.evalCtx)
+	var o xform.Optimizer
+	o.Init(&ot.evalCtx)
 	root, required, err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return "", err
@@ -370,7 +371,8 @@ func (ot *OptTester) RuleStats() (string, error) {
 		stats[i].rule = opt.RuleName(i)
 	}
 
-	o := xform.NewOptimizer(&ot.evalCtx)
+	var o xform.Optimizer
+	o.Init(&ot.evalCtx)
 
 	o.NotifyOnAppliedRule(
 		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
@@ -642,7 +644,8 @@ func (ot *OptTester) buildExpr(
 func (ot *OptTester) optimizeExpr(
 	allowNormalizations, allowExplorations bool,
 ) (memo.ExprView, error) {
-	o := xform.NewOptimizer(&ot.evalCtx)
+	var o xform.Optimizer
+	o.Init(&ot.evalCtx)
 	if !allowExplorations {
 		if allowNormalizations {
 			o.DisableExplorations()

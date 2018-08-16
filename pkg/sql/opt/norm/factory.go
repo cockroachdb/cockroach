@@ -60,8 +60,10 @@ type AppliedRuleFunc func(
 // optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
 type Factory struct {
-	mem     *memo.Memo
 	evalCtx *tree.EvalContext
+
+	// mem is the Memo data structure that the factory builds.
+	mem *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
 	// used by the normalization rules. It wraps an unnamed xfunc.CustomFuncs,
@@ -99,11 +101,10 @@ type Factory struct {
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
-// This must be called exactly once before the factory can be used (and never
-// again).
+// This must be called before the factory can be used (or reused).
 func (f *Factory) Init(evalCtx *tree.EvalContext) {
-	f.mem = memo.New()
 	f.evalCtx = evalCtx
+	f.mem = memo.New()
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
