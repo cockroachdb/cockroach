@@ -1277,7 +1277,9 @@ func (ds *DistSender) sendToReplicas(
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 	}
-	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
+
+	curReplica := transport.NextReplica()
+	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), curReplica)
 	br, err := transport.SendNext(ctx)
 
 	// This loop will retry operations that fail with errors that reflect
@@ -1302,6 +1304,21 @@ func (ds *DistSender) sendToReplicas(
 				ambiguousError = err
 			}
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			if storeID, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok && curReplica.StoreID == storeID {
+				// If the down replica is cached as the lease holder, evict
+				// it. The only other eviction happens below on
+				// NotLeaseHolderError, but if the next replica is the
+				// actual lease holder, we're never going to receive one of
+				// those and will thus pay the price of trying the down node
+				// first forever.
+				//
+				// NB: we could consider instead adding a successful reply
+				// from the next replica into the cache, but without a
+				// leaseholder (and taking into account that the local
+				// node can't be down) it won't take long until we talk
+				// to a replica that tells us who the leaseholder is.
+				ds.leaseHolderCache.Update(ctx, rangeID, 0 /* evict */)
+			}
 		} else {
 			propagateError := false
 			switch tErr := br.Error.GetDetail().(type) {
@@ -1375,7 +1392,8 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		ds.metrics.NextReplicaErrCount.Inc(1)
-		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, transport.NextReplica())
+		curReplica = transport.NextReplica()
+		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
 		br, err = transport.SendNext(ctx)
 	}
 }

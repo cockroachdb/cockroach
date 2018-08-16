@@ -131,21 +131,24 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (Transport, error) {
-		return &simpleTransportAdapter{fn, opts, replicas, args, false}, nil
+		return &simpleTransportAdapter{
+			fn:       fn,
+			opts:     opts,
+			replicas: replicas,
+			args:     args}, nil
 	}
 }
 
 type simpleTransportAdapter struct {
-	fn       simpleSendFn
-	opts     SendOptions
-	replicas ReplicaSlice
-	args     roachpb.BatchRequest
-
-	called bool
+	fn          simpleSendFn
+	opts        SendOptions
+	replicas    ReplicaSlice
+	args        roachpb.BatchRequest
+	nextReplica int
 }
 
 func (l *simpleTransportAdapter) IsExhausted() bool {
-	return l.called
+	return l.nextReplica >= len(l.replicas)
 }
 
 func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
@@ -153,11 +156,15 @@ func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
 }
 
 func (l *simpleTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
-	l.called = true
+	l.args.Replica = l.replicas[l.nextReplica].ReplicaDescriptor
+	l.nextReplica++
 	return l.fn(ctx, l.opts, l.replicas, l.args)
 }
 
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
+	if !l.IsExhausted() {
+		return l.replicas[l.nextReplica].ReplicaDescriptor
+	}
 	return roachpb.ReplicaDescriptor{}
 }
 
@@ -565,6 +572,93 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		t.Errorf("lease holder cache was not updated: expected %+v", leaseHolder)
 	} else if cur != leaseHolder.StoreID {
 		t.Errorf("lease holder cache was not updated: expected %d, got %d", leaseHolder.StoreID, cur)
+	}
+}
+
+// This test verifies that when we have a cached leaseholder that is down
+// it is ejected from the cache.
+func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	g, clock := makeGossip(t, stopper)
+	if err := g.AddInfoProto(
+		gossip.MakeNodeIDKey(roachpb.NodeID(2)),
+		&roachpb.NodeDescriptor{
+			NodeID:  2,
+			Address: util.MakeUnresolvedAddr("tcp", "neverused:12345"),
+		},
+		gossip.NodeDescriptorTTL,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var contacted1, contacted2 bool
+
+	transport := func(
+		ctx context.Context,
+		opts SendOptions,
+		replicas ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		switch ba.Replica.StoreID {
+		case 1:
+			contacted1 = true
+			return nil, errors.New("mock RPC error")
+		case 2:
+			contacted2 = true
+			return ba.CreateReply(), nil
+		default:
+			panic("unexpected replica: " + ba.Replica.String())
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transport),
+		},
+		RangeDescriptorDB: mockRangeDescriptorDBForDescs(
+			roachpb.RangeDescriptor{
+				RangeID:  1,
+				StartKey: roachpb.RKeyMin,
+				EndKey:   roachpb.RKeyMax,
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						NodeID:  1,
+						StoreID: 1,
+					},
+					{
+						NodeID:  2,
+						StoreID: 2,
+					},
+				},
+			}),
+	}
+
+	ds := NewDistSender(cfg, g)
+	ds.LeaseHolderCache().Update(ctx, roachpb.RangeID(1), roachpb.StoreID(1))
+
+	var ba roachpb.BatchRequest
+	ba.RangeID = 1
+	get := &roachpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
+
+	if _, pErr := ds.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !contacted1 || !contacted2 {
+		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
+	}
+
+	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); ok {
+		t.Fatalf("expected no lease holder for r1, but got s%d", storeID)
 	}
 }
 
