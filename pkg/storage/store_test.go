@@ -555,7 +555,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Remove range 1.
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -571,7 +571,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to remove range 1 again.
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err == nil {
 		t.Fatal("expected error re-removing same range")
 	}
@@ -679,14 +679,14 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	}
 	expectedErr := "replica descriptor's ID has changed"
 	if err := store.RemoveReplica(context.Background(), rep, origDesc.NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); !testutils.IsError(err, expectedErr) {
 		t.Fatalf("expected error %q but got %v", expectedErr, err)
 	}
 
 	// Now try a fresh descriptor and succeed.
 	if err := store.RemoveReplica(context.Background(), rep, rep.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +703,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -744,7 +744,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		t.Error(err)
 	}
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -811,7 +811,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 	// Remove range 1.
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -871,7 +871,7 @@ func TestLookupPrecedingReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -930,7 +930,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		t.Error(err)
 	}
 	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -2535,7 +2535,7 @@ func TestMaybeRemove(t *testing.T) {
 		t.Error(err)
 	}
 	if err := store.RemoveReplica(context.Background(), repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -2619,7 +2619,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		t.Error(err)
 	}
 	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Error(err)
 	}
@@ -2713,7 +2713,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2788,7 +2788,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
+		DestroyReplica: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -2929,7 +2929,7 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 				defer repl1.mu.Unlock()
 
 				go func() {
-					errChan <- s.RemoveReplica(ctx, repl1, c.descNextReplicaID, RemoveOptions{DestroyData: true})
+					errChan <- s.RemoveReplica(ctx, repl1, c.descNextReplicaID, RemoveOptions{DestroyReplica: true})
 				}()
 
 				time.Sleep(1 * time.Millisecond)

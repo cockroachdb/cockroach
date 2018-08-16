@@ -233,7 +233,7 @@ func (rgcq *replicaGCQueue) process(
 			log.Infof(ctx, "destroying local data")
 		}
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
-			DestroyData: true,
+			DestroyReplica: true,
 		}); err != nil {
 			return err
 		}
@@ -287,7 +287,7 @@ func (rgcq *replicaGCQueue) process(
 		// have new replicas.
 		const nextReplicaID = math.MaxInt32
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
-			DestroyData: true,
+			DestroyReplica: true,
 		}); err != nil {
 			return err
 		}

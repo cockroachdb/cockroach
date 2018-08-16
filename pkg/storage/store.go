@@ -2395,20 +2395,17 @@ func (s *Store) MergeRange(
 	leftRepl.raftMu.AssertHeld()
 	rightRepl.raftMu.AssertHeld()
 
-	if rightRepl.IsInitialized() {
-		// Note that we were called (indirectly) from raft processing so we must
-		// call removeReplicaImpl directly to avoid deadlocking on the right-hand
-		// replica's raftMu.
-		if err := s.removeReplicaImpl(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
-			DestroyData: false,
-		}); err != nil {
-			return errors.Errorf("cannot remove range: %s", err)
-		}
-	} else {
-		s.mu.Lock()
-		s.unlinkReplicaByRangeIDLocked(rightRepl.RangeID)
-		_ = s.removePlaceholderLocked(ctx, rightRepl.RangeID)
-		s.mu.Unlock()
+	if err := rightRepl.postDestroyRaftMuLocked(ctx); err != nil {
+		return err
+	}
+
+	// Note that we were called (indirectly) from raft processing so we must
+	// call removeReplicaImpl directly to avoid deadlocking on the right-hand
+	// replica's raftMu.
+	if err := s.removeReplicaImpl(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
+		DestroyReplica: false, // the replica was destroyed when the merge commit applied
+	}); err != nil {
+		return errors.Errorf("cannot remove range: %s", err)
 	}
 
 	if leftRepl.leaseholderStats != nil {
@@ -2529,7 +2526,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 
 // RemoveOptions bundles boolean parameters for Store.RemoveReplica.
 type RemoveOptions struct {
-	DestroyData bool
+	DestroyReplica bool
 }
 
 // RemoveReplica removes the replica from the store's replica map and from the
@@ -2539,9 +2536,7 @@ type RemoveOptions struct {
 // removal decision is passed in. Removal is aborted if the replica ID has
 // advanced to or beyond the NextReplicaID since the removal decision was made.
 //
-// If opts.DestroyData is true, data in all of the range's keyspaces is deleted.
-// Otherwise, only data in the range-ID local keyspace is deleted. In either
-// case a tombstone record is written.
+// If opts.DestroyReplica is false, replica.destroyRaftMuLocked is not called.
 func (s *Store) RemoveReplica(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
@@ -2607,8 +2602,10 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
-	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID, opts.DestroyData); err != nil {
-		return err
+	if opts.DestroyReplica {
+		if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
+			return err
+		}
 	}
 
 	s.mu.Lock()
