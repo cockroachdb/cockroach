@@ -670,6 +670,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.leaseMgr.SetExecCfg(&execCfg)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+	s.leaseMgr.PeriodicallyRefreshSomeLeases()
 
 	s.node.InitLogger(&execCfg)
 
