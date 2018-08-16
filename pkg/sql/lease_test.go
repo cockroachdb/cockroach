@@ -207,6 +207,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.server.Stopper(),
 			t.cfg,
 		)
+		mgr.PeriodicallyRefreshSomeLeases()
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
@@ -1554,4 +1555,121 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	wg.Wait()
+}
+
+// This test makes sure leases get renewed periodically.
+// TODO(vivek): remove once epoch based leases is implemented.
+func TestLeaseRenewedPeriodically(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	var mu syncutil.Mutex
+	releasedIDs := make(map[sqlbase.ID]struct{})
+
+	var testAcquiredCount int32
+	var testAcquisitionBlockCount int32
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				// We also want to know when acquiring blocks to test lease renewal.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.ID > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquiredCount, 1)
+					}
+				},
+				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+					if id < keys.MaxReservedDescID {
+						return
+					}
+					mu.Lock()
+					defer mu.Unlock()
+					releasedIDs[id] = struct{}{}
+				},
+				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
+					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				},
+			},
+		},
+	}
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// The lease jitter is set to ensure newer leases have higher
+	// expiration timestamps.
+	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	// Lease duration to something small.
+	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 50 * time.Millisecond
+	// Renewal timeout to 0 saying that the lease will get renewed only
+	// after the lease expires when a request requests the descriptor.
+	params.LeaseManagerConfig.TableDescriptorLeaseRenewalTimeout = 0
+
+	ctx := context.Background()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.test2 ();
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
+	dbID := test2Desc.ParentID
+
+	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+
+	// Acquire a lease on test1 by name.
+	ts1, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts1); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquisitionBlockCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	}
+
+	// Acquire a lease on test2 by ID.
+	ts2, _, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts2); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquisitionBlockCount); count != 2 {
+		t.Fatalf("expected 2 leases to be acquired, but acquired %d times",
+			count)
+	}
+
+	// From now on henceforth do not acquire a lease, so any renewals can only
+	// happen through the periodic lease renewal mechanism.
+	numReleasedLeases := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(releasedIDs)
+	}
+	if count := numReleasedLeases(); count != 0 {
+		t.Fatalf("expected no leases to be releases, released %d", count)
+	}
+
+	// Reset testAcquisitionBlockCount as the first acqusitions will always block.
+	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+
+	// Check that lease acquisition happens independent of lease being requested.
+	testutils.SucceedsSoon(t, func() error {
+		if count := atomic.LoadInt32(&testAcquiredCount); count <= 4 {
+			return errors.Errorf("expected more than 4 leases to be acquired, but acquired %d times", count)
+		}
+
+		if count := numReleasedLeases(); count != 2 {
+			return errors.Errorf("expected 2 leases to be releases, released %d", count)
+		}
+		return nil
+	})
+
+	// No blocked acquisitions.
+	if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
+		t.Fatalf("expected lease acquisition to not block, but blockCount is: %d", blockCount)
+	}
 }
