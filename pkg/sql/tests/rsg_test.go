@@ -149,6 +149,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
+		if strings.Contains(s, "REVOKE") || strings.Contains(s, "GRANT") {
+			return errors.New("REVOKE and GRANT are unsupported")
+		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
