@@ -148,13 +148,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	// We need to validate again after adding the FKs.
-	// Only validate the table because backreferences aren't created yet.
-	// Everything is validated below.
-	if err := desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
-
 	if desc.Adding() {
 		// if this table and all its references are created in the same
 		// transaction it can be made PUBLIC.
@@ -175,7 +168,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	// Descriptor written to store here.
-	if err := params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err := params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 

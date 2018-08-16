@@ -233,13 +233,10 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 	newTableDesc.Mutations = nil
 
-	if err = newTableDesc.ValidateTable(p.ExtendedEvalContext().Settings); err != nil {
-		return err
-	}
-
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
-	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
+	if err := p.createDescriptorWithID(
+		ctx, key, newID, &newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
 	}
 
