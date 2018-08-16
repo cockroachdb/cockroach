@@ -477,3 +477,34 @@ query B
 SELECT (SELECT 123 IN (VALUES (1), (2)))
 ----
 false
+
+statement error pq: subqueryfail
+SELECT * FROM xyz WHERE x IN (SELECT crdb_internal.force_error('', 'subqueryfail'))
+
+statement ok
+PREPARE a AS SELECT 1 = (SELECT $1:::int)
+
+query B
+EXECUTE a(1)
+----
+true
+
+query B
+EXECUTE a(2)
+----
+false
+
+statement ok
+PREPARE b AS SELECT EXISTS (SELECT $1)
+
+query B
+EXECUTE b(3)
+----
+true
+
+statement ok
+PREPARE c AS CANCEL JOBS VALUES ((SELECT job_id FROM [SHOW JOBS] WHERE ((job_type = 'SCHEMA CHANGE') AND (status = $1)) AND (description NOT LIKE 'ROLL BACK%')));
+
+statement ok
+EXECUTE c('running')
+
