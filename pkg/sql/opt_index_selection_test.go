@@ -92,7 +92,8 @@ func makeSpans(
 		desc:  desc,
 		index: index,
 	}
-	o := xform.NewOptimizer(nil /* Catalog */)
+	var o xform.Optimizer
+	o.Init(nil /* evalCtx */)
 	for _, c := range desc.Columns {
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
@@ -105,7 +106,7 @@ func makeSpans(
 		t.Fatal(err)
 	}
 	filterExpr := memo.MakeNormExprView(o.Memo(), filterGroup)
-	err = c.makeIndexConstraints(o, filterExpr, p.EvalContext())
+	err = c.makeIndexConstraints(&o, filterExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)
 	}

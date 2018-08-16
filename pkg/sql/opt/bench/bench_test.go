@@ -130,6 +130,8 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 		b.Fatalf("%v", err)
 	}
 
+	var opt xform.Optimizer
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if bmType == parse {
@@ -137,7 +139,7 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 			continue
 		}
 
-		opt := xform.NewOptimizer(&evalCtx)
+		opt.Init(&evalCtx)
 		if bmType == optbuild {
 			opt.DisableOptimizations()
 		}

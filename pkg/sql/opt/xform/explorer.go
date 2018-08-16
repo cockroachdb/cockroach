@@ -83,26 +83,27 @@ import (
 // themselves match this same rule. However, adding their replace expressions to
 // the memo group will be a no-op, because they're already present.
 type explorer struct {
-	o       *Optimizer
-	mem     *memo.Memo
-	f       *norm.Factory
 	evalCtx *tree.EvalContext
-
-	// exprs is a buffer reused by custom replace functions.
-	exprs []memo.Expr
+	o       *Optimizer
+	f       *norm.Factory
+	mem     *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
 	// used by the exploration rules. It wraps an unnamed xfunc.CustomFuncs,
 	// so it provides a clean interface for calling functions from both the xform
 	// and xfunc packages using the same prefix.
 	funcs CustomFuncs
+
+	// exprs is a buffer reused by custom replace functions.
+	exprs []memo.Expr
 }
 
+// init initializes the explorer for use (or reuse).
 func (e *explorer) init(o *Optimizer) {
-	e.o = o
-	e.mem = o.mem
-	e.f = o.Factory()
 	e.evalCtx = o.evalCtx
+	e.o = o
+	e.f = o.Factory()
+	e.mem = o.mem
 	e.funcs.Init(e)
 }
 
