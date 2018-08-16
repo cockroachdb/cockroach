@@ -803,11 +803,11 @@ project
            │         │    │    └── columns: a:2(int!null)
            │         │    └── filters [type=bool]
            │         │         └── eq [type=bool]
-           │         │              ├── variable: x.a [type=int]
-           │         │              └── variable: y.b [type=int]
+           │         │              ├── variable: a [type=int]
+           │         │              └── variable: b [type=int]
            │         └── aggregations
            │              └── array-agg [type=int[]]
-           │                   └── variable: x.a [type=int]
+           │                   └── variable: a [type=int]
            └── array: [type=int[]]
 
 build
@@ -828,7 +828,7 @@ project
            │         │    └── ordering: +2
            │         └── aggregations
            │              └── array-agg [type=int[]]
-           │                   └── variable: x.a [type=int]
+           │                   └── variable: a [type=int]
            └── array: [type=int[]]
 
 build

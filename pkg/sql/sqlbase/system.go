@@ -128,7 +128,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             SERIAL     PRIMARY KEY,
+	id             INT        NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),

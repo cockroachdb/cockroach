@@ -1279,11 +1279,9 @@ message GetSnapshotForMergeRequest {
 message GetSnapshotForMergeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // Data is a snapshot of the right-hand range's data in the form of a
-  // BatchRepr, a serialized RocksDB Batch.
-  bytes data = 2;
+  reserved 2;
 
-  // MVCCStats are the MVCC statistics for data.
+  // MVCCStats are the MVCC statistics for the range.
   storage.engine.enginepb.MVCCStats mvcc_stats = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"

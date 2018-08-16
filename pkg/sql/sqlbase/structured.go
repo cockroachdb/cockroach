@@ -2694,8 +2694,8 @@ func (desc *ColumnDescriptor) IsNullable() bool {
 }
 
 // ColName is part of the opt.Column interface.
-func (desc *ColumnDescriptor) ColName() opt.ColumnName {
-	return opt.ColumnName(desc.Name)
+func (desc *ColumnDescriptor) ColName() tree.Name {
+	return tree.Name(desc.Name)
 }
 
 // DatumType is part of the opt.Column interface.

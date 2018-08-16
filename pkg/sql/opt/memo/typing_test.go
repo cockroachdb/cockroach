@@ -25,7 +25,7 @@ import (
 )
 
 func TestTyping(t *testing.T) {
-	runDataDrivenTest(t, "testdata/typing", opt.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/typing", memo.ExprFmtHideAll)
 }
 
 func TestBinaryOverloadExists(t *testing.T) {

@@ -36,9 +36,9 @@ project
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
  │    └── filters [type=bool, outer=(1)]
- │         └── (a.k = 1) IS NULL [type=bool, outer=(1)]
+ │         └── (k = 1) IS NULL [type=bool, outer=(1)]
  └── projections [outer=(1)]
-      └── a.k = 1 [type=bool, outer=(1)]
+      └── k = 1 [type=bool, outer=(1)]
 
 # Inline arithmetic.
 opt
@@ -53,9 +53,9 @@ project
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
  │    └── filters [type=bool, outer=(1)]
- │         └── ((a.k * 2) + 1) > 10 [type=bool, outer=(1)]
+ │         └── ((k * 2) + 1) > 10 [type=bool, outer=(1)]
  └── projections [outer=(1)]
-      └── (a.k * 2) + 1 [type=int, outer=(1)]
+      └── (k * 2) + 1 [type=int, outer=(1)]
 
 # Inline boolean logic.
 opt
@@ -68,7 +68,7 @@ project
  │    ├── constraint: /1: [ - /1] [/6 - ]
  │    └── key: (1)
  └── projections [outer=(1)]
-      └── (a.k <= 1) OR (a.k > 5) [type=bool, outer=(1)]
+      └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
 
 # Inline constants.
 opt
@@ -81,9 +81,9 @@ project
  │    ├── scan a
  │    │    └── columns: f:3(float)
  │    └── filters [type=bool, outer=(3)]
- │         └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
+ │         └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
  └── projections [outer=(3)]
-      └── (a.f IS NULL) OR (a.f != 10.5) [type=bool, outer=(3)]
+      └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
 # Reference the expression to inline multiple times.
 opt
@@ -96,9 +96,9 @@ project
  │    ├── scan a
  │    │    └── columns: f:3(float)
  │    └── filters [type=bool, outer=(3)]
- │         └── (a.f + 1.0) = (a.f + 1.0) [type=bool, outer=(3)]
+ │         └── (f + 1.0) = (f + 1.0) [type=bool, outer=(3)]
  └── projections [outer=(3)]
-      └── a.f + 1.0 [type=float, outer=(3)]
+      └── f + 1.0 [type=float, outer=(3)]
 
 # Use outer references in both inlined expression and in referencing expression.
 opt
@@ -116,7 +116,7 @@ semi-join
  │    ├── columns: x:6(int!null)
  │    └── key: (6)
  └── filters [type=bool, outer=(2,6)]
-      └── (xy.x - a.i) > (a.i * a.i) [type=bool, outer=(2,6)]
+      └── (x - i) > (i * i) [type=bool, outer=(2,6)]
 
 # --------------------------------------------------
 # InlineProjectInProject
@@ -131,8 +131,8 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
-      ├── a.i + 1 [type=int, outer=(2)]
-      └── a.k = 1 [type=bool, outer=(1)]
+      ├── i + 1 [type=int, outer=(2)]
+      └── k = 1 [type=bool, outer=(1)]
 
 # Inline multiple expressions.
 opt
@@ -145,7 +145,7 @@ project
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections [outer=(1,2,4)]
-      ├── (a.k + 1) + 1 [type=int, outer=(1)]
+      ├── (k + 1) + 1 [type=int, outer=(1)]
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
 
 # Don't inline when there are multiple references.
@@ -161,7 +161,7 @@ project
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
  │    └── projections [outer=(1)]
- │         └── a.k + 1 [type=int, outer=(1)]
+ │         └── k + 1 [type=int, outer=(1)]
  └── projections [outer=(6)]
       └── expr * 2 [type=int, outer=(6)]
 
@@ -182,7 +182,7 @@ project
       │         ├── constraint: /7: [/1 - /2]
       │         ├── key: (7)
       │         └── fd: (7)-->(8)
-      └── (a.k + 1) * 2 [type=int, outer=(1)]
+      └── (k + 1) * 2 [type=int, outer=(1)]
 
 # Correlated subquery should be hoisted as usual.
 opt
@@ -208,7 +208,7 @@ project
  │    │    │         │    ├── columns: k:1(int!null)
  │    │    │         │    └── key: (1)
  │    │    │         └── projections [outer=(1)]
- │    │    │              └── a.k + 1 [type=int, outer=(1)]
+ │    │    │              └── k + 1 [type=int, outer=(1)]
  │    │    ├── project
  │    │    │    ├── columns: true:10(bool!null)
  │    │    │    ├── fd: ()-->(10)

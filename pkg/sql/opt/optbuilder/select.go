@@ -254,9 +254,7 @@ func (b *Builder) buildScan(
 	tab opt.Table, tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
-
-	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
-	tabID := md.AddTableWithName(tab, tabName)
+	tabID := md.AddTable(tab)
 
 	colCount := len(ordinals)
 	if colCount == 0 {
@@ -265,7 +263,7 @@ func (b *Builder) buildScan(
 
 	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, 0, colCount)
+	outScope.cols = make([]scopeColumn, colCount)
 	for i := 0; i < colCount; i++ {
 		ord := i
 		if ordinals != nil {
@@ -275,15 +273,15 @@ func (b *Builder) buildScan(
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(int(colID))
-		name := tree.Name(col.ColName())
-		outScope.cols = append(outScope.cols, scopeColumn{
+		name := col.ColName()
+		outScope.cols[i] = scopeColumn{
 			id:       colID,
 			origName: name,
 			name:     name,
 			table:    *tn,
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden(),
-		})
+		}
 	}
 
 	if tab.IsVirtualTable() {

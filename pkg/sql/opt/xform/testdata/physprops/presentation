@@ -33,7 +33,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── a.y = 1 [type=bool]
+      └── y = 1 [type=bool]
 
 # Project operator.
 opt
@@ -44,7 +44,7 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      └── a.y + 1 [type=int]
+      └── y + 1 [type=int]
 
 # Join operator.
 opt
@@ -69,6 +69,6 @@ group-by
  │    └── columns: x:1(int!null) y:2(int)
  └── aggregations
       ├── max [type=int]
-      │    └── variable: a.y [type=int]
+      │    └── variable: y [type=int]
       └── const-agg [type=int]
-           └── variable: a.y [type=int]
+           └── variable: y [type=int]

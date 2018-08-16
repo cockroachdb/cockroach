@@ -15,6 +15,8 @@
 package memo
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,7 +108,7 @@ const (
 type Memo struct {
 	// metadata provides information about the columns and tables used in this
 	// particular query.
-	metadata *opt.Metadata
+	metadata opt.Metadata
 
 	// exprMap maps from expression fingerprint (Expr.fingerprint()) to
 	// that expression's group. Multiple different fingerprints can map to the
@@ -118,6 +120,10 @@ type Memo struct {
 	// the group ID 0 is invalid in order to allow zero initialization of an
 	// expression to indicate that it did not originate from the memo.
 	groups []group
+
+	// logPropsBuilder is inlined in the memo so that it can be reused each time
+	// scalar or relational properties need to be built.
+	logPropsBuilder logicalPropsBuilder
 
 	// Some memoExprs have a variable number of children. The Expr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
@@ -141,9 +147,8 @@ func New() *Memo {
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
 	m := &Memo{
-		metadata: opt.NewMetadata(),
-		exprMap:  make(map[Fingerprint]GroupID),
-		groups:   make([]group, 1, 8),
+		exprMap: make(map[Fingerprint]GroupID),
+		groups:  make([]group, 1, 8),
 	}
 
 	m.privateStorage.init()
@@ -152,7 +157,7 @@ func New() *Memo {
 
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
-	return m.metadata
+	return &m.metadata
 }
 
 // Root returns the root of the memo's lowest cost expression tree. It can only
@@ -258,8 +263,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	}
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	logPropsFactory := logicalPropsBuilder{evalCtx: evalCtx}
-	mgrp.logical = logPropsFactory.buildProps(ev)
+	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
 	return mgrp.id
 }
 
@@ -393,6 +397,5 @@ func (m *Memo) String() string {
 // FormatString returns a string representation of this memo for testing
 // and debugging. The given flags control which properties are shown.
 func (m *Memo) FormatString(flags FmtFlags) string {
-	formatter := m.makeMemoFormatter(flags)
-	return formatter.format()
+	return m.format(&memoFmtCtx{buf: &bytes.Buffer{}, flags: flags})
 }

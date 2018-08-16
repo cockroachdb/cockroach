@@ -42,8 +42,8 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps |
-		opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

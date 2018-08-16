@@ -577,5 +577,5 @@ select
  │              └── fd: (7)-->(4-6)
  └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-           ├── variable: a.y [type=int, outer=(2)]
+           ├── variable: y [type=int, outer=(2)]
            └── const: 5 [type=int]

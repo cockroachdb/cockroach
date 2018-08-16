@@ -25,7 +25,7 @@ import (
 )
 
 func TestMetadataColumns(t *testing.T) {
-	md := opt.NewMetadata()
+	var md opt.Metadata
 
 	// Add standalone column.
 	colID := md.AddColumn("alias", types.Int)
@@ -69,7 +69,7 @@ func TestMetadataColumns(t *testing.T) {
 }
 
 func TestMetadataTables(t *testing.T) {
-	md := opt.NewMetadata()
+	var md opt.Metadata
 
 	// Add a table reference to the metadata.
 	a := &testcat.Table{}
@@ -94,7 +94,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	label := md.ColumnLabel(colID)
-	if label != "a.x" {
+	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 
@@ -109,7 +109,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	label = md.ColumnLabel(otherTabID.ColumnID(0))
-	if label != "b.x" {
+	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 }
@@ -129,7 +129,7 @@ func TestIndexColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	md := opt.NewMetadata()
+	var md opt.Metadata
 	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
 
 	k := int(a.ColumnID(0))

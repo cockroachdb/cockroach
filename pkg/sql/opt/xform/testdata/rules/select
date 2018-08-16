@@ -80,7 +80,7 @@ memo (optimized)
  │         └── cost: 1040.00
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
- ├── G5: (variable a.k)
+ ├── G5: (variable k)
  └── G6: (const 1)
 
 opt
@@ -107,14 +107,14 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
  │         └── cost: 350.00
- ├── G3: (projections a.k)
+ ├── G3: (projections k)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan a,cols=(1,3))
  │         └── cost: 1050.00
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
- ├── G7: (variable a.v)
+ ├── G7: (variable v)
  └── G8: (const 1)
 
 opt
@@ -144,7 +144,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
  │         └── cost: 1.05
- ├── G3: (projections a.k)
+ ├── G3: (projections k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -157,9 +157,9 @@ memo (optimized)
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
- ├── G10: (variable a.k)
+ ├── G10: (variable k)
  ├── G11: (const 5)
- ├── G12: (variable a.u)
+ ├── G12: (variable u)
  └── G13: (const 1)
 
 # Constraint + remaining filter.
@@ -179,7 +179,7 @@ project
       │    ├── key: (1)
       │    └── fd: ()-->(2)
       └── filters [type=bool, outer=(1,2)]
-           └── (a.k + a.u) = 1 [type=bool, outer=(1,2)]
+           └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
@@ -193,7 +193,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.51
- ├── G3: (projections a.k)
+ ├── G3: (projections k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -208,8 +208,8 @@ memo (optimized)
  ├── G9: (eq G10 G11)
  ├── G10: (plus G12 G13)
  ├── G11: (const 1)
- ├── G12: (variable a.k)
- └── G13: (variable a.u)
+ ├── G12: (variable k)
+ └── G13: (variable u)
 
 opt
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -231,7 +231,7 @@ project
       │    ├── key: ()
       │    └── fd: ()-->(1-3)
       └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -245,7 +245,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G8 G9)
  │         └── cost: 1.07
- ├── G3: (projections a.k)
+ ├── G3: (projections k)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
  │         ├── best: (scan a)
@@ -263,9 +263,9 @@ memo (optimized)
  ├── G9: (filters G11)
  ├── G10: (eq G12 G13)
  ├── G11: (eq G14 G15)
- ├── G12: (variable a.v)
+ ├── G12: (variable v)
  ├── G13: (const 5)
- ├── G14: (variable a.u)
+ ├── G14: (variable u)
  └── G15: (const 1)
 
 # Only not-null constraint is pushed down.
@@ -285,7 +285,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (3)~~>(1,2)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
-           └── a.u = a.v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           └── u = v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
 
 # Don't push constraint into already limited scan.
 opt
@@ -307,7 +307,7 @@ project
       │    ├── key: ()
       │    └── fd: ()-->(1,2)
       └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           └── a.k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
 
 # --------------------------------------------------
 # PushFilterIntoLookupJoinNoRemainder
@@ -358,7 +358,7 @@ memo (optimized)
  ├── G8: (ge G11 G10)
  ├── G9: (le G11 G12)
  ├── G10: (const 1)
- ├── G11: (variable b.v)
+ ├── G11: (variable v)
  └── G12: (const 10)
 
 # Don't choose lookup join if it's not beneficial.
@@ -374,7 +374,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
-      └── b.v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+      └── v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
 
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
@@ -393,7 +393,7 @@ index-join b
       │    ├── key: (1)
       │    └── fd: (1)-->(3), (3)-->(1)
       └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-           └── b.k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+           └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
@@ -453,10 +453,10 @@ memo (optimized)
  │         └── cost: 1040.00
  ├── G17: (filters G21)
  ├── G18: (const 1)
- ├── G19: (variable b.v)
+ ├── G19: (variable v)
  ├── G20: (const 10)
  ├── G21: (gt G22 G23)
- ├── G22: (variable b.k)
+ ├── G22: (variable k)
  └── G23: (const 5)
 
 # Ensure the rule doesn't match at all when the first column of the index is
@@ -481,7 +481,7 @@ Source expression:
         │    ├── key: (1)
         │    └── fd: (1)-->(2)
         └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             └── a.u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+             └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
 
 New expression 1 of 1:
   project
@@ -517,7 +517,7 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(3), (3)-->(1)
  └── filters [type=bool, outer=(1,2)]
-      └── (b.k + b.u) = 1 [type=bool, outer=(1,2)]
+      └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
@@ -571,10 +571,10 @@ memo (optimized)
  ├── G16: (le G19 G20)
  ├── G17: (plus G21 G22)
  ├── G18: (const 1)
- ├── G19: (variable b.v)
+ ├── G19: (variable v)
  ├── G20: (const 10)
- ├── G21: (variable b.k)
- └── G22: (variable b.u)
+ ├── G21: (variable k)
+ └── G22: (variable u)
 
 opt
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
@@ -597,9 +597,9 @@ select
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3), (3)-->(1)
  │         └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
- │              └── b.k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │              └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
  └── filters [type=bool, outer=(1,2)]
-      └── (b.k + b.u) = 1 [type=bool, outer=(1,2)]
+      └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
@@ -674,11 +674,11 @@ memo (optimized)
  ├── G25: (gt G31 G30)
  ├── G26: (plus G31 G32)
  ├── G27: (const 1)
- ├── G28: (variable b.v)
+ ├── G28: (variable v)
  ├── G29: (const 10)
  ├── G30: (const 5)
- ├── G31: (variable b.k)
- └── G32: (variable b.u)
+ ├── G31: (variable k)
+ └── G32: (variable u)
 
 # --------------------------------------------------
 # ConstrainLookupJoinIndexScan
@@ -701,8 +701,8 @@ select
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - /8/9/9]; tight)]
-      ├── (b.u, b.k, b.v) > (1, 2, 3) [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
-      └── (b.u, b.k, b.v) < (8, 9, 10) [type=bool, outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
+      ├── (u, k, v) > (1, 2, 3) [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
+      └── (u, k, v) < (8, 9, 10) [type=bool, outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
 
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
@@ -741,9 +741,9 @@ memo (optimized)
  ├── G13: (const 1)
  ├── G14: (const 2)
  ├── G15: (const 3)
- ├── G16: (variable b.u)
- ├── G17: (variable b.k)
- ├── G18: (variable b.v)
+ ├── G16: (variable u)
+ ├── G17: (variable k)
+ ├── G18: (variable v)
  ├── G19: (const 8)
  ├── G20: (const 9)
  └── G21: (const 10)
@@ -788,7 +788,7 @@ project
       │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       │         └── key: (1)
       └── filters [type=bool, outer=(4)]
-           └── b.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+           └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
 # Query requiring an index join with no remaining filter.
 opt
@@ -849,7 +849,7 @@ select
  │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
  │         └── key: (1)
  └── filters [type=bool, outer=(4)]
-      └── b.j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
+      └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -867,4 +867,4 @@ select
  │         ├── constraint: /4/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
  │         └── key: (1)
  └── filters [type=bool, outer=(4)]
-      └── b.j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]
+      └── j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]

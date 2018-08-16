@@ -15,8 +15,6 @@
 package testutils
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -33,8 +31,8 @@ func init() {
 // fmtInterceptor is a function suitable for memo.ExprFmtInterceptor. It detects
 // if an expression tree contains only scalar expressions; if so, it tries to
 // execbuild them and print the SQL expressions.
-func fmtInterceptor(f *opt.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) bool {
-	if !f.HasFlags(opt.ExprFmtHideScalars) || !onlyScalars(ev) {
+func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) bool {
+	if !f.HasFlags(memo.ExprFmtHideScalars) || !onlyScalars(ev) {
 		return false
 	}
 
@@ -57,14 +55,16 @@ func fmtInterceptor(f *opt.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) bo
 		// Not all scalar operators are supported (e.g. Projections).
 		return false
 	}
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
+	f.Buffer.Reset()
+	fmtCtx := tree.MakeFmtCtx(f.Buffer, tree.FmtSimple)
 	fmtCtx.WithIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-		ctx.WriteString(md.ColumnLabel(opt.ColumnID(idx + 1)))
+		fullyQualify := !f.HasFlags(memo.ExprFmtHideQualifications)
+		label := md.QualifiedColumnLabel(opt.ColumnID(idx+1), fullyQualify)
+		ctx.WriteString(label)
 	})
 	expr.Format(&fmtCtx)
-	ev.FormatScalarProps(f, &buf)
-	tp.Child(buf.String())
+	ev.FormatScalarProps(f)
+	tp.Child(f.Buffer.String())
 	return true
 }
 

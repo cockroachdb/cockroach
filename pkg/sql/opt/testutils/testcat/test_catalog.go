@@ -398,8 +398,8 @@ func (tc *Column) IsNullable() bool {
 }
 
 // ColName is part of the opt.Column interface.
-func (tc *Column) ColName() opt.ColumnName {
-	return opt.ColumnName(tc.Name)
+func (tc *Column) ColName() tree.Name {
+	return tree.Name(tc.Name)
 }
 
 // DatumType is part of the opt.Column interface.

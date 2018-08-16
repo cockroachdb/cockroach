@@ -342,7 +342,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan abc,cols=(4))
  │         └── cost: 1050.00
- ├── G3: (projections G6 abc.d)
+ ├── G3: (projections G6 d)
  ├── G4: (scan abc@bc,cols=(1-3))
  │    └── ""
  │         ├── best: (scan abc@bc,cols=(1-3))
@@ -352,7 +352,7 @@ memo (optimized)
  │         ├── best: (scan abc@ba,cols=(1-3))
  │         └── cost: 1060.00
  ├── G6: (function G7 lower)
- └── G7: (variable abc.d)
+ └── G7: (variable d)
 
 memo
 SELECT j FROM a WHERE s = 'foo'
@@ -366,7 +366,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
  │         └── cost: 1.51
- ├── G3: (projections a.j)
+ ├── G3: (projections j)
  ├── G4: (scan a,cols=(4,5)) (index-join G7 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5))
@@ -385,7 +385,7 @@ memo (optimized)
  │         └── cost: 1060.00
  ├── G8: (filters G9)
  ├── G9: (eq G10 G11)
- ├── G10: (variable a.s)
+ ├── G10: (variable s)
  └── G11: (const 'foo')
 
 # Scan of primary index is lowest cost.
@@ -482,12 +482,12 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
  │         └── cost: 356.67
- ├── G3: (projections a.k a.i)
+ ├── G3: (projections k i)
  ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,2,4))
  │         └── cost: 1070.00
  ├── G5: (filters G6)
  ├── G6: (ge G7 G8)
- ├── G7: (variable a.s)
+ ├── G7: (variable s)
  └── G8: (const 'foo')

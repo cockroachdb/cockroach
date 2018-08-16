@@ -61,7 +61,7 @@ semi-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
@@ -84,7 +84,7 @@ anti-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # TryDecorrelateSelect
@@ -104,10 +104,10 @@ semi-join-apply
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
  │    ├── cardinality: [2 - 2]
- │    ├── (a.k,) [type=tuple{int}, outer=(1)]
- │    └── (a.i,) [type=tuple{int}, outer=(2)]
+ │    ├── (k,) [type=tuple{int}, outer=(1)]
+ │    └── (i,) [type=tuple{int}, outer=(2)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── column1 = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
@@ -124,10 +124,10 @@ anti-join-apply
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
  │    ├── cardinality: [2 - 2]
- │    ├── (a.k,) [type=tuple{int}, outer=(1)]
- │    └── (a.i,) [type=tuple{int}, outer=(2)]
+ │    ├── (k,) [type=tuple{int}, outer=(1)]
+ │    └── (i,) [type=tuple{int}, outer=(2)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── column1 = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── column1 = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Attempt to decorrelate query by pulling up outer select. But since limit query
 # cannot be decorrelated, push the outer select back down again (and make sure
@@ -165,10 +165,10 @@ semi-join-apply
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── const: 1 [type=int]
  │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
- │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  └── true [type=bool]
 
 # Same as previous, but using anti-join.
@@ -205,10 +205,10 @@ anti-join-apply
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── const: 1 [type=int]
  │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
- │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  └── true [type=bool]
 
 # Decorrelate Select with reference to outer column and no limit.
@@ -236,9 +236,9 @@ project
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7)
       │    └── filters [type=bool, outer=(7), constraints=(/7: [/101 - ]; tight)]
-      │         └── xy.y > 100 [type=bool, outer=(7), constraints=(/7: [/101 - ]; tight)]
+      │         └── y > 100 [type=bool, outer=(7), constraints=(/7: [/101 - ]; tight)]
       └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-           └── xy.x = a.i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+           └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 # Decorrelate Select with LeftJoinApply.
 opt
@@ -266,10 +266,10 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(6)
       │    └── filters [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
-      │         └── xy.x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
+      │         └── x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
       └── filters [type=bool, outer=(1,6), constraints=(/1: [/101 - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── a.k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
+           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
 opt
@@ -301,9 +301,9 @@ semi-join-apply
  │    │    ├── key: ()
  │    │    └── fd: ()-->(8,9)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # TryDecorrelateProject +
@@ -349,14 +349,14 @@ project
  │    │    │    │    │    ├── fd: (6)-->(7)
  │    │    │    │    │    └── ordering: +6
  │    │    │    │    └── filters [type=bool, outer=(7)]
- │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
+ │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections [outer=(6,7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
  │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool, outer=(9)]
@@ -389,9 +389,9 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(6,7)
       │    └── filters [type=bool, outer=(7)]
-      │         └── (xy.y + 1) > 10 [type=bool, outer=(7)]
+      │         └── (y + 1) > 10 [type=bool, outer=(7)]
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Any clause with constant.
 opt
@@ -428,14 +428,14 @@ project
  │    │    │    │    │    ├── fd: (6)-->(7)
  │    │    │    │    │    └── ordering: +6
  │    │    │    │    └── filters [type=bool, outer=(7)]
- │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
+ │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections [outer=(6,7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
  │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool, outer=(9)]
@@ -473,20 +473,20 @@ project
  │    │    │    │    ├── fd: (6)-->(7)
  │    │    │    │    └── ordering: +6
  │    │    │    └── projections [outer=(6,7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
  │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │              └── (a.i = xy.y) IS NOT false [type=bool, outer=(2,7)]
+ │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── (i = y) IS NOT false [type=bool, outer=(2,7)]
  │    └── aggregations [outer=(2,9)]
  │         ├── bool-or [type=bool, outer=(9)]
  │         │    └── variable: notnull [type=bool, outer=(9)]
  │         └── const-agg [type=int, outer=(2)]
- │              └── variable: a.i [type=int, outer=(2)]
+ │              └── variable: i [type=int, outer=(2)]
  └── projections [outer=(2,10)]
-      └── CASE WHEN bool_or AND (a.i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,10)]
+      └── CASE WHEN bool_or AND (i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,10)]
 
 # Any clause with more complex expression that must be cached.
 opt
@@ -518,7 +518,7 @@ project
  │    │    │    │    ├── fd: (1)-->(2)
  │    │    │    │    └── ordering: +1
  │    │    │    └── projections [outer=(1,2), side-effects]
- │    │    │         └── (a.i * a.i) / 5 [type=decimal, outer=(2), side-effects]
+ │    │    │         └── (i * i) / 5 [type=decimal, outer=(2), side-effects]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10(bool) x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
@@ -530,13 +530,13 @@ project
  │    │    │    │    ├── fd: (6)-->(7)
  │    │    │    │    └── ordering: +6
  │    │    │    └── projections [outer=(6,7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
  │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │    │              └── (scalar = xy.y) IS NOT false [type=bool, outer=(7,9)]
+ │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── (scalar = y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
  │         │    └── variable: notnull [type=bool, outer=(10)]
@@ -590,12 +590,12 @@ distinct-on
       │    │    │    │    ├── key: (1)
       │    │    │    │    └── fd: (1)-->(2)
       │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    │    └── true [type=bool]
       │    └── projections [outer=(1,6,8), side-effects]
-      │         └── uv.u / 1.1 [type=decimal, outer=(8), side-effects]
+      │         └── u / 1.1 [type=decimal, outer=(8), side-effects]
       └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
-           └── xy.x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+           └── x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
 
 # Don't hoist Project operator in right join case.
 opt
@@ -637,11 +637,11 @@ project
       │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    └── key: (8)
       │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    │    └── projections [outer=(8), side-effects]
-      │    │         └── uv.u / 1.1 [type=decimal, outer=(8), side-effects]
+      │    │         └── u / 1.1 [type=decimal, outer=(8), side-effects]
       │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
-      │         └── xy.x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+      │         └── x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       └── true [type=bool]
 
 # --------------------------------------------------
@@ -682,11 +682,11 @@ project
       │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    └── key: (8)
       │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    │    └── projections [outer=(8)]
-      │    │         └── uv.u + 1 [type=int, outer=(8)]
+      │    │         └── u + 1 [type=int, outer=(8)]
       │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
-      │         └── xy.x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+      │         └── x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       └── true [type=bool]
 
 # Don't decorrelate FULL JOIN case.
@@ -725,11 +725,11 @@ project
       │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    └── key: (8)
       │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
       │    │    └── projections [outer=(8)]
-      │    │         └── uv.u + 1 [type=int, outer=(8)]
+      │    │         └── u + 1 [type=int, outer=(8)]
       │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
-      │         └── xy.x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+      │         └── x = plus [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
       └── true [type=bool]
 
 # --------------------------------------------------
@@ -777,14 +777,14 @@ project
  │    │    │    │         ├── left ordering: +6
  │    │    │    │         ├── right ordering: +8
  │    │    │    │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │    │    │    │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │    │    │    │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  │    │    │    └── projections [outer=(6,7,9)]
- │    │    │         └── xy.y + uv.v [type=int, outer=(7,9)]
+ │    │    │         └── y + v [type=int, outer=(7,9)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
  │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(10)]
  │         └── sum [type=decimal, outer=(10)]
  │              └── variable: column10 [type=int, outer=(10)]
@@ -828,12 +828,12 @@ semi-join (merge)
  │         ├── left ordering: +6
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Anti-join as outer.
 opt
@@ -869,12 +869,12 @@ anti-join (merge)
  │         ├── left ordering: +6
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Right-join as outer.
 opt
@@ -924,15 +924,15 @@ project
       │    │    │         ├── left ordering: +6
       │    │    │         ├── right ordering: +8
       │    │    │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
-      │    │    │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +6
       │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    └── aggregations [outer=(6)]
       │         └── count [type=int, outer=(6)]
-      │              └── variable: xy.x [type=int, outer=(6)]
+      │              └── variable: x [type=int, outer=(6)]
       └── filters [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
            └── count IS DISTINCT FROM 1 [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
 
@@ -969,8 +969,8 @@ semi-join-apply
  │         ├── left ordering: +6
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(1,6,8), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(1,8), (8)==(1,6), (1)==(6,8)]
- │              ├── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
- │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │              ├── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── true [type=bool]
 
 # Can't decorrelate semi-join as inner.
@@ -1016,7 +1016,7 @@ semi-join-apply
  │    │    │    └── fd: (10)-->(11)
  │    │    └── true [type=bool]
  │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │         └── uv.u = a.k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+ │         └── uv.u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  └── true [type=bool]
 
 # --------------------------------------------------
@@ -1060,8 +1060,8 @@ semi-join-apply
  │    │    │    ├── key: (7)
  │    │    │    └── fd: (7)-->(8)
  │    │    └── filters [type=bool, outer=(2,3,7,8), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(7), (7)==(2), (3)==(8), (8)==(3)]
- │    │         ├── xy.x = a.k [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │    │         └── a.i = xy.y [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
+ │    │         ├── x = k [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── i = y [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
  │    ├── project
  │    │    ├── columns: v1:11(int)
  │    │    ├── outer: (1)
@@ -1074,7 +1074,7 @@ semi-join-apply
  │    │    └── projections [outer=(1)]
  │    │         └── variable: column1 [type=int, outer=(1)]
  │    └── filters [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
- │         └── xy.x = v1 [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ])]
+ │         └── x = v1 [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ])]
  └── true [type=bool]
 
 opt
@@ -1111,9 +1111,9 @@ project
       │    │    ├── key: (5)
       │    │    └── fd: (5)-->(6)
       │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │         └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── filters [type=bool, outer=(3,6)]
-           └── uv.u IS DISTINCT FROM a.i [type=bool, outer=(3,6)]
+           └── u IS DISTINCT FROM i [type=bool, outer=(3,6)]
 
 opt
 SELECT generate_series(1, (SELECT u FROM uv WHERE u=x))
@@ -1140,12 +1140,12 @@ project
       │         ├── left ordering: +1
       │         ├── right ordering: +3
       │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │              └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
       ├── zip
       │    ├── columns: column5:5(int)
       │    ├── outer: (3)
       │    ├── side-effects
-      │    └── generate_series(1, uv.u) [type=int, outer=(3), side-effects]
+      │    └── generate_series(1, u) [type=int, outer=(3), side-effects]
       └── true [type=bool]
 
 # --------------------------------------------------
@@ -1193,29 +1193,29 @@ group-by
  │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
- │    │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    │    └── true [type=bool]
  │    │    └── aggregations [outer=(2-5)]
  │    │         ├── count-rows [type=int]
  │    │         ├── const-agg [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         │    └── variable: i [type=int, outer=(2)]
  │    │         ├── const-agg [type=float, outer=(3)]
- │    │         │    └── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── variable: f [type=float, outer=(3)]
  │    │         ├── const-agg [type=string, outer=(4)]
- │    │         │    └── variable: a.s [type=string, outer=(4)]
+ │    │         │    └── variable: s [type=string, outer=(4)]
  │    │         └── const-agg [type=jsonb, outer=(5)]
- │    │              └── variable: a.j [type=jsonb, outer=(5)]
+ │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
- │         └── xy.x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ │         └── x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
+      │    └── variable: f [type=float, outer=(3)]
       ├── const-agg [type=string, outer=(4)]
-      │    └── variable: a.s [type=string, outer=(4)]
+      │    └── variable: s [type=string, outer=(4)]
       └── const-agg [type=jsonb, outer=(5)]
-           └── variable: a.j [type=jsonb, outer=(5)]
+           └── variable: j [type=jsonb, outer=(5)]
 
 opt
 SELECT *
@@ -1259,31 +1259,31 @@ group-by
  │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
- │    │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    │    └── true [type=bool]
  │    │    └── aggregations [outer=(2-5,9)]
  │    │         ├── count [type=int, outer=(9)]
  │    │         │    └── agg-distinct [type=int, outer=(9)]
- │    │         │         └── variable: uv.v [type=int, outer=(9)]
+ │    │         │         └── variable: v [type=int, outer=(9)]
  │    │         ├── const-agg [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         │    └── variable: i [type=int, outer=(2)]
  │    │         ├── const-agg [type=float, outer=(3)]
- │    │         │    └── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── variable: f [type=float, outer=(3)]
  │    │         ├── const-agg [type=string, outer=(4)]
- │    │         │    └── variable: a.s [type=string, outer=(4)]
+ │    │         │    └── variable: s [type=string, outer=(4)]
  │    │         └── const-agg [type=jsonb, outer=(5)]
- │    │              └── variable: a.j [type=jsonb, outer=(5)]
+ │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
- │         └── xy.x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ │         └── x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
+      │    └── variable: f [type=float, outer=(3)]
       ├── const-agg [type=string, outer=(4)]
-      │    └── variable: a.s [type=string, outer=(4)]
+      │    └── variable: s [type=string, outer=(4)]
       └── const-agg [type=jsonb, outer=(5)]
-           └── variable: a.j [type=jsonb, outer=(5)]
+           └── variable: j [type=jsonb, outer=(5)]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
 opt
@@ -1321,7 +1321,7 @@ project
       │    │    │    │    ├── key: (3)
       │    │    │    │    └── fd: (3)-->(4)
       │    │    │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      │    │    │         └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    │    │         └── x = v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
       │    │    ├── select
       │    │    │    ├── columns: k:5(int!null) i:6(int!null)
       │    │    │    ├── key: (5)
@@ -1331,20 +1331,20 @@ project
       │    │    │    │    ├── key: (5)
       │    │    │    │    └── fd: (5)-->(6)
       │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │    │    │         └── a.i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │         └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
-      │         │    └── variable: a.i [type=int, outer=(6)]
+      │         │    └── variable: i [type=int, outer=(6)]
       │         ├── const-agg [type=int, outer=(4)]
-      │         │    └── variable: uv.v [type=int, outer=(4)]
+      │         │    └── variable: v [type=int, outer=(4)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: xy.y [type=int, outer=(2)]
+      │         │    └── variable: y [type=int, outer=(2)]
       │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: xy.x [type=int, outer=(1)]
+      │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
-           └── uv.u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
+           └── u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
 # IS DISTINCT FROM to retain left join.
@@ -1383,24 +1383,24 @@ project
       │    │    │    │    ├── key: (3)
       │    │    │    │    └── fd: (3)-->(4)
       │    │    │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      │    │    │         └── xy.x = uv.v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      │    │    │         └── x = v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
       │    │    ├── scan a
       │    │    │    ├── columns: k:5(int!null) i:6(int)
       │    │    │    ├── key: (5)
       │    │    │    └── fd: (5)-->(6)
       │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │         └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    └── aggregations [outer=(1,2,4,6)]
       │         ├── max [type=int, outer=(6)]
-      │         │    └── variable: a.i [type=int, outer=(6)]
+      │         │    └── variable: i [type=int, outer=(6)]
       │         ├── const-agg [type=int, outer=(4)]
-      │         │    └── variable: uv.v [type=int, outer=(4)]
+      │         │    └── variable: v [type=int, outer=(4)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: xy.y [type=int, outer=(2)]
+      │         │    └── variable: y [type=int, outer=(2)]
       │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: xy.x [type=int, outer=(1)]
+      │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10)]
-           └── uv.u IS DISTINCT FROM max [type=bool, outer=(3,10)]
+           └── u IS DISTINCT FROM max [type=bool, outer=(3,10)]
 
 # Synthesize key when one is not present.
 opt
@@ -1439,12 +1439,12 @@ project
  │    │    │    │    ├── key: ()
  │    │    │    │    └── fd: ()-->(4,7)
  │    │    │    └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
- │    │    │         └── a.k = xy.y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+ │    │    │         └── k = y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
  │    │    └── aggregations [outer=(2,7)]
  │    │         ├── max [type=string, outer=(7)]
- │    │         │    └── variable: a.s [type=string, outer=(7)]
+ │    │         │    └── variable: s [type=string, outer=(7)]
  │    │         └── const-agg [type=int, outer=(2)]
- │    │              └── variable: xy.y [type=int, outer=(2)]
+ │    │              └── variable: y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight), fd=()-->(9)]
  │         └── max = 'bar' [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight)]
  └── projections [outer=(2)]
@@ -1500,30 +1500,30 @@ group-by
  │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    └── fd: (1)-->(2-5)
  │    │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
- │    │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    │    └── true [type=bool]
  │    │    └── aggregations [outer=(2-5,8)]
  │    │         ├── first-agg [type=int, outer=(8)]
- │    │         │    └── variable: uv.u [type=int, outer=(8)]
+ │    │         │    └── variable: u [type=int, outer=(8)]
  │    │         ├── const-agg [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         │    └── variable: i [type=int, outer=(2)]
  │    │         ├── const-agg [type=float, outer=(3)]
- │    │         │    └── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── variable: f [type=float, outer=(3)]
  │    │         ├── const-agg [type=string, outer=(4)]
- │    │         │    └── variable: a.s [type=string, outer=(4)]
+ │    │         │    └── variable: s [type=string, outer=(4)]
  │    │         └── const-agg [type=jsonb, outer=(5)]
- │    │              └── variable: a.j [type=jsonb, outer=(5)]
+ │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │         └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
+      │    └── variable: f [type=float, outer=(3)]
       ├── const-agg [type=string, outer=(4)]
-      │    └── variable: a.s [type=string, outer=(4)]
+      │    └── variable: s [type=string, outer=(4)]
       └── const-agg [type=jsonb, outer=(5)]
-           └── variable: a.j [type=jsonb, outer=(5)]
+           └── variable: j [type=jsonb, outer=(5)]
 
 # --------------------------------------------------
 # TryDecorrelateScalarGroupBy
@@ -1572,29 +1572,29 @@ group-by
  │    │    │    │    └── projections
  │    │    │    │         └── true [type=bool]
  │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
- │    │    │         └── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
  │    │    └── aggregations [outer=(2-5,12)]
  │    │         ├── count [type=int, outer=(12)]
  │    │         │    └── variable: canary [type=bool, outer=(12)]
  │    │         ├── const-agg [type=int, outer=(2)]
- │    │         │    └── variable: a.i [type=int, outer=(2)]
+ │    │         │    └── variable: i [type=int, outer=(2)]
  │    │         ├── const-agg [type=float, outer=(3)]
- │    │         │    └── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── variable: f [type=float, outer=(3)]
  │    │         ├── const-agg [type=string, outer=(4)]
- │    │         │    └── variable: a.s [type=string, outer=(4)]
+ │    │         │    └── variable: s [type=string, outer=(4)]
  │    │         └── const-agg [type=jsonb, outer=(5)]
- │    │              └── variable: a.j [type=jsonb, outer=(5)]
+ │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
- │         └── xy.x = cnt [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
+ │         └── x = cnt [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
+      │    └── variable: f [type=float, outer=(3)]
       ├── const-agg [type=string, outer=(4)]
-      │    └── variable: a.s [type=string, outer=(4)]
+      │    └── variable: s [type=string, outer=(4)]
       └── const-agg [type=jsonb, outer=(5)]
-           └── variable: a.j [type=jsonb, outer=(5)]
+           └── variable: j [type=jsonb, outer=(5)]
 
 # Synthesize key when one is not present.
 opt
@@ -1631,14 +1631,14 @@ project
  │    │    │    │    │    ├── key: (7)
  │    │    │    │    │    └── fd: (7)-->(8)
  │    │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
- │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
+ │    │    │    │         └── y IS NOT NULL [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
  │    │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │    │         └── xy.x = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │         └── x = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── aggregations [outer=(2,8)]
  │    │         ├── max [type=int, outer=(8)]
- │    │         │    └── variable: xy.y [type=int, outer=(8)]
+ │    │         │    └── variable: y [type=int, outer=(8)]
  │    │         └── const-agg [type=int, outer=(2)]
- │    │              └── variable: a.i [type=int, outer=(2)]
+ │    │              └── variable: i [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
  │         └── max = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
  └── projections [outer=(2)]
@@ -1666,14 +1666,14 @@ project
  │    │    ├── scan xy
  │    │    │    └── columns: y:7(int)
  │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(7)]
  │         ├── array-agg [type=int[], outer=(7)]
- │         │    └── variable: xy.y [type=int, outer=(7)]
+ │         │    └── variable: y [type=int, outer=(7)]
  │         └── any-not-null-agg [type=int, outer=(7)]
- │              └── variable: xy.y [type=int, outer=(7)]
+ │              └── variable: y [type=int, outer=(7)]
  └── projections [outer=(1,7,10)]
-      └── CASE WHEN xy.y IS NOT NULL THEN array_agg END [type=int[], outer=(7,10)]
+      └── CASE WHEN y IS NOT NULL THEN array_agg END [type=int[], outer=(7,10)]
 
 # With multiple columns. Without LATERAL these tests are a bit verbose.
 norm
@@ -1696,16 +1696,16 @@ project
  │    │    ├── scan xy
  │    │    │    └── columns: y:7(int)
  │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(7)]
  │         ├── array-agg [type=int[], outer=(7)]
- │         │    └── variable: xy.y [type=int, outer=(7)]
+ │         │    └── variable: y [type=int, outer=(7)]
  │         ├── max [type=int, outer=(7)]
- │         │    └── variable: xy.y [type=int, outer=(7)]
+ │         │    └── variable: y [type=int, outer=(7)]
  │         └── any-not-null-agg [type=int, outer=(7)]
- │              └── variable: xy.y [type=int, outer=(7)]
+ │              └── variable: y [type=int, outer=(7)]
  └── projections [outer=(1,7,9,12)]
-      └── (CASE WHEN xy.y IS NOT NULL THEN r END, q) [type=tuple{int[], int}, outer=(7,9,12)]
+      └── (CASE WHEN y IS NOT NULL THEN r END, q) [type=tuple{int[], int}, outer=(7,9,12)]
 
 
 # With an aggregate that can't ignore nulls and when a non-nullable column must be synthesized.
@@ -1736,10 +1736,10 @@ project
  │    │    │    └── projections [outer=(7)]
  │    │    │         └── true [type=bool]
  │    │    └── filters [type=bool, outer=(2,7)]
- │    │         └── (xy.y = a.i) OR (xy.y IS NULL) [type=bool, outer=(2,7)]
+ │    │         └── (y = i) OR (y IS NULL) [type=bool, outer=(2,7)]
  │    └── aggregations [outer=(7,10)]
  │         ├── array-agg [type=int[], outer=(7)]
- │         │    └── variable: xy.y [type=int, outer=(7)]
+ │         │    └── variable: y [type=int, outer=(7)]
  │         └── any-not-null-agg [type=bool, outer=(10)]
  │              └── variable: canary [type=bool, outer=(10)]
  └── projections [outer=(1,10,11)]
@@ -1776,12 +1776,12 @@ project
  │    │         │    └── projections [outer=(7)]
  │    │         │         └── true [type=bool]
  │    │         └── filters [type=bool, outer=(1,7)]
- │    │              └── (xy.y = a.k) OR NULL [type=bool, outer=(1,7)]
+ │    │              └── (y = k) OR NULL [type=bool, outer=(1,7)]
  │    └── aggregations [outer=(2,7,10)]
  │         ├── array-agg [type=int[], outer=(7)]
- │         │    └── variable: xy.y [type=int, outer=(7)]
+ │         │    └── variable: y [type=int, outer=(7)]
  │         ├── const-agg [type=int, outer=(2)]
- │         │    └── variable: a.i [type=int, outer=(2)]
+ │         │    └── variable: i [type=int, outer=(2)]
  │         └── any-not-null-agg [type=bool, outer=(10)]
  │              └── variable: canary [type=bool, outer=(10)]
  └── projections [outer=(2,10,11)]
@@ -1848,26 +1848,26 @@ project
       │    │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    │    └── fd: (8)-->(9)
       │    │    │    │    │    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    │    │    │         └── uv.u = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │    │    │         └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       │    │    │    │    └── aggregations [outer=(7,9)]
       │    │    │    │         ├── max [type=int, outer=(9)]
-      │    │    │    │         │    └── variable: uv.v [type=int, outer=(9)]
+      │    │    │    │         │    └── variable: v [type=int, outer=(9)]
       │    │    │    │         └── const-agg [type=int, outer=(7)]
-      │    │    │    │              └── variable: xy.y [type=int, outer=(7)]
+      │    │    │    │              └── variable: y [type=int, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
       │    │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(2-5,7)]
       │         ├── max [type=int, outer=(7)]
-      │         │    └── variable: xy.y [type=int, outer=(7)]
+      │         │    └── variable: y [type=int, outer=(7)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: a.j [type=jsonb, outer=(5)]
+      │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
            └── max IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
 
@@ -1912,16 +1912,16 @@ project
       │    │    │    │    ├── key: (3)
       │    │    │    │    └── fd: (3)-->(4)
       │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │    │    │         └── cd.c = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │    │    │         └── c = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
       │    │    └── aggregations [outer=(2-4)]
       │    │         ├── array-agg [type=int[], outer=(4)]
-      │    │         │    └── variable: xy.y [type=int, outer=(4)]
+      │    │         │    └── variable: y [type=int, outer=(4)]
       │    │         ├── const-agg [type=int, outer=(2)]
-      │    │         │    └── variable: cd.d [type=int, outer=(2)]
+      │    │         │    └── variable: d [type=int, outer=(2)]
       │    │         └── any-not-null-agg [type=int, outer=(3)]
-      │    │              └── variable: xy.x [type=int, outer=(3)]
+      │    │              └── variable: x [type=int, outer=(3)]
       │    └── projections [outer=(1-3,6)]
-      │         └── CASE WHEN xy.x IS NOT NULL THEN array_agg END [type=int[], outer=(3,6)]
+      │         └── CASE WHEN x IS NOT NULL THEN array_agg END [type=int[], outer=(3,6)]
       └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
            └── array_agg = ARRAY[] [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
 
@@ -1963,20 +1963,20 @@ project
       │    │    │    │    │    └── fd: (6)-->(7)
       │    │    │    │    └── projections [outer=(6,7)]
       │    │    │    │         ├── true [type=bool]
-      │    │    │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    │    │         └── y::STRING [type=string, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    └── aggregations [outer=(2-5,8,10)]
       │    │         ├── concat-agg [type=string, outer=(8)]
       │    │         │    └── variable: column8 [type=string, outer=(8)]
       │    │         ├── const-agg [type=int, outer=(2)]
-      │    │         │    └── variable: a.i [type=int, outer=(2)]
+      │    │         │    └── variable: i [type=int, outer=(2)]
       │    │         ├── const-agg [type=float, outer=(3)]
-      │    │         │    └── variable: a.f [type=float, outer=(3)]
+      │    │         │    └── variable: f [type=float, outer=(3)]
       │    │         ├── const-agg [type=string, outer=(4)]
-      │    │         │    └── variable: a.s [type=string, outer=(4)]
+      │    │         │    └── variable: s [type=string, outer=(4)]
       │    │         ├── const-agg [type=jsonb, outer=(5)]
-      │    │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │    │         │    └── variable: j [type=jsonb, outer=(5)]
       │    │         └── any-not-null-agg [type=bool, outer=(10)]
       │    │              └── variable: canary [type=bool, outer=(10)]
       │    └── projections [outer=(1-5,10,11)]
@@ -2017,22 +2017,22 @@ project
       │    │    │    │    ├── scan xy
       │    │    │    │    │    └── columns: y:7(int)
       │    │    │    │    └── projections [outer=(7)]
-      │    │    │    │         └── xy.y::STRING [type=string, outer=(7)]
+      │    │    │    │         └── y::STRING [type=string, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │    │    │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,9)]
       │         ├── max [type=string, outer=(9)]
       │         │    └── variable: column9 [type=string, outer=(9)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: a.j [type=jsonb, outer=(5)]
+      │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight), fd=()-->(10)]
            └── max = 'foo' [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight)]
 
@@ -2085,19 +2085,19 @@ group-by
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2)
  │    │    │    └── filters [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
- │    │    │         └── a.f = xy.y::FLOAT [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
+ │    │    │         └── a.f = y::FLOAT [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
  │    │    └── aggregations [outer=(2,4,9)]
  │    │         ├── max [type=int, outer=(9)]
  │    │         │    └── variable: a.i [type=int, outer=(9)]
  │    │         ├── const-agg [type=int, outer=(4)]
  │    │         │    └── variable: a.i [type=int, outer=(4)]
  │    │         └── const-agg [type=int, outer=(2)]
- │    │              └── variable: xy.y [type=int, outer=(2)]
+ │    │              └── variable: y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]
  │         └── a.i = max [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ])]
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xy.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # Right input of SemiJoin is DistinctOn.
 opt
@@ -2132,17 +2132,17 @@ group-by
  │    │    │    ├── scan a
  │    │    │    │    └── columns: i:4(int) f:5(float)
  │    │    │    └── filters [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
- │    │    │         └── xy.y > a.f [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ │    │    │         └── y > f [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
  │    │    └── aggregations [outer=(2,4)]
  │    │         ├── first-agg [type=int, outer=(4)]
- │    │         │    └── variable: a.i [type=int, outer=(4)]
+ │    │         │    └── variable: i [type=int, outer=(4)]
  │    │         └── const-agg [type=int, outer=(2)]
- │    │              └── variable: xy.y [type=int, outer=(2)]
+ │    │              └── variable: y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── xy.x = a.i [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── x = i [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: xy.y [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # Right input of SemiJoin is Project.
 opt
@@ -2182,11 +2182,11 @@ project
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2)
       │    │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │    │         └── uv.u = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+      │    │         └── u = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
       │    └── projections [outer=(1,6,8)]
-      │         └── COALESCE(uv.u, 10) [type=int, outer=(8)]
+      │         └── COALESCE(u, 10) [type=int, outer=(8)]
       └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
-           └── xy.x = computed [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+           └── x = computed [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
 
 # --------------------------------------------------
 # TryDecorrelateLimitOne
@@ -2229,9 +2229,9 @@ semi-join
  │         ├── left ordering: +6
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      └── uv.v = a.i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
+      └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
 
 # With left join.
 opt
@@ -2259,7 +2259,7 @@ project
  │    │    │    ├── key: (6)
  │    │    │    └── fd: (6)-->(7)
  │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(6)]
  │         └── first-agg [type=int, outer=(6)]
  │              └── variable: xy.x [type=int, outer=(6)]
@@ -2313,35 +2313,35 @@ project
       │    │    │    │    │    │    ├── key: (6)
       │    │    │    │    │    │    └── fd: (6)-->(7)
       │    │    │    │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      │    │    │    │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │    │    │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    │    │    │    └── aggregations [outer=(2-6)]
       │    │    │    │         ├── const-agg [type=int, outer=(2)]
-      │    │    │    │         │    └── variable: a.i [type=int, outer=(2)]
+      │    │    │    │         │    └── variable: i [type=int, outer=(2)]
       │    │    │    │         ├── const-agg [type=float, outer=(3)]
-      │    │    │    │         │    └── variable: a.f [type=float, outer=(3)]
+      │    │    │    │         │    └── variable: f [type=float, outer=(3)]
       │    │    │    │         ├── const-agg [type=string, outer=(4)]
-      │    │    │    │         │    └── variable: a.s [type=string, outer=(4)]
+      │    │    │    │         │    └── variable: s [type=string, outer=(4)]
       │    │    │    │         ├── const-agg [type=jsonb, outer=(5)]
-      │    │    │    │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │    │    │    │         │    └── variable: j [type=jsonb, outer=(5)]
       │    │    │    │         └── first-agg [type=int, outer=(6)]
-      │    │    │    │              └── variable: xy.x [type=int, outer=(6)]
+      │    │    │    │              └── variable: x [type=int, outer=(6)]
       │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │    │         └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      │    │         └── uv.v = a.i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
+      │    │         └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
       │    └── aggregations [outer=(2-5,8)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │         │    └── variable: j [type=jsonb, outer=(5)]
       │         └── first-agg [type=int, outer=(8)]
-      │              └── variable: uv.u [type=int, outer=(8)]
+      │              └── variable: u [type=int, outer=(8)]
       └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-           └── a.k = uv.u [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+           └── k = u [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 
 # With nested limited queries.
 opt
@@ -2401,29 +2401,29 @@ project
       │    │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    │    └── fd: (8)-->(9)
       │    │    │    │    │    └── filters [type=bool, outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
-      │    │    │    │    │         └── uv.v = xy.y [type=bool, outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ])]
+      │    │    │    │    │         └── v = y [type=bool, outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ])]
       │    │    │    │    └── aggregations [outer=(7,8)]
       │    │    │    │         ├── const-agg [type=int, outer=(7)]
-      │    │    │    │         │    └── variable: xy.y [type=int, outer=(7)]
+      │    │    │    │         │    └── variable: y [type=int, outer=(7)]
       │    │    │    │         └── first-agg [type=int, outer=(8)]
-      │    │    │    │              └── variable: uv.u [type=int, outer=(8)]
+      │    │    │    │              └── variable: u [type=int, outer=(8)]
       │    │    │    └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
-      │    │    │         └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
       │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-6)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │         │    └── variable: j [type=jsonb, outer=(5)]
       │         └── first-agg [type=int, outer=(6)]
-      │              └── variable: xy.x [type=int, outer=(6)]
+      │              └── variable: x [type=int, outer=(6)]
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # With inner join + ORDER BY.
 opt
@@ -2469,9 +2469,9 @@ project
  │    │    │         ├── left ordering: +3
  │    │    │         ├── right ordering: +5
  │    │    │         └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
- │    │    │              └── uv.u = a.k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+ │    │    │              └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── a.i = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(4)]
  │         └── first-agg [type=int, outer=(4)]
  │              └── variable: uv.v [type=int, outer=(4)]
@@ -2514,14 +2514,14 @@ project
       │    │         │    ├── key: (3)
       │    │         │    └── fd: (3)-->(4-6)
       │    │         └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-      │    │              └── a.i = xy.y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+      │    │              └── i = y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
       │    └── aggregations [outer=(2,3)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: xy.y [type=int, outer=(2)]
+      │         │    └── variable: y [type=int, outer=(2)]
       │         └── first-agg [type=int, outer=(3)]
-      │              └── variable: a.k [type=int, outer=(3)]
+      │              └── variable: k [type=int, outer=(3)]
       └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
 
 # --------------------------------------------------
 # HoistSelectExists
@@ -2547,7 +2547,7 @@ semi-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that EXISTS is hoisted even when it is one of several conjuncts.
 opt
@@ -2568,8 +2568,8 @@ semi-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
@@ -2579,7 +2579,7 @@ semi-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Exists operators in same Select list.
 opt
@@ -2602,13 +2602,13 @@ semi-join
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
  │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │         └── xy.x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
 opt
@@ -2661,12 +2661,12 @@ semi-join (merge)
  │         ├── left ordering: +6
  │         ├── right ordering: +8
  │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── xy.x = uv.u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # HoistSelectNotExists
@@ -2692,7 +2692,7 @@ anti-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
 opt
@@ -2713,8 +2713,8 @@ anti-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4)
  │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         ├── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- │         └── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
@@ -2724,7 +2724,7 @@ anti-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Not Exists operators in same Select list.
 opt
@@ -2749,13 +2749,13 @@ anti-join
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
  │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │         └── xy.x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
 opt
@@ -2800,13 +2800,13 @@ semi-join
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9)
  │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- │         └── xy.x = a.i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │         └── xy.x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  ├── scan xy
  │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # HoistSelectSubquery
@@ -2837,20 +2837,20 @@ project
       │    │    ├── scan xy
       │    │    │    └── columns: y:7(int)
       │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,7)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │         │    └── variable: j [type=jsonb, outer=(5)]
       │         └── first-agg [type=int, outer=(7)]
-      │              └── variable: xy.y [type=int, outer=(7)]
+      │              └── variable: y [type=int, outer=(7)]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-           └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
 opt
@@ -2915,22 +2915,22 @@ project
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +7
       │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │              └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │              └── xy.y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(1-5,7)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │         │    └── variable: j [type=jsonb, outer=(5)]
       │         ├── first-agg [type=int, outer=(7)]
       │         │    └── variable: xy.y [type=int, outer=(7)]
       │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: a.k [type=int, outer=(1)]
+      │              └── variable: k [type=int, outer=(1)]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-           └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           └── i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple correlated subqueries.
 opt
@@ -2974,35 +2974,35 @@ project
       │    │    │    │    │    ├── scan xy
       │    │    │    │    │    │    └── columns: xy.y:7(int)
       │    │    │    │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │    │    │    │         └── xy.y = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │    │    │    │         └── xy.y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
       │    │    │    │    └── aggregations [outer=(2-5,7)]
       │    │    │    │         ├── count [type=int, outer=(7)]
       │    │    │    │         │    └── variable: xy.y [type=int, outer=(7)]
       │    │    │    │         ├── const-agg [type=int, outer=(2)]
-      │    │    │    │         │    └── variable: a.i [type=int, outer=(2)]
+      │    │    │    │         │    └── variable: i [type=int, outer=(2)]
       │    │    │    │         ├── const-agg [type=float, outer=(3)]
-      │    │    │    │         │    └── variable: a.f [type=float, outer=(3)]
+      │    │    │    │         │    └── variable: f [type=float, outer=(3)]
       │    │    │    │         ├── const-agg [type=string, outer=(4)]
-      │    │    │    │         │    └── variable: a.s [type=string, outer=(4)]
+      │    │    │    │         │    └── variable: s [type=string, outer=(4)]
       │    │    │    │         └── const-agg [type=jsonb, outer=(5)]
-      │    │    │    │              └── variable: a.j [type=jsonb, outer=(5)]
+      │    │    │    │              └── variable: j [type=jsonb, outer=(5)]
       │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
       │    │    │         └── count > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
       │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │         └── xy.y = a.k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    │         └── xy.y = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
       │    └── aggregations [outer=(2-5,10)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: a.j [type=jsonb, outer=(5)]
+      │         │    └── variable: j [type=jsonb, outer=(5)]
       │         └── first-agg [type=int, outer=(10)]
       │              └── variable: xy.y [type=int, outer=(10)]
       └── filters [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
-           └── a.i = xy.y [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
+           └── i = xy.y [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
 
 # Subquery nested below interesting scalar operators like cast, function, tuple,
 # or, etc).
@@ -3039,20 +3039,20 @@ project
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +6
       │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │              └── a.k = uv.u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │              └── k = u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    └── aggregations [outer=(2-6)]
       │         ├── count [type=int, outer=(6)]
-      │         │    └── variable: uv.u [type=int, outer=(6)]
+      │         │    └── variable: u [type=int, outer=(6)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: a.j [type=jsonb, outer=(5)]
+      │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,8)]
-           └── ((0, length(count::STRING)) > (0, 1)) OR (a.i = 1) [type=bool, outer=(2,8)]
+           └── ((0, length(count::STRING)) > (0, 1)) OR (i = 1) [type=bool, outer=(2,8)]
 
 # Exists within a disjunction.
 opt
@@ -3086,20 +3086,20 @@ project
       │    │    │    └── projections [outer=(7)]
       │    │    │         └── true [type=bool]
       │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
       │    └── aggregations [outer=(2-5,8)]
       │         ├── const-not-null-agg [type=bool, outer=(8)]
       │         │    └── variable: true [type=bool, outer=(8)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string, outer=(4)]
       │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: a.j [type=jsonb, outer=(5)]
+      │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,9)]
-           └── (a.i = 1) OR (true_agg IS NOT NULL) [type=bool, outer=(2,9)]
+           └── (i = 1) OR (true_agg IS NOT NULL) [type=bool, outer=(2,9)]
 
 # Any with IS NULL.
 opt
@@ -3135,22 +3135,22 @@ project
       │    │    │    │    ├── scan xy
       │    │    │    │    │    └── columns: y:7(int)
       │    │    │    │    └── projections [outer=(7)]
-      │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+      │    │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(2,7)]
-      │    │    │         └── (a.i = xy.y) IS NOT false [type=bool, outer=(2,7)]
+      │    │    │         └── (i = y) IS NOT false [type=bool, outer=(2,7)]
       │    │    └── aggregations [outer=(2-5,8)]
       │    │         ├── bool-or [type=bool, outer=(8)]
       │    │         │    └── variable: notnull [type=bool, outer=(8)]
       │    │         ├── const-agg [type=int, outer=(2)]
-      │    │         │    └── variable: a.i [type=int, outer=(2)]
+      │    │         │    └── variable: i [type=int, outer=(2)]
       │    │         ├── const-agg [type=float, outer=(3)]
-      │    │         │    └── variable: a.f [type=float, outer=(3)]
+      │    │         │    └── variable: f [type=float, outer=(3)]
       │    │         ├── const-agg [type=string, outer=(4)]
-      │    │         │    └── variable: a.s [type=string, outer=(4)]
+      │    │         │    └── variable: s [type=string, outer=(4)]
       │    │         └── const-agg [type=jsonb, outer=(5)]
-      │    │              └── variable: a.j [type=jsonb, outer=(5)]
+      │    │              └── variable: j [type=jsonb, outer=(5)]
       │    └── projections [outer=(1-5,9)]
-      │         └── CASE WHEN bool_or AND (a.i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,9)]
+      │         └── CASE WHEN bool_or AND (i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,9)]
       └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
            └── case IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
 
@@ -3182,21 +3182,21 @@ project
  │    │    │         ├── scan a
  │    │    │         │    └── columns: i:2(int) s:4(string)
  │    │    │         └── projections [outer=(2,4), side-effects]
- │    │    │              └── (a.i * a.i) / 100 [type=decimal, outer=(2), side-effects]
+ │    │    │              └── (i * i) / 100 [type=decimal, outer=(2), side-effects]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10(bool) y:7(int)
  │    │    │    ├── fd: (7)-->(10)
  │    │    │    ├── scan xy
  │    │    │    │    └── columns: y:7(int)
  │    │    │    └── projections [outer=(7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── filters [type=bool, outer=(7,9)]
- │    │         └── (scalar >= xy.y) IS NOT false [type=bool, outer=(7,9)]
+ │    │         └── (scalar >= y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(4,9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
  │         │    └── variable: notnull [type=bool, outer=(10)]
  │         ├── const-agg [type=string, outer=(4)]
- │         │    └── variable: a.s [type=string, outer=(4)]
+ │         │    └── variable: s [type=string, outer=(4)]
  │         └── const-agg [type=decimal, outer=(9)]
  │              └── variable: scalar [type=decimal, outer=(9)]
  └── projections [outer=(4,9,11)]
@@ -3225,7 +3225,7 @@ project
  │         ├── left ordering: +1
  │         ├── right ordering: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │              └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── projections [outer=(6)]
       └── variable: xy.x [type=int, outer=(6)]
 
@@ -3265,11 +3265,11 @@ project
  │    │    │         ├── left ordering: +1
  │    │    │         ├── right ordering: +7
  │    │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    │              └── xy.x = a.k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │              └── xy.x = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    │    ├── scan xy
  │    │    │    └── columns: xy.y:20(int)
  │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
- │    │         └── xy.y = a.k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
+ │    │         └── xy.y = k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
  │    └── aggregations [outer=(20)]
  │         └── count [type=int, outer=(20)]
  │              └── variable: xy.y [type=int, outer=(20)]
@@ -3321,10 +3321,10 @@ scalar-group-by
  │    │    │         ├── scan xy
  │    │    │         │    └── columns: y:7(int)
  │    │    │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │    │              └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │              └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    │    └── true [type=bool]
  │    └── projections [outer=(7)]
- │         └── variable: xy.y [type=int, outer=(7)]
+ │         └── variable: y [type=int, outer=(7)]
  └── aggregations [outer=(8)]
       └── max [type=int, outer=(8)]
            └── variable: column8 [type=int, outer=(8)]
@@ -3357,7 +3357,7 @@ project
  │    │    │    └── projections [outer=(7)]
  │    │    │         └── true [type=bool]
  │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── const-not-null-agg [type=bool, outer=(9)]
  │              └── variable: true [type=bool, outer=(9)]
@@ -3392,11 +3392,11 @@ project
  │    │    │    │    ├── scan xy
  │    │    │    │    │    └── columns: y:7(int)
  │    │    │    │    └── filters [type=bool, outer=(7)]
- │    │    │    │         └── (xy.y > 5) IS NOT false [type=bool, outer=(7)]
+ │    │    │    │         └── (y > 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections [outer=(7)]
- │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │         └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool, outer=(9)]
@@ -3435,7 +3435,7 @@ project
                 │    └── projections [outer=(7)]
                 │         └── true [type=bool]
                 └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-                     └── xy.y = a.i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+                     └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # --------------------------------------------------
 # HoistJoinSubquery
@@ -3459,7 +3459,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters [type=bool, outer=(1)]
-      │         └── (a.k + 1) = 0 [type=bool, outer=(1)]
+      │         └── (k + 1) = 0 [type=bool, outer=(1)]
       └── true [type=bool]
 
 # Right join + multiple subqueries.
@@ -3482,8 +3482,8 @@ project
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7)
       │    └── projections [outer=(1,6,7)]
-      │         ├── xy.x + 1 [type=int, outer=(6)]
-      │         └── a.k + 1 [type=int, outer=(1)]
+      │         ├── x + 1 [type=int, outer=(6)]
+      │         └── k + 1 [type=int, outer=(1)]
       └── filters [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
            └── ?column? = ?column? [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ])]
 
@@ -3528,14 +3528,14 @@ project
       │    │    │    │    └── projections [outer=(8)]
       │    │    │    │         └── true [type=bool]
       │    │    │    └── filters [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
-      │    │    │         └── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │         └── u = y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
       │    │    └── aggregations [outer=(10)]
       │    │         └── const-not-null-agg [type=bool, outer=(10)]
       │    │              └── variable: true [type=bool, outer=(10)]
       │    └── projections [outer=(6,11)]
       │         └── true_agg IS NOT NULL [type=bool, outer=(11)]
       └── filters [type=bool, outer=(1,6,12)]
-           └── exists OR (a.k = xy.x) [type=bool, outer=(1,6,12)]
+           └── exists OR (k = x) [type=bool, outer=(1,6,12)]
 
 # Any in Join filter disjunction.
 opt
@@ -3578,19 +3578,19 @@ project
       │    │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    │    └── fd: (8)-->(9)
       │    │    │    │    │    └── projections [outer=(8,9)]
-      │    │    │    │    │         └── uv.v IS NOT NULL [type=bool, outer=(9)]
+      │    │    │    │    │         └── v IS NOT NULL [type=bool, outer=(9)]
       │    │    │    │    └── filters [type=bool, outer=(6-9), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
-      │    │    │    │         ├── uv.u = xy.y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
-      │    │    │    │         └── (xy.x = uv.v) IS NOT false [type=bool, outer=(6,9)]
+      │    │    │    │         ├── u = y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │    │         └── (x = v) IS NOT false [type=bool, outer=(6,9)]
       │    │    │    └── aggregations [outer=(7,10)]
       │    │    │         ├── bool-or [type=bool, outer=(10)]
       │    │    │         │    └── variable: notnull [type=bool, outer=(10)]
       │    │    │         └── const-agg [type=int, outer=(7)]
-      │    │    │              └── variable: xy.y [type=int, outer=(7)]
+      │    │    │              └── variable: y [type=int, outer=(7)]
       │    │    └── projections [outer=(6,7,11)]
-      │    │         └── CASE WHEN bool_or AND (xy.x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(6,11)]
+      │    │         └── CASE WHEN bool_or AND (x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(6,11)]
       │    └── filters [type=bool, outer=(6,12)]
-      │         └── case OR (xy.x IS NULL) [type=bool, outer=(6,12)]
+      │         └── case OR (x IS NULL) [type=bool, outer=(6,12)]
       └── true [type=bool]
 
 # --------------------------------------------------
@@ -3635,8 +3635,8 @@ project
  │    │              │    │    ├── key: ()
  │    │              │    │    └── tuple [type=tuple]
  │    │              │    └── projections [outer=(1,2)]
- │    │              │         ├── a.k + 1 [type=int, outer=(1)]
- │    │              │         └── a.i + 1 [type=int, outer=(2)]
+ │    │              │         ├── k + 1 [type=int, outer=(1)]
+ │    │              │         └── i + 1 [type=int, outer=(2)]
  │    │              ├── values
  │    │              │    ├── columns: column1:8(int)
  │    │              │    ├── outer: (6,7)
@@ -3700,7 +3700,7 @@ project
  │    │    │    │    │    │    ├── key: ()
  │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
  │    │    │    │         └── const-not-null-agg [type=bool, outer=(9)]
  │    │    │    │              └── variable: true [type=bool, outer=(9)]
@@ -3768,15 +3768,15 @@ project
  │    │    │    │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    │    │    │    └── filters [type=bool, outer=(7)]
- │    │    │    │    │    │    │         └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
+ │    │    │    │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    │    │    │    └── projections [outer=(6,7)]
- │    │    │    │    │    │         └── xy.y IS NOT NULL [type=bool, outer=(7)]
+ │    │    │    │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    │    ├── key: ()
  │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │    │    │         └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    │    │    └── aggregations [outer=(9)]
  │    │    │    │         └── bool-or [type=bool, outer=(9)]
  │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
@@ -3825,12 +3825,12 @@ project
       │              ├── left ordering: +1
       │              ├── right ordering: +3
       │              └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │                   └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │                   └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
       ├── zip
       │    ├── columns: column5:5(int)
       │    ├── outer: (4)
       │    ├── side-effects
-      │    └── generate_series(1, uv.v) [type=int, outer=(4), side-effects]
+      │    └── generate_series(1, v) [type=int, outer=(4), side-effects]
       └── true [type=bool]
 
 # Zip correlation within EXISTS.
@@ -3869,12 +3869,12 @@ semi-join-apply
  │    │         │    ├── key: ()
  │    │         │    └── tuple [type=tuple]
  │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │    │              └── uv.u = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  │    ├── zip
  │    │    ├── columns: generate_series:5(int)
  │    │    ├── outer: (4)
  │    │    ├── side-effects
- │    │    └── generate_series(1, uv.v) [type=int, outer=(4), side-effects]
+ │    │    └── generate_series(1, v) [type=int, outer=(4), side-effects]
  │    └── true [type=bool]
  └── true [type=bool]
 
@@ -3914,7 +3914,7 @@ project
       │         │              ├── left ordering: +1
       │         │              ├── right ordering: +6
       │         │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │         │                   └── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │         │                   └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │         ├── scan uv
       │         │    ├── columns: u:8(int!null) v:9(int)
       │         │    ├── key: (8)
@@ -3924,12 +3924,12 @@ project
       │              ├── left ordering: +1
       │              ├── right ordering: +8
       │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │                   └── uv.u = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      │                   └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
       ├── zip
       │    ├── columns: column10:10(int)
       │    ├── outer: (7,9)
       │    ├── side-effects
-      │    └── generate_series(xy.y, uv.v) [type=int, outer=(7,9), side-effects]
+      │    └── generate_series(y, v) [type=int, outer=(7,9), side-effects]
       └── true [type=bool]
 
 # Multiple functions.
@@ -3940,7 +3940,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: generate_series:8(int) _pg_expandarray:13(tuple{int AS x, int AS n})
+ ├── columns: generate_series:8(int) information_schema._pg_expandarray:13(tuple{int AS x, int AS n})
  ├── side-effects
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) v:7(int) column8:8(int) xy.x:9(int) x:11(int) n:12(int)
@@ -3968,7 +3968,7 @@ project
  │    │    │              ├── left ordering: +1
  │    │    │              ├── right ordering: +6
  │    │    │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │                   └── uv.u = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │                   └── u = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:9(int!null)
  │    │    │    ├── key: (9)
@@ -3977,12 +3977,12 @@ project
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +9
  │    │         └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │              └── xy.x = a.k [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
+ │    │              └── xy.x = k [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
  │    ├── zip
  │    │    ├── columns: column8:8(int) x:11(int) n:12(int)
  │    │    ├── outer: (7,9)
  │    │    ├── side-effects
- │    │    ├── generate_series(1, uv.v) [type=int, outer=(7), side-effects]
+ │    │    ├── generate_series(1, v) [type=int, outer=(7), side-effects]
  │    │    └── information_schema._pg_expandarray(ARRAY[xy.x]) [type=tuple{int AS x, int AS n}, outer=(9), side-effects]
  │    └── true [type=bool]
  └── projections [outer=(8,11,12)]
@@ -4005,7 +4005,7 @@ semi-join
  ├── scan xy
  │    └── columns: y:7(int)
  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Any is one of several conjuncts.
 opt
@@ -4028,11 +4028,11 @@ semi-join
  │    │    ├── key: ()
  │    │    └── fd: ()-->(1-5)
  │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
  ├── scan xy
  │    └── columns: y:7(int)
  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-      └── a.i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple ANY conjuncts.
 opt
@@ -4057,11 +4057,11 @@ semi-join
  │    │    └── projections [outer=(9)]
  │    │         └── xy.y::STRING [type=string, outer=(9)]
  │    └── filters [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
- │         └── a.s = y [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
+ │         └── s = y [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
  ├── scan xy
  │    └── columns: xy.y:7(int)
  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-      └── a.i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
 opt
@@ -4083,7 +4083,7 @@ select
                 ├── scan xy
                 │    └── columns: y:7(int)
                 └── filters [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
-                     └── xy.y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
+                     └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
 
 # ANY in Join On condition.
 opt
@@ -4104,13 +4104,13 @@ inner-join
  │    ├── scan uv
  │    │    └── columns: v:9(int)
  │    └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- │         └── a.i = uv.v [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
+ │         └── i = v [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # NormalizeNotAnyFilter
@@ -4129,7 +4129,7 @@ anti-join
  ├── scan xy
  │    └── columns: y:7(int)
  └── filters [type=bool, outer=(2,7)]
-      └── (a.i = xy.y) IS NOT false [type=bool, outer=(2,7)]
+      └── (i = y) IS NOT false [type=bool, outer=(2,7)]
 
 # NOT ANY is one of several conjuncts. Note that i > ALL(...) gets mapped to
 # NOT i <= ANY(...) by optbuilder.
@@ -4148,7 +4148,7 @@ anti-join
  ├── scan xy
  │    └── columns: y:7(int)
  └── filters [type=bool, outer=(2,7)]
-      └── (a.i <= xy.y) IS NOT false [type=bool, outer=(2,7)]
+      └── (i <= y) IS NOT false [type=bool, outer=(2,7)]
 
 # Multiple NOT ANY conjuncts.
 opt
@@ -4173,11 +4173,11 @@ anti-join
  │    │    └── projections [outer=(9)]
  │    │         └── xy.y::STRING [type=string, outer=(9)]
  │    └── filters [type=bool, outer=(4,10)]
- │         └── (a.s = y) IS NOT false [type=bool, outer=(4,10)]
+ │         └── (s = y) IS NOT false [type=bool, outer=(4,10)]
  ├── scan xy
  │    └── columns: xy.y:7(int)
  └── filters [type=bool, outer=(2,7)]
-      └── (a.i >= xy.y) IS NOT false [type=bool, outer=(2,7)]
+      └── (i >= xy.y) IS NOT false [type=bool, outer=(2,7)]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
 opt
@@ -4199,7 +4199,7 @@ select
                      ├── scan xy
                      │    └── columns: y:7(int)
                      └── filters [type=bool, outer=(7)]
-                          └── (xy.y = 5) IS NOT false [type=bool, outer=(7)]
+                          └── (y = 5) IS NOT false [type=bool, outer=(7)]
 
 # NOT ANY in Join On condition.
 opt
@@ -4220,13 +4220,13 @@ inner-join
  │    ├── scan uv
  │    │    └── columns: v:9(int)
  │    └── filters [type=bool, outer=(2,9)]
- │         └── (a.i = uv.v) IS NOT false [type=bool, outer=(2,9)]
+ │         └── (i = v) IS NOT false [type=bool, outer=(2,9)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # NormalizeAnyFilter + NormalizeNotAnyFilter
@@ -4253,8 +4253,8 @@ semi-join
  │    │    └── projections [outer=(9)]
  │    │         └── xy.y::STRING [type=string, outer=(9)]
  │    └── filters [type=bool, outer=(4,10)]
- │         └── (a.s = y) IS NOT false [type=bool, outer=(4,10)]
+ │         └── (s = y) IS NOT false [type=bool, outer=(4,10)]
  ├── scan xy
  │    └── columns: xy.y:7(int)
  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]

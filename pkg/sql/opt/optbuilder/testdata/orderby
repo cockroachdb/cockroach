@@ -142,7 +142,7 @@ build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
 project
- ├── columns: bar:1(int!null) b:2(int)
+ ├── columns: foo.bar:1(int!null) b:2(int)
  ├── ordering: -1
  └── scan t,rev
       ├── columns: a:1(int!null) b:2(int) c:3(bool)
@@ -265,7 +265,7 @@ sort
            │    └── columns: a:1(int!null) b:2(int) c:3(bool)
            └── filters [type=bool]
                 └── eq [type=bool]
-                     ├── variable: t.b [type=int]
+                     ├── variable: b [type=int]
                      └── const: 7 [type=int]
 
 build
@@ -293,12 +293,12 @@ sort
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       │    └── filters [type=bool]
       │         └── eq [type=bool]
-      │              ├── variable: t.b [type=int]
+      │              ├── variable: b [type=int]
       │              └── const: 7 [type=int]
       └── projections
            └── plus [type=int]
-                ├── variable: t.a [type=int]
-                └── variable: t.b [type=int]
+                ├── variable: a [type=int]
+                └── variable: b [type=int]
 
 build
 SELECT a FROM t ORDER BY a+b DESC, a
@@ -312,8 +312,8 @@ sort
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
-                ├── variable: t.a [type=int]
-                └── variable: t.b [type=int]
+                ├── variable: a [type=int]
+                └── variable: b [type=int]
 
 build
 SELECT a FROM t ORDER BY (((a)))
@@ -524,7 +524,7 @@ sort
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
-                ├── variable: t.b [type=int]
+                ├── variable: b [type=int]
                 └── const: 2 [type=int]
 
 # Check that the sort picks up a renamed render properly.
@@ -540,7 +540,7 @@ sort
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
-                ├── variable: t.b [type=int]
+                ├── variable: b [type=int]
                 └── const: 2 [type=int]
 
 build
@@ -555,7 +555,7 @@ sort
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
-                ├── variable: t.b [type=int]
+                ├── variable: b [type=int]
                 └── const: 2 [type=int]
 
 build
@@ -569,7 +569,7 @@ sort
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
-           └── variable: t.b [type=int]
+           └── variable: b [type=int]
 
 build
 SELECT b, c FROM t ORDER BY @4
@@ -625,7 +625,7 @@ sort
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
       └── projections
            └── function: lower [type=string]
-                └── variable: abc.d [type=string]
+                └── variable: d [type=string]
 
 build
 SELECT * FROM abc ORDER BY a
@@ -721,7 +721,7 @@ sort
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── filters [type=bool]
                 └── eq [type=bool]
-                     ├── variable: abc.b [type=int]
+                     ├── variable: b [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -738,7 +738,7 @@ sort
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── filters [type=bool]
                 └── eq [type=bool]
-                     ├── variable: abc.b [type=int]
+                     ├── variable: b [type=int]
                      └── const: 2 [type=int]
 
 build
@@ -757,7 +757,7 @@ sort
                 │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
                 └── filters [type=bool]
                      └── eq [type=bool]
-                          ├── variable: abc.a [type=int]
+                          ├── variable: a [type=int]
                           └── const: 1 [type=int]
 
 build
@@ -841,8 +841,8 @@ project
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
       └── plus [type=int]
-           ├── variable: abcd.a [type=int]
-           └── variable: abcd.b [type=int]
+           ├── variable: a [type=int]
+           └── variable: b [type=int]
 
 build
 SELECT b+d AS r FROM (SELECT * FROM abcd ORDER BY a,d)
@@ -853,8 +853,8 @@ project
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
       └── plus [type=int]
-           ├── variable: abcd.b [type=int]
-           └── variable: abcd.d [type=int]
+           ├── variable: b [type=int]
+           └── variable: d [type=int]
 
 build
 SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x

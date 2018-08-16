@@ -5333,35 +5333,6 @@ func (r *Replica) processRaftCommand(
 			tmpBatch.Close()
 		}
 
-		if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
-			// The merge trigger contains an up-to-date copy of the RHS that we're
-			// about to apply, but we must ensure that we install that copy into empty
-			// keyspace. Otherwise we'll end up merging the out-of-date data with the
-			// up-to-date data, instead of outright replacing it with the up-to-date
-			// data, leading to consistency violations.
-			//
-			// To that end, we inject ClearRange commands into the beginning of the
-			// write batch for the key spans that make up the RHS. This ensures that
-			// the up-to-date state replaces the RHS atomically.
-			//
-			// TODO(benesch): This will be unnecessary once we mandate that followers
-			// are up-to-date before the merge transaction commits. As such, this is
-			// an incredibly naive implementation. A real implementation would a)
-			// avoid rewriting the whole batch and b) avoid range deletion tombstones
-			// when there are only a few keys to delete.
-			tmpBatch := r.store.engine.NewBatch()
-			for _, keyRange := range rditer.MakeAllKeyRanges(&merge.RightDesc) {
-				if err := tmpBatch.ClearRange(keyRange.Start, keyRange.End); err != nil {
-					log.Fatal(ctx, err)
-				}
-			}
-			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
-				log.Fatal(ctx, err)
-			}
-			writeBatch.Data = tmpBatch.Repr()
-			tmpBatch.Close()
-		}
-
 		var delta enginepb.MVCCStats
 		{
 			var err error

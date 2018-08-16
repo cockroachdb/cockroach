@@ -25,4 +25,4 @@ select
  │    ├── stats: [rows=1000, distinct(2)=700]
  │    └── cost: 10
  └── filters [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
-      └── system.information_schema.schemata.schema_name = 'public' [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight)]
+      └── schema_name = 'public' [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight)]

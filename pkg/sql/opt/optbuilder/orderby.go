@@ -123,7 +123,7 @@ func (b *Builder) buildOrderByIndex(
 			panic(err)
 		}
 
-		colItem := tree.NewColumnItem(tab.Name(), tree.Name(col.Column.ColName()))
+		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
 		b.addExtraColumn(expr, inScope, projectionsScope, orderByScope)
 	}

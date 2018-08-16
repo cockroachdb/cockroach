@@ -177,7 +177,7 @@ project
                      │    │    └── interesting orderings: (+5)
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
-                     └── variable: xyzs.y [type=int, outer=(2)]
+                     └── variable: y [type=int, outer=(2)]
 
 # Test very high limit (> max uint32).
 opt

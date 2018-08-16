@@ -72,7 +72,7 @@ project
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
       ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
+      │    ├── variable: x [type=int]
       │    └── const: 3 [type=int]
       └── false [type=bool]
 
@@ -86,10 +86,10 @@ project
  └── projections
       └── or [type=bool]
            ├── lt [type=bool]
-           │    ├── variable: a.x [type=int]
-           │    └── variable: a.y [type=float]
+           │    ├── variable: x [type=int]
+           │    └── variable: y [type=float]
            └── gt [type=bool]
-                ├── variable: a.x [type=int]
+                ├── variable: x [type=int]
                 └── const: 1000 [type=int]
 
 build
@@ -113,10 +113,10 @@ project
  │    │    └── columns: x:1(int!null) y:2(float)
  │    └── projections
  │         ├── plus [type=int]
- │         │    ├── variable: a.x [type=int]
+ │         │    ├── variable: x [type=int]
  │         │    └── const: 3 [type=int]
  │         └── plus [type=float]
- │              ├── variable: a.y [type=float]
+ │              ├── variable: y [type=float]
  │              └── const: 1.0 [type=float]
  └── projections
       ├── plus [type=int]
@@ -187,7 +187,7 @@ select
  │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
  └── filters [type=bool]
       └── gt [type=bool]
-           ├── variable: c.rowid [type=int]
+           ├── variable: rowid [type=int]
            └── const: 0 [type=int]
 
 build
@@ -276,6 +276,6 @@ project
  │    └── columns: k:1(int!null) v:2(int)
  └── projections
       └── tuple [type=tuple{int AS a, int AS b, int AS c}]
-           ├── variable: kv.v [type=int]
-           ├── variable: kv.v [type=int]
-           └── variable: kv.v [type=int]
+           ├── variable: v [type=int]
+           ├── variable: v [type=int]
+           └── variable: v [type=int]

@@ -65,8 +65,8 @@ limit
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
  │         └── filters [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/2 - /2]; tight), fd=()-->(4,5)]
- │              ├── abcde.d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
- │              └── abcde.e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight)]
+ │              ├── d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+ │              └── e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight)]
  └── const: 10 [type=int]
 
 # Remove functionally dependent column that's only used in ordering.
@@ -116,9 +116,9 @@ sort
       │    └── fd: (1)-->(2,3), (2,3)~~>(1)
       └── aggregations [outer=(2,3)]
            ├── array-agg [type=int[], outer=(2)]
-           │    └── variable: abcde.b [type=int, outer=(2)]
+           │    └── variable: b [type=int, outer=(2)]
            └── const-agg [type=int, outer=(3)]
-                └── variable: abcde.c [type=int, outer=(3)]
+                └── variable: c [type=int, outer=(3)]
 
 # ScalarGroupBy case.
 opt
@@ -137,7 +137,7 @@ scalar-group-by
  │    └── ordering: +1
  └── aggregations [outer=(2)]
       └── array-agg [type=int[], outer=(2)]
-           └── variable: abcde.b [type=int, outer=(2)]
+           └── variable: b [type=int, outer=(2)]
 
 # DistinctOn case.
 opt
@@ -157,7 +157,7 @@ distinct-on
  │    └── ordering: +2,+3,+1
  └── aggregations [outer=(1)]
       └── first-agg [type=int, outer=(1)]
-           └── variable: abcde.a [type=int, outer=(1)]
+           └── variable: a [type=int, outer=(1)]
 
 # --------------------------------------------------
 # SimplifyRowNumberOrdering
@@ -184,8 +184,8 @@ sort
       │         ├── key: (1)
       │         └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
-           ├── abcde.b IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-           └── abcde.c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+           ├── b IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+           └── c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
 # SimplifyExplainOrdering
@@ -204,7 +204,7 @@ explain
       │    ├── columns: b:2(int) c:3(int)
       │    └── ordering: +2,+3
       └── projections [outer=(2,3)]
-           └── abcde.b + 1 [type=int, outer=(2)]
+           └── b + 1 [type=int, outer=(2)]
 
 # Regression: Explain a statement having constant column, but with no ordering.
 opt

@@ -92,7 +92,7 @@ project
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(2)]
            └── max [type=int, outer=(2)]
-                └── variable: a.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # Group by non-key.
 build
@@ -114,7 +114,7 @@ group-by
  │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── aggregations [outer=(3)]
       └── sum [type=float, outer=(3)]
-           └── variable: a.z [type=float, outer=(3)]
+           └── variable: z [type=float, outer=(3)]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -135,7 +135,7 @@ project
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(1)]
            └── max [type=int, outer=(1)]
-                └── variable: a.x [type=int, outer=(1)]
+                └── variable: x [type=int, outer=(1)]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -161,7 +161,7 @@ project
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(1)]
            └── min [type=int, outer=(1)]
-                └── variable: a.x [type=int, outer=(1)]
+                └── variable: x [type=int, outer=(1)]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -187,10 +187,10 @@ project
       │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations [outer=(1)]
       │         └── max [type=int, outer=(1)]
-      │              └── variable: a.x [type=int, outer=(1)]
+      │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
            └── in [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-                ├── variable: a.s [type=string, outer=(4)]
+                ├── variable: s [type=string, outer=(4)]
                 └── tuple [type=tuple{string, string}]
                      ├── const: 'a' [type=string]
                      └── const: 'b' [type=string]
@@ -222,7 +222,7 @@ select
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations [outer=(1)]
  │         └── sum [type=decimal, outer=(1)]
- │              └── variable: a.x [type=int, outer=(1)]
+ │              └── variable: x [type=int, outer=(1)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
       └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
            ├── variable: column5 [type=decimal, outer=(5)]
@@ -254,9 +254,9 @@ select
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations [outer=(2,3)]
  │         ├── sum [type=float, outer=(3)]
- │         │    └── variable: a.z [type=float, outer=(3)]
+ │         │    └── variable: z [type=float, outer=(3)]
  │         └── max [type=int, outer=(2)]
- │              └── variable: a.y [type=int, outer=(2)]
+ │              └── variable: y [type=int, outer=(2)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight), fd=()-->(5)]
       └── eq [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight)]
            ├── variable: column5 [type=float, outer=(5)]

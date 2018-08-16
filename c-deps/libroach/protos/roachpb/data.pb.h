@@ -31,6 +31,7 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
 #include "roachpb/metadata.pb.h"
+#include "storage/engine/enginepb/mvcc.pb.h"
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
@@ -853,20 +854,6 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
 
   // accessors -------------------------------------------------------
 
-  // bytes right_data = 3;
-  void clear_right_data();
-  static const int kRightDataFieldNumber = 3;
-  const ::std::string& right_data() const;
-  void set_right_data(const ::std::string& value);
-  #if LANG_CXX11
-  void set_right_data(::std::string&& value);
-  #endif
-  void set_right_data(const char* value);
-  void set_right_data(const void* value, size_t size);
-  ::std::string* mutable_right_data();
-  ::std::string* release_right_data();
-  void set_allocated_right_data(::std::string* right_data);
-
   bool has_left_desc() const;
   void clear_left_desc();
   static const int kLeftDescFieldNumber = 1;
@@ -889,13 +876,24 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::RangeDescriptor* mutable_right_desc();
   void set_allocated_right_desc(::cockroach::roachpb::RangeDescriptor* right_desc);
 
+  bool has_right_mvcc_stats() const;
+  void clear_right_mvcc_stats();
+  static const int kRightMvccStatsFieldNumber = 4;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& _internal_right_mvcc_stats() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCStats& right_mvcc_stats() const;
+  ::cockroach::storage::engine::enginepb::MVCCStats* release_right_mvcc_stats();
+  ::cockroach::storage::engine::enginepb::MVCCStats* mutable_right_mvcc_stats();
+  void set_allocated_right_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.MergeTrigger)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::ArenaStringPtr right_data_;
   ::cockroach::roachpb::RangeDescriptor* left_desc_;
   ::cockroach::roachpb::RangeDescriptor* right_desc_;
+  ::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -2957,57 +2955,51 @@ inline void MergeTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_desc)
 }
 
-// bytes right_data = 3;
-inline void MergeTrigger::clear_right_data() {
-  right_data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+inline bool MergeTrigger::has_right_mvcc_stats() const {
+  return this != internal_default_instance() && right_mvcc_stats_ != NULL;
 }
-inline const ::std::string& MergeTrigger::right_data() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.right_data)
-  return right_data_.GetNoArena();
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& MergeTrigger::_internal_right_mvcc_stats() const {
+  return *right_mvcc_stats_;
 }
-inline void MergeTrigger::set_right_data(const ::std::string& value) {
+inline const ::cockroach::storage::engine::enginepb::MVCCStats& MergeTrigger::right_mvcc_stats() const {
+  const ::cockroach::storage::engine::enginepb::MVCCStats* p = right_mvcc_stats_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCStats*>(
+      &::cockroach::storage::engine::enginepb::_MVCCStats_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCStats* MergeTrigger::release_right_mvcc_stats() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
   
-  right_data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.MergeTrigger.right_data)
+  ::cockroach::storage::engine::enginepb::MVCCStats* temp = right_mvcc_stats_;
+  right_mvcc_stats_ = NULL;
+  return temp;
 }
-#if LANG_CXX11
-inline void MergeTrigger::set_right_data(::std::string&& value) {
+inline ::cockroach::storage::engine::enginepb::MVCCStats* MergeTrigger::mutable_right_mvcc_stats() {
   
-  right_data_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.MergeTrigger.right_data)
+  if (right_mvcc_stats_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCStats>(GetArenaNoVirtual());
+    right_mvcc_stats_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
+  return right_mvcc_stats_;
 }
-#endif
-inline void MergeTrigger::set_right_data(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  
-  right_data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.MergeTrigger.right_data)
-}
-inline void MergeTrigger::set_right_data(const void* value, size_t size) {
-  
-  right_data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.MergeTrigger.right_data)
-}
-inline ::std::string* MergeTrigger::mutable_right_data() {
-  
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.right_data)
-  return right_data_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* MergeTrigger::release_right_data() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.right_data)
-  
-  return right_data_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void MergeTrigger::set_allocated_right_data(::std::string* right_data) {
-  if (right_data != NULL) {
+inline void MergeTrigger::set_allocated_right_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(right_mvcc_stats_);
+  }
+  if (right_mvcc_stats) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      right_mvcc_stats = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, right_mvcc_stats, submessage_arena);
+    }
     
   } else {
     
   }
-  right_data_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), right_data);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_data)
+  right_mvcc_stats_ = right_mvcc_stats;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
 }
 
 // -------------------------------------------------------------------

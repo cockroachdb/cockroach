@@ -264,7 +264,7 @@ project
       │    └── true [type=bool]
       └── filters [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
            └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
-                ├── variable: b.z [type=int, outer=(6)]
+                ├── variable: z [type=int, outer=(6)]
                 └── const: 5 [type=int]
 
 # Force calculation of the distinct count for the column set spanning both
@@ -299,7 +299,7 @@ group-by
  │         └── true [type=bool]
  └── aggregations [outer=(6)]
       └── sum [type=decimal, outer=(6)]
-           └── variable: b.z [type=int, outer=(6)]
+           └── variable: z [type=int, outer=(6)]
 
 # Join selectivity: 1/max(distinct(a.x), distinct(b.x)) = 1/5000.
 norm
@@ -328,7 +328,7 @@ group-by
  │              └── variable: b.x [type=int, outer=(5)]
  └── aggregations [outer=(6)]
       └── sum [type=decimal, outer=(6)]
-           └── variable: b.z [type=int, outer=(6)]
+           └── variable: z [type=int, outer=(6)]
 
 # Semi-join.
 norm
@@ -395,8 +395,8 @@ inner-join
       │    ├── variable: a.x [type=int, outer=(1)]
       │    └── variable: b.x [type=int, outer=(5)]
       └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-           ├── variable: a.y [type=int, outer=(2)]
-           └── variable: b.z [type=int, outer=(6)]
+           ├── variable: y [type=int, outer=(2)]
+           └── variable: z [type=int, outer=(6)]
 
 # Equality condition + extra filters.
 norm
@@ -418,10 +418,10 @@ inner-join
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
  │         ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
- │         │    ├── variable: a.y [type=int, outer=(2)]
+ │         │    ├── variable: y [type=int, outer=(2)]
  │         │    └── const: 0 [type=int]
  │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /299]; tight)]
- │              ├── variable: a.y [type=int, outer=(2)]
+ │              ├── variable: y [type=int, outer=(2)]
  │              └── const: 300 [type=int]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
@@ -432,8 +432,8 @@ inner-join
       │    └── variable: b.x [type=int, outer=(5)]
       └── eq [type=bool, outer=(2,6)]
            ├── plus [type=int, outer=(2,6)]
-           │    ├── variable: a.y [type=int, outer=(2)]
-           │    └── variable: b.z [type=int, outer=(6)]
+           │    ├── variable: y [type=int, outer=(2)]
+           │    └── variable: z [type=int, outer=(6)]
            └── const: 5 [type=int]
 
 # Force column statistics calculation for semi-join.
@@ -470,8 +470,8 @@ project
       │         │    └── variable: b.x [type=int, outer=(5)]
       │         └── eq [type=bool, outer=(2,6)]
       │              ├── plus [type=int, outer=(2,6)]
-      │              │    ├── variable: a.y [type=int, outer=(2)]
-      │              │    └── variable: b.z [type=int, outer=(6)]
+      │              │    ├── variable: y [type=int, outer=(2)]
+      │              │    └── variable: z [type=int, outer=(6)]
       │              └── const: 5 [type=int]
       └── aggregations
            └── count-rows [type=int]
@@ -510,8 +510,8 @@ project
       │         │    └── variable: b.x [type=int, outer=(5)]
       │         └── eq [type=bool, outer=(2,6)]
       │              ├── plus [type=int, outer=(2,6)]
-      │              │    ├── variable: a.y [type=int, outer=(2)]
-      │              │    └── variable: b.z [type=int, outer=(6)]
+      │              │    ├── variable: y [type=int, outer=(2)]
+      │              │    └── variable: z [type=int, outer=(6)]
       │              └── const: 5 [type=int]
       └── aggregations
            └── count-rows [type=int]
@@ -549,8 +549,8 @@ project
       │         │    └── variable: b.x [type=int, outer=(5)]
       │         └── eq [type=bool, outer=(2,6)]
       │              ├── plus [type=int, outer=(2,6)]
-      │              │    ├── variable: a.y [type=int, outer=(2)]
-      │              │    └── variable: b.z [type=int, outer=(6)]
+      │              │    ├── variable: y [type=int, outer=(2)]
+      │              │    └── variable: z [type=int, outer=(6)]
       │              └── const: 5 [type=int]
       └── aggregations
            └── count-rows [type=int]
@@ -588,8 +588,8 @@ project
       │         │    └── variable: b.x [type=int, outer=(5)]
       │         └── eq [type=bool, outer=(2,6)]
       │              ├── plus [type=int, outer=(2,6)]
-      │              │    ├── variable: a.y [type=int, outer=(2)]
-      │              │    └── variable: b.z [type=int, outer=(6)]
+      │              │    ├── variable: y [type=int, outer=(2)]
+      │              │    └── variable: z [type=int, outer=(6)]
       │              └── const: 5 [type=int]
       └── aggregations
            └── count-rows [type=int]
@@ -627,8 +627,8 @@ project
       │         │    └── variable: b.x [type=int, outer=(5)]
       │         └── eq [type=bool, outer=(2,6)]
       │              ├── plus [type=int, outer=(2,6)]
-      │              │    ├── variable: a.y [type=int, outer=(2)]
-      │              │    └── variable: b.z [type=int, outer=(6)]
+      │              │    ├── variable: y [type=int, outer=(2)]
+      │              │    └── variable: z [type=int, outer=(6)]
       │              └── const: 5 [type=int]
       └── aggregations
            └── count-rows [type=int]
@@ -705,8 +705,8 @@ inner-join (lookup def)
  │    └── fd: (1,3)-->(2)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           ├── variable: abc.a [type=int, outer=(1)]
-           └── variable: def.f [type=int, outer=(6)]
+           ├── variable: a [type=int, outer=(1)]
+           └── variable: f [type=int, outer=(6)]
 
 # The filter a=e is not very selective, so we do not expect a lookup join.
 opt
@@ -734,5 +734,5 @@ inner-join (merge)
       ├── right ordering: +5
       └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-                ├── variable: abc.a [type=int, outer=(1)]
-                └── variable: def.e [type=int, outer=(5)]
+                ├── variable: a [type=int, outer=(1)]
+                └── variable: e [type=int, outer=(5)]

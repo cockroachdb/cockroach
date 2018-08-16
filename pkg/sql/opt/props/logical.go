@@ -15,15 +15,11 @@
 package props
 
 import (
-	"bytes"
 	"fmt"
-	"strings"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // Logical properties describe the content and characteristics of data returned
@@ -470,113 +466,4 @@ func (p *Logical) Verify() {
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", relational.Cardinality))
 		}
 	}
-}
-
-// FormatColSet outputs the specified set of columns using FormatCol to format
-// the output.
-func (p *Logical) FormatColSet(
-	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colSet opt.ColSet,
-) {
-	if !colSet.Empty() {
-		var buf bytes.Buffer
-		buf.WriteString(heading)
-		colSet.ForEach(func(i int) {
-			p.FormatCol(f, &buf, "", opt.ColumnID(i))
-		})
-		tp.Child(buf.String())
-	}
-}
-
-// FormatColList outputs the specified list of columns using FormatCol to
-// format the output.
-func (p *Logical) FormatColList(
-	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colList opt.ColList,
-) {
-	if len(colList) > 0 {
-		var buf bytes.Buffer
-		buf.WriteString(heading)
-		for _, col := range colList {
-			p.FormatCol(f, &buf, "", col)
-		}
-		tp.Child(buf.String())
-	}
-}
-
-// FormatCol outputs the specified column using the following format:
-//   label:index(type)
-//
-// If the column is not nullable, then this is the format:
-//   label:index(type!null)
-//
-// If a label is given, then it is used. Otherwise, a "best effort" label is
-// used from query metadata.
-func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, id opt.ColumnID) {
-	if label == "" {
-		label = f.Metadata().ColumnLabel(id)
-	}
-
-	if !isSimpleColumnName(label) {
-		// Add quotations around the column name if it appears to be an
-		// expression. This also indicates that the column name is not eligible
-		// to be shortened.
-		label = "\"" + label + "\""
-	} else if f.HasFlags(opt.ExprFmtHideQualifications) {
-		// If the label is qualified, try to shorten it.
-		if idx := strings.LastIndex(label, "."); idx != -1 {
-			short := label[idx+1:]
-			suffix := label[idx:] // includes the "."
-			// Check if shortening the label could cause ambiguity: is there another
-			// column that would be shortened to the same name?
-			ambiguous := false
-			for col := opt.ColumnID(1); int(col) <= f.Metadata().NumColumns(); col++ {
-				if col != id {
-					if l := f.Metadata().ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
-						ambiguous = true
-						break
-					}
-				}
-			}
-			if !ambiguous {
-				label = short
-			}
-		}
-	}
-
-	typ := f.Metadata().ColumnType(id)
-	buf.WriteByte(' ')
-	buf.WriteString(label)
-	buf.WriteByte(':')
-	fmt.Fprintf(buf, "%d", id)
-	buf.WriteByte('(')
-	buf.WriteString(typ.String())
-
-	if p.Relational.NotNullCols.Contains(int(id)) {
-		buf.WriteString("!null")
-	}
-	buf.WriteByte(')')
-}
-
-// isSimpleColumnName returns true if the given label consists of only ASCII
-// letters, numbers, underscores, quotation marks, and periods ("."). It is
-// used to determine whether or not we can shorten a column label by removing
-// the prefix up to the last ".". Although isSimpleColumnName excludes some
-// valid table column names, it ensures that we don't shorten expressions such
-// as "a.x + b.x" to "x". It is better to err on the side of not shortening
-// than to incorrectly shorten a column name representing an expression.
-func isSimpleColumnName(label string) bool {
-	for i, r := range label {
-		if r > unicode.MaxASCII {
-			return false
-		}
-
-		if i == 0 {
-			if r != '"' && !unicode.IsLetter(r) {
-				// The first character must be a letter or quotation mark.
-				return false
-			}
-		} else if r != '.' && r != '_' && r != '"' && !unicode.IsNumber(r) && !unicode.IsLetter(r) {
-			return false
-		}
-	}
-	return true
 }

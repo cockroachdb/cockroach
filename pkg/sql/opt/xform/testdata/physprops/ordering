@@ -80,7 +80,7 @@ select
  │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  │    └── ordering: +1,-2
  └── filters [type=bool]
-      └── a.x > a.y [type=bool]
+      └── x > y [type=bool]
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -94,7 +94,7 @@ sort
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       └── filters [type=bool]
-           └── a.x > a.y [type=bool]
+           └── x > y [type=bool]
 
 # --------------------------------------------------
 # Project operator (pass through).
@@ -111,7 +111,7 @@ project
  │    ├── columns: x:1(int!null) y:2(float!null)
  │    └── ordering: +1,-2
  └── projections
-      └── a.x + 1 [type=int]
+      └── x + 1 [type=int]
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -125,7 +125,7 @@ sort
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
       └── projections
-           └── a.z + 1 [type=decimal]
+           └── z + 1 [type=decimal]
 
 # Ordering cannot be passed through because it includes computed column.
 opt
@@ -139,7 +139,7 @@ sort
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null)
       └── projections
-           └── a.y + 1.0 [type=float]
+           └── y + 1.0 [type=float]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).
@@ -159,9 +159,9 @@ project
  │    │    ├── columns: x:1(int!null) y:2(float!null)
  │    │    └── ordering: +1,-2
  │    └── filters [type=bool]
- │         └── a.x > a.y [type=bool]
+ │         └── x > y [type=bool]
  └── projections
-      └── a.x - 1 [type=int]
+      └── x - 1 [type=int]
 
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
@@ -181,7 +181,7 @@ memo (optimized)
  │    └── "[ordering: +1,-2]"
  │         ├── best: (select G4="[ordering: +1,-2]" G5)
  │         └── cost: 1070.00
- ├── G3: (projections G6 a.x a.y)
+ ├── G3: (projections G6 x y)
  ├── G4: (scan a,cols=(1,2))
  │    ├── ""
  │    │    ├── best: (scan a,cols=(1,2))
@@ -193,8 +193,8 @@ memo (optimized)
  ├── G6: (minus G9 G8)
  ├── G7: (gt G9 G10)
  ├── G8: (const 1)
- ├── G9: (variable a.x)
- └── G10: (variable a.y)
+ ├── G9: (variable x)
+ └── G10: (variable y)
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -210,7 +210,7 @@ sort
            ├── scan a
            │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
            └── filters [type=bool]
-                └── a.x > a.y [type=bool]
+                └── x > y [type=bool]
 
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
@@ -230,7 +230,7 @@ memo (optimized)
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
  │         └── cost: 1096.21
- ├── G3: (projections a.y a.z)
+ ├── G3: (projections y z)
  ├── G4: (scan a,cols=(1-3))
  │    ├── ""
  │    │    ├── best: (scan a,cols=(1-3))
@@ -240,8 +240,8 @@ memo (optimized)
  │         └── cost: 1279.32
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
- ├── G7: (variable a.x)
- └── G8: (variable a.y)
+ ├── G7: (variable x)
+ └── G8: (variable y)
 
 # --------------------------------------------------
 # GroupBy operator.
@@ -259,7 +259,7 @@ scalar-group-by
  │         └── columns: y:2(float!null) z:3(decimal)
  └── aggregations
       └── array-agg [type=decimal[]]
-           └── variable: a.z [type=decimal]
+           └── variable: z [type=decimal]
 
 opt
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY x, y DESC)
@@ -272,7 +272,7 @@ scalar-group-by
  │    └── ordering: +1,-2
  └── aggregations
       └── array-agg [type=int[]]
-           └── variable: a.x [type=int]
+           └── variable: x [type=int]
 
 # --------------------------------------------------
 # Explain operator.
@@ -339,7 +339,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (row-number G4)
  │         └── cost: 1060.00
- ├── G3: (projections G5 a.y)
+ ├── G3: (projections G5 y)
  ├── G4: (scan a,cols=(2))
  │    └── ""
  │         ├── best: (scan a,cols=(2))
@@ -461,7 +461,7 @@ inner-join (merge)
       ├── left ordering: +1
       ├── right ordering: +4
       └── filters [type=bool]
-           └── abc.a = xyz.x [type=bool]
+           └── a = x [type=bool]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x ORDER BY x
@@ -479,7 +479,7 @@ inner-join (merge)
       ├── left ordering: +1
       ├── right ordering: +4
       └── filters [type=bool]
-           └── abc.a = xyz.x [type=bool]
+           └── a = x [type=bool]
 
 # A left join guarantees an ordering on the left side.
 opt
@@ -498,7 +498,7 @@ left-join (merge)
       ├── left ordering: +1
       ├── right ordering: +4
       └── filters [type=bool]
-           └── abc.a = xyz.x [type=bool]
+           └── a = x [type=bool]
 
 # A left join doesn't guarantee an ordering on x (some rows will have NULLs).
 opt
@@ -519,7 +519,7 @@ sort
            ├── left ordering: +1
            ├── right ordering: +4
            └── filters [type=bool]
-                └── abc.a = xyz.x [type=bool]
+                └── a = x [type=bool]
 
 # A right join doesn't guarantee an ordering on a (some rows will have NULLs).
 opt
@@ -540,7 +540,7 @@ sort
            ├── left ordering: +1
            ├── right ordering: +4
            └── filters [type=bool]
-                └── abc.a = xyz.x [type=bool]
+                └── a = x [type=bool]
 
 opt
 SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
@@ -558,7 +558,7 @@ right-join (merge)
       ├── left ordering: +1
       ├── right ordering: +4
       └── filters [type=bool]
-           └── abc.a = xyz.x [type=bool]
+           └── a = x [type=bool]
 
 opt
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=x ORDER BY a
@@ -578,7 +578,7 @@ sort
            ├── left ordering: +1
            ├── right ordering: +4
            └── filters [type=bool]
-                └── abc.a = xyz.x [type=bool]
+                └── a = x [type=bool]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a
@@ -596,8 +596,8 @@ inner-join (merge)
       ├── left ordering: +1,+2
       ├── right ordering: +4,+5
       └── filters [type=bool]
-           ├── abc.a = xyz.x [type=bool]
-           └── abc.b = xyz.y [type=bool]
+           ├── a = x [type=bool]
+           └── b = y [type=bool]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, b
@@ -615,8 +615,8 @@ inner-join (merge)
       ├── left ordering: +1,+2
       ├── right ordering: +4,+5
       └── filters [type=bool]
-           ├── abc.a = xyz.x [type=bool]
-           └── abc.b = xyz.y [type=bool]
+           ├── a = x [type=bool]
+           └── b = y [type=bool]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, y
@@ -634,8 +634,8 @@ inner-join (merge)
       ├── left ordering: +1,+2
       ├── right ordering: +4,+5
       └── filters [type=bool]
-           ├── abc.a = xyz.x [type=bool]
-           └── abc.b = xyz.y [type=bool]
+           ├── a = x [type=bool]
+           └── b = y [type=bool]
 
 # --------------------------------------------------
 # Limit / Offset
@@ -666,7 +666,7 @@ limit
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
  │    └── filters [type=bool]
- │         └── abc.c < (abc.a + abc.b) [type=bool]
+ │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
 opt
@@ -711,7 +711,7 @@ sort
       │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    │    └── ordering: +1,+2
       │    └── filters [type=bool]
-      │         └── abc.c < (abc.a + abc.b) [type=bool]
+      │         └── c < (a + b) [type=bool]
       └── const: 10 [type=int]
 
 opt
@@ -754,7 +754,7 @@ limit
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
  │    └── filters [type=bool]
- │         └── abc.c < (abc.a + abc.b) [type=bool]
+ │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
 opt
@@ -794,7 +794,7 @@ limit
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2,+3
  │    └── filters [type=bool]
- │         └── abc.c < (abc.a + abc.b) [type=bool]
+ │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
 opt
@@ -851,7 +851,7 @@ sort
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: abc.a [type=int]
+                └── variable: a [type=int]
 
 opt
 SELECT DISTINCT ON (b, c) a, b, c FROM abc ORDER BY b, c, a
@@ -868,7 +868,7 @@ sort
       │    └── ordering: +1 opt(2,3)
       └── aggregations
            └── first-agg [type=int]
-                └── variable: abc.a [type=int]
+                └── variable: a [type=int]
 
 opt
 SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
@@ -885,7 +885,7 @@ distinct-on
  │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.c [type=int]
+           └── variable: c [type=int]
 
 # Pass through the ordering from above.
 opt
@@ -900,7 +900,7 @@ distinct-on
  │    └── ordering: +1
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.c [type=int]
+           └── variable: c [type=int]
 
 # Internal orderings that refer just to ON columns can be ignored.
 opt
@@ -915,7 +915,7 @@ distinct-on
  │    └── ordering: +1,+2
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.c [type=int]
+           └── variable: c [type=int]
 
 opt
 SELECT * FROM (SELECT DISTINCT ON (a, b) a, b, c FROM abc ORDER BY a, b) ORDER BY a
@@ -929,7 +929,7 @@ distinct-on
  │    └── ordering: +1
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.c [type=int]
+           └── variable: c [type=int]
 
 # The c,b part of the inner ordering can be ignored.
 opt
@@ -945,7 +945,7 @@ distinct-on
  │    └── ordering: +1
  └── aggregations
       └── first-agg [type=int]
-           └── variable: abc.a [type=int]
+           └── variable: a [type=int]
 
 # There is no ordering that satisfies both the intra-group ordering of c+ and the
 # inter-group ordering of a+; we have to sort twice.
@@ -966,9 +966,9 @@ sort
       │         └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── aggregations
            ├── first-agg [type=int]
-           │    └── variable: abc.a [type=int]
+           │    └── variable: a [type=int]
            └── first-agg [type=int]
-                └── variable: abc.c [type=int]
+                └── variable: c [type=int]
 
 # Same as above, except we can use the index ordering for the distinct input.
 opt
@@ -986,6 +986,6 @@ sort
       │    └── ordering: +2 opt(1)
       └── aggregations
            ├── first-agg [type=int]
-           │    └── variable: abc.b [type=int]
+           │    └── variable: b [type=int]
            └── first-agg [type=int]
-                └── variable: abc.c [type=int]
+                └── variable: c [type=int]
