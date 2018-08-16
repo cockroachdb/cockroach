@@ -68,7 +68,13 @@ type EvalContext interface {
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
 
+	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
+	// If called from a command that declares a read/write span on the
+	// entire range, the stats will be consistent with the data that is
+	// visible to the batch. Otherwise, it may return inconsistent
+	// results due to concurrent writes.
 	GetMVCCStats() enginepb.MVCCStats
+
 	GetGCThreshold() hlc.Timestamp
 	GetTxnSpanGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)

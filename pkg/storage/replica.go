@@ -1774,6 +1774,8 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
+// This accessor is thread-safe, but provides no guarantees about its
+// synchronization with any concurrent writes.
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
