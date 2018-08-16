@@ -1562,9 +1562,8 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
-// Batch service implemeted by nodes for KV API requests.
+// Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
   rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
-  // TODO(nvanbenschoten): Uncomment when the RangeFeed API is introduced.
-  // rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
 }

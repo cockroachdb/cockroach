@@ -132,6 +132,12 @@ func (*internalServer) Batch(
 	return nil, nil
 }
 
+func (*internalServer) RangeFeed(
+	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //

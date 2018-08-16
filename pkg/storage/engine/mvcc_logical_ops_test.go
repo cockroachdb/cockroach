@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,7 +37,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	ol := NewOpLoggerBatch(batch)
 	defer ol.Close()
 
-	// Write a value and and intent.
+	// Write a value and an intent.
 	if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -44,11 +45,23 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Update the intent and write another. Use a distinct batch.
+	// Write a value and an intent on local keys.
+	localKey := keys.MakeRangeIDPrefix(1)
+	if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 2}, value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Update the intents and write another. Use a distinct batch.
 	olDist := ol.Distinct()
 	txn1Seq := *txn1
 	txn1Seq.Sequence++
 	if err := MVCCPut(ctx, olDist, nil, testKey1, hlc.Timestamp{Logical: 3}, value2, &txn1Seq); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(ctx, olDist, nil, localKey, hlc.Timestamp{Logical: 3}, value2, &txn1Seq); err != nil {
 		t.Fatal(err)
 	}
 	if err := MVCCPut(ctx, olDist, nil, testKey2, hlc.Timestamp{Logical: 3}, value3, txn1); err != nil {
@@ -56,11 +69,18 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 	olDist.Close()
 
-	// Resolve both intent.
+	// Resolve all three intent.
 	txn1CommitTS := *txn1Commit
 	txn1CommitTS.Timestamp = hlc.Timestamp{Logical: 4}
 	if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: testKey1, EndKey: testKey2.Next()},
+		Txn:    txn1CommitTS.TxnMeta,
+		Status: txn1CommitTS.Status,
+	}, math.MaxInt64); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil, roachpb.Intent{
+		Span:   roachpb.Span{Key: localKey, EndKey: localKey.Next()},
 		Txn:    txn1CommitTS.TxnMeta,
 		Status: txn1CommitTS.Status,
 	}, math.MaxInt64); err != nil {
@@ -100,7 +120,6 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteValueOp{
 			Key:       testKey1,
 			Timestamp: hlc.Timestamp{Logical: 1},
-			Value:     value1.RawBytes,
 		}),
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:     txn1.ID,
