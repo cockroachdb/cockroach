@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
@@ -232,6 +233,32 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
+}
+
+// AssertInvariants verifies that the store's bookkeping is self-consistent. It
+// is only valid to call this method when there is no in-flight traffic to the
+// store (e.g., after the store is shut down).
+func (s *Store) AssertInvariants() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.mu.replicas.Range(func(_ int64, p unsafe.Pointer) bool {
+		ctx := s.cfg.AmbientCtx.AnnotateCtx(context.Background())
+		repl := (*Replica)(p)
+		// We would normally need to hold repl.raftMu. Otherwise we can observe an
+		// initialized replica that is not in s.replicasByKey, e.g., if we race with
+		// a goroutine that is currently initializing repl. The lock ordering makes
+		// acquiring repl.raftMu challenging; instead we require that this method is
+		// called only when there is no in-flight traffic to the store, at which
+		// point acquiring repl.raftMu is unnecessary.
+		if repl.IsInitialized() {
+			if ex := s.mu.replicasByKey.Get(repl); ex != repl {
+				log.Fatalf(ctx, "%v misplaced in replicasByKey; found %v instead", repl, ex)
+			}
+		} else if _, ok := s.mu.uninitReplicas[repl.RangeID]; !ok {
+			log.Fatalf(ctx, "%v missing from unitReplicas", repl)
+		}
+		return true // keep iterating
+	})
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
