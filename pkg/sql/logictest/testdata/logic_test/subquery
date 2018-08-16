@@ -477,3 +477,6 @@ query B
 SELECT (SELECT 123 IN (VALUES (1), (2)))
 ----
 false
+
+statement error pq: subqueryfail
+SELECT * FROM xyz WHERE x IN (SELECT crdb_internal.force_error('', 'subqueryfail'))
