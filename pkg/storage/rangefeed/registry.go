@@ -31,8 +31,6 @@ type Stream interface {
 	// Context returns the context for this stream.
 	Context() context.Context
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// The provided RangeFeedEvent is not guaranteed to be safe for use after
-	// Send returns, so a copy should be made before returning if necessary.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*roachpb.RangeFeedEvent) error
 }
