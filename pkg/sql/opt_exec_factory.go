@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -644,11 +645,11 @@ func (ef *execFactory) ConstructPlan(
 			out.subquery = in.ExprNode
 			switch in.Mode {
 			case exec.SubqueryExists:
-				out.execMode = execModeExists
+				out.execMode = distsqlrun.SubqueryExecModeExists
 			case exec.SubqueryOneRow:
-				out.execMode = execModeOneRow
+				out.execMode = distsqlrun.SubqueryExecModeOneRow
 			case exec.SubqueryAnyRows:
-				out.execMode = execModeAllRowsNormalized
+				out.execMode = distsqlrun.SubqueryExecModeAllRowsNormalized
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
