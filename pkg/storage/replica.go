@@ -4050,7 +4050,24 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 		}
 
-		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
+		var rhsRepl *Replica
+		if currentEndKey := r.Desc().EndKey; currentEndKey.Less(inSnap.State.Desc.EndKey) {
+			rhsRepl = r.store.LookupReplica(currentEndKey)
+			if rhsRepl == nil {
+				log.Fatalf(ctx, "attempted to apply snapshot spanning merge, but no replica for subsumed key %s", currentEndKey)
+			}
+			rhsDesc := rhsRepl.Desc()
+			if !rhsDesc.StartKey.Equal(currentEndKey) {
+				log.Fatalf(ctx, "subsumed replica %v does not start at end of current replica %v", rhsRepl, r)
+			}
+			if !rhsDesc.EndKey.Equal(inSnap.State.Desc.EndKey) {
+				log.Fatalf(ctx, "subsumed replica %v does not end at end of incoming snapshot %v", rhsRepl, inSnap.State.Desc.EndKey)
+			}
+			rhsRepl.raftMu.Lock()
+			defer rhsRepl.raftMu.Unlock()
+		}
+
+		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, rhsRepl); err != nil {
 			const expl = "while applying snapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}

@@ -1609,6 +1609,82 @@ func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
 }
 
+// unreliableRaftHandler drops all Raft messages that are addressed to the
+// specified rangeID, but lets all other messages through.
+type unreliableRaftHandler struct {
+	rangeID roachpb.RangeID
+	storage.RaftMessageHandler
+}
+
+func (h *unreliableRaftHandler) HandleRaftRequest(
+	ctx context.Context,
+	req *storage.RaftMessageRequest,
+	respStream storage.RaftMessageResponseStream,
+) *roachpb.Error {
+	if req.RangeID == h.rangeID {
+		return nil
+	}
+	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	// Create two adjacent ranges on all three stores.
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, _, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Start dropping all Raft traffic to the LHS on store1.
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsDesc.RangeID,
+		RaftMessageHandler: store2,
+	})
+
+	// Merge the ranges together.
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	if _, pErr := client.SendWrapped(ctx, store0.TestSender(), mergeArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Truncate the logs of the LHS.
+	{
+		repl := store0.LookupReplica(roachpb.RKey("a"))
+		index, err := repl.GetLastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Truncate the log at index+1 (log entries < N are removed, so this
+		// includes the merge).
+		truncArgs := &roachpb.TruncateLogRequest{
+			RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
+			Index:         index,
+			RangeID:       repl.RangeID,
+		}
+		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Restore Raft traffic to the LHS on store2.
+	mtc.transport.Listen(store2.Ident.StoreID, store2)
+
+	// Transfer store2 the lease on the LHS to force it to become up to date.
+	// Because we truncated the log while it was unavailable, this will require a
+	// Raft snapshot.
+	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+}
+
 // TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store
 // containing the RHS of a merge can occur cleanly. This previously triggered
 // a fatal error (#27552).

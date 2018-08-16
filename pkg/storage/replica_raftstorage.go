@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -712,7 +713,11 @@ func clearRangeData(
 // responsibility to call r.store.processRangeDescriptorUpdate(r) after a
 // successful applySnapshot. This method requires that r.raftMu is held.
 func (r *Replica) applySnapshot(
-	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
+	ctx context.Context,
+	inSnap IncomingSnapshot,
+	snap raftpb.Snapshot,
+	hs raftpb.HardState,
+	rhsRepl *Replica,
 ) (err error) {
 	s := *inSnap.State
 	if s.Desc.RangeID != r.RangeID {
@@ -780,6 +785,14 @@ func (r *Replica) applySnapshot(
 	// reads from the batch.
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+
+	if rhsRepl != nil {
+		if err := rhsRepl.preDestroyRaftMuLocked(
+			ctx, r.store.Engine(), batch, math.MaxInt32 /* nextReplicaID */, false, /* destroyData */
+		); err != nil {
+			return err
+		}
+	}
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -868,6 +881,20 @@ func (r *Replica) applySnapshot(
 		return err
 	}
 	stats.commit = timeutil.Now()
+
+	if rhsRepl != nil {
+		if err := rhsRepl.postDestroyRaftMuLocked(ctx, rhsRepl.GetMVCCStats()); err != nil {
+			return err
+		}
+		// TODO(benesch): is sticking this upcall here copacetic? Seems to work OK,
+		// but in the non-snapshot merge path we go out of our way to defer the call
+		// to removeReplicaImpl to outside of Raft application.
+		if err := r.store.removeReplicaImpl(ctx, rhsRepl, math.MaxInt32 /* nextReplicaID */, RemoveOptions{
+			DestroyData: false,
+		}); err != nil {
+			return err
+		}
+	}
 
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is

@@ -3580,7 +3580,8 @@ func (s *Store) processRaftSnapshotRequest(
 			}
 
 			// Apply the snapshot, as Raft told us to.
-			if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState); err != nil {
+			var rhsRepl *Replica // preemptive snapshots can never subsume a replica
+			if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState, rhsRepl); err != nil {
 				return roachpb.NewError(err)
 			}
 
