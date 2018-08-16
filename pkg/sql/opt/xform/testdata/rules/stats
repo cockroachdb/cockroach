@@ -1,0 +1,44 @@
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b(b), UNIQUE INDEX c(c))
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ ├── INDEX b
+ │    ├── b int
+ │    └── a int not null
+ └── INDEX c
+      ├── c int
+      └── a int not null (storing)
+
+exec-ddl
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX y(y), UNIQUE INDEX z(z))
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z int
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX y
+ │    ├── y int
+ │    └── x int not null
+ └── INDEX z
+      ├── z int
+      └── x int not null (storing)
+
+# TODO(radu): fix the runaway exploration on this query.
+rulestats
+SELECT * FROM abc JOIN xyz ON a=x
+----
+Normalization rules applied 0 times.
+Exploration rules applied 56 times, added 49 expressions.
+Top exploration rules:
+  CommuteJoin              applied 18 times, added 9  expressions.
+  GenerateMergeJoins       applied 18 times, added 18 expressions.
+  PushJoinThroughIndexJoin applied 12 times, added 12 expressions.
+  GenerateLookupJoin       applied 6  times, added 6  expressions.
+  GenerateIndexScans       applied 2  times, added 4  expressions.
