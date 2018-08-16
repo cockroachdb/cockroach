@@ -15,14 +15,18 @@
 package metric
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/graphite"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 var errNoEndpoint = errors.New("external.graphite.endpoint is not set")
@@ -47,7 +51,8 @@ func (lf loggerFunc) Println(v ...interface{}) {
 
 // Push metrics scraped from registry to Graphite or Carbon server.
 // It converts the same metrics that are pulled by Prometheus into Graphite-format.
-func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string) error {
+func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string, whitelistPath string) error {
+	log.Errorf(ctx, "neeral push endpoint=%s whitelistpath=%s", endpoint, whitelistPath)
 	if endpoint == "" {
 		return errNoEndpoint
 	}
@@ -55,6 +60,42 @@ func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string) error {
 	if err != nil {
 		return err
 	}
+	var names []string
+	if whitelistPath != "" {
+		// Skip whitelisting if there are any errors.
+		if f, err := os.Open(whitelistPath); err == nil {
+			defer f.Close()
+
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				names = append(names, strings.TrimSpace(scanner.Text()))
+			}
+			if err = scanner.Err(); err == nil {
+				log.Errorf(ctx, "neeral reading file %s to give %v of size %d", whitelistPath, names, len(names))
+			} else {
+				log.Errorf(ctx, "neeral error reading from file %s: %v", whitelistPath, err)
+			}
+		}
+	}
+	inWhitelist := func(m *prometheusgo.MetricFamily) bool {
+		for _, name := range names {
+			if b, err := regexp.MatchString(name, *m.Name); err == nil && b {
+				log.Errorf(ctx, "neeral match name=%s regex=%s", *m.Name, name)
+				return true
+			}
+		}
+		return false
+	}
+	// Apply whitelist. We can do this because GraphiteExporter has its own
+	// instance of a PrometheusExporter.
+	if names != nil {
+		for k, family := range ge.pm.families {
+			if inWhitelist(family) {
+				delete(ge.pm.families, k)
+			}
+		}
+	}
+
 	// Make the bridge.
 	var b *graphite.Bridge
 	if b, err = graphite.NewBridge(&graphite.Config{

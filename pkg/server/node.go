@@ -109,6 +109,11 @@ var (
 			return nil
 		},
 	)
+	graphiteWhitelistPath = settings.RegisterStringSetting(
+		"external.graphite.whitelistpath",
+		"if nonempty, enable whitelist for which metrics to push based on contents at this path",
+		"",
+	)
 )
 
 type nodeMetrics struct {
@@ -823,8 +828,9 @@ func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
 			case <-timer.C:
 				timer.Read = true
 				endpoint := graphiteEndpoint.Get(&st.SV)
+				whitelistPath := graphiteWhitelistPath.Get(&st.SV)
 				if endpoint != "" {
-					if err := n.recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
+					if err := n.recorder.ExportToGraphite(ctx, endpoint, &pm, whitelistPath); err != nil {
 						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
 					}
 				}
