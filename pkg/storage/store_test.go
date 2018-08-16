@@ -2727,30 +2727,33 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wrap the snapshot in a minimal request. The request will error because the
+	// Wrap the snapshot in a minimal header. The request will error because the
 	// replica tombstone for the range requires that a new replica have an ID
 	// greater than 1.
-	req := &RaftMessageRequest{
-		RangeID: 1,
-		ToReplica: roachpb.ReplicaDescriptor{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 0,
-		},
-		FromReplica: roachpb.ReplicaDescriptor{
-			NodeID:    2,
-			StoreID:   2,
-			ReplicaID: 2,
-		},
-		Message: raftpb.Message{
-			Type: raftpb.MsgSnap,
-			Snapshot: raftpb.Snapshot{
-				Data: data,
+	snapHeader := &SnapshotRequest_Header{
+		State: storagebase.ReplicaState{Desc: repl1.Desc()},
+		RaftMessageRequest: RaftMessageRequest{
+			RangeID: 1,
+			ToReplica: roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 0,
+			},
+			FromReplica: roachpb.ReplicaDescriptor{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+			Message: raftpb.Message{
+				Type: raftpb.MsgSnap,
+				Snapshot: raftpb.Snapshot{
+					Data: data,
+				},
 			},
 		},
 	}
 	const expected = "preemptive snapshot from term 0 received"
-	if err := s.processRaftSnapshotRequest(ctx, req,
+	if err := s.processRaftSnapshotRequest(ctx, snapHeader,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
 			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
@@ -2809,28 +2812,31 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wrap the snapshot in a minimal request. The request will be dropped
+	// Wrap the snapshot in a minimal header. The request will be dropped
 	// because the Raft log index and term are less than the hard state written
 	// above.
-	req := &RaftMessageRequest{
-		RangeID: 1,
-		ToReplica: roachpb.ReplicaDescriptor{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 2,
-		},
-		FromReplica: roachpb.ReplicaDescriptor{
-			NodeID:    2,
-			StoreID:   2,
-			ReplicaID: 2,
-		},
-		Message: raftpb.Message{
-			Type: raftpb.MsgSnap,
-			Snapshot: raftpb.Snapshot{
-				Data: data,
-				Metadata: raftpb.SnapshotMetadata{
-					Index: 1,
-					Term:  1,
+	req := &SnapshotRequest_Header{
+		State: storagebase.ReplicaState{Desc: repl1.Desc()},
+		RaftMessageRequest: RaftMessageRequest{
+			RangeID: 1,
+			ToReplica: roachpb.ReplicaDescriptor{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 2,
+			},
+			FromReplica: roachpb.ReplicaDescriptor{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+			Message: raftpb.Message{
+				Type: raftpb.MsgSnap,
+				Snapshot: raftpb.Snapshot{
+					Data: data,
+					Metadata: raftpb.SnapshotMetadata{
+						Index: 1,
+						Term:  1,
+					},
 				},
 			},
 		},
