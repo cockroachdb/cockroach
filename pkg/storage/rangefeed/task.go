@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -131,6 +132,7 @@ type catchUpScan struct {
 	p  *Processor
 	r  *registration
 	it engine.SimpleIterator
+	a  bufalloc.ByteAllocator
 }
 
 func newCatchUpScan(p *Processor, r *registration) runnable {
@@ -187,12 +189,17 @@ func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
 			continue
 		}
 
+		var key, val []byte
+		s.a, key = s.a.Copy(unsafeKey.Key, 0)
+		s.a, val = s.a.Copy(unsafeVal, 0)
+		ts := unsafeKey.Timestamp
+
 		var event roachpb.RangeFeedEvent
 		event.MustSetValue(&roachpb.RangeFeedValue{
-			Key: unsafeKey.Key,
+			Key: key,
 			Value: roachpb.Value{
-				RawBytes:  unsafeVal,
-				Timestamp: unsafeKey.Timestamp,
+				RawBytes:  val,
+				Timestamp: ts,
 			},
 		})
 		if err := s.r.stream.Send(&event); err != nil {
@@ -204,6 +211,7 @@ func (s *catchUpScan) iterateAndSend(ctx context.Context) error {
 
 func (s *catchUpScan) Cancel() {
 	s.it.Close()
+	s.a = nil
 }
 
 // TxnPusher is capable of pushing transactions to a new timestamp and
