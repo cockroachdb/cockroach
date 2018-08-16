@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -209,19 +210,19 @@ func (gt *grpcTransport) send(
 		}
 
 		gt.opts.metrics.SentCount.Inc(1)
-		var iface roachpb.InternalServer
+		var iface roachpb.InternalClient
 		var err error
-		ctx, iface, err = gt.nodeDialer.DialInternalServer(ctx, client.nodeID)
+		ctx, iface, err = gt.nodeDialer.DialInternalClient(ctx, client.nodeID)
 		if err != nil {
 			return nil, err
 		}
-		if nodedialer.IsLocal(iface) {
+		if rpc.IsLocal(iface) {
 			gt.opts.metrics.LocalSentCount.Inc(1)
 		}
 		reply, err := iface.Batch(ctx, &client.args)
 		// If we queried a remote node, perform extra validation and
 		// import trace spans.
-		if reply != nil && !nodedialer.IsLocal(iface) {
+		if reply != nil && !rpc.IsLocal(iface) {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
 					log.Error(ctx, err)
