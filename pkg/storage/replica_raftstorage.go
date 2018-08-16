@@ -647,7 +647,7 @@ const (
 func clearRangeData(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	eng engine.Engine,
+	eng engine.Reader,
 	batch engine.Batch,
 	destroyData bool,
 ) error {
