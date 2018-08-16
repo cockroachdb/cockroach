@@ -18,8 +18,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,10 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -393,6 +397,19 @@ func MakeDistSQLReceiver(
 	return r
 }
 
+func (receiver *DistSQLReceiver) cloneDistSQLReceiver() *DistSQLReceiver {
+	return &DistSQLReceiver{
+		ctx:         receiver.ctx,
+		cleanup:     func() {},
+		rangeCache:  receiver.rangeCache,
+		leaseCache:  receiver.leaseCache,
+		txn:         receiver.txn,
+		updateClock: receiver.updateClock,
+		stmtType:    tree.Rows,
+		tracing:     receiver.tracing,
+	}
+}
+
 // SetError provides a convenient way for a client to pass in an error, thus
 // pretending that a query execution error happened. The error is passed along
 // to the resultWriter.
@@ -547,6 +564,133 @@ func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 	return nil
 }
 
+// PlanAndRunSubqueries returns false if an error was encountered and sets that
+// error in the provided receiver.
+func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
+	ctx context.Context, planner *planner, evalContextFactory func() *extendedEvalContext,
+	subqueryPlans []subquery, recv *DistSQLReceiver, maybeDistribute bool,
+) bool {
+
+	evalCtx := evalContextFactory()
+	var subqueryMemAccount mon.BoundAccount
+
+	if len(subqueryPlans) > 0 {
+		subqueryMonitor := mon.MakeMonitor(
+			"subquery",
+			mon.MemoryResource,
+			dsp.distSQLSrv.Metrics.CurBytesCount,
+			dsp.distSQLSrv.Metrics.MaxBytesHist,
+			-1, /* use default block size */
+			noteworthyMemoryUsageBytes,
+			dsp.distSQLSrv.Settings,
+		)
+		subqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+		defer subqueryMonitor.Stop(ctx)
+
+		subqueryMemAccount = subqueryMonitor.MakeBoundAccount()
+		defer subqueryMemAccount.Close(ctx)
+	}
+
+	for i, subqueryPlan := range subqueryPlans {
+		var subqueryPlanCtx PlanningCtx
+		var distributeSubquery bool
+		if maybeDistribute {
+			// TODO(arjun): plumb the distsql mode in here. We know it's not
+			// DistSQLOff (otherwise maybeDistribute would be false) but it might be
+			// Auto or Always and we need to propagate that setting.
+			distributeSubquery = shouldDistributePlan(
+				ctx, sessiondata.DistSQLAuto, dsp, subqueryPlan.plan)
+		}
+		if distributeSubquery {
+			subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+		} else {
+			subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+		}
+		subqueryPlanCtx.isLocal = !distributeSubquery
+		subqueryPlanCtx.planner = planner
+		subqueryPlanCtx.stmtType = tree.Rows
+
+		subqueryPhysPlan, err := dsp.createPlanForNode(&subqueryPlanCtx, subqueryPlan.plan)
+		if err != nil {
+			recv.SetError(err)
+			return false
+		}
+		dsp.FinalizePlan(&subqueryPlanCtx, &subqueryPhysPlan)
+
+		typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+
+		subqueryRecv := recv.cloneDistSQLReceiver()
+		var rows *sqlbase.RowContainer
+		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
+			subqueryRecv.noColsRequired = true
+			typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
+				{SemanticType: sqlbase.ColumnType_BOOL}})
+		}
+		rows = sqlbase.NewRowContainer(subqueryMemAccount, typ, 0)
+		subqueryRowReceiver := NewRowResultWriter(rows)
+		subqueryRecv.resultWriter = subqueryRowReceiver
+		subqueryPlans[i].started = true
+		dsp.Run(&subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx)
+
+		switch subqueryPlan.execMode {
+		case distsqlrun.SubqueryExecModeExists:
+			// For EXISTS expressions, all we want to know if there is at least one row.
+			hasRows := rows.Len() != 0
+			subqueryPlans[i].result = tree.MakeDBool(tree.DBool(hasRows))
+		case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
+			var result tree.DTuple
+			for i := 0; i < rows.Len(); i++ {
+				row := rows.At(i)
+				if row.Len() == 1 {
+					// This seems hokey, but if we don't do this then the subquery expands
+					// to a tuple of tuples instead of a tuple of values and an expression
+					// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
+					// a single value against a tuple.
+					result.D = append(result.D, row[0])
+				} else {
+					result.D = append(result.D, &tree.DTuple{D: row})
+				}
+			}
+
+			if ok, dir := subqueryPlan.subqueryTupleOrdering(); ok {
+				if dir == encoding.Descending {
+					result.D.Reverse()
+				}
+				result.SetSorted()
+			}
+			if subqueryPlan.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
+				result.Normalize(&evalCtx.EvalContext)
+			}
+			subqueryPlans[i].result = &result
+		case distsqlrun.SubqueryExecModeOneRow:
+			switch rows.Len() {
+			case 0:
+				subqueryPlans[i].result = tree.DNull
+			case 1:
+				row := rows.At(0)
+				switch row.Len() {
+				case 1:
+					subqueryPlans[i].result = row[0]
+				default:
+					subqueryPlans[i].result = &tree.DTuple{D: rows.At(0)}
+				}
+			default:
+				rows.Close(evalCtx.Ctx())
+				recv.SetError(fmt.Errorf("more than one row returned by a subquery used as an expression"))
+				return false
+			}
+		default:
+			rows.Close(evalCtx.Ctx())
+			recv.SetError(fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode))
+			return false
+		}
+
+		rows.Close(evalCtx.Ctx())
+	}
+
+	return true
+}
+
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
@@ -557,25 +701,11 @@ func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context, evalCtx *extendedEvalContext, planCtx *PlanningCtx, txn *client.Txn,
-	p *planner, recv *DistSQLReceiver,
+	plan planNode, recv *DistSQLReceiver,
 ) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
-	if len(p.curPlan.subqueryPlans) != 0 {
-		err := p.curPlan.evalSubqueries(runParams{
-			ctx:             planCtx.ctx,
-			extendedEvalCtx: planCtx.ExtendedEvalCtx,
-			p:               p,
-		})
-
-		if err != nil {
-			recv.SetError(errors.Wrapf(err, "error in running subquery:"))
-			return
-		}
-		log.VEvent(ctx, 2, "evaluated subqueries")
-	}
-
-	physPlan, err := dsp.createPlanForNode(planCtx, p.curPlan.plan)
+	physPlan, err := dsp.createPlanForNode(planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
 		return
