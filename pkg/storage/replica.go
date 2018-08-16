@@ -796,47 +796,73 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone. If `destroyData` is true, data in all of the range's keyspaces
-// will be deleted. Otherwise, only data in the range-ID local keyspace will be
-// deleted. Requires that Replica.raftMu is held.
-func (r *Replica) destroyRaftMuLocked(
-	ctx context.Context, nextReplicaID roachpb.ReplicaID, destroyData bool,
+func (r *Replica) preDestroyRaftMuLocked(
+	ctx context.Context,
+	reader engine.Reader,
+	batch engine.Batch,
+	nextReplicaID roachpb.ReplicaID,
+	destroyData bool,
 ) error {
-	startTime := timeutil.Now()
-
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
-
-	ms := r.GetMVCCStats()
-
 	desc := r.Desc()
-	err := clearRangeData(ctx, desc, r.store.Engine(), batch, destroyData)
+	err := clearRangeData(ctx, desc, reader, batch, destroyData)
 	if err != nil {
 		return err
 	}
-	clearTime := timeutil.Now()
-
-	// Suggest the cleared range to the compactor queue.
-	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
-		StartKey: roachpb.Key(desc.StartKey),
-		EndKey:   roachpb.Key(desc.EndKey),
-		Compaction: storagebase.Compaction{
-			Bytes:            ms.Total(),
-			SuggestedAtNanos: clearTime.UnixNano(),
-		},
-	})
 
 	// Save a tombstone to ensure that replica IDs never get reused.
 	//
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	if err := r.setTombstoneKey(ctx, batch, nextReplicaID); err != nil {
+	return r.setTombstoneKey(ctx, batch, nextReplicaID)
+}
+
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
+	// Suggest the cleared range to the compactor queue.
+	//
+	// TODO(benesch): we would ideally atomically suggest the compaction with
+	// the deletion of the data itself.
+	desc := r.Desc()
+	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
+		StartKey: roachpb.Key(desc.StartKey),
+		EndKey:   roachpb.Key(desc.EndKey),
+		Compaction: storagebase.Compaction{
+			Bytes:            ms.Total(),
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
+
+	// NB: we need the nil check below because it's possible that we're GC'ing a
+	// Replica without a replicaID, in which case it does not have a sideloaded
+	// storage.
+	//
+	// TODO(tschottdorf): at node startup, we should remove all on-disk
+	// directories belonging to replicas which aren't present. A crash before a
+	// call to postDestroyRaftMuLocked will currently leave the files around
+	// forever.
+	if r.raftMu.sideloaded != nil {
+		return r.raftMu.sideloaded.Clear(ctx)
+	}
+	return nil
+}
+
+// destroyRaftMuLocked deletes data associated with a replica, leaving a
+// tombstone. If `destroyData` is true, data in all of the range's keyspaces
+// will be deleted. Otherwise, only data in the range-ID local keyspace will be
+// deleted. Requires that Replica.raftMu is held.
+func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
+	startTime := timeutil.Now()
+
+	ms := r.GetMVCCStats()
+
+	const destroyData = true
+	batch := r.Engine().NewWriteOnlyBatch()
+	defer batch.Close()
+	if err := r.preDestroyRaftMuLocked(ctx, r.Engine(), batch, nextReplicaID, destroyData); err != nil {
 		return err
 	}
+	preTime := timeutil.Now()
+
 	// We need to sync here because we are potentially deleting sideloaded
 	// proposals from the file system next. We could write the tombstone only in
 	// a synchronous batch first and then delete the data alternatively, but
@@ -847,17 +873,8 @@ func (r *Replica) destroyRaftMuLocked(
 	}
 	commitTime := timeutil.Now()
 
-	// NB: we need the nil check below because it's possible that we're
-	// GC'ing a Replica without a replicaID, in which case it does not
-	// have a sideloaded storage.
-	//
-	// TODO(tschottdorf): at node startup, we should remove all on-disk
-	// directories belonging to replicas which aren't present. A crash
-	// here will currently leave the files around forever.
-	if r.raftMu.sideloaded != nil {
-		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
-			return err
-		}
+	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
+		return err
 	}
 
 	// TODO(nvanbenschoten): fix for rangefeed.
@@ -866,8 +883,8 @@ func (r *Replica) destroyRaftMuLocked(
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 		commitTime.Sub(startTime).Seconds()*1000,
-		clearTime.Sub(startTime).Seconds()*1000,
-		commitTime.Sub(clearTime).Seconds()*1000)
+		preTime.Sub(startTime).Seconds()*1000,
+		commitTime.Sub(preTime).Seconds()*1000)
 	return nil
 }
 
@@ -5337,6 +5354,29 @@ func (r *Replica) processRaftCommand(
 				log.Fatal(ctx, err)
 			}
 			splitPreApply(ctx, r.store.cfg.Settings, tmpBatch, raftCmd.ReplicatedEvalResult.Split.SplitTrigger)
+			writeBatch.Data = tmpBatch.Repr()
+			tmpBatch.Close()
+		}
+
+		if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
+			// Merges require the subsumed range to be atomically deleted when the
+			// merge transaction commits.
+			//
+			// This is not the most efficient, but it only happens on merges,
+			// which are relatively infrequent and don't write much data.
+			tmpBatch := r.store.engine.NewBatch()
+			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
+				log.Fatal(ctx, err)
+			}
+			rhsRepl, err := r.store.GetReplica(merge.RightDesc.RangeID)
+			if err != nil {
+				log.Fatal(ctx, err)
+			}
+			const destroyData = false
+			err = rhsRepl.preDestroyRaftMuLocked(ctx, tmpBatch, tmpBatch, merge.RightDesc.NextReplicaID, destroyData)
+			if err != nil {
+				log.Fatal(ctx, err)
+			}
 			writeBatch.Data = tmpBatch.Repr()
 			tmpBatch.Close()
 		}
