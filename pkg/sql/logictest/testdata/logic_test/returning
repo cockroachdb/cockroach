@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt
 
 statement ok
 CREATE TABLE a (a int, b int)
