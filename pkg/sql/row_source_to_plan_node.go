@@ -68,12 +68,12 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		r.row, p = r.source.Next()
 
 		if p != nil {
+			if p.Err != nil {
+				return false, p.Err
+			}
 			if r.forwarder != nil {
 				r.forwarder.forwardMetadata(p)
 				continue
-			}
-			if p.Err != nil {
-				return false, p.Err
 			}
 			if p.TraceData != nil {
 				// We drop trace metadata since we have no reasonable way to propagate
