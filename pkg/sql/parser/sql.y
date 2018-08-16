@@ -1975,6 +1975,7 @@ opt_changefeed_sink:
   }
 | /* EMPTY */
   {
+    /* SKIP DOC */
     $$.val = nil
   }
 
