@@ -54,6 +54,20 @@ func declareKeysResolveIntent(
 	declareKeysResolveIntentCombined(desc, header, req, spans)
 }
 
+func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.Metrics {
+	var typ result.Metrics
+	if WriteAbortSpanOnResolve(status) {
+		if poison {
+			typ.ResolvePoison = 1
+		} else {
+			typ.ResolveAbort = 1
+		}
+	} else {
+		typ.ResolveCommit = 1
+	}
+	return &typ
+}
+
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func ResolveIntent(
@@ -75,8 +89,14 @@ func ResolveIntent(
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
 		return result.Result{}, err
 	}
+
+	var res result.Result
+	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
+
 	if WriteAbortSpanOnResolve(args.Status) {
-		return result.Result{}, SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+		if err := SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+			return result.Result{}, err
+		}
 	}
-	return result.Result{}, nil
+	return res, nil
 }

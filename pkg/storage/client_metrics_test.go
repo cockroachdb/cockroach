@@ -23,9 +23,13 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -149,6 +153,84 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		if a := tc.gauge.Value(); a < tc.min {
 			t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
 		}
+	}
+}
+
+// TestStoreResolveMetrics verifies that metrics related to intent resolution
+// are tracked properly.
+func TestStoreResolveMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// First prevent rot that would result from adding fields without handling
+	// them everywhere.
+	{
+		act := fmt.Sprintf("%+v", result.Metrics{})
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0}"
+		if act != exp {
+			t.Errorf("need to update this test due to added fields: %v", act)
+		}
+	}
+
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	ctx := context.Background()
+
+	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+
+	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 999)
+
+	const resolveCommitCount = int64(200)
+	const resolveAbortCount = int64(800)
+	const resolvePoisonCount = int64(2400)
+
+	var ba roachpb.BatchRequest
+	{
+		repl := mtc.stores[0].LookupReplica(keys.MustAddr(span.Key))
+		var err error
+		if ba.Replica, err = repl.GetReplicaDescriptor(); err != nil {
+			t.Fatal(err)
+		}
+		ba.RangeID = repl.RangeID
+	}
+
+	add := func(status roachpb.TransactionStatus, poison bool, n int64) {
+		for i := int64(0); i < n; i++ {
+			key := span.Key
+			endKey := span.EndKey
+			if i > n/2 {
+				req := &roachpb.ResolveIntentRangeRequest{
+					IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+				}
+				req.Key, req.EndKey = key, endKey
+				ba.Add(req)
+				continue
+			}
+			req := &roachpb.ResolveIntentRequest{
+				IntentTxn: txn.TxnMeta, Status: status, Poison: poison,
+			}
+			req.Key = key
+			ba.Add(req)
+		}
+	}
+
+	add(roachpb.COMMITTED, false, resolveCommitCount)
+	add(roachpb.ABORTED, false, resolveAbortCount)
+	add(roachpb.ABORTED, true, resolvePoisonCount)
+
+	if _, pErr := mtc.senders[0].Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if exp, act := resolveCommitCount, mtc.stores[0].Metrics().ResolveCommitCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected around %d intent commits, saw %d", exp, act)
+	}
+	if exp, act := resolveAbortCount, mtc.stores[0].Metrics().ResolveAbortCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected around %d intent aborts, saw %d", exp, act)
+	}
+	if exp, act := resolvePoisonCount, mtc.stores[0].Metrics().ResolvePoisonCount.Count(); act < exp || act > exp+50 {
+		t.Errorf("expected arounc %d abort span poisonings, saw %d", exp, act)
 	}
 }
 

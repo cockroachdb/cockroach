@@ -65,3 +65,26 @@ func TestEvalResultIsZero(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeAndDestroy(t *testing.T) {
+	var r0, r1, r2 Result
+	r1.Local.Metrics = new(Metrics)
+	r2.Local.Metrics = new(Metrics)
+
+	r1.Local.Metrics.LeaseRequestSuccess = 7
+
+	r2.Local.Metrics.ResolveAbort = 13
+	r2.Local.Metrics.LeaseRequestSuccess = 2
+
+	if err := r0.MergeAndDestroy(r1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r0.MergeAndDestroy(r2); err != nil {
+		t.Fatal(err)
+	}
+
+	if f, exp := *r1.Local.Metrics, (Metrics{LeaseRequestSuccess: 9, ResolveAbort: 13}); f != exp {
+		t.Fatalf("expected %d, got %d", exp, f)
+	}
+}

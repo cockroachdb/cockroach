@@ -15,10 +15,13 @@
 package storage
 
 import (
+	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -244,6 +247,26 @@ var (
 		Help:        "Timestamp at which bytes/keys/intents metrics were last updated",
 		Measurement: "Last Update",
 		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+
+	// Contention and intent resolution metrics.
+	metaResolveCommit = metric.Metadata{
+		Name:        "intents.resolve-attempts",
+		Help:        "Count of (point or range) intent commit evaluation attempts",
+		Measurement: "Operations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaResolveAbort = metric.Metadata{
+		Name:        "intents.abort-attempts",
+		Help:        "Count of (point or range) non-poisoning intent abort evaluation attempts",
+		Measurement: "Operations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaResolvePoison = metric.Metadata{
+		Name:        "intents.poison-attempts",
+		Help:        "Count of (point or range) poisoning intent abort evaluation attempts",
+		Measurement: "Operations",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Disk usage diagram (CR=Cockroach):
@@ -986,24 +1009,27 @@ type StoreMetrics struct {
 	LeaseEpochCount           *metric.Gauge
 
 	// Storage metrics.
-	LiveBytes       *metric.Gauge
-	KeyBytes        *metric.Gauge
-	ValBytes        *metric.Gauge
-	TotalBytes      *metric.Gauge
-	IntentBytes     *metric.Gauge
-	LiveCount       *metric.Gauge
-	KeyCount        *metric.Gauge
-	ValCount        *metric.Gauge
-	IntentCount     *metric.Gauge
-	IntentAge       *metric.Gauge
-	GcBytesAge      *metric.Gauge
-	LastUpdateNanos *metric.Gauge
-	Capacity        *metric.Gauge
-	Available       *metric.Gauge
-	Used            *metric.Gauge
-	Reserved        *metric.Gauge
-	SysBytes        *metric.Gauge
-	SysCount        *metric.Gauge
+	LiveBytes          *metric.Gauge
+	KeyBytes           *metric.Gauge
+	ValBytes           *metric.Gauge
+	TotalBytes         *metric.Gauge
+	IntentBytes        *metric.Gauge
+	LiveCount          *metric.Gauge
+	KeyCount           *metric.Gauge
+	ValCount           *metric.Gauge
+	IntentCount        *metric.Gauge
+	IntentAge          *metric.Gauge
+	GcBytesAge         *metric.Gauge
+	LastUpdateNanos    *metric.Gauge
+	ResolveCommitCount *metric.Counter
+	ResolveAbortCount  *metric.Counter
+	ResolvePoisonCount *metric.Counter
+	Capacity           *metric.Gauge
+	Available          *metric.Gauge
+	Used               *metric.Gauge
+	Reserved           *metric.Gauge
+	SysBytes           *metric.Gauge
+	SysCount           *metric.Gauge
 
 	// Rebalancing metrics.
 	AverageQueriesPerSecond *metric.GaugeFloat64
@@ -1203,12 +1229,17 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		IntentAge:       metric.NewGauge(metaIntentAge),
 		GcBytesAge:      metric.NewGauge(metaGcBytesAge),
 		LastUpdateNanos: metric.NewGauge(metaLastUpdateNanos),
-		Capacity:        metric.NewGauge(metaCapacity),
-		Available:       metric.NewGauge(metaAvailable),
-		Used:            metric.NewGauge(metaUsed),
-		Reserved:        metric.NewGauge(metaReserved),
-		SysBytes:        metric.NewGauge(metaSysBytes),
-		SysCount:        metric.NewGauge(metaSysCount),
+
+		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
+		ResolveAbortCount:  metric.NewCounter(metaResolveAbort),
+		ResolvePoisonCount: metric.NewCounter(metaResolvePoison),
+
+		Capacity:  metric.NewGauge(metaCapacity),
+		Available: metric.NewGauge(metaAvailable),
+		Used:      metric.NewGauge(metaUsed),
+		Reserved:  metric.NewGauge(metaReserved),
+		SysBytes:  metric.NewGauge(metaSysBytes),
+		SysCount:  metric.NewGauge(metaSysCount),
 
 		// Rebalancing metrics.
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
@@ -1416,18 +1447,24 @@ func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
-func (sm *StoreMetrics) leaseRequestComplete(success bool) {
-	if success {
-		sm.LeaseRequestSuccessCount.Inc(1)
-	} else {
-		sm.LeaseRequestErrorCount.Inc(1)
-	}
-}
+func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {
+	sm.LeaseRequestSuccessCount.Inc(int64(metric.LeaseRequestSuccess))
+	metric.LeaseRequestSuccess = 0
+	sm.LeaseRequestErrorCount.Inc(int64(metric.LeaseRequestError))
+	metric.LeaseRequestError = 0
+	sm.LeaseTransferSuccessCount.Inc(int64(metric.LeaseTransferSuccess))
+	metric.LeaseTransferSuccess = 0
+	sm.LeaseTransferErrorCount.Inc(int64(metric.LeaseTransferError))
+	metric.LeaseTransferError = 0
 
-func (sm *StoreMetrics) leaseTransferComplete(success bool) {
-	if success {
-		sm.LeaseTransferSuccessCount.Inc(1)
-	} else {
-		sm.LeaseTransferErrorCount.Inc(1)
+	sm.ResolveCommitCount.Inc(int64(metric.ResolveCommit))
+	metric.ResolveCommit = 0
+	sm.ResolveAbortCount.Inc(int64(metric.ResolveAbort))
+	metric.ResolveAbort = 0
+	sm.ResolvePoisonCount.Inc(int64(metric.ResolvePoison))
+	metric.ResolvePoison = 0
+
+	if metric != (result.Metrics{}) {
+		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
 	}
 }
