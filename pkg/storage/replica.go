@@ -4050,7 +4050,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 		}
 
-		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
+		// Applying this snapshot may require us to subsume one or more of our right
+		// neighbors. This occurs if this replica is informed about the merges via a
+		// Raft snapshot instead of a MsgApp containing the merge commits, e.g.,
+		// because it went offline before the merge commits applied and did not come
+		// back online until after the merge commits were truncated away.
+		subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
+		defer releaseMergeLock()
+
+		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
 			const expl = "while applying snapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}
@@ -5500,6 +5508,48 @@ func (r *Replica) processRaftCommand(
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
+}
+
+// maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
+// any replicas and, if so, locks them for subsumption. See acquireMergeLock
+// for details about the lock itself.
+func (r *Replica) maybeAcquireSnapshotMergeLock(
+	ctx context.Context, inSnap IncomingSnapshot,
+) (subsumedRepls []*Replica, releaseMergeLock func()) {
+	// Any replicas that overlap with the bounds of the incoming snapshot are ours
+	// to subsume; further, the end of the last overlapping replica will exactly
+	// align with the end of the snapshot. How are we guaranteed this? Each merge
+	// could not have committed unless this store had an up-to-date replica of the
+	// RHS at the time of the merge. Nothing could have removed that RHS replica,
+	// as the replica GC queue cannot GC a replica unless it can prove its
+	// left-hand neighbor has no pending merges to apply. And that RHS replica
+	// could not have been further split or merged, as it never processes another
+	// command after the merge commits.
+	endKey := r.Desc().EndKey
+	if endKey == nil || !endKey.Less(inSnap.State.Desc.EndKey) {
+		// The existing replica is unitialized, in which case we've already
+		// installed a placeholder for snapshot's keyspace, or this snapshot does
+		// not widen the existing replica. No merge lock needed.
+		return nil, func() {}
+	}
+	for endKey.Less(inSnap.State.Desc.EndKey) {
+		sRepl := r.store.LookupReplica(endKey)
+		if sRepl == nil || !endKey.Equal(sRepl.Desc().StartKey) {
+			log.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)
+		}
+		sRepl.raftMu.Lock()
+		subsumedRepls = append(subsumedRepls, sRepl)
+		endKey = sRepl.Desc().EndKey
+	}
+	if !endKey.Equal(inSnap.State.Desc.EndKey) {
+		log.Fatalf(ctx, "subsumed replicas %v extend past snapshot end key %s",
+			subsumedRepls, inSnap.State.Desc.EndKey)
+	}
+	return subsumedRepls, func() {
+		for _, sr := range subsumedRepls {
+			sr.raftMu.Unlock()
+		}
+	}
 }
 
 // maybeAcquireSplitMergeLock examines the given raftCmd (which need

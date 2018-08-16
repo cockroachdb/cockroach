@@ -396,11 +396,11 @@ func (s *Store) canApplySnapshotLocked(
 ) (*ReplicaPlaceholder, error) {
 	desc := snapHeader.State.Desc
 	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
-		// We have an initialized replica. Raft snapshots cannot be rejected at this
-		// point, so the constraints that ensure they are safe to apply must be
-		// performed elsewhere. TODO(benesch): link to these constraints once
-		// they're added. Preemptive snapshots can be applied with no further checks
-		// if they do not widen the existing replica.
+		// We have an initialized replica. Preemptive snapshots can be applied with
+		// no further checks if they do not widen the existing replica. Raft
+		// snapshots can be applied with no further checks even if they widen the
+		// existing replica—we can't reject them at this point—but see the comments
+		// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
 		existingDesc := (*Replica)(v).Desc()
 		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
 			return nil, nil
