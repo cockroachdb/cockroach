@@ -145,17 +145,26 @@ func (p *parseState) parseElement() error {
 	return p.result.Append(d)
 }
 
-// StringToColType returns a column type given a string representation of the
-// type. Used by dump.
-func StringToColType(s string) (coltypes.T, error) {
+// ArrayElementTypeStringToColType returns a column type given a
+// string representation of the type. Used by dump. It only
+// supports those type names that can appear immediately before `[]`.
+func ArrayElementTypeStringToColType(s string) (coltypes.T, error) {
 	switch s {
-	case "BOOL":
+	case "BOOL", "BOOLEAN":
 		return coltypes.Bool, nil
 	case "INT":
 		return coltypes.Int, nil
-	case "FLOAT":
-		return coltypes.Float, nil
-	case "DECIMAL":
+	case "INT8", "BIGINT", "INT64":
+		return coltypes.Int8, nil
+	case "INT2", "SMALLINT":
+		return coltypes.Int2, nil
+	case "INT4":
+		return coltypes.Int4, nil
+	case "FLOAT", "FLOAT8", "DOUBLE PRECISION":
+		return coltypes.Float8, nil
+	case "REAL", "FLOAT4":
+		return coltypes.Float4, nil
+	case "DECIMAL", "DEC", "NUMERIC":
 		return coltypes.Decimal, nil
 	case "TIMESTAMP":
 		return coltypes.Timestamp, nil
@@ -171,7 +180,7 @@ func StringToColType(s string) (coltypes.T, error) {
 		return coltypes.Date, nil
 	case "TIME":
 		return coltypes.Time, nil
-	case "STRING":
+	case "STRING", "TEXT", "VARCHAR":
 		return coltypes.String, nil
 	case "NAME":
 		return coltypes.Name, nil

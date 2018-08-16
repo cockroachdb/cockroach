@@ -27,50 +27,53 @@ import (
 func TestParseColumnType(t *testing.T) {
 	testData := []struct {
 		str          string
+		norm         string
 		expectedType coltypes.T
 	}{
-		{"BIT", &coltypes.TInt{Name: "BIT", Width: 1, ImplicitWidth: true}},
-		{"BIT(2)", &coltypes.TInt{Name: "BIT", Width: 2}},
-		{"BOOL", &coltypes.TBool{Name: "BOOL"}},
-		{"BOOLEAN", &coltypes.TBool{Name: "BOOLEAN"}},
-		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
-		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},
-		{"INTEGER", &coltypes.TInt{Name: "INTEGER"}},
-		{"INT", &coltypes.TInt{Name: "INT"}},
-		{"INT2", &coltypes.TInt{Name: "INT2", Width: 16, ImplicitWidth: true}},
-		{"INT4", &coltypes.TInt{Name: "INT4", Width: 32, ImplicitWidth: true}},
-		{"INT8", &coltypes.TInt{Name: "INT8"}},
-		{"INT64", &coltypes.TInt{Name: "INT64"}},
-		{"REAL", &coltypes.TFloat{Name: "REAL", Width: 32}},
-		{"DOUBLE PRECISION", &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}},
-		{"FLOAT", &coltypes.TFloat{Name: "FLOAT", Width: 64}},
-		{"FLOAT4", &coltypes.TFloat{Name: "FLOAT4", Width: 32}},
-		{"FLOAT8", &coltypes.TFloat{Name: "FLOAT8", Width: 64}},
-		{"FLOAT(4)", &coltypes.TFloat{Name: "FLOAT", Width: 64, Prec: 4, PrecSpecified: true}},
-		{"DEC", &coltypes.TDecimal{Name: "DEC"}},
-		{"DECIMAL", &coltypes.TDecimal{Name: "DECIMAL"}},
-		{"NUMERIC", &coltypes.TDecimal{Name: "NUMERIC"}},
-		{"NUMERIC(8)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 8}},
-		{"NUMERIC(9,10)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 9, Scale: 10}},
-		{"UUID", &coltypes.TUUID{}},
-		{"INET", &coltypes.TIPAddr{Name: "INET"}},
-		{"DATE", &coltypes.TDate{}},
-		{"TIME", &coltypes.TTime{}},
-		{"TIMESTAMP", &coltypes.TTimestamp{}},
-		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},
-		{"INTERVAL", &coltypes.TInterval{}},
-		{"STRING", &coltypes.TString{Name: "STRING"}},
-		{"CHAR", &coltypes.TString{Name: "CHAR"}},
-		{"VARCHAR", &coltypes.TString{Name: "VARCHAR"}},
-		{"CHAR(11)", &coltypes.TString{Name: "CHAR", N: 11}},
-		{"TEXT", &coltypes.TString{Name: "TEXT"}},
-		{"BLOB", &coltypes.TBytes{Name: "BLOB"}},
-		{"BYTES", &coltypes.TBytes{Name: "BYTES"}},
-		{"BYTEA", &coltypes.TBytes{Name: "BYTEA"}},
-		{"STRING COLLATE da", &coltypes.TCollatedString{Name: "STRING", Locale: "da"}},
-		{"CHAR COLLATE de", &coltypes.TCollatedString{Name: "CHAR", Locale: "de"}},
-		{"VARCHAR COLLATE en", &coltypes.TCollatedString{Name: "VARCHAR", Locale: "en"}},
-		{"CHAR(11) COLLATE en", &coltypes.TCollatedString{Name: "CHAR", N: 11, Locale: "en"}},
+		{"BIT", "", &coltypes.TInt{IsBit: true, Width: 1}},
+		{"BIT(2)", "", &coltypes.TInt{IsBit: true, Width: 2, ExplicitWidth: true}},
+		{"BOOL", "", &coltypes.TBool{}},
+		{"BOOLEAN", "BOOL", &coltypes.TBool{}},
+		{"SMALLINT", "INT2", &coltypes.TInt{Width: 16}},
+		{"BIGINT", "INT8", &coltypes.TInt{Width: 64}},
+		{"INTEGER", "INT", &coltypes.TInt{Width: 0}},
+		{"INT", "", &coltypes.TInt{Width: 0}},
+		{"INT2", "", &coltypes.TInt{Width: 16}},
+		{"INT4", "", &coltypes.TInt{Width: 32}},
+		{"INT8", "", &coltypes.TInt{Width: 64}},
+		{"INT64", "INT8", &coltypes.TInt{Width: 64}},
+		{"REAL", "FLOAT4", &coltypes.TFloat{Width: 32}},
+		{"DOUBLE PRECISION", "FLOAT8", &coltypes.TFloat{Width: 64}},
+		{"FLOAT", "FLOAT8", &coltypes.TFloat{Width: 64}},
+		{"FLOAT4", "", &coltypes.TFloat{Width: 32}},
+		{"FLOAT8", "", &coltypes.TFloat{Width: 64}},
+		{"FLOAT(10)", "FLOAT4", &coltypes.TFloat{Width: 32}},
+		{"FLOAT(40)", "FLOAT8", &coltypes.TFloat{Width: 64}},
+		{"DEC", "DECIMAL", &coltypes.TDecimal{}},
+		{"DECIMAL", "", &coltypes.TDecimal{}},
+		{"NUMERIC", "DECIMAL", &coltypes.TDecimal{}},
+		{"NUMERIC(8)", "DECIMAL(8)", &coltypes.TDecimal{Prec: 8}},
+		{"NUMERIC(9,10)", "DECIMAL(9,10)", &coltypes.TDecimal{Prec: 9, Scale: 10}},
+		{"UUID", "", &coltypes.TUUID{}},
+		{"INET", "", &coltypes.TIPAddr{}},
+		{"DATE", "", &coltypes.TDate{}},
+		{"TIME", "", &coltypes.TTime{}},
+		{"TIMESTAMP", "", &coltypes.TTimestamp{}},
+		{"TIMESTAMPTZ", "", &coltypes.TTimestampTZ{}},
+		{"TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ", &coltypes.TTimestampTZ{}},
+		{"INTERVAL", "", &coltypes.TInterval{}},
+		{"STRING", "", &coltypes.TString{Name: "STRING"}},
+		{"CHAR", "", &coltypes.TString{Name: "CHAR"}},
+		{"VARCHAR", "", &coltypes.TString{Name: "VARCHAR"}},
+		{"CHAR(11)", "", &coltypes.TString{Name: "CHAR", N: 11}},
+		{"TEXT", "", &coltypes.TString{Name: "TEXT"}},
+		{"BLOB", "BYTES", &coltypes.TBytes{}},
+		{"BYTES", "", &coltypes.TBytes{}},
+		{"BYTEA", "BYTES", &coltypes.TBytes{}},
+		{"STRING COLLATE da", "", &coltypes.TCollatedString{Name: "STRING", Locale: "da"}},
+		{"CHAR COLLATE de", "", &coltypes.TCollatedString{Name: "CHAR", Locale: "de"}},
+		{"VARCHAR COLLATE en", "", &coltypes.TCollatedString{Name: "VARCHAR", Locale: "en"}},
+		{"CHAR(11) COLLATE en", "", &coltypes.TCollatedString{Name: "CHAR", N: 11, Locale: "en"}},
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
@@ -79,8 +82,13 @@ func TestParseColumnType(t *testing.T) {
 			t.Errorf("%d: %s", i, err)
 			continue
 		}
-		if sql != stmt.String() {
-			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
+		normType := d.norm
+		if normType == "" {
+			normType = d.str
+		}
+		sqlExpected := fmt.Sprintf("CREATE TABLE a (b %s)", normType)
+		if sqlExpected != stmt.String() {
+			t.Errorf("%d: expected %s, but got %s", i, sqlExpected, stmt)
 		}
 		createTable, ok := stmt.(*tree.CreateTable)
 		if !ok {

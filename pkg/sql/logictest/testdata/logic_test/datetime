@@ -914,10 +914,10 @@ CREATE TABLE tz (
 query TTBTTT
 SHOW COLUMNS FROM tz
 ----
-a  INT                       false  NULL  ·  {"primary"}
-b  TIMESTAMP                 true   NULL  ·  {}
-c  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
-d  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
+a  INT          false  NULL  ·  {"primary"}
+b  TIMESTAMP    true   NULL  ·  {}
+c  TIMESTAMPTZ  true   NULL  ·  {}
+d  TIMESTAMPTZ  true   NULL  ·  {}
 
 statement ok
 INSERT INTO tz VALUES

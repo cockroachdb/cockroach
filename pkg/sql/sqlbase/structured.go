@@ -2166,57 +2166,15 @@ func (c *ColumnType) elementColumnType() *ColumnType {
 	return &result
 }
 
-// Equivalent checks whether a column type is equivalent to another, excluding
-// its VisibleType type alias, which doesn't effect equality.
+// Equivalent checks whether a column type is equivalent to another.
 func (c *ColumnType) Equivalent(other ColumnType) bool {
-	other.VisibleType = c.VisibleType
+	if other.VisibleType != ColumnType_BIT {
+		// For every coltype other than BIT, the visible type
+		// alias doesn't effect equality.
+		// TODO(knz): Remove this when #20991 is fixed.
+		other.VisibleType = c.VisibleType
+	}
 	return c.Equal(other)
-}
-
-// SQLString returns the SQL string corresponding to the type.
-func (c *ColumnType) SQLString() string {
-	switch c.SemanticType {
-	case ColumnType_INT:
-		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
-			// A non-zero width indicates a bit array. The syntax "INT(N)"
-			// is invalid so be sure to use "BIT".
-			return fmt.Sprintf("BIT(%d)", c.Width)
-		}
-	case ColumnType_STRING:
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
-		}
-	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
-		}
-		if c.VisibleType == ColumnType_DOUBLE_PRECISION {
-			return "DOUBLE PRECISION"
-		}
-	case ColumnType_DECIMAL:
-		if c.Precision > 0 {
-			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
-			}
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
-		}
-	case ColumnType_TIMESTAMPTZ:
-		return "TIMESTAMP WITH TIME ZONE"
-	case ColumnType_COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
-		}
-		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
-	case ColumnType_ARRAY:
-		return c.elementColumnType().SQLString() + "[]"
-	}
-	if c.VisibleType != ColumnType_NONE {
-		return c.VisibleType.String()
-	}
-	return c.SemanticType.String()
 }
 
 // MaxCharacterLength returns the declared maximum length of characters if the
@@ -2224,7 +2182,12 @@ func (c *ColumnType) SQLString() string {
 // type is not a character or bit string, or if the string's length is not bounded.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case ColumnType_INT:
+		if c.VisibleType == ColumnType_BIT {
+			// TODO(knz): Change this as #20991 gets fixed.
+			return c.Width, false
+		}
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -2245,18 +2208,53 @@ func (c *ColumnType) MaxOctetLength() (int32, bool) {
 	return 0, false
 }
 
+// FloatProperties returns the width and precision for a FLOAT column type.
+func (c *ColumnType) FloatProperties() (int32, int32) {
+	width := c.Width
+	if width == 0 {
+		// Pre-2.1 columns: the width is not set yet and instead there
+		// is a precision. Reverse-engineer the width from that.
+		if c.Precision < 0 {
+			panic(fmt.Sprintf("programming error: invalid float precision: %d", c.Precision))
+		} else if c.Precision == 0 {
+			// Special case of poorly initialized coltypes pre-2.1.
+			width = 64
+		} else if c.Precision <= 24 {
+			width = 32
+		} else if c.Precision <= 54 {
+			width = 64
+		} else {
+			panic(fmt.Sprintf("programming error: invalid float precision: %d", c.Precision))
+		}
+	}
+	prec := int32(24)
+	if width == 64 {
+		prec = 53
+	}
+	return width, prec
+}
+
 // NumericPrecision returns the declared or implicit precision of numeric
 // data types. Returns false if the data type is not numeric, or if the precision
 // of the numeric type is not bounded.
 func (c *ColumnType) NumericPrecision() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
-		return 64, true
-	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return c.Precision, true
+		if c.VisibleType == ColumnType_BIT {
+			// TODO(knz): Remove this as #20991 gets fixed.
+			return 0, false
 		}
-		return 53, true
+		width := c.Width
+		if width == 0 {
+			// Compatibility with pre-2.1 column types.
+			width = 64
+		}
+		return width, true
+
+	case ColumnType_FLOAT:
+		_, prec := c.FloatProperties()
+		return prec, true
+
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			return c.Precision, true
@@ -2270,7 +2268,10 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
-		return 2, true
+		if c.VisibleType != ColumnType_BIT {
+			// TODO(knz): Change this as #20991 gets fixed.
+			return 2, true
+		}
 	case ColumnType_FLOAT:
 		return 2, true
 	case ColumnType_DECIMAL:
@@ -2285,179 +2286,16 @@ func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 func (c *ColumnType) NumericScale() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
-		return 0, true
+		if c.VisibleType != ColumnType_BIT {
+			// TODO(knz): Change this as #20991 gets fixed.
+			return 0, true
+		}
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			return c.Width, true
 		}
 	}
 	return 0, false
-}
-
-// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
-func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
-	switch ptyp {
-	case types.Bool:
-		return ColumnType_BOOL, nil
-	case types.Int:
-		return ColumnType_INT, nil
-	case types.Float:
-		return ColumnType_FLOAT, nil
-	case types.Decimal:
-		return ColumnType_DECIMAL, nil
-	case types.Bytes:
-		return ColumnType_BYTES, nil
-	case types.String:
-		return ColumnType_STRING, nil
-	case types.Name:
-		return ColumnType_NAME, nil
-	case types.Date:
-		return ColumnType_DATE, nil
-	case types.Time:
-		return ColumnType_TIME, nil
-	case types.Timestamp:
-		return ColumnType_TIMESTAMP, nil
-	case types.TimestampTZ:
-		return ColumnType_TIMESTAMPTZ, nil
-	case types.Interval:
-		return ColumnType_INTERVAL, nil
-	case types.UUID:
-		return ColumnType_UUID, nil
-	case types.INet:
-		return ColumnType_INET, nil
-	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegType, types.RegProcedure:
-		return ColumnType_OID, nil
-	case types.Unknown:
-		return ColumnType_NULL, nil
-	case types.IntVector:
-		return ColumnType_INT2VECTOR, nil
-	case types.OidVector:
-		return ColumnType_OIDVECTOR, nil
-	case types.JSON:
-		return ColumnType_JSON, nil
-	default:
-		if ptyp.FamilyEqual(types.FamCollatedString) {
-			return ColumnType_COLLATEDSTRING, nil
-		}
-		if ptyp.FamilyEqual(types.FamTuple) {
-			return ColumnType_TUPLE, nil
-		}
-		if wrapper, ok := ptyp.(types.TOidWrapper); ok {
-			return DatumTypeToColumnSemanticType(wrapper.T)
-		}
-		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s, %T, %+v", ptyp, ptyp, ptyp)
-	}
-}
-
-// DatumTypeToColumnType converts a parser Type to a ColumnType.
-func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
-	var ctyp ColumnType
-	switch t := ptyp.(type) {
-	case types.TCollatedString:
-		ctyp.SemanticType = ColumnType_COLLATEDSTRING
-		ctyp.Locale = &t.Locale
-	case types.TArray:
-		ctyp.SemanticType = ColumnType_ARRAY
-		contents, err := DatumTypeToColumnSemanticType(t.Typ)
-		if err != nil {
-			return ColumnType{}, err
-		}
-		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(types.FamCollatedString) {
-			cs := t.Typ.(types.TCollatedString)
-			ctyp.Locale = &cs.Locale
-		}
-	case types.TTuple:
-		ctyp.SemanticType = ColumnType_TUPLE
-		ctyp.TupleContents = make([]ColumnType, len(t.Types))
-		for i, tc := range t.Types {
-			var err error
-			ctyp.TupleContents[i], err = DatumTypeToColumnType(tc)
-			if err != nil {
-				return ColumnType{}, err
-			}
-		}
-		ctyp.TupleLabels = t.Labels
-		return ctyp, nil
-	default:
-		semanticType, err := DatumTypeToColumnSemanticType(ptyp)
-		if err != nil {
-			return ColumnType{}, err
-		}
-		ctyp.SemanticType = semanticType
-	}
-	return ctyp, nil
-}
-
-func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
-	switch k {
-	case ColumnType_BOOL:
-		return types.Bool
-	case ColumnType_INT:
-		return types.Int
-	case ColumnType_FLOAT:
-		return types.Float
-	case ColumnType_DECIMAL:
-		return types.Decimal
-	case ColumnType_STRING:
-		return types.String
-	case ColumnType_BYTES:
-		return types.Bytes
-	case ColumnType_DATE:
-		return types.Date
-	case ColumnType_TIME:
-		return types.Time
-	case ColumnType_TIMESTAMP:
-		return types.Timestamp
-	case ColumnType_TIMESTAMPTZ:
-		return types.TimestampTZ
-	case ColumnType_INTERVAL:
-		return types.Interval
-	case ColumnType_UUID:
-		return types.UUID
-	case ColumnType_INET:
-		return types.INet
-	case ColumnType_JSON:
-		return types.JSON
-	case ColumnType_TUPLE:
-		return types.FamTuple
-	case ColumnType_COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		return types.TCollatedString{Locale: *c.Locale}
-	case ColumnType_NAME:
-		return types.Name
-	case ColumnType_OID:
-		return types.Oid
-	case ColumnType_NULL:
-		return types.Unknown
-	case ColumnType_INT2VECTOR:
-		return types.IntVector
-	case ColumnType_OIDVECTOR:
-		return types.OidVector
-	}
-	return nil
-}
-
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
-func (c *ColumnType) ToDatumType() types.T {
-	switch c.SemanticType {
-	case ColumnType_ARRAY:
-		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
-	case ColumnType_TUPLE:
-		datums := types.TTuple{
-			Types:  make([]types.T, len(c.TupleContents)),
-			Labels: c.TupleLabels,
-		}
-		for i := range c.TupleContents {
-			datums.Types[i] = c.TupleContents[i].ToDatumType()
-		}
-		return datums
-	default:
-		return columnSemanticTypeToDatumType(c, c.SemanticType)
-	}
 }
 
 // ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of

@@ -1074,8 +1074,9 @@ func TestColumnTypeSQLString(t *testing.T) {
 	}{
 		{ColumnType{SemanticType: ColumnType_INT}, "INT"},
 		{ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIT, Width: 2}, "BIT(2)"},
-		{ColumnType{SemanticType: ColumnType_FLOAT}, "FLOAT"},
-		{ColumnType{SemanticType: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
+		{ColumnType{SemanticType: ColumnType_FLOAT}, "FLOAT8"},
+		{ColumnType{SemanticType: ColumnType_FLOAT, Width: 32}, "FLOAT4"},
+		{ColumnType{SemanticType: ColumnType_FLOAT, Width: 64}, "FLOAT8"},
 		{ColumnType{SemanticType: ColumnType_DECIMAL}, "DECIMAL"},
 		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 6}, "DECIMAL(6)"},
 		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
@@ -1087,10 +1088,12 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{ColumnType{SemanticType: ColumnType_BYTES}, "BYTES"},
 	}
 	for i, d := range testData {
-		sql := d.colType.SQLString()
-		if d.expectedSQL != sql {
-			t.Errorf("%d: expected %s, but got %s", i, d.expectedSQL, sql)
-		}
+		t.Run(d.colType.String(), func(t *testing.T) {
+			sql := d.colType.SQLString()
+			if d.expectedSQL != sql {
+				t.Errorf("%d: expected %s, but got %s", i, d.expectedSQL, sql)
+			}
+		})
 	}
 }
 

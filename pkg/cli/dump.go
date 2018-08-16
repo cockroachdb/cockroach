@@ -371,13 +371,13 @@ func extractArray(val interface{}) ([]string, error) {
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
-		SELECT COLUMN_NAME, DATA_TYPE
+		SELECT column_name, crdb_sql_type
 		FROM %s.information_schema.columns
 		AS OF SYSTEM TIME %s
-		WHERE TABLE_CATALOG = $1
-			AND TABLE_SCHEMA = $2
-			AND TABLE_NAME = $3
-			AND GENERATION_EXPRESSION = ''
+		WHERE table_catalog = $1
+			AND table_schema = $2
+			AND table_name = $3
+			AND generation_expression = ''
 		`, &md.name.CatalogName, lex.EscapeSQLString(ts)),
 		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {
@@ -576,7 +576,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						if err != nil {
 							return err
 						}
-					case "JSON":
+					case "JSON", "JSONB":
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
@@ -587,7 +587,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						// In addition, we can only observe ARRAY types by their [] suffix.
 						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
 							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
-							elemType, err := tree.StringToColType(typ)
+							elemType, err := tree.ArrayElementTypeStringToColType(typ)
 							if err != nil {
 								return err
 							}
@@ -596,9 +596,12 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 							if err != nil {
 								return err
 							}
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "VARCHAR") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "CHAR") {
 							d = tree.NewDString(string(t))
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "NUMERIC") {
 							d, err = tree.ParseDDecimal(string(t))
 							if err != nil {
 								return err
@@ -617,7 +620,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						d = tree.MakeDTime(timeofday.FromTime(t))
 					case "TIMESTAMP":
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
-					case "TIMESTAMP WITH TIME ZONE":
+					case "TIMESTAMPTZ":
 						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])

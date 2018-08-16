@@ -16,11 +16,11 @@ ALTER TABLE t ALTER s TYPE BYTES, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTA
 query TTBTTT colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type                 is_nullable  column_default  generation_expression  indices
-s            BYTES                     true         NULL            ·                      {}
-sl           STRING(6)                 true         NULL            ·                      {}
-t            TIME                      true         NULL            ·                      {}
-ts           TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+column_name  data_type    is_nullable  column_default  generation_expression  indices
+s            BYTES        true         NULL            ·                      {}
+sl           STRING(6)    true         NULL            ·                      {}
+t            TIME         true         NULL            ·                      {}
+ts           TIMESTAMPTZ  true         NULL            ·                      {}
 
 query TTTT
 SELECT * FROM t
@@ -109,7 +109,7 @@ query TTBTTT colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INTEGER    true         NULL            ·                      {}
+a            INT        true         NULL            ·                      {}
 
 statement ok
 DROP TABLE t

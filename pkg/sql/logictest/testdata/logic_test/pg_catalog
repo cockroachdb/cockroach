@@ -1233,26 +1233,26 @@ datid  datname  pid  usesysid  username  application_name  client_addr  client_h
 query TTBTTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 ----
-column_name       data_type                 is_nullable  column_default  generation_expression  indices
-datid             OID                       true         NULL            ·                      {}
-datname           NAME                      true         NULL            ·                      {}
-pid               INTEGER                   true         NULL            ·                      {}
-usesysid          OID                       true         NULL            ·                      {}
-username          NAME                      true         NULL            ·                      {}
-application_name  STRING                    true         NULL            ·                      {}
-client_addr       INET                      true         NULL            ·                      {}
-client_hostname   STRING                    true         NULL            ·                      {}
-client_port       INTEGER                   true         NULL            ·                      {}
-backend_start     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-xact_start        TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-query_start       TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-state_change      TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-wait_event_type   STRING                    true         NULL            ·                      {}
-wait_event        STRING                    true         NULL            ·                      {}
-state             STRING                    true         NULL            ·                      {}
-backend_xid       INTEGER                   true         NULL            ·                      {}
-backend_xmin      INTEGER                   true         NULL            ·                      {}
-query             STRING                    true         NULL            ·                      {}
+column_name       data_type    is_nullable  column_default  generation_expression  indices
+datid             OID          true         NULL            ·                      {}
+datname           NAME         true         NULL            ·                      {}
+pid               INT          true         NULL            ·                      {}
+usesysid          OID          true         NULL            ·                      {}
+username          NAME         true         NULL            ·                      {}
+application_name  STRING       true         NULL            ·                      {}
+client_addr       INET         true         NULL            ·                      {}
+client_hostname   STRING       true         NULL            ·                      {}
+client_port       INT          true         NULL            ·                      {}
+backend_start     TIMESTAMPTZ  true         NULL            ·                      {}
+xact_start        TIMESTAMPTZ  true         NULL            ·                      {}
+query_start       TIMESTAMPTZ  true         NULL            ·                      {}
+state_change      TIMESTAMPTZ  true         NULL            ·                      {}
+wait_event_type   STRING       true         NULL            ·                      {}
+wait_event        STRING       true         NULL            ·                      {}
+state             STRING       true         NULL            ·                      {}
+backend_xid       INT          true         NULL            ·                      {}
+backend_xmin      INT          true         NULL            ·                      {}
+query             STRING       true         NULL            ·                      {}
 
 
 ## pg_catalog.pg_settings

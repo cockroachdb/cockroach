@@ -22,84 +22,109 @@ import (
 )
 
 // TBool represents a BOOLEAN type.
-type TBool struct {
-	Name string
-}
+type TBool struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TBool) TypeName() string { return node.Name }
+func (node *TBool) TypeName() string { return "BOOL" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TBool) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TInt represents an INT, INTEGER, SMALLINT or BIGINT type.
 type TInt struct {
-	Name          string
-	Width         int
-	ImplicitWidth bool
+	Width int
+
+	// IsBit is only used with BIT.
+	// TODO(knz): remove this with the fix to #20991.
+	IsBit bool
+
+	// ExplicitWidth is only used with BIT.
+	// TODO(knz): remove this with the fix to #20991.
+	ExplicitWidth bool
+}
+
+var intNames = map[int]string{
+	0:  "INT",
+	16: "INT2",
+	32: "INT4",
+	64: "INT8",
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TInt) TypeName() string { return node.Name }
+func (node *TInt) TypeName() string {
+	if node.IsBit {
+		return "BIT"
+	}
+	return intNames[node.Width]
+}
+
+var pgIntNames = map[int]string{
+	0:  "integer", // TODO(knz): This is a lie. Change this.
+	16: "smallint",
+	32: "integer",
+	64: "bigint",
+}
 
 // Format implements the ColTypeFormatter interface.
 func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
-	if node.Width > 0 && !node.ImplicitWidth {
+	buf.WriteString(node.TypeName())
+	if node.ExplicitWidth {
 		fmt.Fprintf(buf, "(%d)", node.Width)
 	}
 }
 
-var serialIntTypes = map[string]struct{}{
-	SmallSerial.Name: {},
-	Serial.Name:      {},
-	BigSerial.Name:   {},
-	Serial2.Name:     {},
-	Serial4.Name:     {},
-	Serial8.Name:     {},
+// TSerial represents a SERIAL type.
+type TSerial struct {
+	IntType *TInt
 }
 
-// IsSerial returns true when this column should be given a DEFAULT of a unique,
-// incrementing function.
-func (node *TInt) IsSerial() bool {
-	_, ok := serialIntTypes[node.Name]
-	return ok
+var serialNames = map[int]string{
+	0:  "SERIAL",
+	16: "SERIAL2",
+	32: "SERIAL4",
+	64: "SERIAL8",
+}
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TSerial) TypeName() string { return serialNames[node.IntType.Width] }
+
+// Format implements the ColTypeFormatter interface.
+func (node *TSerial) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
+	buf.WriteString(node.TypeName())
 }
 
 // TFloat represents a REAL, DOUBLE or FLOAT type.
 type TFloat struct {
-	Name          string
-	Prec          int
-	Width         int
-	PrecSpecified bool // true if the value of Prec is not the default
+	Width int
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TFloat) TypeName() string { return node.Name }
+func (node *TFloat) TypeName() string {
+	if node.Width == 32 {
+		return "FLOAT4"
+	}
+	return "FLOAT8"
+}
 
 // Format implements the ColTypeFormatter interface.
 func (node *TFloat) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
-	if node.Prec > 0 {
-		fmt.Fprintf(buf, "(%d)", node.Prec)
-	}
+	buf.WriteString(node.TypeName())
 }
 
 // TDecimal represents a DECIMAL or NUMERIC type.
 type TDecimal struct {
-	Name  string
 	Prec  int
 	Scale int
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TDecimal) TypeName() string { return node.Name }
+func (node *TDecimal) TypeName() string { return "DECIMAL" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TDecimal) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d", node.Prec)
 		if node.Scale > 0 {
