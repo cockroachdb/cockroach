@@ -21,58 +21,39 @@ import (
 
 var (
 	// Bool is an immutable T instance.
-	Bool = &TBool{Name: "BOOL"}
-	// Boolean is an immutable T instance.
-	Boolean = &TBool{Name: "BOOLEAN"}
+	Bool = &TBool{}
 
 	// Bit is an immutable T instance.
-	Bit = &TInt{Name: "BIT", Width: 1, ImplicitWidth: true}
+	//
+	// TODO(knz): BIT is not(!!) an integer type! This is
+	// very wrong and needs to be fixed. See #20991.
+	Bit = &TInt{IsBit: true, Width: 1}
+
 	// Int is an immutable T instance.
-	Int = &TInt{Name: "INT"}
+	Int = &TInt{}
 	// Int2 is an immutable T instance.
-	Int2 = &TInt{Name: "INT2", Width: 16, ImplicitWidth: true}
+	Int2 = &TInt{Width: 16}
 	// Int4 is an immutable T instance.
-	Int4 = &TInt{Name: "INT4", Width: 32, ImplicitWidth: true}
+	Int4 = &TInt{Width: 32}
 	// Int8 is an immutable T instance.
-	Int8 = &TInt{Name: "INT8"}
-	// Int64 is an immutable T instance.
-	Int64 = &TInt{Name: "INT64"}
-	// Integer is an immutable T instance.
-	Integer = &TInt{Name: "INTEGER"}
-	// SmallInt is an immutable T instance.
-	SmallInt = &TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	// BigInt is an immutable T instance.
-	BigInt = &TInt{Name: "BIGINT"}
+	Int8 = &TInt{Width: 64}
+
 	// Serial is an immutable T instance.
-	Serial = &TInt{Name: "SERIAL"}
+	Serial = &TSerial{IntType: Int}
 	// Serial2 is an immutable T instance.
-	Serial2 = &TInt{Name: "SERIAL2"}
+	Serial2 = &TSerial{IntType: Int2}
 	// Serial4 is an immutable T instance.
-	Serial4 = &TInt{Name: "SERIAL4"}
+	Serial4 = &TSerial{IntType: Int4}
 	// Serial8 is an immutable T instance.
-	Serial8 = &TInt{Name: "SERIAL8"}
-	// SmallSerial is an immutable T instance.
-	SmallSerial = &TInt{Name: "SMALLSERIAL"}
-	// BigSerial is an immutable T instance.
-	BigSerial = &TInt{Name: "BIGSERIAL"}
+	Serial8 = &TSerial{IntType: Int8}
 
-	// Real is an immutable T instance.
-	Real = &TFloat{Name: "REAL", Width: 32}
 	// Float is an immutable T instance.
-	Float = &TFloat{Name: "FLOAT", Width: 64}
-	// Float4 is an immutable T instance.
-	Float4 = &TFloat{Name: "FLOAT4", Width: 32}
+	Float4 = &TFloat{Width: 32}
 	// Float8 is an immutable T instance.
-	Float8 = &TFloat{Name: "FLOAT8", Width: 64}
-	// Double is an immutable T instance.
-	Double = &TFloat{Name: "DOUBLE PRECISION", Width: 64}
+	Float8 = &TFloat{Width: 64}
 
-	// Dec is an immutable T instance.
-	Dec = &TDecimal{Name: "DEC"}
 	// Decimal is an immutable T instance.
-	Decimal = &TDecimal{Name: "DECIMAL"}
-	// Numeric is an immutable T instance.
-	Numeric = &TDecimal{Name: "NUMERIC"}
+	Decimal = &TDecimal{}
 
 	// Date is an immutable T instance.
 	Date = &TDate{}
@@ -100,12 +81,8 @@ var (
 	// Name is an immutable T instance.
 	Name = &TName{}
 
-	// Blob is an immutable T instance.
-	Blob = &TBytes{Name: "BLOB"}
 	// Bytes is an immutable T instance.
-	Bytes = &TBytes{Name: "BYTES"}
-	// Bytea is an immutable T instance.
-	Bytea = &TBytes{Name: "BYTEA"}
+	Bytes = &TBytes{}
 
 	// Int2vector is an immutable T instance.
 	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int}
@@ -114,7 +91,7 @@ var (
 	UUID = &TUUID{}
 
 	// INet is an immutable T instance.
-	INet = &TIPAddr{Name: "INET"}
+	INet = &TIPAddr{}
 
 	// JSON is an immutable T instance.
 	JSON = &TJSON{Name: "JSON"}
@@ -140,20 +117,39 @@ var (
 
 var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
 
-// NewIntBitType creates a type alias for INT named BIT with the given bit width.
-func NewIntBitType(width int) (*TInt, error) {
+var errBitLengthMax64 = pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+	"length for type bit larger than 64 are not supported yet")
+
+// NewBitType creates a type alias for BIT with the given bit width.
+// TODO(knz): Fix this with #20991.
+func NewBitType(width int64) (*TInt, error) {
 	if width < 1 {
 		return nil, errBitLengthNotPositive
 	}
-	return &TInt{Name: "BIT", Width: width}, nil
+	if width > 64 {
+		// Until #20991 is fixed.
+		return nil, errBitLengthMax64
+	}
+	return &TInt{IsBit: true, Width: int(width), ExplicitWidth: true}, nil
 }
 
+var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be at least 1 bit")
+var errFloatPrecMax54 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be less than 54 bits")
+
 // NewFloat creates a type alias for FLOAT with the given precision.
-func NewFloat(prec int, precSpecified bool) *TFloat {
-	if prec == 0 && !precSpecified {
-		return Float
+func NewFloat(prec int64) (*TFloat, error) {
+	if prec < 1 {
+		return nil, errFloatPrecAtLeast1
 	}
-	return &TFloat{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
+	if prec <= 24 {
+		return Float4, nil
+	}
+	if prec <= 54 {
+		return Float8, nil
+	}
+	return nil, errFloatPrecMax54
 }
 
 // ArrayOf creates a type alias for an array of the given element type and fixed bounds.
@@ -161,7 +157,7 @@ func ArrayOf(colType T, bounds []int32) (T, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
-	return &TArray{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
+	return &TArray{ParamType: colType, Bounds: bounds}, nil
 }
 
 var typNameLiterals map[string]T

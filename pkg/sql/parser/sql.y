@@ -889,7 +889,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <coltypes.T> typename simple_typename const_typename
 %type <coltypes.T> numeric opt_numeric_modifiers
-%type <*tree.NumVal> opt_float
+%type <coltypes.T> opt_float
 %type <coltypes.T> character_with_length character_without_length
 %type <coltypes.T> const_datetime const_interval const_json
 %type <coltypes.T> bit_with_length bit_without_length
@@ -5894,7 +5894,7 @@ const_typename:
 | const_json
 | BLOB
   {
-    $$.val = coltypes.Blob
+    $$.val = coltypes.Bytes
   }
 | BYTES
   {
@@ -5902,7 +5902,7 @@ const_typename:
   }
 | BYTEA
   {
-    $$.val = coltypes.Bytea
+    $$.val = coltypes.Bytes
   }
 | TEXT
   {
@@ -5920,6 +5920,10 @@ const_typename:
   {
     $$.val = coltypes.Serial2
   }
+| SMALLSERIAL
+  {
+    $$.val = coltypes.Serial2
+  }
 | SERIAL4
   {
     $$.val = coltypes.Serial4
@@ -5928,9 +5932,9 @@ const_typename:
   {
     $$.val = coltypes.Serial8
   }
-| SMALLSERIAL
+| BIGSERIAL
   {
-    $$.val = coltypes.SmallSerial
+    $$.val = coltypes.Serial8
   }
 | UUID
   {
@@ -5939,10 +5943,6 @@ const_typename:
 | INET
   {
     $$.val = coltypes.INet
-  }
-| BIGSERIAL
-  {
-    $$.val = coltypes.BigSerial
   }
 | OID
   {
@@ -5995,10 +5995,14 @@ numeric:
   {
     $$.val = coltypes.Int
   }
+| INTEGER
+  {
+    $$.val = coltypes.Int
+  }
 | INT2
-    {
-      $$.val = coltypes.Int2
-    }
+  {
+    $$.val = coltypes.Int2
+  }
 | INT4
   {
     $$.val = coltypes.Int4
@@ -6009,23 +6013,19 @@ numeric:
   }
 | INT64
   {
-    $$.val = coltypes.Int64
-  }
-| INTEGER
-  {
-    $$.val = coltypes.Integer
+    $$.val = coltypes.Int8
   }
 | SMALLINT
   {
-    $$.val = coltypes.SmallInt
+    $$.val = coltypes.Int2
   }
 | BIGINT
   {
-    $$.val = coltypes.BigInt
+    $$.val = coltypes.Int8
   }
 | REAL
   {
-    $$.val = coltypes.Real
+    $$.val = coltypes.Float4
   }
 | FLOAT4
     {
@@ -6037,48 +6037,36 @@ numeric:
     }
 | FLOAT opt_float
   {
-    nv := $2.numVal()
-    prec, err := nv.AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = coltypes.NewFloat(int(prec), len(nv.OrigString) > 0)
+    $$.val = $2.colType()
   }
 | DOUBLE PRECISION
   {
-    $$.val = coltypes.Double
+    $$.val = coltypes.Float8
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
       $$.val = coltypes.Decimal
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "DECIMAL"
     }
   }
 | DEC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = coltypes.Dec
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "DEC"
+      $$.val = coltypes.Decimal
     }
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = coltypes.Numeric
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "NUMERIC"
+      $$.val = coltypes.Decimal
     }
   }
 | BOOLEAN
   {
-    $$.val = coltypes.Boolean
+    $$.val = coltypes.Bool
   }
 | BOOL
   {
@@ -6111,17 +6099,28 @@ postgres_oid:
 opt_float:
   '(' ICONST ')'
   {
-    $$.val = $2.numVal()
+    nv := $2.numVal()
+    prec, err := nv.AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    typ, err := coltypes.NewFloat(prec)
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = typ
   }
 | /* EMPTY */
   {
-    $$.val = &tree.NumVal{Value: constant.MakeInt64(0)}
+    $$.val = coltypes.Float8
   }
 
 bit_with_length:
   BIT opt_varying '(' iconst64 ')'
   {
-    bit, err := coltypes.NewIntBitType(int($4.int64()))
+    bit, err := coltypes.NewBitType($4.int64())
     if err != nil {
       sqllex.Error(err.Error())
       return 1

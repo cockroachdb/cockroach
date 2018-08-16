@@ -27,6 +27,9 @@ type TTuple []T
 // TypeName implements the ColTypeFormatter interface.
 func (node TTuple) TypeName() string { return "" }
 
+// PGTypeName implements the ColTypeFormatter interface.
+func (node TTuple) PGTypeName() string { return "record" }
+
 // Format implements the ColTypeFormatter interface.
 func (node TTuple) Format(buf *bytes.Buffer, flags lex.EncodeFlags) {
 	buf.WriteString("(")

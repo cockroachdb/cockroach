@@ -73,7 +73,7 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 	case types.Int:
 		return Int, nil
 	case types.Float:
-		return Float, nil
+		return Float8, nil
 	case types.Decimal:
 		return Decimal, nil
 	case types.Timestamp:
@@ -148,6 +148,8 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *TBool:
 		return types.Bool
 	case *TInt:
+		return types.Int
+	case *TSerial:
 		return types.Int
 	case *TFloat:
 		return types.Float

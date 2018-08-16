@@ -151,6 +151,9 @@ func (ColumnType_SemanticType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptorStructured, []int{0, 0}
 }
 
+// Note: this enum is becoming deprecated. Do not add items
+// to it without consideration.
+// TODO(knz): remove this.
 type ColumnType_VisibleType int32
 
 const (
@@ -515,9 +518,10 @@ func (TableDescriptor_AuditMode) EnumDescriptor() ([]byte, []int) {
 
 type ColumnType struct {
 	SemanticType ColumnType_SemanticType `protobuf:"varint,1,opt,name=semantic_type,json=semanticType,enum=cockroach.sql.sqlbase.ColumnType_SemanticType" json:"semantic_type"`
-	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+	// BIT, INT, FLOAT, DECIMAL, CHAR, BINARY, FLOAT.
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
-	// FLOAT and DECIMAL.
+	// DECIMAL.
+	// Also FLOAT pre-2.1 (this was incorrect.)
 	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
 	// The length of each dimension in the array. A dimension of -1 means that
 	// no bound was specified for that dimension.
@@ -525,8 +529,10 @@ type ColumnType struct {
 	// Collated STRING, CHAR, and VARCHAR
 	Locale *string `protobuf:"bytes,5,opt,name=locale" json:"locale,omitempty"`
 	// Alias for any types where our internal representation is different than
-	// the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
-	// compatibility.
+	// the user specification.
+	// Note: this is still set for pre-2.1 nodes for compatibility, but is not
+	// read from any more in 2.1 other than VisibleType_BIT (pending #20911).
+	// TODO(knz): remove this beyond CockroachDB 2.2.
 	VisibleType ColumnType_VisibleType `protobuf:"varint,6,opt,name=visible_type,json=visibleType,enum=cockroach.sql.sqlbase.ColumnType_VisibleType" json:"visible_type"`
 	// Only used if the kind is ARRAY.
 	ArrayContents *ColumnType_SemanticType `protobuf:"varint,7,opt,name=array_contents,json=arrayContents,enum=cockroach.sql.sqlbase.ColumnType_SemanticType" json:"array_contents,omitempty"`

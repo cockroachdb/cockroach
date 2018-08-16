@@ -361,15 +361,16 @@ func TestInternColType(t *testing.T) {
 	}
 
 	// Arithmetic types.
-	test(coltypes.Boolean, &coltypes.TBool{Name: "BOOLEAN"}, true)
+	test(coltypes.Boolean, &coltypes.TBool{}, true)
 
 	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
 	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)
 
-	test(coltypes.Float4, &coltypes.TFloat{Name: "FLOAT4", Width: 32}, true)
-	test(coltypes.Float8, &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}, false)
-	test(coltypes.Float, coltypes.NewFloat(64, true), false)
-	test(coltypes.NewFloat(0, true), coltypes.NewFloat(0, true), true)
+	test(coltypes.Float4, &coltypes.TFloat{Width: 32}, true)
+	test(coltypes.Float8, &coltypes.TFloat{Width: 64}, false)
+	nf30, _ := coltypes.NewFloat(16)
+	test(coltypes.Float, nf30, false)
+	test(nf30, nf30, true)
 
 	tdec := &coltypes.TDecimal{Name: "DECIMAL", Prec: 19}
 	test(coltypes.Numeric, &coltypes.TDecimal{Name: "NUMERIC"}, true)

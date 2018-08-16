@@ -38,25 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
-// so that the alias is persisted. When adding new column type aliases or new
-// VisibleType variants, consider adding to this mapping as well.
-var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	coltypes.Bit.Name:      ColumnType_BIT,
-	coltypes.Int2.Name:     ColumnType_SMALLINT,
-	coltypes.Int4.Name:     ColumnType_INTEGER,
-	coltypes.Int8.Name:     ColumnType_BIGINT,
-	coltypes.Int64.Name:    ColumnType_BIGINT,
-	coltypes.Integer.Name:  ColumnType_INTEGER,
-	coltypes.SmallInt.Name: ColumnType_SMALLINT,
-	coltypes.BigInt.Name:   ColumnType_BIGINT,
-
-	coltypes.Real.Name:   ColumnType_REAL,
-	coltypes.Float4.Name: ColumnType_REAL,
-	coltypes.Float8.Name: ColumnType_DOUBLE_PRECISION,
-	coltypes.Double.Name: ColumnType_DOUBLE_PRECISION,
-}
-
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
@@ -100,70 +81,6 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-// PopulateTypeAttrs set other attributes of col.Type and performs type-specific verification.
-func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
-	switch t := typ.(type) {
-	case *coltypes.TBool:
-	case *coltypes.TInt:
-		base.Width = int32(t.Width)
-		if val, present := aliasToVisibleTypeMap[t.Name]; present {
-			base.VisibleType = val
-		}
-	case *coltypes.TFloat:
-		// If the precision for this float col was intentionally specified as 0, return an error.
-		if t.Prec == 0 && t.PrecSpecified {
-			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
-		}
-		base.Precision = int32(t.Prec)
-		if val, present := aliasToVisibleTypeMap[t.Name]; present {
-			base.VisibleType = val
-		}
-	case *coltypes.TDecimal:
-		base.Width = int32(t.Scale)
-		base.Precision = int32(t.Prec)
-
-		switch {
-		case base.Precision == 0 && base.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return ColumnType{}, errors.New("invalid NUMERIC precision 0")
-		case base.Precision < base.Width:
-			return ColumnType{}, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				base.Width, base.Precision)
-		}
-	case *coltypes.TDate:
-	case *coltypes.TTime:
-	case *coltypes.TTimestamp:
-	case *coltypes.TTimestampTZ:
-	case *coltypes.TInterval:
-	case *coltypes.TUUID:
-	case *coltypes.TIPAddr:
-	case *coltypes.TJSON:
-	case *coltypes.TString:
-		base.Width = int32(t.N)
-	case *coltypes.TName:
-	case *coltypes.TBytes:
-	case *coltypes.TCollatedString:
-		base.Width = int32(t.N)
-	case *coltypes.TArray:
-		base.ArrayDimensions = t.Bounds
-		var err error
-		base, err = PopulateTypeAttrs(base, t.ParamType)
-		if err != nil {
-			return ColumnType{}, err
-		}
-	case *coltypes.TVector:
-		switch t.ParamType.(type) {
-		case *coltypes.TInt, *coltypes.TOid:
-		default:
-			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
-		}
-	case *coltypes.TOid:
-	default:
-		return ColumnType{}, errors.Errorf("unexpected type %T", t)
-	}
-	return base, nil
-}
-
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
@@ -180,26 +97,32 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
 
+	defType := d.Type
+	if t, ok := defType.(*coltypes.TSerial); ok {
+		if d.HasDefaultExpr() {
+			return nil, nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
+		}
+		s := "unique_rowid()"
+		col.DefaultExpr = &s
+		defType = t.IntType
+		if t.IntType.Width < 64 {
+			// If the serial type appears too small, pretend it's larger
+			// otherwise the rowid values won't fit.
+			// TODO(knz): Remove/change this when #28575 is complete.
+			defType = coltypes.Int
+		}
+	}
+
 	// Set Type.SemanticType and Type.Locale.
-	colDatumType := coltypes.CastTargetToDatumType(d.Type)
+	colDatumType := coltypes.CastTargetToDatumType(defType)
 	colTyp, err := DatumTypeToColumnType(colDatumType)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
+	col.Type, err = PopulateTypeAttrs(colTyp, defType)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	if t, ok := d.Type.(*coltypes.TInt); ok {
-		if t.IsSerial() {
-			if d.HasDefaultExpr() {
-				return nil, nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
-			}
-			s := "unique_rowid()"
-			col.DefaultExpr = &s
-		}
 	}
 
 	if len(d.CheckExprs) > 0 {

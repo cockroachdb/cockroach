@@ -63,6 +63,9 @@ message ColumnType {
     OIDVECTOR = 201;
   }
 
+  // Note: this enum is becoming deprecated. Do not add items
+  // to it without consideration.
+  // TODO(knz): remove this.
   enum VisibleType {
     NONE = 0;
     INTEGER = 1;
@@ -74,19 +77,24 @@ message ColumnType {
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  // BIT, INT, FLOAT, DECIMAL, CHAR, BINARY, FLOAT.
   optional int32 width = 2 [(gogoproto.nullable) = false];
-  // FLOAT and DECIMAL.
+  // DECIMAL.
+  // Also FLOAT pre-2.1 (this was incorrect.)
   optional int32 precision = 3 [(gogoproto.nullable) = false];
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.
   repeated int32 array_dimensions = 4;
   // Collated STRING, CHAR, and VARCHAR
   optional string locale = 5;
+
   // Alias for any types where our internal representation is different than
-  // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
-  // compatibility.
+  // the user specification.
+  // Note: this is still set for pre-2.1 nodes for compatibility, but is not
+  // read from any more in 2.1 other than VisibleType_BIT (pending #20911).
+  // TODO(knz): remove this beyond CockroachDB 2.2.
   optional VisibleType visible_type = 6 [(gogoproto.nullable) = false];
+
   // Only used if the kind is ARRAY.
   optional SemanticType array_contents = 7;
   // Only used if the kind is TUPLE

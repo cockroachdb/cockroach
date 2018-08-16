@@ -16,6 +16,7 @@ package coltypes
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
@@ -32,22 +33,26 @@ type TUUID struct{}
 // TypeName implements the ColTypeFormatter interface.
 func (node *TUUID) TypeName() string { return "UUID" }
 
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TUUID) PGTypeName() string { return "uuid" }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TUUID) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("UUID")
 }
 
 // TIPAddr represents an INET or CIDR type.
-type TIPAddr struct {
-	Name string
-}
+type TIPAddr struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TIPAddr) TypeName() string { return node.Name }
+func (node *TIPAddr) TypeName() string { return "INET" }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TIPAddr) PGTypeName() string { return "inet" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TIPAddr) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TJSON represents the JSON column type.
@@ -57,6 +62,9 @@ type TJSON struct {
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TJSON) TypeName() string { return node.Name }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TJSON) PGTypeName() string { return strings.ToLower(node.Name) }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TJSON) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
@@ -76,6 +84,9 @@ type TOid struct {
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TOid) TypeName() string { return node.Name }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TOid) PGTypeName() string { return strings.ToLower(node.Name) }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TOid) Format(buf *bytes.Buffer, f lex.EncodeFlags) {

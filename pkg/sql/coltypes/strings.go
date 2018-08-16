@@ -17,6 +17,7 @@ package coltypes
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
@@ -29,6 +30,9 @@ type TString struct {
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TString) TypeName() string { return node.Name }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TString) PGTypeName() string { return strings.ToLower(node.Name) }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
@@ -44,22 +48,26 @@ type TName struct{}
 // TypeName implements the ColTypeFormatter interface.
 func (node *TName) TypeName() string { return "NAME" }
 
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TName) PGTypeName() string { return "name" }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TName) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("NAME")
+	buf.WriteString(node.TypeName())
 }
 
 // TBytes represents a BYTES or BLOB type.
-type TBytes struct {
-	Name string
-}
+type TBytes struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TBytes) TypeName() string { return node.Name }
+func (node TBytes) TypeName() string { return "BYTES" }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node TBytes) PGTypeName() string { return "bytea" }
 
 // Format implements the ColTypeFormatter interface.
-func (node *TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+func (node TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+	buf.WriteString(node.TypeName())
 }
 
 // TCollatedString represents a STRING, CHAR or VARCHAR type with a
@@ -72,6 +80,9 @@ type TCollatedString struct {
 
 // TypeName implements the ColTypeFormatter interface.
 func (node *TCollatedString) TypeName() string { return node.Name }
+
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TCollatedString) PGTypeName() string { return strings.ToLower(node.Name) }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TCollatedString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {

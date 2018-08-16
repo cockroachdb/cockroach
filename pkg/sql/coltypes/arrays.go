@@ -16,24 +16,32 @@ package coltypes
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
 // TArray represents an ARRAY column type.
 type TArray struct {
-	Name string
 	// ParamTyp is the type of the elements in this array.
 	ParamType T
 	Bounds    []int32
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TArray) TypeName() string { return node.Name }
+func (node *TArray) TypeName() string {
+	return node.ParamType.TypeName() + "[]"
+}
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TArray) PGTypeName() string {
+	return node.ParamType.PGTypeName() + "[]"
+}
 
 // Format implements the ColTypeFormatter interface.
 func (node *TArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.ParamType.TypeName())
+	buf.WriteString("[]")
 	if collation, ok := node.ParamType.(*TCollatedString); ok {
 		buf.WriteString(" COLLATE ")
 		lex.EncodeUnrestrictedSQLIdent(buf, collation.Locale, f)
@@ -62,7 +70,10 @@ type TVector struct {
 // TypeName implements the ColTypeFormatter interface.
 func (node *TVector) TypeName() string { return node.Name }
 
+// PGTypeName implements the ColTypeFormatter interface.
+func (node *TVector) PGTypeName() string { return strings.ToLower(node.Name) }
+
 // Format implements the ColTypeFormatter interface.
 func (node *TVector) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }

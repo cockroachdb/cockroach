@@ -76,7 +76,7 @@ func TestValues(t *testing.T) {
 	floatVal := func(f float64) *tree.CastExpr {
 		return &tree.CastExpr{
 			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
-			Type: &coltypes.TFloat{},
+			Type: &coltypes.TFloat{Width: 64},
 		}
 	}
 	asRow := func(datums ...tree.Datum) []tree.Datums {

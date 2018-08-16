@@ -97,10 +97,12 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b VARCHAR(3))`},
 		{`CREATE TABLE a (b STRING)`},
 		{`CREATE TABLE a (b STRING(3))`},
-		{`CREATE TABLE a (b FLOAT)`},
+		{`CREATE TABLE a (b FLOAT4)`},
+		{`CREATE TABLE a (b FLOAT8)`},
 		{`CREATE TABLE a (b SERIAL)`},
-		{`CREATE TABLE a (b SMALLSERIAL)`},
-		{`CREATE TABLE a (b BIGSERIAL)`},
+		{`CREATE TABLE a (b SERIAL2)`},
+		{`CREATE TABLE a (b SERIAL4)`},
+		{`CREATE TABLE a (b SERIAL8)`},
 		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
@@ -584,7 +586,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT BOOL 'foo'`},
 		{`SELECT INT 'foo'`},
-		{`SELECT REAL 'foo'`},
+		{`SELECT FLOAT4 'foo'`},
 		{`SELECT DECIMAL 'foo'`},
 		{`SELECT BIT '1'`},
 		{`SELECT CHAR 'foo'`},
@@ -700,7 +702,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IS false`},
 		{`SELECT a FROM t WHERE a IS NOT false`},
 		{`SELECT a FROM t WHERE a IS OF (INT)`},
-		{`SELECT a FROM t WHERE a IS NOT OF (FLOAT, STRING)`},
+		{`SELECT a FROM t WHERE a IS NOT OF (FLOAT8, STRING)`},
 		{`SELECT a FROM t WHERE a IS DISTINCT FROM b`},
 		{`SELECT a FROM t WHERE a IS NOT DISTINCT FROM b`},
 		{`SELECT a FROM t WHERE a < b`},
@@ -1052,15 +1054,17 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
-		stmts, err := parser.Parse(d.sql)
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
-		}
-		s := stmts.String()
-		if d.sql != s {
-			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		t.Run(d.sql, func(t *testing.T) {
+			stmts, err := parser.Parse(d.sql)
+			if err != nil {
+				t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			}
+			s := stmts.String()
+			if d.sql != s {
+				t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		})
 	}
 }
 
