@@ -1,11 +1,25 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+subtest serial_rowid
+
 statement ok
 CREATE TABLE serial (
   a SERIAL PRIMARY KEY,
   b INT DEFAULT 7,
   c SERIAL,
   UNIQUE INDEX (c)
+)
+
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE serial (
+        a INT NOT NULL DEFAULT unique_rowid(),
+        b INT NULL DEFAULT 7:::INT,
+        c INT NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        UNIQUE INDEX serial_c_key (c ASC),
+        FAMILY "primary" (a, b, c)
 )
 
 statement ok
@@ -19,14 +33,27 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
 ----
 4 3 4
 
-statement error SERIAL column \"a\" cannot have a default value
+statement error multiple default values specified for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL DEFAULT 7)
+
+statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
+CREATE TABLE s1 (a SERIAL NULL)
 
 statement ok
 CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
 
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
+
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE smallbig (
+          a INT NOT NULL DEFAULT unique_rowid(),
+          b INT NOT NULL DEFAULT unique_rowid(),
+          c INT NULL,
+          FAMILY "primary" (a, b, c, rowid)
+)
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -36,6 +63,17 @@ SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
 statement ok
 CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
 
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE serials (
+         a INT NOT NULL DEFAULT unique_rowid(),
+         b INT NOT NULL DEFAULT unique_rowid(),
+         c INT NOT NULL DEFAULT unique_rowid(),
+         d INT NULL,
+         FAMILY "primary" (a, b, c, d, rowid)
+)
+
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)
 
@@ -43,3 +81,198 @@ query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serials
 ----
 2 2 2
+
+statement ok
+DROP TABLE serials, smallbig, serial
+
+
+subtest serial_virtual_sequence
+
+statement ok
+SET experimental_serial_normalization = virtual_sequence
+
+# Force the sequence for column "c" to bump to 2.
+statement ok
+CREATE SEQUENCE serial_c_seq; CREATE SEQUENCE serial_c_seq1
+
+statement ok
+CREATE TABLE serial (
+  a SERIAL PRIMARY KEY,
+  b INT DEFAULT 7,
+  c SERIAL,
+  UNIQUE INDEX (c)
+)
+
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE serial (
+        a INT NOT NULL DEFAULT nextval('serial_a_seq':::STRING),
+        b INT NULL DEFAULT 7:::INT,
+        c INT NOT NULL DEFAULT nextval('serial_c_seq2':::STRING),
+        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        UNIQUE INDEX serial_c_key (c ASC),
+        FAMILY "primary" (a, b, c)
+)
+
+query TT
+SHOW CREATE SEQUENCE serial_a_seq
+----
+serial_a_seq  CREATE SEQUENCE serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+
+statement ok
+INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
+
+statement ok
+INSERT INTO serial (b) VALUES (2)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
+----
+4 3 4
+
+statement error multiple default values specified for column "a" of table "s1"
+CREATE TABLE s1 (a SERIAL DEFAULT 7)
+
+statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
+CREATE TABLE s1 (a SERIAL NULL)
+
+statement ok
+CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+
+statement ok
+INSERT INTO smallbig (c) VALUES (7), (7)
+
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE smallbig (
+          a INT NOT NULL DEFAULT nextval('smallbig_a_seq':::STRING),
+          b INT NOT NULL DEFAULT nextval('smallbig_b_seq':::STRING),
+          c INT NULL,
+          FAMILY "primary" (a, b, c, rowid)
+)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
+----
+2 2 1
+
+statement ok
+CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE serials (
+         a INT NOT NULL DEFAULT nextval('serials_a_seq':::STRING),
+         b INT NOT NULL DEFAULT nextval('serials_b_seq':::STRING),
+         c INT NOT NULL DEFAULT nextval('serials_c_seq':::STRING),
+         d INT NULL,
+         FAMILY "primary" (a, b, c, d, rowid)
+)
+
+statement ok
+INSERT INTO serials (d) VALUES (9), (9)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serials
+----
+2 2 2
+
+statement ok
+DROP TABLE serials, smallbig, serial
+
+
+subtest serial_sql_sequence
+
+statement ok
+SET experimental_serial_normalization = sql_sequence
+
+statement ok
+CREATE TABLE serial (
+  a SERIAL PRIMARY KEY,
+  b INT DEFAULT 7,
+  c SERIAL,
+  UNIQUE INDEX (c)
+)
+
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE serial (
+        a INTEGER NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
+        b INT NULL DEFAULT 7:::INT,
+        c INTEGER NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
+        CONSTRAINT "primary" PRIMARY KEY (a ASC),
+        UNIQUE INDEX serial_c_key (c ASC),
+        FAMILY "primary" (a, b, c)
+)
+
+query TT
+SHOW CREATE SEQUENCE serial_a_seq1
+----
+serial_a_seq1  CREATE SEQUENCE serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+statement ok
+INSERT INTO serial (a, b) VALUES (0, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
+
+statement ok
+INSERT INTO serial (b) VALUES (2)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serial
+----
+4  3  4
+
+statement error multiple default values specified for column "a" of table "s1"
+CREATE TABLE s1 (a SERIAL DEFAULT 7)
+
+statement error conflicting NULL/NOT NULL declarations for column "a" of table "s1"
+CREATE TABLE s1 (a SERIAL NULL)
+
+statement ok
+CREATE TABLE smallbig (a SMALLSERIAL, b BIGSERIAL, c INT)
+
+statement ok
+INSERT INTO smallbig (c) VALUES (7), (7)
+
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE smallbig (
+          a SMALLINT NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
+          b BIGINT NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
+          c INT NULL,
+          FAMILY "primary" (a, b, c, rowid)
+)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
+----
+2 2 1
+
+statement ok
+CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE serials (
+         a SMALLINT NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
+         b INTEGER NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
+         c BIGINT NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
+         d INT NULL,
+         FAMILY "primary" (a, b, c, d, rowid)
+)
+
+statement ok
+INSERT INTO serials (d) VALUES (9), (9)
+
+query III
+SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM serials
+----
+2 2 2
+
+statement ok
+DROP TABLE serials, smallbig, serial

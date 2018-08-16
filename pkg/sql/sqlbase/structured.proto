@@ -696,6 +696,8 @@ message TableDescriptor {
     optional int64 max_value = 3 [(gogoproto.nullable) = false];
     // Start value of the sequence.
     optional int64 start = 4 [(gogoproto.nullable) = false];
+    // Whether the sequence is virtual.
+    optional bool virtual = 5 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
