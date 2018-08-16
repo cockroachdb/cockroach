@@ -885,6 +885,10 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 				requiredType = types.Interval
 			}
 		}
+	case GROUPS:
+		// In GROUPS mode, offsets must be non-null, non-negative integers.
+		// Non-nullity and non-negativity will be checked later.
+		requiredType = types.Int
 	default:
 		panic("unexpected WindowFrameMode")
 	}

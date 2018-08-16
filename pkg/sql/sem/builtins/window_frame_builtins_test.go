@@ -220,53 +220,8 @@ func partitionToString(partition tree.IndexedRows) string {
 	return buf.String()
 }
 
-func testRingBuffer(t *testing.T, count int) {
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
-	partition := makeTestPartition(count)
-	ring := ringBuffer{}
-	naiveBuffer := make([]*indexedValue, 0, count)
-	for rowIdx := 0; rowIdx < partition.Len(); rowIdx++ {
-		if ring.len() != len(naiveBuffer) {
-			t.Errorf("Ring ring returned incorrect len: expected %v, found %v", len(naiveBuffer), ring.len())
-			panic("")
-		}
-
-		op := rand.Float64()
-		if op < 0.5 {
-			iv := &indexedValue{idx: rowIdx, value: partition.GetRow(rowIdx).GetDatum(0)}
-			ring.add(iv)
-			naiveBuffer = append(naiveBuffer, iv)
-		} else if op < 0.75 {
-			if len(naiveBuffer) > 0 {
-				ring.removeHead()
-				naiveBuffer = naiveBuffer[1:]
-			}
-		} else {
-			if len(naiveBuffer) > 0 {
-				ring.removeTail()
-				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
-			}
-		}
-
-		for pos, iv := range naiveBuffer {
-			res := ring.get(pos)
-			if res.idx != iv.idx || res.value.Compare(evalCtx, iv.value) != 0 {
-				t.Errorf("Ring buffer returned incorrect value: expected %+v, found %+v", iv, res)
-				panic("")
-			}
-		}
-	}
-}
-
 func TestSlidingWindow(t *testing.T) {
 	for count := 1; count <= maxCount; count += int(rand.Int31n(maxCount / 10)) {
 		testSlidingWindow(t, count)
-	}
-}
-
-func TestRingBuffer(t *testing.T) {
-	for count := 1; count <= maxCount; count++ {
-		testRingBuffer(t, count)
 	}
 }

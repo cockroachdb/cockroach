@@ -899,6 +899,9 @@ message WindowerSpec {
       RANGE = 0;
       // ROWS specifies frame in terms of physical offsets (e.g. 1 row before).
       ROWS = 1;
+      // GROUPS specifies frame in terms of peer groups (where "peers" mean
+      // rows not distinct in the ordering columns).
+      GROUPS = 2;
     }
 
     // BoundType indicates which type of boundary is used.

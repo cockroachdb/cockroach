@@ -683,6 +683,7 @@ unreserved_keyword ::=
 	| 'FORCE_INDEX'
 	| 'GIN'
 	| 'GRANTS'
+	| 'GROUPS'
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
@@ -2104,6 +2105,7 @@ opt_partition_clause ::=
 opt_frame_clause ::=
 	'RANGE' frame_extent
 	| 'ROWS' frame_extent
+	| 'GROUPS' frame_extent
 	| 
 
 extract_list ::=
