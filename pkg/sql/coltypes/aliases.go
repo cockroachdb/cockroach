@@ -51,10 +51,6 @@ var (
 	Serial4 = &TInt{Name: "SERIAL4"}
 	// Serial8 is an immutable T instance.
 	Serial8 = &TInt{Name: "SERIAL8"}
-	// SmallSerial is an immutable T instance.
-	SmallSerial = &TInt{Name: "SMALLSERIAL"}
-	// BigSerial is an immutable T instance.
-	BigSerial = &TInt{Name: "BIGSERIAL"}
 
 	// Real is an immutable T instance.
 	Real = &TFloat{Name: "REAL", Width: 32}

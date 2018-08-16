@@ -4081,6 +4081,7 @@ numeric_only:
 //   [START [WITH] <start>]
 //   [CACHE <cache>]
 //   [NO CYCLE]
+//   [VIRTUAL]
 //
 // %SeeAlso: CREATE TABLE
 create_sequence_stmt:
@@ -4134,6 +4135,7 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+| VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
@@ -5930,7 +5932,7 @@ const_typename:
   }
 | SMALLSERIAL
   {
-    $$.val = coltypes.SmallSerial
+    $$.val = coltypes.Serial2
   }
 | UUID
   {
@@ -5942,7 +5944,7 @@ const_typename:
   }
 | BIGSERIAL
   {
-    $$.val = coltypes.BigSerial
+    $$.val = coltypes.Serial8
   }
 | OID
   {

@@ -433,6 +433,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	}
 }
 
+// String implements the fmt.Stringer interface.
+func (node *ColumnTableDef) String() string { return AsString(node) }
+
 // NamedColumnQualification wraps a NamedColumnQualification with a name.
 type NamedColumnQualification struct {
 	Name          Name
@@ -935,6 +938,8 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 				ctx.WriteString("BY ")
 			}
 			ctx.Printf("%d", *option.IntVal)
+		case SeqOptVirtual:
+			ctx.WriteString(option.Name)
 		default:
 			panic(fmt.Sprintf("unexpected SequenceOption: %v", option))
 		}
@@ -961,6 +966,7 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs

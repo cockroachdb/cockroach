@@ -441,14 +441,15 @@ func (sp sessionParams) sessionData(
 		curDb = sessiondata.DefaultDatabaseName
 	}
 	sd := sessiondata.SessionData{
-		ApplicationName: sp.args.ApplicationName,
-		Database:        curDb,
-		DistSQLMode:     sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
-		OptimizerMode:   sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
-		SearchPath:      sqlbase.DefaultSearchPath,
-		User:            sp.args.User,
-		RemoteAddr:      sp.args.RemoteAddr,
-		SequenceState:   sessiondata.NewSequenceState(),
+		ApplicationName:         sp.args.ApplicationName,
+		Database:                curDb,
+		DistSQLMode:             sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
+		OptimizerMode:           sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
+		SerialNormalizationMode: sessiondata.SerialNormalizationMode(SerialNormalizationMode.Get(&settings.SV)),
+		SearchPath:              sqlbase.DefaultSearchPath,
+		User:                    sp.args.User,
+		RemoteAddr:              sp.args.RemoteAddr,
+		SequenceState:           sessiondata.NewSequenceState(),
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},

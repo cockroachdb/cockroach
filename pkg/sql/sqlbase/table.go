@@ -167,6 +167,12 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
+// If the column type *may* be SERIAL (or SERIAL-like), it is the
+// caller's responsibility to call sql.processSerialInColumnDef() and
+// sql.doCreateSequence() before MakeColumnDefDescs() to remove the
+// SERIAL type and replace it with a suitable integer type and default
+// expression.
+//
 // semaCtx and evalCtx can be nil if no default expression is used for the
 // column.
 //
@@ -192,14 +198,14 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, err
 	}
 
-	if t, ok := d.Type.(*coltypes.TInt); ok {
-		if t.IsSerial() {
-			if d.HasDefaultExpr() {
-				return nil, nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
-			}
-			s := "unique_rowid()"
-			col.DefaultExpr = &s
-		}
+	if t, ok := d.Type.(*coltypes.TInt); ok && t.IsSerial() {
+		// To the reader of this code: if control arrives here, this means
+		// the caller has not suitably called processSerialInColumnDef()
+		// prior to calling MakeColumnDefDescs. The dependent sequences
+		// must be created, and the SERIAL type eliminated, prior to this
+		// point.
+		return nil, nil, nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			"SERIAL cannot be used in this context")
 	}
 
 	if len(d.CheckExprs) > 0 {
