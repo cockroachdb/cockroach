@@ -132,6 +132,10 @@ type Memo struct {
 	// root is the root of the lowest cost expression tree in the memo. It is
 	// set once after optimization is complete.
 	root BestExprID
+
+	// logPropsBuilder is inlined in the memo so that it can be reused each time
+	// scalar or relational properties need to be built.
+	logPropsBuilder logicalPropsBuilder
 }
 
 // New constructs a new empty memo instance.
@@ -258,8 +262,8 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	}
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	logPropsFactory := logicalPropsBuilder{evalCtx: evalCtx}
-	mgrp.logical = logPropsFactory.buildProps(ev)
+	m.logPropsBuilder.evalCtx = evalCtx
+	mgrp.logical = m.logPropsBuilder.buildProps(ev)
 	return mgrp.id
 }
 
