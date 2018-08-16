@@ -43,8 +43,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,4), constraints=(/2: [/5 - /5]; /4: (/NULL - /'foo'); tight), fd=()-->(2)]
-      ├── a.i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-      └── a.s < 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo'); tight)]
+      ├── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      └── s < 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo'); tight)]
 
 # --------------------------------------------------
 # EnsureSelectFilters
@@ -61,7 +61,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
 opt
 SELECT * FROM a WHERE i<5 OR s='foo'
@@ -75,7 +75,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,4)]
-      └── (a.i < 5) OR (a.s = 'foo') [type=bool, outer=(2,4)]
+      └── (i < 5) OR (s = 'foo') [type=bool, outer=(2,4)]
 
 # Don't use Filters for True or False condition.
 opt
@@ -123,7 +123,7 @@ select
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
  └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
@@ -155,8 +155,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /4]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i>1 AND i<10) WHERE s='foo' OR k=5
@@ -170,9 +170,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2,4), constraints=(/2: [/2 - /9])]
-      ├── a.i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
-      ├── a.i < 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
-      └── (a.s = 'foo') OR (a.k = 5) [type=bool, outer=(1,4)]
+      ├── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+      ├── i < 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+      └── (s = 'foo') OR (k = 5) [type=bool, outer=(1,4)]
 
 # --------------------------------------------------
 # PushSelectIntoProject
@@ -189,9 +189,9 @@ project
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
  │    └── filters [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
- │         └── a.f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
+ │         └── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
  └── projections [outer=(2,3)]
-      └── a.i + 1 [type=int, outer=(2)]
+      └── i + 1 [type=int, outer=(2)]
 
 # Don't push down select if it depends on computed column that can't be inlined.
 opt
@@ -207,7 +207,7 @@ select
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
  │    └── projections [outer=(2,3), side-effects]
- │         └── a.i / 2 [type=decimal, outer=(2), side-effects]
+ │         └── i / 2 [type=decimal, outer=(2), side-effects]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
       └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
 
@@ -229,10 +229,10 @@ select
  │    │    ├── scan a
  │    │    │    └── columns: i:2(int) f:3(float)
  │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight), fd=()-->(2,3)]
- │    │         ├── a.f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
- │    │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │    │         ├── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
+ │    │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  │    └── projections [outer=(2,3), side-effects]
- │         └── a.i / 2 [type=decimal, outer=(2), side-effects]
+ │         └── i / 2 [type=decimal, outer=(2), side-effects]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
       └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
 
@@ -255,11 +255,11 @@ project
  │    │    │    └── columns: i:2(int) f:3(float)
  │    │    └── aggregations [outer=(3)]
  │    │         └── sum [type=float, outer=(3)]
- │    │              └── variable: a.f [type=float, outer=(3)]
+ │    │              └── variable: f [type=float, outer=(3)]
  │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
  │         └── column6 = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
  └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+      └── f + 1.1 [type=float, outer=(3)]
 
 # --------------------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
@@ -294,9 +294,9 @@ select
  │         ├── left ordering: +1
  │         ├── right ordering: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(6)]
-      └── (xy.x = 6) OR (xy.x IS NULL) [type=bool, outer=(6)]
+      └── (x = 6) OR (x IS NULL) [type=bool, outer=(6)]
 
 opt
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -321,7 +321,7 @@ semi-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
 SELECT * FROM a WHERE NOT EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -346,7 +346,7 @@ anti-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Only the filters bound by the right side are mapped and pushed down.
 opt
@@ -372,16 +372,16 @@ select
  │    │    │    ├── key: (6)
  │    │    │    └── fd: (6)-->(7)
  │    │    └── filters [type=bool, outer=(6,7)]
- │    │         ├── (xy.x + xy.y) > 5 [type=bool, outer=(6,7)]
- │    │         └── (xy.y % 2) = 0 [type=bool, outer=(7)]
+ │    │         ├── (x + y) > 5 [type=bool, outer=(6,7)]
+ │    │         └── (y % 2) = 0 [type=bool, outer=(7)]
  │    └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: [/10 - ]; /2: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(7), (7)==(2)]
- │         ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │         ├── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │         ├── (a.k + a.i) > 5 [type=bool, outer=(1,2)]
- │         ├── (a.i % 2) = 0 [type=bool, outer=(2)]
- │         └── a.k >= 10 [type=bool, outer=(1), constraints=(/1: [/10 - ]; tight)]
+ │         ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │         ├── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │         ├── (k + i) > 5 [type=bool, outer=(1,2)]
+ │         ├── (i % 2) = 0 [type=bool, outer=(2)]
+ │         └── k >= 10 [type=bool, outer=(1), constraints=(/1: [/10 - ]; tight)]
  └── filters [type=bool, outer=(2,6)]
-      └── ((xy.x + a.i) = 6) OR (xy.x IS NULL) [type=bool, outer=(2,6)]
+      └── ((x + i) = 6) OR (x IS NULL) [type=bool, outer=(2,6)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
@@ -403,9 +403,9 @@ inner-join (lookup xy)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │         └── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │         └── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 opt
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x
@@ -429,12 +429,12 @@ select
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2-5)
  │    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/1.1 - /1.1]), fd=()-->(3)]
- │    │         ├── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
- │    │         └── (a.s = 'foo') OR (a.s = 'bar') [type=bool, outer=(4)]
+ │    │         ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4)]
  │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(2,7)]
-      └── (a.i < xy.y) OR (xy.y IS NULL) [type=bool, outer=(2,7)]
+      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7)]
 
 # Pushdown constant condition.
 opt
@@ -464,7 +464,7 @@ inner-join
  │    │    └── fd: (1)-->(2-5)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
  │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── a.i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+ │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
  └── true [type=bool]
 
 # Don't push down conditions in case of RIGHT JOIN.
@@ -493,9 +493,9 @@ select
  │         ├── left ordering: +1
  │         ├── right ordering: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(2)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(2)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -523,9 +523,9 @@ select
  │         ├── left ordering: +1
  │         ├── right ordering: +6
  │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── filters [type=bool, outer=(2)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(2)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
 
 # Push into semi-join.
 opt
@@ -546,7 +546,7 @@ semi-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(2)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
@@ -556,7 +556,7 @@ semi-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Push into anti-join.
 opt
@@ -577,7 +577,7 @@ anti-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(2)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── a.i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
@@ -587,7 +587,7 @@ anti-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # --------------------------------------------------
 # PushSelectIntoJoinRight
@@ -609,9 +609,9 @@ inner-join (lookup xy)
  │    │    ├── key: (3)
  │    │    └── fd: (3)-->(4-7)
  │    └── filters [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │         └── a.f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │         └── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
  └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
 
 opt
 SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k
@@ -635,12 +635,12 @@ select
  │    │    │    ├── key: (3)
  │    │    │    └── fd: (3)-->(4-7)
  │    │    └── filters [type=bool, outer=(5,6), constraints=(/5: [/1.1 - /1.1]), fd=()-->(5)]
- │    │         ├── a.f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
- │    │         └── (a.s = 'foo') OR (a.s = 'bar') [type=bool, outer=(6)]
+ │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6)]
  │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │         └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │         └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  └── filters [type=bool, outer=(2,4)]
-      └── (a.i < xy.y) OR (xy.y IS NULL) [type=bool, outer=(2,4)]
+      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
 
 # Don't push down conditions in case of LEFT JOIN.
 opt
@@ -668,9 +668,9 @@ select
  │         ├── left ordering: +1
  │         ├── right ordering: +3
  │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  └── filters [type=bool, outer=(4)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(4)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -698,9 +698,9 @@ select
  │         ├── left ordering: +1
  │         ├── right ordering: +3
  │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── a.k = xy.x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  └── filters [type=bool, outer=(4)]
-      └── (a.i = 100) OR (a.i IS NULL) [type=bool, outer=(4)]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # MergeSelectInnerJoin
@@ -726,8 +726,8 @@ inner-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]
+           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
 
 opt
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
@@ -750,8 +750,8 @@ inner-join (merge)
       ├── left ordering: +1
       ├── right ordering: +6
       └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (a.s = 'foo') OR (xy.y < 100) [type=bool, outer=(4,7)]
+           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
 
 opt
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
@@ -793,7 +793,7 @@ select
  │    │    └── fd: (6)-->(7)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
-      └── (a.k = xy.x) OR (xy.x IS NULL) [type=bool, outer=(1,6)]
+      └── (k = x) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with RIGHT JOIN.
 opt
@@ -817,7 +817,7 @@ select
  │    │    └── fd: (6)-->(7)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
-      └── (a.k = xy.x) OR (a.k IS NULL) [type=bool, outer=(1,6)]
+      └── (k = x) OR (k IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with FULL JOIN.
 opt
@@ -841,7 +841,7 @@ select
  │    │    └── fd: (6)-->(7)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
-      └── ((a.k = xy.x) OR (a.k IS NULL)) OR (xy.x IS NULL) [type=bool, outer=(1,6)]
+      └── ((k = x) OR (k IS NULL)) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft + PushSelectIntoJoinRight + MergeSelectInnerJoin
@@ -863,12 +863,12 @@ inner-join (lookup a)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
  │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
- │         └── xy.y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  └── filters [type=bool, outer=(1-4,6,7), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/1.1 - /1.1]; /4: [/'foo' - /'foo']; /6: (/NULL - ]; /7: (/NULL - ]), fd=()-->(3,4), (1)==(6), (6)==(1)]
-      ├── a.k = xy.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      ├── a.i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-      ├── a.f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      ├── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 opt
 SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
@@ -888,9 +888,9 @@ inner-join (lookup xy)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
  │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── a.i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+ │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── xy.x = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       └── $1 > '2000-01-01T1:00:00' [type=bool]
 
 # --------------------------------------------------
@@ -912,11 +912,11 @@ group-by
  │    ├── scan a
  │    │    └── columns: i:2(int)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  └── aggregations [outer=(2)]
       ├── count-rows [type=int]
       └── const-agg [type=int, outer=(2)]
-           └── variable: a.i [type=int, outer=(2)]
+           └── variable: i [type=int, outer=(2)]
 
 # Push down into GroupBy with no aggregations.
 opt
@@ -933,10 +933,10 @@ distinct-on
  │    ├── scan a
  │    │    └── columns: i:2(int)
  │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
-           └── variable: a.i [type=int, outer=(2)]
+           └── variable: i [type=int, outer=(2)]
 
 # Push down only conditions that do not depend on aggregations.
 opt
@@ -960,12 +960,12 @@ select
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,4)
  │    │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- │    │         └── a.i = a.k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ │    │         └── i = k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
  │    └── aggregations [outer=(2,4)]
  │         ├── max [type=string, outer=(4)]
- │         │    └── variable: a.s [type=string, outer=(4)]
+ │         │    └── variable: s [type=string, outer=(4)]
  │         └── const-agg [type=int, outer=(2)]
- │              └── variable: a.i [type=int, outer=(2)]
+ │              └── variable: i [type=int, outer=(2)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
       └── m = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
 
@@ -983,10 +983,10 @@ distinct-on
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float) s:4(string)
  │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
- │         └── a.i > a.f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+ │         └── i > f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
  └── aggregations [outer=(4)]
       └── first-agg [type=string, outer=(4)]
-           └── variable: a.s [type=string, outer=(4)]
+           └── variable: s [type=string, outer=(4)]
 
 # DistinctOn case with a ConstAgg.
 opt
@@ -1014,16 +1014,16 @@ distinct-on
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,3)
  │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │    │         └── a.k > a.f [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    │         └── k > f [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │         └── a.i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  └── aggregations [outer=(2,3,6)]
       ├── first-agg [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
       ├── first-agg [type=int, outer=(6)]
-      │    └── variable: xy.x [type=int, outer=(6)]
+      │    └── variable: x [type=int, outer=(6)]
       └── const-agg [type=float, outer=(3)]
-           └── variable: a.f [type=float, outer=(3)]
+           └── variable: f [type=float, outer=(3)]
 
 # Do *not* push down into scalar GroupBy.
 opt
@@ -1092,8 +1092,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
-      ├── b.i < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      ├── i < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+      └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 opt
 SELECT k,s FROM b WHERE k IS NOT NULL AND s IS NOT NULL
@@ -1116,7 +1116,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
 opt
@@ -1127,7 +1127,7 @@ select
  ├── scan b
  │    └── columns: i:2(int)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      └── b.i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
 opt
@@ -1145,7 +1145,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters [type=bool, outer=(1,2)]
-           └── (b.i + b.k) IS NOT NULL [type=bool, outer=(1,2)]
+           └── (i + k) IS NOT NULL [type=bool, outer=(1,2)]
 
 # --------------------------------------------------
 # DetectSelectContradiction

@@ -153,9 +153,9 @@ project
  └── projections
       └── plus [type=int]
            ├── plus [type=int]
-           │    ├── variable: abc.a [type=int]
-           │    └── variable: abc.b [type=int]
-           └── variable: abc.c [type=int]
+           │    ├── variable: a [type=int]
+           │    └── variable: b [type=int]
+           └── variable: c [type=int]
 
 build allow-unsupported
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
@@ -171,12 +171,12 @@ project
                 ├── true [type=bool]
                 ├── when [type=bool]
                 │    ├── ne [type=bool]
-                │    │    ├── variable: abc.a [type=int]
+                │    │    ├── variable: a [type=int]
                 │    │    └── const: 0 [type=int]
                 │    └── gt [type=bool]
                 │         ├── div [type=decimal]
-                │         │    ├── variable: abc.b [type=int]
-                │         │    └── variable: abc.a [type=int]
+                │         │    ├── variable: b [type=int]
+                │         │    └── variable: a [type=int]
                 │         └── const: 1.5 [type=decimal]
                 └── false [type=bool]
 
@@ -212,7 +212,7 @@ project
  │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── concat [type=string]
-           ├── variable: kv.v [type=string]
+           ├── variable: v [type=string]
            └── const: 'foo' [type=string]
 
 build
@@ -224,7 +224,7 @@ project
  │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── function: lower [type=string]
-           └── variable: kv.v [type=string]
+           └── variable: v [type=string]
 
 build
 SELECT k FROM kv
@@ -255,8 +255,8 @@ project
  │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── tuple [type=tuple{string AS k, string AS v}]
-           ├── variable: kv.k [type=string]
-           └── variable: kv.v [type=string]
+           ├── variable: k [type=string]
+           └── variable: v [type=string]
 
 build
 SELECT foo.* FROM kv
@@ -300,7 +300,7 @@ project
       │    └── columns: k:1(string!null) v:2(string)
       └── filters [type=bool]
            └── eq [type=bool]
-                ├── variable: kv.k [type=string]
+                ├── variable: k [type=string]
                 └── const: 'a' [type=string]
 
 build
@@ -314,7 +314,7 @@ project
       │    └── columns: k:1(string!null) v:2(string)
       └── filters [type=bool]
            └── eq [type=bool]
-                ├── variable: kv.k [type=string]
+                ├── variable: k [type=string]
                 └── const: 'a' [type=string]
 
 exec-ddl
@@ -425,8 +425,8 @@ project
  │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── projections
       └── tuple [type=tuple{int, int}]
-           ├── variable: xyzw.x [type=int]
-           └── variable: xyzw.y [type=int]
+           ├── variable: x [type=int]
+           └── variable: y [type=int]
 
 build
 SELECT * FROM xyzw LIMIT 0
@@ -602,13 +602,13 @@ project
  └── projections
       ├── mult [type=int]
       │    ├── const: 0 [type=int]
-      │    └── variable: abc.b [type=int]
+      │    └── variable: b [type=int]
       ├── mod [type=int]
-      │    ├── variable: abc.b [type=int]
+      │    ├── variable: b [type=int]
       │    └── const: 1 [type=int]
       └── mod [type=int]
            ├── const: 0 [type=int]
-           └── variable: abc.b [type=int]
+           └── variable: b [type=int]
 
 # Regression tests for #22670.
 build
@@ -998,7 +998,7 @@ select
  │    └── columns: x:1(int!null) y:2(float)
  └── filters [type=bool]
       └── gt [type=bool]
-           ├── variable: a.x [type=int]
+           ├── variable: x [type=int]
            └── const: 10 [type=int]
 
 build
@@ -1011,14 +1011,14 @@ select
  └── filters [type=bool]
       └── and [type=bool]
            ├── gt [type=bool]
-           │    ├── variable: a.x [type=int]
+           │    ├── variable: x [type=int]
            │    └── const: 10 [type=int]
            └── and [type=bool]
                 ├── lt [type=bool]
-                │    ├── variable: a.x [type=int]
+                │    ├── variable: x [type=int]
                 │    └── const: 20 [type=int]
                 └── ne [type=bool]
-                     ├── variable: a.x [type=int]
+                     ├── variable: x [type=int]
                      └── const: 13 [type=int]
 
 build
@@ -1030,7 +1030,7 @@ select
  │    └── columns: x:1(int!null) y:2(float)
  └── filters [type=bool]
       └── in [type=bool]
-           ├── variable: a.x [type=int]
+           ├── variable: x [type=int]
            └── tuple [type=tuple{int, int, int}]
                 ├── const: 1 [type=int]
                 ├── const: 2 [type=int]
@@ -1050,8 +1050,8 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
-      ├── variable: a.x [type=int]
-      └── variable: a.y [type=float]
+      ├── variable: x [type=int]
+      └── variable: y [type=float]
 
 build
 SELECT * FROM a WHERE (x > 10)::bool
@@ -1063,7 +1063,7 @@ select
  └── filters [type=bool]
       └── cast: BOOL [type=bool]
            └── gt [type=bool]
-                ├── variable: a.x [type=int]
+                ├── variable: x [type=int]
                 └── const: 10 [type=int]
 
 build
@@ -1080,7 +1080,7 @@ select
  │    └── columns: x:1(int!null) y:2(float)
  └── filters [type=bool]
       └── eq [type=bool]
-           ├── variable: a.x [type=int]
+           ├── variable: x [type=int]
            └── placeholder: $1 [type=int]
 
 # This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets

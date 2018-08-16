@@ -20,11 +20,11 @@ namespace protobuf_roachpb_2fdata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_SequencedWrite;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Span;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ChangeReplicasTrigger;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_MergeTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ModifiedSpanTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_MergeTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
@@ -34,6 +34,9 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::pr
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
 }  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto
+namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_MVCCStats;
+}  // namespace protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto
 namespace protobuf_util_2fhlc_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2fhlc_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_util_2fhlc_2ftimestamp_2eproto
@@ -206,9 +209,10 @@ static void InitDefaultsMergeTrigger() {
   ::cockroach::roachpb::MergeTrigger::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_MergeTrigger =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsMergeTrigger}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_MergeTrigger =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsMergeTrigger}, {
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
 
 static void InitDefaultsChangeReplicasTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1601,6 +1605,8 @@ void MergeTrigger::InitAsDefaultInstance() {
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
   ::cockroach::roachpb::_MergeTrigger_default_instance_._instance.get_mutable()->right_desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
+  ::cockroach::roachpb::_MergeTrigger_default_instance_._instance.get_mutable()->right_mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
+      ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
 }
 void MergeTrigger::clear_left_desc() {
   if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) {
@@ -1614,10 +1620,16 @@ void MergeTrigger::clear_right_desc() {
   }
   right_desc_ = NULL;
 }
+void MergeTrigger::clear_right_mvcc_stats() {
+  if (GetArenaNoVirtual() == NULL && right_mvcc_stats_ != NULL) {
+    delete right_mvcc_stats_;
+  }
+  right_mvcc_stats_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeTrigger::kLeftDescFieldNumber;
 const int MergeTrigger::kRightDescFieldNumber;
-const int MergeTrigger::kRightDataFieldNumber;
+const int MergeTrigger::kRightMvccStatsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeTrigger::MergeTrigger()
@@ -1631,10 +1643,6 @@ MergeTrigger::MergeTrigger(const MergeTrigger& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  right_data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.right_data().size() > 0) {
-    right_data_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.right_data_);
-  }
   if (from.has_left_desc()) {
     left_desc_ = new ::cockroach::roachpb::RangeDescriptor(*from.left_desc_);
   } else {
@@ -1645,14 +1653,18 @@ MergeTrigger::MergeTrigger(const MergeTrigger& from)
   } else {
     right_desc_ = NULL;
   }
+  if (from.has_right_mvcc_stats()) {
+    right_mvcc_stats_ = new ::cockroach::storage::engine::enginepb::MVCCStats(*from.right_mvcc_stats_);
+  } else {
+    right_mvcc_stats_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.MergeTrigger)
 }
 
 void MergeTrigger::SharedCtor() {
-  right_data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&left_desc_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&right_desc_) -
-      reinterpret_cast<char*>(&left_desc_)) + sizeof(right_desc_));
+      reinterpret_cast<char*>(&right_mvcc_stats_) -
+      reinterpret_cast<char*>(&left_desc_)) + sizeof(right_mvcc_stats_));
 }
 
 MergeTrigger::~MergeTrigger() {
@@ -1661,9 +1673,9 @@ MergeTrigger::~MergeTrigger() {
 }
 
 void MergeTrigger::SharedDtor() {
-  right_data_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete left_desc_;
   if (this != internal_default_instance()) delete right_desc_;
+  if (this != internal_default_instance()) delete right_mvcc_stats_;
 }
 
 void MergeTrigger::SetCachedSize(int size) const {
@@ -1681,7 +1693,6 @@ void MergeTrigger::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  right_data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) {
     delete left_desc_;
   }
@@ -1690,6 +1701,10 @@ void MergeTrigger::Clear() {
     delete right_desc_;
   }
   right_desc_ = NULL;
+  if (GetArenaNoVirtual() == NULL && right_mvcc_stats_ != NULL) {
+    delete right_mvcc_stats_;
+  }
+  right_mvcc_stats_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -1731,12 +1746,11 @@ bool MergeTrigger::MergePartialFromCodedStream(
         break;
       }
 
-      // bytes right_data = 3;
-      case 3: {
+      case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_right_data()));
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_right_mvcc_stats()));
         } else {
           goto handle_unusual;
         }
@@ -1779,10 +1793,9 @@ void MergeTrigger::SerializeWithCachedSizes(
       2, this->_internal_right_desc(), output);
   }
 
-  // bytes right_data = 3;
-  if (this->right_data().size() > 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      3, this->right_data(), output);
+  if (this->has_right_mvcc_stats()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4, this->_internal_right_mvcc_stats(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -1796,13 +1809,6 @@ size_t MergeTrigger::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
-  // bytes right_data = 3;
-  if (this->right_data().size() > 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::BytesSize(
-        this->right_data());
-  }
-
   if (this->has_left_desc()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -1813,6 +1819,12 @@ size_t MergeTrigger::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *right_desc_);
+  }
+
+  if (this->has_right_mvcc_stats()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *right_mvcc_stats_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -1832,15 +1844,14 @@ void MergeTrigger::MergeFrom(const MergeTrigger& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from.right_data().size() > 0) {
-
-    right_data_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.right_data_);
-  }
   if (from.has_left_desc()) {
     mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
   }
   if (from.has_right_desc()) {
     mutable_right_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.right_desc());
+  }
+  if (from.has_right_mvcc_stats()) {
+    mutable_right_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.right_mvcc_stats());
   }
 }
 
@@ -1861,10 +1872,9 @@ void MergeTrigger::Swap(MergeTrigger* other) {
 }
 void MergeTrigger::InternalSwap(MergeTrigger* other) {
   using std::swap;
-  right_data_.Swap(&other->right_data_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-    GetArenaNoVirtual());
   swap(left_desc_, other->left_desc_);
   swap(right_desc_, other->right_desc_);
+  swap(right_mvcc_stats_, other->right_mvcc_stats_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

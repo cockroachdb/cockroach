@@ -29,10 +29,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── a.k > (a.i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      ├── a.i >= (a.k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-      ├── a.k < (a.i * a.i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      └── a.i <= (a.k / 2) [type=bool, outer=(1,2), side-effects, constraints=(/2: (/NULL - ])]
+      ├── k > (i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      ├── i >= (k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+      ├── k < (i * i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      └── i <= (k / 2) [type=bool, outer=(1,2), side-effects, constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # CommuteConstInequality
@@ -49,10 +49,10 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(1,2,4), constraints=(/2: (/NULL - /4]; /4: (/NULL - /'foo'])]
-      ├── (a.i + a.k) > (length('foo') + 1) [type=bool, outer=(1,2)]
-      ├── (a.i * 2) >= length('bar') [type=bool, outer=(2)]
-      ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+      ├── (i + k) > (length('foo') + 1) [type=bool, outer=(1,2)]
+      ├── (i * 2) >= length('bar') [type=bool, outer=(2)]
+      ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
 # Impure function should not be considered constant.
 opt
@@ -68,7 +68,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2), side-effects]
-      └── random()::INT > (a.i + a.i) [type=bool, outer=(2), side-effects]
+      └── random()::INT > (i + i) [type=bool, outer=(2), side-effects]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst
@@ -92,11 +92,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (2 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) < (5.0 - 2.0) [type=bool, outer=(3)]
-      ├── a.i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > ((10 - 2) - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── a.i::INTERVAL >= ('02:00:00' - '01:00:00') [type=bool, outer=(2)]
+      ├── i = (2 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (f + f) < (5.0 - 2.0) [type=bool, outer=(3)]
+      ├── i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── i > ((10 - 2) - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── i::INTERVAL >= ('02:00:00' - '01:00:00') [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
@@ -111,7 +111,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
-      └── (a.s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
+      └── (s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
@@ -135,11 +135,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (2 + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) < (5.0 + 2.0) [type=bool, outer=(3)]
-      ├── a.i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (a.f + a.i::FLOAT) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
+      ├── i = (2 + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (f + f) < (5.0 + 2.0) [type=bool, outer=(3)]
+      ├── i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── (f + i::FLOAT) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Plus overload is not defined.
 opt
@@ -154,7 +154,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(4)]
-      └── (a.s::JSON - 1) = '[1]' [type=bool, outer=(4)]
+      └── (s::JSON - 1) = '[1]' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
@@ -178,11 +178,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── a.i = (1 - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (a.f + a.f) > (2.0 - 5.0) [type=bool, outer=(3)]
-      ├── a.i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── a.i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (a.f + a.i::FLOAT) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
+      ├── i = (1 - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (f + f) > (2.0 - 5.0) [type=bool, outer=(3)]
+      ├── i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── (f + i::FLOAT) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
@@ -197,7 +197,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2)]
-      └── ('[1, 2]' - a.i) = '[1]' [type=bool, outer=(2)]
+      └── ('[1, 2]' - i) = '[1]' [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
@@ -214,9 +214,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters [type=bool, outer=(2-4), constraints=(/2: [/1 - /1]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight), fd=()-->(2-4)]
-      ├── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
-      ├── a.f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+      ├── f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality, FlattenAnd
@@ -238,8 +238,8 @@ select
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
  └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - /2]; /4: [/'foo' - /'foo']; tight), fd=()-->(2,4)]
-      ├── a.i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
-      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # FoldNullComparisonLeft, FoldNullComparisonRight
@@ -350,8 +350,8 @@ project
  │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
       ├── true [type=bool]
-      ├── a.k IS NOT NULL [type=bool, outer=(1)]
-      └── a.i IS NOT NULL [type=bool, outer=(2)]
+      ├── k IS NOT NULL [type=bool, outer=(1)]
+      └── i IS NOT NULL [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # CommuteNullIs

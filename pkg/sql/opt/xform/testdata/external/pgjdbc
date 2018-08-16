@@ -139,7 +139,7 @@ project
  │    │    │    ├── scan pg_namespace
  │    │    │    │    └── columns: pg_namespace.oid:33(oid) nspname:34(name!null)
  │    │    │    └── filters [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
- │    │    │         └── pg_namespace.nspname != 'pg_catalog' [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ │    │    │         └── nspname != 'pg_catalog' [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
  │    │    └── filters [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
  │    │         └── pg_type.typnamespace = pg_namespace.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ])]
  │    ├── max1-row

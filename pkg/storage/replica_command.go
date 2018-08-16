@@ -519,9 +519,9 @@ func (r *Replica) AdminMerge(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					LeftDesc:  updatedLeftDesc,
-					RightDesc: rightDesc,
-					RightData: rhsSnapshotRes.Data,
+					LeftDesc:       updatedLeftDesc,
+					RightDesc:      rightDesc,
+					RightMVCCStats: rhsSnapshotRes.MVCCStats,
 				},
 			},
 		})

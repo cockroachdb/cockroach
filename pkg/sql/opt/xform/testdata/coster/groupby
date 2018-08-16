@@ -27,6 +27,6 @@ group-by
  │    └── fd: (1)-->(2,3)
  └── aggregations [outer=(1)]
       ├── max [type=int, outer=(1)]
-      │    └── variable: a.k [type=int, outer=(1)]
+      │    └── variable: k [type=int, outer=(1)]
       └── min [type=int, outer=(1)]
-           └── variable: a.k [type=int, outer=(1)]
+           └── variable: k [type=int, outer=(1)]

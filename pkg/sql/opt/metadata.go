@@ -153,11 +153,6 @@ type mdColumn struct {
 	typ types.T
 }
 
-// NewMetadata constructs a new instance of metadata for the optimizer.
-func NewMetadata() *Metadata {
-	return &Metadata{}
-}
-
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
@@ -211,28 +206,70 @@ func (md *Metadata) ColumnType(id ColumnID) types.T {
 // ColumnOrdinal returns the ordinal position of the column in its base table.
 // It panics if the column has no base table because it was synthesized.
 func (md *Metadata) ColumnOrdinal(id ColumnID) int {
-	tabID := md.cols[id].tabID
+	tabID := md.cols[id-1].tabID
 	if tabID == 0 {
 		panic("column was synthesized and has no ordinal position")
 	}
 	return int(id - tabID.firstColID())
 }
 
+// QualifiedColumnLabel returns the column label, possibly qualified with the
+// table name if either of these conditions is true:
+//
+//   1. fullyQualify is true
+//   2. the label might be ambiguous if it's not qualified, because there's
+//      another column in the metadata with the same name
+//
+// If the column label is qualified, the table is prefixed to it and separated
+// by a "." character.
+func (md *Metadata) QualifiedColumnLabel(id ColumnID, fullyQualify bool) string {
+	col := md.cols[id-1]
+	if col.tabID == 0 {
+		// Column doesn't belong to a table, so no need to qualify it further.
+		return col.label
+	}
+
+	// If a fully qualified label has not been requested, then only qualify it if
+	// it would otherwise be ambiguous.
+	ambiguous := fullyQualify
+	if !fullyQualify {
+		for i := range md.cols {
+			if i == int(id-1) {
+				continue
+			}
+
+			// If there are two columns with same name, then column is ambiguous.
+			otherCol := &md.cols[i]
+			if otherCol.label == col.label {
+				ambiguous = true
+				break
+			}
+		}
+	}
+
+	if !ambiguous {
+		return col.label
+	}
+
+	var sb strings.Builder
+	tabName := md.Table(col.tabID).Name()
+	if fullyQualify {
+		sb.WriteString(tabName.FQString())
+	} else {
+		sb.WriteString(string(tabName.TableName))
+	}
+	sb.WriteRune('.')
+	sb.WriteString(col.label)
+	return sb.String()
+}
+
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query).
 func (md *Metadata) AddTable(tab Table) TableID {
-	return md.AddTableWithName(tab, string(tab.Name().TableName))
-}
-
-// AddTableWithName indexes a new reference to a table within the query.
-// Separate references to the same table are assigned different table ids
-// (e.g. in a self-join query). The given table name is used when creating
-// column labels.
-func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
-		md.tables = make([]mdTable, 0, 1)
+		md.tables = make([]mdTable, 0, 4)
 	}
 	md.tables = append(md.tables, mdTable{tab: tab})
 
@@ -243,18 +280,9 @@ func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
 
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
-
-		// Format column name.
-		colName := string(col.ColName())
-		var sb strings.Builder
-		sb.Grow(len(tabName) + len(colName) + 1)
-		sb.WriteString(tabName)
-		sb.WriteRune('.')
-		sb.WriteString(colName)
-
 		md.cols = append(md.cols, mdColumn{
 			tabID: tabID,
-			label: sb.String(),
+			label: string(col.ColName()),
 			typ:   col.DatumType(),
 		})
 	}

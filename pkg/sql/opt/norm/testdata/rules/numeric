@@ -27,12 +27,12 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── a.i + a.i [type=int, outer=(2)]
-      ├── a.i + a.i [type=int, outer=(2)]
-      ├── a.f + a.f [type=float, outer=(3)]
-      ├── a.f + a.f [type=float, outer=(3)]
-      ├── a.d + a.d [type=decimal, outer=(4)]
-      └── a.d + a.d [type=decimal, outer=(4)]
+      ├── i + i [type=int, outer=(2)]
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      ├── f + f [type=float, outer=(3)]
+      ├── d + d [type=decimal, outer=(4)]
+      └── d + d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -51,9 +51,9 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── a.i + a.i [type=int, outer=(2)]
-      ├── a.f + a.f [type=float, outer=(3)]
-      └── a.d + a.d [type=decimal, outer=(4)]
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      └── d + d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
@@ -72,12 +72,12 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── a.i + a.i [type=int, outer=(2)]
-      ├── a.i + a.i [type=int, outer=(2)]
-      ├── a.f + a.f [type=float, outer=(3)]
-      ├── a.f + a.f [type=float, outer=(3)]
-      ├── a.d + a.d [type=decimal, outer=(4)]
-      └── a.d + a.d [type=decimal, outer=(4)]
+      ├── i + i [type=int, outer=(2)]
+      ├── i + i [type=int, outer=(2)]
+      ├── f + f [type=float, outer=(3)]
+      ├── f + f [type=float, outer=(3)]
+      ├── d + d [type=decimal, outer=(4)]
+      └── d + d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -95,9 +95,9 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── variable: a.i [type=int, outer=(2)]
-      ├── variable: a.f [type=float, outer=(3)]
-      └── variable: a.d [type=decimal, outer=(4)]
+      ├── variable: i [type=int, outer=(2)]
+      ├── variable: f [type=float, outer=(3)]
+      └── variable: d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # InvertMinus
@@ -114,8 +114,8 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal) a.t:5(time)
  └── projections [outer=(2-5)]
-      ├── a.f - a.f [type=float, outer=(3)]
-      ├── a.i - a.d [type=decimal, outer=(2,4)]
+      ├── f - f [type=float, outer=(3)]
+      ├── i - d [type=decimal, outer=(2,4)]
       └── a.t - a.t [type=interval, outer=(5)]
 
 # --------------------------------------------------
@@ -129,7 +129,7 @@ project
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]
-      └── variable: a.i [type=int, outer=(2)]
+      └── variable: i [type=int, outer=(2)]
 
 # --------------------------------------------------
 # FoldUnaryMinus

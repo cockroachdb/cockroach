@@ -524,7 +524,7 @@ build
 SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 project
- ├── columns: _pg_expandarray:3(tuple{string AS x, int AS n})
+ ├── columns: information_schema._pg_expandarray:3(tuple{string AS x, int AS n})
  ├── inner-join-apply
  │    ├── columns: x:1(string) n:2(int)
  │    ├── values
@@ -748,12 +748,12 @@ project
       │    │    │    └── columns: a:1(string) t.rowid:2(int!null)
       │    │    └── projections
       │    │         └── cast: INT [type=int]
-      │    │              └── variable: t.a [type=string]
+      │    │              └── variable: a [type=string]
       │    └── aggregations
       │         ├── max [type=int]
       │         │    └── variable: column6 [type=int]
       │         └── max [type=string]
-      │              └── variable: t.a [type=string]
+      │              └── variable: a [type=string]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: column7 [type=int]
@@ -773,7 +773,7 @@ project
                                │         │    └── function: generate_series [type=int]
                                │         │         ├── const: 0 [type=int]
                                │         │         └── cast: INT [type=int]
-                               │         │              └── variable: u.b [type=string]
+                               │         │              └── variable: b [type=string]
                                │         └── true [type=bool]
                                └── const: 1 [type=int]
 
@@ -810,7 +810,7 @@ project
       │         │                   │              ├── variable: t.a [type=string]
       │         │                   │              └── concat [type=string]
       │         │                   │                   ├── variable: t.a [type=string]
-      │         │                   │                   └── variable: u.b [type=string]
+      │         │                   │                   └── variable: b [type=string]
       │         │                   └── true [type=bool]
       │         └── const: 100 [type=int]
       └── true [type=bool]

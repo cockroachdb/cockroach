@@ -660,8 +660,8 @@ project
            │    │         └── columns: a:1(int!null) b:2(int) c:3(int)
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
-           │              ├── variable: abc.a [type=int]
-           │              └── variable: abc.b [type=int]
+           │              ├── variable: a [type=int]
+           │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -687,8 +687,8 @@ project
            │    │              └── false [type=bool]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
-           │              ├── variable: abc.a [type=int]
-           │              └── variable: abc.b [type=int]
+           │              ├── variable: a [type=int]
+           │              └── variable: b [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -788,7 +788,7 @@ select
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── filters [type=bool]
       └── eq [type=bool]
-           ├── variable: abc.a [type=int]
+           ├── variable: a [type=int]
            └── const: 7 [type=int]
 
 exec-ddl
@@ -927,7 +927,7 @@ project
                 │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── filters [type=bool]
                 │         └── eq [type=bool]
-                │              ├── variable: kv.k [type=int]
+                │              ├── variable: k [type=int]
                 │              └── const: 1 [type=int]
                 └── projections
                      └── const: 1 [type=int]
@@ -949,7 +949,7 @@ project
                 │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── filters [type=bool]
                 │         └── eq [type=bool]
-                │              ├── variable: kv.k [type=int]
+                │              ├── variable: k [type=int]
                 │              └── const: 2 [type=int]
                 └── projections
                      └── const: 1 [type=int]
@@ -1041,7 +1041,7 @@ select
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── filters [type=bool]
       └── lt [type=bool]
-           ├── variable: xyz.x [type=int]
+           ├── variable: x [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1053,7 +1053,7 @@ select
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── filters [type=bool]
       └── lt [type=bool]
-           ├── variable: xyz.x [type=int]
+           ├── variable: x [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1065,7 +1065,7 @@ select
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── filters [type=bool]
       └── lt [type=bool]
-           ├── variable: xyz.x [type=int]
+           ├── variable: x [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1077,7 +1077,7 @@ select
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── filters [type=bool]
       └── lt [type=bool]
-           ├── variable: xyz.x [type=int]
+           ├── variable: x [type=int]
            └── const: 7 [type=int]
 
 build
@@ -1092,7 +1092,7 @@ sort
       │    └── columns: x:1(int!null) y:2(int) z:3(int)
       └── filters [type=bool]
            └── lt [type=bool]
-                ├── variable: xyz.x [type=int]
+                ├── variable: x [type=int]
                 └── const: 7 [type=int]
 
 build
@@ -1941,7 +1941,7 @@ select
  │    │         └── columns: a:1(string) t.rowid:2(int!null)
  │    └── aggregations
  │         └── max [type=string]
- │              └── variable: t.a [type=string]
+ │              └── variable: a [type=string]
  └── filters [type=bool]
       └── any: lt [type=bool]
            ├── project
@@ -1963,7 +1963,7 @@ project
  │    │         └── columns: a:1(string) t.rowid:2(int!null)
  │    └── aggregations
  │         └── min [type=string]
- │              └── variable: t.a [type=string]
+ │              └── variable: a [type=string]
  └── projections
       └── any: eq [type=bool]
            ├── project

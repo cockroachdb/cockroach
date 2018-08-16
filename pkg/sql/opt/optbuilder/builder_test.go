@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -67,7 +67,7 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = opt.ExprFmtHideAll ^ opt.ExprFmtHideScalars
+			tester.Flags.ExprFormat = memo.ExprFmtHideAll ^ memo.ExprFmtHideScalars
 
 			for _, arg := range d.CmdArgs {
 				key, vals := arg.Key, arg.Vals

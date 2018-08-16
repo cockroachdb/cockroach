@@ -25,4 +25,4 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
  └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
-      └── a.s >= 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
+      └── s >= 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]

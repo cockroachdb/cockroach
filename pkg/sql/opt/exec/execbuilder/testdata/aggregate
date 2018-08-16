@@ -49,18 +49,18 @@ render               ·            ·                            (min int, max i
  │                   render 9     (agg8)[bool]                 ·                                                                                                                                                    ·
  │                   render 10    (agg9)[bytes]                ·                                                                                                                                                    ·
  └── group           ·            ·                            (agg0 int, agg1 int, agg2 int, agg3 int, agg4 decimal, agg5 decimal, agg6 decimal, agg7 decimal, agg8 bool, agg9 bytes)                              ·
-      │              aggregate 0  min(kv.v)                    ·                                                                                                                                                    ·
-      │              aggregate 1  max(kv.v)                    ·                                                                                                                                                    ·
-      │              aggregate 2  count(kv.v)                  ·                                                                                                                                                    ·
+      │              aggregate 0  min(v)                       ·                                                                                                                                                    ·
+      │              aggregate 1  max(v)                       ·                                                                                                                                                    ·
+      │              aggregate 2  count(v)                     ·                                                                                                                                                    ·
       │              aggregate 3  sum_int(column8)             ·                                                                                                                                                    ·
-      │              aggregate 4  avg(kv.v)                    ·                                                                                                                                                    ·
-      │              aggregate 5  sum(kv.v)                    ·                                                                                                                                                    ·
-      │              aggregate 6  stddev(kv.v)                 ·                                                                                                                                                    ·
-      │              aggregate 7  variance(kv.v)               ·                                                                                                                                                    ·
+      │              aggregate 4  avg(v)                       ·                                                                                                                                                    ·
+      │              aggregate 5  sum(v)                       ·                                                                                                                                                    ·
+      │              aggregate 6  stddev(v)                    ·                                                                                                                                                    ·
+      │              aggregate 7  variance(v)                  ·                                                                                                                                                    ·
       │              aggregate 8  bool_and(column14)           ·                                                                                                                                                    ·
       │              aggregate 9  xor_agg(column16)            ·                                                                                                                                                    ·
       │              scalar       ·                            ·                                                                                                                                                    ·
-      └── render     ·            ·                            (column8 int, column14 bool, column16 bytes, "kv.v" int)                                                                                             ·
+      └── render     ·            ·                            (column8 int, column14 bool, column16 bytes, v int)                                                                                                  ·
            │         render 0     (1)[int]                     ·                                                                                                                                                    ·
            │         render 1     ((v)[int] = (1)[int])[bool]  ·                                                                                                                                                    ·
            │         render 2     ((s)[string]::BYTES)[bytes]  ·                                                                                                                                                    ·
@@ -541,18 +541,18 @@ sort            ·            ·             (v int, count int)  +count
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
-sort                 ·            ·               (v int, count int)         +count
- │                   order        +count          ·                          ·
- └── group           ·            ·               (v int, count int)         ·
-      │              aggregate 0  kv.v            ·                          ·
-      │              aggregate 1  count(column5)  ·                          ·
-      │              group by     @2              ·                          ·
-      └── render     ·            ·               (column5 int, "kv.v" int)  ·
-           │         render 0     (1)[int]        ·                          ·
-           │         render 1     (v)[int]        ·                          ·
-           └── scan  ·            ·               (v int)                    ·
-·                    table        kv@primary      ·                          ·
-·                    spans        ALL             ·                          ·
+sort                 ·            ·               (v int, count int)    +count
+ │                   order        +count          ·                     ·
+ └── group           ·            ·               (v int, count int)    ·
+      │              aggregate 0  v               ·                     ·
+      │              aggregate 1  count(column5)  ·                     ·
+      │              group by     @2              ·                     ·
+      └── render     ·            ·               (column5 int, v int)  ·
+           │         render 0     (1)[int]        ·                     ·
+           │         render 1     (v)[int]        ·                     ·
+           └── scan  ·            ·               (v int)               ·
+·                    table        kv@primary      ·                     ·
+·                    spans        ALL             ·                     ·
 
 # TODO(radu): we don't propagate filters yet.
 ## Check that filters propagate through no-op aggregation.
@@ -848,18 +848,18 @@ render               ·            ·                                           
 query TTTTT
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
-render                    ·            ·                                          (a int)                        ·
- │                        render 0     (1)[int]                                   ·                              ·
- └── distinct             ·            ·                                          (column5 decimal, "kv.v" int)  weak-key(column5,"kv.v")
-      │                   distinct on  column5, kv.v                              ·                              ·
-      └── filter          ·            ·                                          (column5 decimal, "kv.v" int)  ·
-           │              filter       ((column5)[decimal] > (1)[decimal])[bool]  ·                              ·
-           └── render     ·            ·                                          (column5 decimal, "kv.v" int)  ·
-                │         render 0     ((w)[int]::DECIMAL)[decimal]               ·                              ·
-                │         render 1     (v)[int]                                   ·                              ·
-                └── scan  ·            ·                                          (v int, w int)                 ·
-·                         table        kv@primary                                 ·                              ·
-·                         spans        ALL                                        ·                              ·
+render                    ·            ·                                          (a int)                   ·
+ │                        render 0     (1)[int]                                   ·                         ·
+ └── distinct             ·            ·                                          (column5 decimal, v int)  weak-key(column5,v)
+      │                   distinct on  column5, v                                 ·                         ·
+      └── filter          ·            ·                                          (column5 decimal, v int)  ·
+           │              filter       ((column5)[decimal] > (1)[decimal])[bool]  ·                         ·
+           └── render     ·            ·                                          (column5 decimal, v int)  ·
+                │         render 0     ((w)[int]::DECIMAL)[decimal]               ·                         ·
+                │         render 1     (v)[int]                                   ·                         ·
+                └── scan  ·            ·                                          (v int, w int)            ·
+·                         table        kv@primary                                 ·                         ·
+·                         spans        ALL                                        ·                         ·
 
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
@@ -868,34 +868,34 @@ CREATE TABLE foo(a INT, b CHAR)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
-render               ·            ·            (m)                 ·
- │                   render 0     agg0         ·                   ·
- └── group           ·            ·            (column4, agg0)     ·
-      │              aggregate 0  column4      ·                   ·
-      │              aggregate 1  min(foo.a)   ·                   ·
-      │              group by     @1           ·                   ·
-      └── render     ·            ·            (column4, "foo.a")  ·
-           │         render 0     a            ·                   ·
-           │         render 1     a            ·                   ·
-           └── scan  ·            ·            (a)                 ·
-·                    table        foo@primary  ·                   ·
-·                    spans        ALL          ·                   ·
+render               ·            ·            (m)              ·
+ │                   render 0     agg0         ·                ·
+ └── group           ·            ·            (column4, agg0)  ·
+      │              aggregate 0  column4      ·                ·
+      │              aggregate 1  min(a)       ·                ·
+      │              group by     @1           ·                ·
+      └── render     ·            ·            (column4, a)     ·
+           │         render 0     a            ·                ·
+           │         render 1     a            ·                ·
+           └── scan  ·            ·            (a)              ·
+·                    table        foo@primary  ·                ·
+·                    spans        ALL          ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
-render               ·            ·            (m)                 ·
- │                   render 0     agg0         ·                   ·
- └── group           ·            ·            (column4, agg0)     ·
-      │              aggregate 0  column4      ·                   ·
-      │              aggregate 1  min(foo.a)   ·                   ·
-      │              group by     @1           ·                   ·
-      └── render     ·            ·            (column4, "foo.a")  ·
-           │         render 0     b            ·                   ·
-           │         render 1     a            ·                   ·
-           └── scan  ·            ·            (a, b)              ·
-·                    table        foo@primary  ·                   ·
-·                    spans        ALL          ·                   ·
+render               ·            ·            (m)              ·
+ │                   render 0     agg0         ·                ·
+ └── group           ·            ·            (column4, agg0)  ·
+      │              aggregate 0  column4      ·                ·
+      │              aggregate 1  min(a)       ·                ·
+      │              group by     @1           ·                ·
+      └── render     ·            ·            (column4, a)     ·
+           │         render 0     b            ·                ·
+           │         render 1     a            ·                ·
+           └── scan  ·            ·            (a, b)           ·
+·                    table        foo@primary  ·                ·
+·                    spans        ALL          ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)

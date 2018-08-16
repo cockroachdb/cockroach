@@ -61,8 +61,8 @@ Source expression:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join
@@ -73,8 +73,8 @@ New expression 1 of 1:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 GenerateIndexScans
@@ -88,8 +88,8 @@ Source expression:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join
@@ -100,8 +100,8 @@ New expression 1 of 1:
    ├── scan xyz@xy
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 CommuteJoin
@@ -115,8 +115,8 @@ Source expression:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join
@@ -127,8 +127,8 @@ New expression 1 of 1:
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 GenerateMergeJoins
@@ -142,8 +142,8 @@ Source expression:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join (merge)
@@ -159,8 +159,8 @@ New expression 1 of 1:
         ├── left ordering: +1,+2
         ├── right ordering: +5,+6
         └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-             ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-             └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+             ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+             └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 GenerateLookupJoin
@@ -174,8 +174,8 @@ Source expression:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join (lookup xyz@xy)
@@ -185,8 +185,8 @@ New expression 1 of 1:
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 CommuteJoin
@@ -200,8 +200,8 @@ Source expression:
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 No new expressions.
 
@@ -217,8 +217,8 @@ Source expression:
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join (merge)
@@ -234,8 +234,8 @@ New expression 1 of 1:
         ├── left ordering: +5,+6
         ├── right ordering: +1,+2
         └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-             ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-             └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+             ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+             └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
 GenerateLookupJoin
@@ -249,8 +249,8 @@ Source expression:
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 New expression 1 of 1:
   inner-join (lookup abc@ab)
@@ -260,7 +260,7 @@ New expression 1 of 1:
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── abc.a = xyz.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── abc.b = xyz.y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 ----
 ----

@@ -79,7 +79,7 @@ project
            │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
            └── filters [type=bool]
                 └── eq [type=bool]
-                     ├── variable: a.i [type=int]
+                     ├── variable: i [type=int]
                      └── const: 10 [type=int]
 
 # Sort used by group by because of presence of ARRAY_AGG.
@@ -102,8 +102,8 @@ scalar-group-by
  │                   │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │                   └── filters [type=bool]
  │                        └── eq [type=bool]
- │                             ├── variable: a.i [type=int]
+ │                             ├── variable: i [type=int]
  │                             └── const: 10 [type=int]
  └── aggregations
       └── array-agg [type=float[]]
-           └── variable: a.f [type=float]
+           └── variable: f [type=float]

@@ -33,6 +33,7 @@ var fdAnnID = opt.NewTableAnnID()
 type logicalPropsBuilder struct {
 	evalCtx *tree.EvalContext
 	sb      statisticsBuilder
+	kb      keyBuffer
 }
 
 // buildProps is called by the memo group construction code in order to
@@ -42,7 +43,8 @@ type logicalPropsBuilder struct {
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (b *logicalPropsBuilder) buildProps(ev ExprView) props.Logical {
+func (b *logicalPropsBuilder) buildProps(evalCtx *tree.EvalContext, ev ExprView) props.Logical {
+	b.evalCtx = evalCtx
 	if ev.IsRelational() {
 		return b.buildRelationalProps(ev)
 	}
@@ -170,7 +172,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildScan(ev, relational)
 
 	return logical
@@ -206,7 +208,7 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildVirtualScan(ev, relational)
 
 	return logical
@@ -268,7 +270,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildSelect(ev, relational)
 
 	return logical
@@ -358,7 +360,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildProject(ev, relational)
 
 	return logical
@@ -519,7 +521,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildJoin(ev, relational)
 
 	return logical
@@ -564,7 +566,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildIndexJoin(ev, relational)
 
 	return logical
@@ -627,7 +629,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildGroupBy(ev, relational)
 
 	return logical
@@ -685,7 +687,7 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildSetOp(ev, relational)
 
 	return logical
@@ -726,7 +728,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildValues(ev, relational)
 
 	return logical
@@ -857,7 +859,7 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildLimit(ev, relational)
 
 	return logical
@@ -912,7 +914,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildOffset(ev, relational)
 
 	return logical
@@ -951,7 +953,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildMax1Row(ev, relational)
 
 	return logical
@@ -1000,7 +1002,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildRowNumber(ev, relational)
 
 	return logical
@@ -1037,7 +1039,7 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &keyBuffer{})
+	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildZip(ev, relational)
 
 	return logical

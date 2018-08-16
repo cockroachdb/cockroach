@@ -42,7 +42,7 @@ project
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── projections [outer=(1,2)]
       ├── plus [type=int, outer=(1)]
-      │    ├── variable: xysd.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       └── const: 1 [type=int]
 
@@ -116,8 +116,8 @@ select
            │              │    │    └── interesting orderings: (+5)
            │              │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           │              │              ├── variable: kuv.k [type=int, outer=(5)]
-           │              │              └── variable: xysd.x [type=int, outer=(1)]
+           │              │              ├── variable: k [type=int, outer=(5)]
+           │              │              └── variable: x [type=int, outer=(1)]
            │              └── projections [outer=(2)]
            │                   └── subquery [type=int, outer=(2)]
            │                        └── max1-row
@@ -265,8 +265,8 @@ project
                           │    └── interesting orderings: (+4) (-6,+7,+4)
                           └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
                                └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-                                    ├── variable: xysd.x [type=int, outer=(4)]
-                                    └── variable: kuv.k [type=int, outer=(1)]
+                                    ├── variable: x [type=int, outer=(4)]
+                                    └── variable: k [type=int, outer=(1)]
 
 # Project nested correlated subquery.
 build
@@ -330,7 +330,7 @@ project
                                     └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
                                          └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
                                               ├── variable: xysd.x [type=int, outer=(8)]
-                                              └── variable: kuv.k [type=int, outer=(1)]
+                                              └── variable: k [type=int, outer=(1)]
 
 # We have the FD: y --> y::TEXT.
 build

@@ -115,7 +115,8 @@ func declareKeysEndTransaction(
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 			// Merges write to the left side's abort span and the right side's data
-			// and range-local spans.
+			// and range-local spans. They also read from the right side's range ID
+			// span.
 			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
 			spans.Add(spanset.SpanReadWrite, roachpb.Span{
 				Key:    leftRangeIDPrefix,
@@ -128,6 +129,10 @@ func declareKeysEndTransaction(
 			spans.Add(spanset.SpanReadWrite, roachpb.Span{
 				Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
 				EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
+			})
+			spans.Add(spanset.SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
+				EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
 			})
 		}
 	}
@@ -992,50 +997,30 @@ func mergeTrigger(
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
-	// Create a scratch engine to rewrite the RHS data.
-	//
-	// TODO(benesch): the cache size may need to be tuned.
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	defer eng.Close()
-
-	// Load the data from the RHS.
-	if err := eng.ApplyBatchRepr(merge.RightData, false /* sync */); err != nil {
-		return result.Result{}, err
-	}
-
 	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
-		ctx, eng, batch, ms, ts, merge.LeftDesc.RangeID,
+		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
 	); err != nil {
 		return result.Result{}, err
 	}
 
-	// Copy the RHS data into the command's batch. We skip over the range-ID local
-	// keys. The abort span is the only relevant part of the range-ID local
-	// keyspace, and we already copied it above.
-	rhsRelevantStartKey := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.StartKey))
-	iter := eng.NewIterator(engine.IterOptions{
-		UpperBound: roachpb.KeyMax, // all the data in this engine is relevant
-	})
-	defer iter.Close()
-	for iter.Seek(rhsRelevantStartKey); ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
+	// The stats for the merged range are the sum of the LHS and RHS stats, less
+	// the RHS's replicated range ID stats. The only replicated range ID keys we
+	// copy from the RHS are the keys in the abort span, and we've already
+	// accounted for those stats above.
+	ms.Add(merge.RightMVCCStats)
+	{
+		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		defer iter.Close()
+		sysMS, err := iter.ComputeStats(
+			engine.MakeMVCCMetadataKey(ridPrefix),
+			engine.MakeMVCCMetadataKey(ridPrefix.PrefixEnd()),
+			0 /* nowNanos */)
+		if err != nil {
 			return result.Result{}, err
-		} else if !ok {
-			break
 		}
-		if err := batch.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
-			return result.Result{}, err
-		}
+		ms.Subtract(sysMS)
 	}
-
-	// Adjust stats for the rewritten RHS data. Again, we skip over the range-ID
-	// local keys, as only the abort span is relevant and its stats were accounted
-	// for above.
-	rhsMS, err := iter.ComputeStats(rhsRelevantStartKey, engine.MVCCKeyMax, 0 /* nowNanos */)
-	if err != nil {
-		return result.Result{}, err
-	}
-	ms.Add(rhsMS)
 
 	var pd result.Result
 	pd.Replicated.BlockReads = true

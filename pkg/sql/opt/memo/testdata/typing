@@ -57,7 +57,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── a.x = $1 [type=bool]
+      └── x = $1 [type=bool]
 
 # Tuple, Projections
 build
@@ -68,7 +68,7 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      └── (a.x, 1.5) [type=tuple{int, decimal}]
+      └── (x, 1.5) [type=tuple{int, decimal}]
 
 # And, Or, Not
 build
@@ -79,7 +79,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── (a.x = 1) AND (NOT ((a.y = 2) OR (a.y = 3.5))) [type=bool]
+      └── (x = 1) AND (NOT ((y = 2) OR (y = 3.5))) [type=bool]
 
 # Eq, Ne
 build
@@ -90,7 +90,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── (a.x = 1) AND (a.x != 2) [type=bool]
+      └── (x = 1) AND (x != 2) [type=bool]
 
 # Le, Ge, Lt, Gt
 build
@@ -101,7 +101,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── (((a.x >= 1) AND (a.x <= 10)) AND (a.y > 1)) AND (a.y < 10) [type=bool]
+      └── (((x >= 1) AND (x <= 10)) AND (y > 1)) AND (y < 10) [type=bool]
 
 # In, NotIn
 build
@@ -112,7 +112,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── (a.x IN (1, 2)) AND (a.y NOT IN (3, 4)) [type=bool]
+      └── (x IN (1, 2)) AND (y NOT IN (3, 4)) [type=bool]
 
 # Like, NotLike
 build
@@ -123,7 +123,7 @@ select
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── filters [type=bool]
-      └── (b.x LIKE '%foo%') AND (b.x NOT LIKE '%bar%') [type=bool]
+      └── (x LIKE '%foo%') AND (x NOT LIKE '%bar%') [type=bool]
 
 # ILike, INotLike
 build
@@ -134,7 +134,7 @@ select
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── filters [type=bool]
-      └── (b.x ILIKE '%foo%') AND (b.x NOT ILIKE '%bar%') [type=bool]
+      └── (x ILIKE '%foo%') AND (x NOT ILIKE '%bar%') [type=bool]
 
 # RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
 build
@@ -145,7 +145,7 @@ select
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── filters [type=bool]
-      └── (((b.x ~ 'foo') AND (b.x !~ 'bar')) AND (b.x ~* 'foo')) AND (b.x !~* 'bar') [type=bool]
+      └── (((x ~ 'foo') AND (x !~ 'bar')) AND (x ~* 'foo')) AND (x !~* 'bar') [type=bool]
 
 # Is, IsNot
 build
@@ -156,7 +156,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── (a.x IS DISTINCT FROM a.y) AND (a.x IS NULL) [type=bool]
+      └── (x IS DISTINCT FROM y) AND (x IS NULL) [type=bool]
 
 # Bitand, Bitor, Bitxor
 build
@@ -167,9 +167,9 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      ├── a.x & a.y [type=int]
-      ├── a.x | a.y [type=int]
-      └── a.x # a.y [type=int]
+      ├── x & y [type=int]
+      ├── x | y [type=int]
+      └── x # y [type=int]
 
 # Plus, Minus, Mult, Div, FloorDiv
 build
@@ -185,11 +185,11 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      ├── a.x + 1.5 [type=decimal]
+      ├── x + 1.5 [type=decimal]
       ├── '2000-01-01' - 15 [type=date]
-      ├── 10.10 * a.x [type=decimal]
-      ├── 1 / a.y [type=decimal]
-      └── a.x // 1.5 [type=decimal]
+      ├── 10.10 * x [type=decimal]
+      ├── 1 / y [type=decimal]
+      └── x // 1.5 [type=decimal]
 
 # Mod, Pow, LShift, RShift
 build
@@ -204,10 +204,10 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      ├── 100.1 % a.x [type=decimal]
-      ├── a.x ^ 2.5 [type=decimal]
-      ├── a.x << 3 [type=int]
-      └── a.y >> 2 [type=int]
+      ├── 100.1 % x [type=decimal]
+      ├── x ^ 2.5 [type=decimal]
+      ├── x << 3 [type=int]
+      └── y >> 2 [type=int]
 
 # FetchVal, FetchText, FetchValPath, FetchTextPath
 build
@@ -236,7 +236,7 @@ project
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── projections
-      └── b.x || 'more' [type=string]
+      └── x || 'more' [type=string]
 
 # UnaryMinus, UnaryComplement
 build
@@ -247,8 +247,8 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      ├── -a.y [type=int]
-      └── ~a.x [type=int]
+      ├── -y [type=int]
+      └── ~x [type=int]
 
 # Array Concat
 build
@@ -259,9 +259,9 @@ project
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
-      ├── unusual.arr || unusual.arr [type=int[]]
-      ├── unusual.arr || NULL::INT[] [type=int[]]
-      └── NULL::INT[] || unusual.arr [type=int[]]
+      ├── arr || arr [type=int[]]
+      ├── arr || NULL::INT[] [type=int[]]
+      └── NULL::INT[] || arr [type=int[]]
 
 # Array Element Concat
 build
@@ -272,10 +272,10 @@ project
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
-      ├── unusual.x || unusual.arr [type=int[]]
-      ├── unusual.arr || unusual.x [type=int[]]
-      ├── unusual.x || NULL::INT[] [type=int[]]
-      └── NULL::INT[] || unusual.x [type=int[]]
+      ├── x || arr [type=int[]]
+      ├── arr || x [type=int[]]
+      ├── x || NULL::INT[] [type=int[]]
+      └── NULL::INT[] || x [type=int[]]
 
 # Function with fixed return type.
 build
@@ -336,38 +336,38 @@ scalar-group-by
  │    ├── scan b
  │    │    └── columns: x:1(string!null) z:2(decimal!null)
  │    └── projections
- │         ├── b.z = 0 [type=bool]
- │         ├── b.x::INT [type=int]
- │         ├── b.x::JSON [type=jsonb]
- │         └── b.x::JSONB [type=jsonb]
+ │         ├── z = 0 [type=bool]
+ │         ├── x::INT [type=int]
+ │         ├── x::JSON [type=jsonb]
+ │         └── x::JSONB [type=jsonb]
  └── aggregations
       ├── array-agg [type=decimal[]]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── avg [type=decimal]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── bool-and [type=bool]
       │    └── variable: column5 [type=bool]
       ├── bool-or [type=bool]
       │    └── variable: column5 [type=bool]
       ├── concat-agg [type=string]
-      │    └── variable: b.x [type=string]
+      │    └── variable: x [type=string]
       ├── count [type=int]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── count-rows [type=int]
       ├── max [type=string]
-      │    └── variable: b.x [type=string]
+      │    └── variable: x [type=string]
       ├── max [type=decimal]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── sum-int [type=int]
       │    └── variable: column13 [type=int]
       ├── sum [type=decimal]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── sqr-diff [type=decimal]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── variance [type=decimal]
       │    └── variable: column13 [type=int]
       ├── std-dev [type=decimal]
-      │    └── variable: b.z [type=decimal]
+      │    └── variable: z [type=decimal]
       ├── xor-agg [type=int]
       │    └── variable: column13 [type=int]
       ├── json-agg [type=jsonb]
@@ -393,12 +393,12 @@ project
  │    │    │    ├── scan b
  │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
  │    │    │    └── filters [type=bool]
- │    │    │         └── a.y = b.z::INT [type=bool]
+ │    │    │         └── y = z::INT [type=bool]
  │    │    └── aggregations
  │    │         ├── max [type=string]
  │    │         │    └── variable: b.x [type=string]
  │    │         └── const-agg [type=int]
- │    │              └── variable: a.y [type=int]
+ │    │              └── variable: y [type=int]
  │    └── filters [type=bool]
  │         └── max > 'foo' [type=bool]
  └── projections

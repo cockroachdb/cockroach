@@ -870,7 +870,7 @@ func (c *CustomFuncs) ExtractRedundantSubclause(
 
 			panic(fmt.Errorf(
 				"ExtractRedundantSubclause called with non-redundant subclause:\n%s",
-				memo.MakeNormExprView(c.mem, subclause).FormatString(opt.ExprFmtHideScalars),
+				memo.MakeNormExprView(c.mem, subclause).FormatString(memo.ExprFmtHideScalars),
 			))
 		}
 	}

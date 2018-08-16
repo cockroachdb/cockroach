@@ -135,7 +135,7 @@ inner-join (merge)
       ├── left ordering: +1
       ├── right ordering: +5
       └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # Right-join operator.
 opt
@@ -154,7 +154,7 @@ inner-join
  │    ├── key: (5)
  │    └── fd: (5)-->(6)
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── a.k > xy.y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Full-join operator.
 opt
@@ -221,9 +221,9 @@ right-join
  │         │              │    ├── key: (7)
  │         │              │    └── fd: (7)-->(8)
  │         │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │                   └── uv.v = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ │         │                   └── v = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
  │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │              └── a.i = uv.u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │              └── i = u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  └── true [type=bool]
 
 # ----------------------------------------------------------
@@ -263,7 +263,7 @@ project
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(5)]
       │         └── max [type=int, outer=(5)]
-      │              └── variable: xy.x [type=int, outer=(5)]
+      │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
@@ -300,9 +300,9 @@ project
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(5)]
       │         ├── min [type=int, outer=(5)]
-      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int, outer=(5)]
       │         └── max [type=int, outer=(5)]
-      │              └── variable: xy.x [type=int, outer=(5)]
+      │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
@@ -340,18 +340,18 @@ project
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +5
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │              └── xy.x = a.k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │              └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    └── aggregations [outer=(2-5)]
       │         ├── sum [type=decimal, outer=(5)]
-      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int, outer=(5)]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int, outer=(2)]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float, outer=(3)]
       │         └── const-agg [type=string, outer=(4)]
-      │              └── variable: a.s [type=string, outer=(4)]
+      │              └── variable: s [type=string, outer=(4)]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-           └── a.i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't reject nulls when multiple columns are used.
 opt
@@ -388,9 +388,9 @@ project
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(5,6)]
       │         ├── min [type=int, outer=(5)]
-      │         │    └── variable: xy.x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int, outer=(5)]
       │         └── max [type=int, outer=(6)]
-      │              └── variable: xy.y [type=int, outer=(6)]
+      │              └── variable: y [type=int, outer=(6)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
@@ -428,6 +428,6 @@ project
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(5)]
       │         └── count [type=int, outer=(5)]
-      │              └── variable: xy.x [type=int, outer=(5)]
+      │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]

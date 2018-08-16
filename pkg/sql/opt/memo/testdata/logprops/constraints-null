@@ -47,7 +47,7 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
       └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
-           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: a [type=int, outer=(1)]
            └── null [type=unknown]
 
 opt
@@ -65,7 +65,7 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: a [type=int, outer=(1)]
            └── null [type=unknown]
 
 opt
@@ -84,10 +84,10 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight), fd=()-->(2,3)]
       ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
-      │    ├── variable: t.b [type=bool, outer=(2)]
+      │    ├── variable: b [type=bool, outer=(2)]
       │    └── null [type=unknown]
       └── is [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight)]
-           ├── variable: t.c [type=string, outer=(3)]
+           ├── variable: c [type=string, outer=(3)]
            └── null [type=unknown]
 
 opt
@@ -105,10 +105,10 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
       ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      │    ├── variable: t.b [type=bool, outer=(2)]
+      │    ├── variable: b [type=bool, outer=(2)]
       │    └── null [type=unknown]
       └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-           ├── variable: t.c [type=string, outer=(3)]
+           ├── variable: c [type=string, outer=(3)]
            └── null [type=unknown]
 
 exec-ddl
@@ -139,9 +139,9 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-           ├── variable: xy.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── function: abs [type=int, outer=(2)]
-                └── variable: xy.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # Test that we get a not-NULL constraint on x.
 opt
@@ -159,11 +159,11 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
-           ├── variable: xy.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── cast: INT [type=int, outer=(1)]
                 └── function: sin [type=float, outer=(1)]
                      └── cast: FLOAT [type=float, outer=(1)]
-                          └── variable: xy.x [type=int, outer=(1)]
+                          └── variable: x [type=int, outer=(1)]
 
 # Test that we get a not-NULL constraint on x and y.
 opt
@@ -180,8 +180,8 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-           ├── variable: xy.x [type=int, outer=(1)]
-           └── variable: xy.y [type=int, outer=(2)]
+           ├── variable: x [type=int, outer=(1)]
+           └── variable: y [type=int, outer=(2)]
 
 # Test that we get a not-NULL constraint on x and y.
 opt
@@ -199,5 +199,5 @@ select
  │    └── interesting orderings: ()
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-           ├── variable: xy.x [type=int, outer=(1)]
-           └── variable: xy.y [type=int, outer=(2)]
+           ├── variable: x [type=int, outer=(1)]
+           └── variable: y [type=int, outer=(2)]

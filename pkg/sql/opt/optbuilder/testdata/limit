@@ -149,7 +149,7 @@ limit
  │              │    └── columns: k:1(int!null) v:2(int) w:3(int)
  │              └── aggregations
  │                   └── sum [type=decimal]
- │                        └── variable: t.w [type=int]
+ │                        └── variable: w [type=int]
  └── const: 10 [type=int]
 
 build
