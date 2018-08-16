@@ -23,7 +23,6 @@ from time import sleep
 #     'us-west1-b': 'gke_cockroach-alex_us-west1-b_my-cluster',
 # }
 contexts = {
-        "a":"",
 }
 
 # Fill in the `regions` map with the zones and corresponding regions of your
@@ -67,7 +66,7 @@ except:
 
 for zone, context in contexts.items():
     try:
-        check_call(['kubectl', 'get', 'pods', zone, '--context', context])
+        check_call(['kubectl', 'get', 'pods', '--context', context])
     except:
         exit("unable to make basic API call using kubectl context '%s' for cluster in zone '%s'; please check if the context is correct and your Kubernetes cluster is working" % (context, zone))
 
