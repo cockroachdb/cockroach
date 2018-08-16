@@ -31,9 +31,11 @@ var fdAnnID = opt.NewTableAnnID()
 // logicalPropsBuilder is a helper class that consolidates the code that derives
 // a parent expression's logical properties from those of its children.
 type logicalPropsBuilder struct {
-	evalCtx *tree.EvalContext
-	sb      statisticsBuilder
-	kb      keyBuffer
+	evalCtx         *tree.EvalContext
+	sb              statisticsBuilder
+	kb              keyBuffer
+	relationalAlloc []props.Relational
+	scalarAlloc     []props.Scalar
 }
 
 // buildProps is called by the memo group construction code in order to
@@ -122,7 +124,7 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	md := ev.Metadata()
@@ -179,7 +181,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	def := ev.Private().(*VirtualScanOpDef)
@@ -215,7 +217,7 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -277,7 +279,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -367,7 +369,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -528,7 +530,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -573,7 +575,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -636,7 +638,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -694,7 +696,7 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	card := uint32(ev.ChildCount())
@@ -735,7 +737,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	def := ev.Private().(*ExplainOpDef)
@@ -770,7 +772,7 @@ func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	def := ev.Private().(*ShowTraceOpDef)
@@ -805,7 +807,7 @@ func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -866,7 +868,7 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -921,7 +923,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -960,7 +962,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -1009,7 +1011,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
-	logical := props.Logical{Relational: &props.Relational{}}
+	logical := props.Logical{Relational: b.allocRelationalProps()}
 	relational := logical.Relational
 
 	// Output Columns
@@ -1046,8 +1048,9 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 }
 
 func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
-	logical := props.Logical{Scalar: &props.Scalar{Type: InferType(ev)}}
+	logical := props.Logical{Scalar: b.allocScalarProps()}
 	scalar := logical.Scalar
+	scalar.Type = InferType(ev)
 
 	switch ev.Operator() {
 	case opt.VariableOp:
@@ -1275,4 +1278,29 @@ func (b *logicalPropsBuilder) applyNotNullConstraint(
 func (b *logicalPropsBuilder) applyOuterColConstants(relational *props.Relational) {
 	equivCols := relational.FuncDeps.ComputeEquivClosure(relational.OuterCols)
 	relational.FuncDeps.AddConstants(equivCols)
+}
+
+func (b *logicalPropsBuilder) allocRelationalProps() *props.Relational {
+	if len(b.relationalAlloc) == 0 {
+		// props.Relational is pretty hefty (200+ bytes), hence the small chunk
+		// size. A larger chunk size can be a pessimization as the GC has to scan
+		// the pointers in any unallocated entries. A value of 2 was chosen at this
+		// captures scans from a single relation and 2-way joins.
+		b.relationalAlloc = make([]props.Relational, 2)
+	}
+	r := &b.relationalAlloc[0]
+	b.relationalAlloc = b.relationalAlloc[1:]
+	return r
+}
+
+func (b *logicalPropsBuilder) allocScalarProps() *props.Scalar {
+	if len(b.scalarAlloc) == 0 {
+		// props.Scalar is pretty hefty (100+ bytes), hence the small chunk size. A
+		// larger chunk size can be a pessimization as the GC has to scan the
+		// pointers in any unallocated entries.
+		b.scalarAlloc = make([]props.Scalar, 4)
+	}
+	r := &b.scalarAlloc[0]
+	b.scalarAlloc = b.scalarAlloc[1:]
+	return r
 }
