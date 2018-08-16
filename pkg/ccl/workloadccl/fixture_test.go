@@ -11,7 +11,6 @@ package workloadccl
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -71,8 +70,6 @@ func TestFixture(t *testing.T) {
 		t.Skip("GS_BUCKET and GS_JSONKEY env vars must be set")
 	}
 
-	// This prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 	source, err := google.JWTConfigFromJSON([]byte(gcsKey), storage.ScopeReadWrite)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
