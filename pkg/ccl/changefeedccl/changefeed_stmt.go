@@ -186,8 +186,12 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
+			// The job registry has a set of metrics used to monitor the various
+			// jobs it runs. They're all stored as the `metric.Struct` interface
+			// because of dependency cycles.
+			metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 			return runChangefeedFlow(
-				ctx, p.ExecCfg(), details, progress, resultsCh, nil, /* progressedFn */
+				ctx, p.ExecCfg(), details, progress, metrics, resultsCh, nil, /* progressedFn */
 			)
 		}
 
@@ -308,7 +312,9 @@ func (b *changefeedResumer) Resume(
 	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	err := runChangefeedFlow(ctx, execCfg, details, progress, startedCh, job.HighWaterProgressed)
+	metrics := job.RegistryMetrics().Changefeed.(*Metrics)
+	err := runChangefeedFlow(
+		ctx, execCfg, details, progress, metrics, startedCh, job.HighWaterProgressed)
 	if err != nil {
 		log.Infof(ctx, `CHANGEFEED job %d returning with error: %+v`, *job.ID(), err)
 	}

@@ -17,8 +17,10 @@ package testutils
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
+	"text/tabwriter"
 
 	"github.com/pmezard/go-difflib/difflib"
 
@@ -140,6 +142,11 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the memo containing the forest of trees.
 //
+//  - rulestats [flags]
+//
+//    Performs the optimization and outputs statistics about applied rules.
+//
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -214,6 +221,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		fillInLazyProps(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
+
+	case "rulestats":
+		result, err := ot.RuleStats()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
 
 	case "optsteps":
 		result, err := ot.OptSteps()
@@ -341,6 +355,95 @@ func (ot *OptTester) Memo() (string, error) {
 	}
 	o.Optimize(root, required)
 	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
+}
+
+// RuleStats performs the optimization and returns statistics about how many
+// rules were applied.
+func (ot *OptTester) RuleStats() (string, error) {
+	type ruleStats struct {
+		rule       opt.RuleName
+		numApplied int
+		numAdded   int
+	}
+	stats := make([]ruleStats, opt.NumRuleNames)
+	for i := range stats {
+		stats[i].rule = opt.RuleName(i)
+	}
+
+	o := xform.NewOptimizer(&ot.evalCtx)
+
+	o.NotifyOnAppliedRule(
+		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
+			stats[ruleName].numApplied++
+			stats[ruleName].numAdded += added
+		},
+	)
+	root, required, err := ot.buildExpr(o.Factory())
+	if err != nil {
+		return "", err
+	}
+	o.Optimize(root, required)
+
+	// Split the rules.
+	var norm, explore []ruleStats
+	var allNorm, allExplore ruleStats
+	for i := range stats {
+		if stats[i].numApplied > 0 {
+			if stats[i].rule.IsNormalize() {
+				allNorm.numApplied += stats[i].numApplied
+				norm = append(norm, stats[i])
+			} else {
+				allExplore.numApplied += stats[i].numApplied
+				allExplore.numAdded += stats[i].numAdded
+				explore = append(explore, stats[i])
+			}
+		}
+	}
+	// Sort with most applied rules first.
+	sort.SliceStable(norm, func(i, j int) bool {
+		return norm[i].numApplied > norm[j].numApplied
+	})
+	sort.SliceStable(explore, func(i, j int) bool {
+		return explore[i].numApplied > explore[j].numApplied
+	})
+
+	// Only show the top 5 rules.
+	const topK = 5
+	if len(norm) > topK {
+		norm = norm[:topK]
+	}
+	if len(explore) > topK {
+		explore = explore[:topK]
+	}
+
+	// Ready to report.
+	var res strings.Builder
+	fmt.Fprintf(&res, "Normalization rules applied %d times.\n", allNorm.numApplied)
+	if len(norm) > 0 {
+		fmt.Fprintf(&res, "Top normalization rules:\n")
+		tw := tabwriter.NewWriter(&res, 1 /* minwidth */, 1 /* tabwidth */, 1 /* padding */, ' ', 0)
+		for _, s := range norm {
+			fmt.Fprintf(tw, "  %s\tapplied\t%d\ttimes.\n", s.rule, s.numApplied)
+		}
+		_ = tw.Flush()
+	}
+
+	fmt.Fprintf(
+		&res, "Exploration rules applied %d times, added %d expressions.\n",
+		allExplore.numApplied, allExplore.numAdded,
+	)
+
+	if len(explore) > 0 {
+		fmt.Fprintf(&res, "Top exploration rules:\n")
+		tw := tabwriter.NewWriter(&res, 1 /* minwidth */, 1 /* tabwidth */, 1 /* padding */, ' ', 0)
+		for _, s := range explore {
+			fmt.Fprintf(
+				tw, "  %s\tapplied\t%d\ttimes, added\t%d\texpressions.\n", s.rule, s.numApplied, s.numAdded,
+			)
+		}
+		_ = tw.Flush()
+	}
+	return res.String(), nil
 }
 
 // OptSteps steps through the transformations performed by the optimizer on the

@@ -550,8 +550,14 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 
 	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
-			c = v.(*metric.Counter).Count()
-			found = true
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			}
 		}
 	})
 	if !found {
