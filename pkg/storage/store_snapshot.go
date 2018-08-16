@@ -384,29 +384,43 @@ func (s *Store) reserveSnapshot(
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
 func (s *Store) canApplySnapshot(
-	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.canApplySnapshotLocked(ctx, rangeDescriptor)
+	return s.canApplySnapshotLocked(ctx, snapHeader)
 }
 
 func (s *Store) canApplySnapshotLocked(
-	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
-	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
-		(*Replica)(v).IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
-		return nil, nil
+	desc := snapHeader.State.Desc
+	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
+		// We have an initialized replica. Raft snapshots cannot be rejected at this
+		// point, so the constraints that ensure they are safe to apply must be
+		// performed elsewhere. TODO(benesch): link to these constraints once
+		// they're added. Preemptive snapshots can be applied with no further checks
+		// if they do not widen the existing replica.
+		existingDesc := (*Replica)(v).Desc()
+		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
+			return nil, nil
+		}
+
+		// We have a preemptive snapshot that widens an existing replica. Proceed
+		// by checking the keyspace covered by the snapshot but not the existing
+		// replica.
+		desc.StartKey = existingDesc.EndKey
 	}
 
-	// We don't have the range (or we have an uninitialized
-	// placeholder). Will we be able to create/initialize it?
-	if exRng, ok := s.mu.replicaPlaceholders[rangeDescriptor.RangeID]; ok {
+	// We don't have the range, or we have an uninitialized placeholder, or the
+	// existing range is less wide. Will we be able to create/initialize it?
+	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
 		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
-	if exRange := s.getOverlappingKeyRangeLocked(rangeDescriptor); exRange != nil {
+	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
+	// not just the first one that getOverlappingKeyRangeLocked happens to return.
+	if exRange := s.getOverlappingKeyRangeLocked(desc); exRange != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -440,7 +454,7 @@ func (s *Store) canApplySnapshotLocked(
 	}
 
 	placeholder := &ReplicaPlaceholder{
-		rangeDesc: *rangeDescriptor,
+		rangeDesc: *desc,
 	}
 	return placeholder, nil
 }
@@ -466,7 +480,7 @@ func (s *Store) receiveSnapshot(
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if _, err := s.canApplySnapshot(ctx, header.State.Desc); err != nil {
+	if _, err := s.canApplySnapshot(ctx, header); err != nil {
 		return sendSnapshotError(stream,
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
 		)
@@ -497,7 +511,7 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
-	if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
+	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
 
