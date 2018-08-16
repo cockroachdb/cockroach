@@ -459,6 +459,9 @@ type Store struct {
 	//   Replicas in the Store is being changed (which may happen outside of raft
 	//   via the replica GC queue).
 	//
+	//   If holding raftMus for multiple different replicas simultaneously,
+	//   acquire the locks in the order that the replicas appear in replicasByKey.
+	//
 	// * Replica.readOnlyCmdMu (RWMutex): Held in read mode while any
 	//   read-only command is in progress on the replica; held in write
 	//   mode while executing a commit trigger. This is necessary
@@ -489,12 +492,12 @@ type Store struct {
 	//   state. Callbacks from the scheduler are performed while not holding this
 	//   mutex in order to observe the above ordering constraints.
 	//
-	// Splits (and merges, but they're not finished and so will not be discussed
-	// here) deserve special consideration: they operate on two ranges. Naively,
-	// this is fine because the right-hand range is brand new, but an
-	// uninitialized version may have been created by a raft message before we
-	// process the split (see commentary on Replica.splitTrigger). We make this
-	// safe by locking the right-hand range for the duration of the Raft command
+	// Splits and merges deserve special consideration: they operate on two
+	// ranges. For splits, this might seem fine because the right-hand range is
+	// brand new, but an uninitialized version may have been created by a raft
+	// message before we process the split (see commentary on
+	// Replica.splitTrigger). We make this safe, for both splits and merges, by
+	// locking the right-hand range for the duration of the Raft command
 	// containing the split/merge trigger.
 	//
 	// Note that because we acquire and release Store.mu and Replica.mu
@@ -3393,9 +3396,6 @@ func (s *Store) processRaftRequestWithReplica(
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
 // the request's specified replica. This snapshot can be preemptive or not. If
 // not, the function makes sure to handle any updated Raft Ready state.
-//
-// TODO(benesch): handle snapshots that widen EndKey. These can occur if this
-// replica was behind when the range committed a merge.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
@@ -3579,8 +3579,12 @@ func (s *Store) processRaftSnapshotRequest(
 				r.mu.Unlock()
 			}
 
-			// Apply the snapshot, as Raft told us to.
-			if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState); err != nil {
+			// Apply the snapshot, as Raft told us to. Preemptive snapshots never
+			// subsume replicas (this is guaranteed by Store.canApplySnapshot), so
+			// we can simply pass nil for the subsumedRepls parameter.
+			if err := r.applySnapshot(
+				ctx, inSnap, ready.Snapshot, ready.HardState, nil, /* subsumedRepls */
+			); err != nil {
 				return roachpb.NewError(err)
 			}
 
