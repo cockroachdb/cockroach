@@ -180,6 +180,13 @@ message TableReaderSpan {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
 }
 
+// ScanVisibility controls which columns are seen by scans - just normal
+// columns, or normal columns and also in-progress schema change columns.
+enum ScanVisibility {
+  PUBLIC = 0;
+  PUBLIC_AND_NOT_PUBLIC = 1;
+}
+
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
@@ -211,6 +218,12 @@ message TableReaderSpec {
   // Indicates whether the TableReader is being run as an exhaustive
   // check. This is only true during SCRUB commands.
   optional bool is_check = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the visibility level of the columns that should be returned.
+  // Normally, will be set to public. Will be set to publicAndNotPublic if the
+  // consumer of this TableReader expects to be able to see in-progress schema
+  // changes.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
@@ -262,6 +275,13 @@ message JoinReaderSpec {
   optional Expression index_filter_expr = 5 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // For index joins that are sources to mutation statements - what visibility
+  // of columns should we return? Mutations sometimes need to see in-progress
+  // schema change columns, in which case this field will be changed from its
+  // default PUBLIC state. Causes the index join to return these schema change
+  // columns.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -333,6 +353,8 @@ message ZigzagJoinerSpec {
 // distsqlplan.PhysicalPlan.
 message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1;
+  optional uint32 NumInputs = 2;
+  optional string Name = 3;
 }
 
 message Columns {

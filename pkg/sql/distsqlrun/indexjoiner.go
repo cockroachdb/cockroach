@@ -77,10 +77,11 @@ func newIndexJoiner(
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
+	needMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	if err := ij.Init(
 		ij,
 		post,
-		ij.desc.ColumnTypes(),
+		ij.desc.ColumnTypesWithMutations(needMutations),
 		flowCtx,
 		processorID,
 		output,
@@ -102,11 +103,12 @@ func newIndexJoiner(
 		&ij.fetcher,
 		&ij.desc,
 		0, /* primary index */
-		ij.desc.ColumnIdxMap(),
+		ij.desc.ColumnIdxMapWithMutations(needMutations),
 		false, /* reverse */
 		ij.out.neededColumns(),
 		false, /* isCheck */
 		&ij.alloc,
+		spec.Visibility,
 	); err != nil {
 		return nil, err
 	}

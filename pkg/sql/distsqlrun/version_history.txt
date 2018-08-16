@@ -76,3 +76,6 @@
     - More EvalContext fields.
 - Version: 20 (MinAcceptedVersion: 6)
     - Add labels to tuple types.
+- Version: 21 (MinAcceptedVersion: 6)
+    - Permit non-public (mutation) columns in TableReader return values, when
+      requested. The new processor spec would be ignored by old versions.

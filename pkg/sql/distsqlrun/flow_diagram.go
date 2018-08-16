@@ -334,7 +334,7 @@ func (is *InputSyncSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (r *LocalPlanNodeSpec) summary() (string, []string) {
-	return fmt.Sprintf("local planNode %d", *r.RowSourceIdx), []string{}
+	return fmt.Sprintf("local %s %d", *r.Name, *r.RowSourceIdx), []string{}
 }
 
 // summary implements the diagramCellType interface.

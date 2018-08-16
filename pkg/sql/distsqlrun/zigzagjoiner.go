@@ -400,6 +400,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		neededCols,
 		false, /* check */
 		info.alloc,
+		ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return err

@@ -28,7 +28,10 @@ import (
 // be constructed with Create(), after which it is a PlanNode and can be treated
 // as such.
 type rowSourceToPlanNode struct {
-	source distsqlrun.RowSource
+	source    distsqlrun.RowSource
+	forwarder metadataForwarder
+
+	planCols sqlbase.ResultColumns
 
 	// Temporary variables
 	row      sqlbase.EncDatumRow
@@ -38,13 +41,25 @@ type rowSourceToPlanNode struct {
 
 var _ planNode = &rowSourceToPlanNode{}
 
-func makeRowSourceToPlanNode(s distsqlrun.RowSource) *rowSourceToPlanNode {
+// makeRowSourceToPlanNode creates a new planNode that wraps a RowSource. It
+// takes an optional metadataForwarder, which if non-nil is invoked for every
+// piece of metadata this wrapper receives from the wrapped RowSource.
+func makeRowSourceToPlanNode(
+	s distsqlrun.RowSource, forwarder metadataForwarder, planCols sqlbase.ResultColumns,
+) *rowSourceToPlanNode {
 	row := make(tree.Datums, len(s.OutputTypes()))
 
 	return &rowSourceToPlanNode{
-		source:   s,
-		datumRow: row,
+		source:    s,
+		datumRow:  row,
+		forwarder: forwarder,
+		planCols:  planCols,
 	}
+}
+
+func (r *rowSourceToPlanNode) startExec(params runParams) error {
+	r.source.Start(params.ctx)
+	return nil
 }
 
 func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
@@ -53,6 +68,10 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		r.row, p = r.source.Next()
 
 		if p != nil {
+			if r.forwarder != nil {
+				r.forwarder.forwardMetadata(p)
+				continue
+			}
 			if p.Err != nil {
 				return false, p.Err
 			}

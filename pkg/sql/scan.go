@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -120,6 +121,17 @@ const (
 	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
+
+func (s scanVisibility) toDistSQLScanVisibility() distsqlrun.ScanVisibility {
+	switch s {
+	case publicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC
+	case publicAndNonPublicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	default:
+		panic(fmt.Sprintf("Unknown visibility %+v", s))
+	}
+}
 
 // scanColumnsConfig controls the "schema" of a scan node. The zero value is the
 // default: all "public" columns.
