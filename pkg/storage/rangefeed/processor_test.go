@@ -416,6 +416,14 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	)
 	require.Equal(t, 1, p.Len())
 
+	// The registration should be provided a checkpoint immediately with an
+	// empty resolved timestamp because it did not perform a catch-up scan.
+	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+		hlc.Timestamp{},
+	)}
+	require.Equal(t, chEvent, r1Stream.Events())
+
 	// The resolved timestamp should still not be initialized.
 	require.False(t, p.rts.IsInit())
 	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
@@ -441,7 +449,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, p.rts.Get())
 
 	// The registration should have been informed of the new resolved timestamp.
-	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEvent = []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 		hlc.Timestamp{WallTime: 18},
 	)}

@@ -1199,9 +1199,8 @@ func mvccPutInternal(
 		}
 		if err == nil {
 			engine.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
-				Key:   key,
-				Value: roachpb.Value{RawBytes: value},
-				Safe:  true,
+				Key:  key,
+				Safe: true,
 			})
 		}
 		return err
@@ -1378,12 +1377,9 @@ func mvccPutInternal(
 
 	// Log the logical MVCC operation.
 	logicalOpDetails := MVCCLogicalOpDetails{
-		Key: key,
-		Value: roachpb.Value{
-			Timestamp: timestamp,
-			RawBytes:  value,
-		},
-		Safe: true,
+		Key:       key,
+		Timestamp: timestamp,
+		Safe:      true,
 	}
 	if buf.newMeta.Txn != nil {
 		logicalOpDetails.Txn = *buf.newMeta.Txn
@@ -2353,11 +2349,9 @@ func mvccResolveWriteIntent(
 			logicalOp = MVCCUpdateIntentOpType
 		}
 		engine.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
-			Txn: intent.Txn,
-			Key: intent.Key,
-			Value: roachpb.Value{
-				Timestamp: intent.Txn.Timestamp,
-			},
+			Txn:       intent.Txn,
+			Key:       intent.Key,
+			Timestamp: intent.Txn.Timestamp,
 		})
 
 		return true, nil

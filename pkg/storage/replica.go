@@ -50,6 +50,7 @@ import (
 	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -301,8 +302,6 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
-	//
-	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu struct {
 		syncutil.Mutex
 
@@ -311,6 +310,11 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
+
+		// rangefeed is an instance of a rangefeed Processor that is capable of
+		// routing rangefeed events to a set of subscribers. Will be nil if no
+		// subscribers are registered.
+		rangefeed *rangefeed.Processor
 	}
 
 	// Contains the lease history when enabled.
@@ -855,6 +859,9 @@ func (r *Replica) destroyRaftMuLocked(
 			return err
 		}
 	}
+
+	// TODO(nvanbenschoten): fix for rangefeed.
+	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
 
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
@@ -5270,6 +5277,7 @@ func (r *Replica) processRaftCommand(
 			// Apply an empty entry.
 			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
+			raftCmd.LogicalOpLog = nil
 		}
 
 		// Update the node clock with the serviced request. This maintains
@@ -5403,11 +5411,15 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
 
 		// Provide the command's corresponding logical operations to the
-		// Replica's rangefeed. If no rangefeed is running, this will be a
-		// no-op.
-		// TODO(nvanbenschoten): consume the logical ops when we have
-		// rangefeed plugged in.
-		// r.mu.rangefeed.ConsumeLogicalOps(raftCmd.LogicalOps)
+		// Replica's rangefeed. Only do so if the WriteBatch is non-nil,
+		// otherwise it's valid for the logical op log to be nil, which
+		// would shut down all rangefeeds. If no rangefeed is running,
+		// this call will be a no-op.
+		if raftCmd.WriteBatch != nil {
+			r.handleLogicalOpLogRaftMuLocked(ctx, raftCmd.LogicalOpLog)
+		} else if raftCmd.LogicalOpLog != nil {
+			log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", raftCmd)
+		}
 	}
 
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
@@ -5835,8 +5847,9 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 		}
 		batch = r.store.Engine().NewBatch()
 		var opLogger *engine.OpLoggerBatch
-		if false /* enable cdc */ {
-			// TODO(nvanbenschoten): we need a way to turn this on when any
+		if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+			// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
+			// cluster setting we'll need a way to turn this on when any
 			// replica (not just the leaseholder) wants it and off when no
 			// replicas want it. This turns out to be pretty involved.
 			//
@@ -5859,6 +5872,14 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			//   set to prevent "leaking" subscriptions.
 			// - The condition here to add logical logging will be:
 			//     if len(replicaState.logicalOpsSubs) > 0 { ... }
+			//
+			// An alternative to this is the reduce the cost of the including
+			// the logical op log to a negligible amount such that it can be
+			// included on all raft commands, regardless of whether any replica
+			// has a rangefeed running or not.
+			//
+			// Another alternative is to make the setting table/zone-scoped
+			// instead of a fine-grained per-replica state.
 			opLogger = engine.NewOpLoggerBatch(batch)
 			batch = opLogger
 		}
@@ -5877,9 +5898,9 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
 		}
-		if ops := opLogger.LogicalOps(); len(ops) > 0 {
+		if opLogger != nil {
 			res.LogicalOpLog = &storagebase.LogicalOpLog{
-				Ops: ops,
+				Ops: opLogger.LogicalOps(),
 			}
 		}
 		break

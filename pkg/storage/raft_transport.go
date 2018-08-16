@@ -69,14 +69,23 @@ type RaftMessageResponseStream interface {
 // Send. Note that the default implementation of grpc.Stream for server
 // responses (grpc.serverStream) is not safe for concurrent calls to Send.
 type lockedRaftMessageResponseStream struct {
-	MultiRaft_RaftMessageBatchServer
-	sendMu syncutil.Mutex
+	wrapped MultiRaft_RaftMessageBatchServer
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedRaftMessageResponseStream) Context() context.Context {
+	return s.wrapped.Context()
 }
 
 func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	return s.MultiRaft_RaftMessageBatchServer.Send(resp)
+	return s.wrapped.Send(resp)
+}
+
+func (s *lockedRaftMessageResponseStream) Recv() (*RaftMessageRequestBatch, error) {
+	// No need for lock. gRPC.Stream.RecvMsg is safe for concurrent use.
+	return s.wrapped.Recv()
 }
 
 // SnapshotResponseStream is the subset of the
@@ -312,7 +321,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					var stats *raftTransportStats
-					stream := &lockedRaftMessageResponseStream{MultiRaft_RaftMessageBatchServer: stream}
+					stream := &lockedRaftMessageResponseStream{wrapped: stream}
 					for {
 						batch, err := stream.Recv()
 						if err != nil {

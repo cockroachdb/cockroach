@@ -2342,6 +2342,9 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// txnWaitQueue after we clear it.
 	origRng.txnWaitQueue.Clear(false /* disable */)
 
+	// TODO(nvanbenschoten): fix for rangefeed.
+	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
+
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
 	origRng.leaseholderStats.resetRequestCounts()
@@ -2424,6 +2427,9 @@ func (s *Store) MergeRange(
 	// Clear the wait queue to redirect the queued transactions to the
 	// left-hand replica, if necessary.
 	rightRepl.txnWaitQueue.Clear(true /* disable */)
+
+	// TODO(nvanbenschoten): fix for rangefeed.
+	// r.disconnectRangefeedWithErrRaftMuLocked(nil)
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
@@ -3115,6 +3121,49 @@ func (s *Store) Send(
 			return nil, pErr
 		}
 	}
+}
+
+// RangeFeed registers a rangefeed over the specified span. It sends updates to
+// the provided stream and returns with an optional error when the rangefeed is
+// complete.
+func (s *Store) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+) *roachpb.Error {
+	ctx = s.AnnotateCtx(ctx)
+	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
+		return roachpb.NewError(err)
+	}
+
+	// Get range and add command to the range for execution.
+	repl, err := s.GetReplica(args.RangeID)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	if !repl.IsInitialized() {
+		repl.mu.RLock()
+		replicaID := repl.mu.replicaID
+		repl.mu.RUnlock()
+
+		// If we have an uninitialized copy of the range, then we are
+		// probably a valid member of the range, we're just in the
+		// process of getting our snapshot. If we returned
+		// RangeNotFoundError, the client would invalidate its cache,
+		// but we can be smarter: the replica that caused our
+		// uninitialized replica to be created is most likely the
+		// leader.
+		return roachpb.NewError(&roachpb.NotLeaseHolderError{
+			RangeID:     args.RangeID,
+			LeaseHolder: repl.creatingReplica,
+			// The replica doesn't have a range descriptor yet, so we have to build
+			// a ReplicaDescriptor manually.
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    repl.store.nodeDesc.NodeID,
+				StoreID:   repl.store.StoreID(),
+				ReplicaID: replicaID,
+			},
+		})
+	}
+	return repl.RangeFeed(ctx, args, stream)
 }
 
 // maybeWaitForPushee potentially diverts the incoming request to
