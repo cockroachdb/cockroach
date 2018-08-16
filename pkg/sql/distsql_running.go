@@ -269,6 +269,10 @@ type DistSQLReceiver struct {
 	// stream.
 	resultToStreamColMap []int
 
+	// noColsRequired indicates that the caller is only interested in the
+	// existence of a single row. Used by subqueries in EXISTS mode.
+	noColsRequired bool
+
 	// commErr keeps track of the error received from interacting with the
 	// resultWriter. This represents a "communication error" and as such is unlike
 	// query execution errors: when the DistSQLReceiver is used within a SQL
@@ -474,17 +478,26 @@ func (r *DistSQLReceiver) Push(
 		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
-	if r.row == nil {
-		r.row = make(tree.Datums, len(r.resultToStreamColMap))
-	}
-	for i, resIdx := range r.resultToStreamColMap {
-		err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
-		if err != nil {
-			r.resultWriter.SetError(err)
-			r.status = distsqlrun.ConsumerClosed
-			return r.status
+	// If no columns are needed by the output, they are only looking for whether
+	// a row is pushed or not, so the contents do not matter, and
+	// planNodeToRowSource is not set up to handle decoding the row.
+	if r.noColsRequired {
+		datum := tree.DBool(row != nil)
+		r.row = []tree.Datum{&datum}
+		r.status = distsqlrun.ConsumerClosed
+	} else {
+		if r.row == nil {
+			r.row = make(tree.Datums, len(r.resultToStreamColMap))
 		}
-		r.row[i] = row[resIdx].Datum
+		for i, resIdx := range r.resultToStreamColMap {
+			err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
+			if err != nil {
+				r.resultWriter.SetError(err)
+				r.status = distsqlrun.ConsumerClosed
+				return r.status
+			}
+			r.row[i] = row[resIdx].Datum
+		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
