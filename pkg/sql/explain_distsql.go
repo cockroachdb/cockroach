@@ -48,6 +48,10 @@ type explainDistSQLRun struct {
 
 	// done is set if Next() was called.
 	done bool
+
+	// executedStatement is set if EXPLAIN ANALYZE was active and finished
+	// executing the query, regardless of query success or failure.
+	executedStatement bool
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
@@ -113,8 +117,14 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx)
 
+		n.run.executedStatement = true
+
 		spans = params.extendedEvalCtx.Tracing.getRecording()
 		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
+			return err
+		}
+
+		if err := rw.Err(); err != nil {
 			return err
 		}
 	}
@@ -143,5 +153,10 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	// If we managed to execute and we were in ANALYZE mode, our child planNode
+	// tree will already have been closed - so don't do anything to avoid a double
+	// close of that tree.
+	if !n.run.executedStatement {
+		n.plan.Close(ctx)
+	}
 }

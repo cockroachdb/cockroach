@@ -765,16 +765,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.SetError(err)
 		return nil
 	}
-	// We only need to close the plan if we don't hand it off to DistSQL. Once
-	// we hand it off, DistSQL will take care of closing it.
-	// TODO(jordan): once we add partial plan wrapping, this will need to change.
-	// We'll need to close all of the nodes that weren't taken over by DistSQL.
-	needClose := true
-	defer func() {
-		if needClose {
-			planner.curPlan.close(ctx)
-		}
-	}()
 
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
@@ -813,10 +803,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.mu.Unlock()
 
 	if ex.sessionData.DistSQLMode != sessiondata.DistSQLOff {
-		needClose = false
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
+		defer planner.curPlan.close(ctx)
 		ex.sessionTracing.TraceExecStart(ctx, "local")
 		err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 	}
