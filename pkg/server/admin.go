@@ -1124,7 +1124,8 @@ func (s *adminServer) Jobs(
 	q := makeSQLQuery()
 	q.Append(`
       SELECT job_id, job_type, description, user_name, descriptor_ids, status,
-             created, started, finished, modified, fraction_completed, error
+						 created, started, finished, modified, fraction_completed,
+						 high_water_timestamp, error
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1152,6 +1153,7 @@ func (s *adminServer) Jobs(
 	for i, row := range rows {
 		job := &resp.Jobs[i]
 		var fractionCompletedOrNil *float32
+		var highwaterOrNil *apd.Decimal
 		if err := scanner.ScanAll(
 			row,
 			&job.ID,
@@ -1165,9 +1167,19 @@ func (s *adminServer) Jobs(
 			&job.Finished,
 			&job.Modified,
 			&fractionCompletedOrNil,
+			&highwaterOrNil,
 			&job.Error,
 		); err != nil {
 			return nil, s.serverError(err)
+		}
+		if highwaterOrNil != nil {
+			highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
+			if err != nil {
+				return nil, s.serverError(errors.Wrap(err, "highwater timestamp had unexpected format"))
+			}
+			goTime := highwaterTimestamp.GoTime()
+			job.HighwaterTimestamp = &goTime
+			job.HighwaterDecimal = highwaterOrNil.String()
 		}
 		if fractionCompletedOrNil != nil {
 			job.FractionCompleted = *fractionCompletedOrNil
@@ -1856,6 +1868,17 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = s.Decimal
+
+	case **apd.Decimal:
+		s, ok := src.(*tree.DDecimal)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		*d = &s.Decimal
 
 	default:
 		return errors.Errorf("unimplemented type for scanCol: %T", dst)
