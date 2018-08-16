@@ -363,6 +363,14 @@ func (m *multiTestContext) Stop() {
 			panic("timed out during shutdown")
 		}
 	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, s := range m.stores {
+		if s != nil {
+			s.AssertInvariants()
+		}
+	}
 }
 
 // gossipStores forces each store to gossip its store descriptor and then
