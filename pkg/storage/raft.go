@@ -183,3 +183,9 @@ var _ security.RequestWithUser = &RaftMessageRequest{}
 func (*RaftMessageRequest) GetUser() string {
 	return security.NodeUser
 }
+
+func (h *SnapshotRequest_Header) isPreemptive() bool {
+	// Preemptive snapshots are addressed to replica ID 0. No other requests to
+	// replica ID 0 are allowed.
+	return h.RaftMessageRequest.ToReplica.ReplicaID == 0
+}
