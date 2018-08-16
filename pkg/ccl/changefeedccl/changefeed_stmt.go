@@ -37,9 +37,10 @@ func init() {
 type envelopeType string
 
 const (
-	optCursor     = `cursor`
-	optEnvelope   = `envelope`
-	optTimestamps = `timestamps`
+	optCursor             = `cursor`
+	optEnvelope           = `envelope`
+	optResolvedTimestamps = `resolved`
+	optUpdatedTimestamps  = `updated`
 
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
@@ -50,9 +51,10 @@ const (
 )
 
 var changefeedOptionExpectValues = map[string]bool{
-	optCursor:     true,
-	optEnvelope:   true,
-	optTimestamps: false,
+	optCursor:             true,
+	optEnvelope:           true,
+	optResolvedTimestamps: false,
+	optUpdatedTimestamps:  false,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.
