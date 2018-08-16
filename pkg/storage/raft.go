@@ -183,3 +183,11 @@ var _ security.RequestWithUser = &RaftMessageRequest{}
 func (*RaftMessageRequest) GetUser() string {
 	return security.NodeUser
 }
+
+// IsPreemptive returns whether this is a preemptive snapshot or a Raft
+// snapshot.
+func (h *SnapshotRequest_Header) IsPreemptive() bool {
+	// Preemptive snapshots are addressed to replica ID 0. No other requests to
+	// replica ID 0 are allowed.
+	return h.RaftMessageRequest.ToReplica.ReplicaID == 0
+}
