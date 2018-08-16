@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -505,6 +506,7 @@ func importPlanHook(
 		format := roachpb.IOFileFormat{}
 		switch importStmt.FileFormat {
 		case "CSV":
+			telemetry.Count("import.format.csv")
 			format.Format = roachpb.IOFileFormat_CSV
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
@@ -543,6 +545,7 @@ func importPlanHook(
 				format.Csv.Skip = uint32(skip)
 			}
 		case "MYSQLOUTFILE":
+			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
 				RowSeparator:   '\n',
@@ -582,8 +585,10 @@ func importPlanHook(
 				format.MysqlOut.Escape = c
 			}
 		case "MYSQLDUMP":
+			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
 		case "PGCOPY":
+			telemetry.Count("import.format.pgcopy")
 			format.Format = roachpb.IOFileFormat_PgCopy
 			format.PgCopy = roachpb.PgCopyOptions{
 				Delimiter: '\t',
@@ -612,6 +617,7 @@ func importPlanHook(
 			}
 			format.PgCopy.MaxRowSize = maxRowSize
 		case "PGDUMP":
+			telemetry.Count("import.format.pgdump")
 			format.Format = roachpb.IOFileFormat_PgDump
 			maxRowSize := int32(defaultScanBuffer)
 			if override, ok := opts[pgMaxRowSize]; ok {
@@ -765,6 +771,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
+			telemetry.Count("import.transform")
 		} else {
 			for _, tableDesc := range tableDescs {
 				if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
@@ -798,6 +805,8 @@ func importPlanHook(
 		for _, name := range names {
 			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
 		}
+
+		telemetry.CountBucketed("import.files", len(files))
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
@@ -1089,6 +1098,10 @@ func (r *importResumer) OnTerminal(
 	}
 
 	if status == jobs.StatusSucceeded {
+		telemetry.CountBucketed("import.rows", int(r.res.Rows))
+		const mb = 1 << 20
+		telemetry.CountBucketed("import.size-mb", int(r.res.DataSize/mb))
+
 		resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),
