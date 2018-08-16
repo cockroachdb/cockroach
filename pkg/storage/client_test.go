@@ -308,6 +308,12 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 }
 
 func (m *multiTestContext) Stop() {
+	m.mu.RLock()
+	for _, s := range m.stores {
+		s.AssertInvariants()
+	}
+	m.mu.RUnlock()
+
 	done := make(chan struct{})
 	go func() {
 		m.mu.RLock()
