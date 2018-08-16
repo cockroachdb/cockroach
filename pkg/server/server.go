@@ -478,6 +478,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
 		},
 	)
+	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)

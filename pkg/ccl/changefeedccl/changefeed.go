@@ -71,6 +71,7 @@ func runChangefeedFlow(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
+	metrics *Metrics,
 	resultsCh chan<- tree.Datums,
 	progressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 ) error {
@@ -109,6 +110,8 @@ func runChangefeedFlow(
 		resultsCh <- tree.Datums(nil)
 	}
 
+	sink = makeMetricsSink(metrics, sink)
+
 	// The changefeed flow is intentionally structured as a pull model so it's
 	// easy to later make it into a DistSQL processor.
 	//
@@ -124,6 +127,16 @@ func runChangefeedFlow(
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(poller.Run)
 
+	metrics.mu.Lock()
+	metricsID := metrics.mu.id
+	metrics.mu.id++
+	metrics.mu.Unlock()
+	defer func() {
+		metrics.mu.Lock()
+		delete(metrics.mu.resolved, metricsID)
+		metrics.mu.Unlock()
+	}()
+
 	sf := makeSpanFrontier(trackedSpans...)
 	g.GoCtx(func(ctx context.Context) error {
 		for {
@@ -138,6 +151,9 @@ func runChangefeedFlow(
 				}
 			}
 			if newFrontier {
+				metrics.mu.Lock()
+				metrics.mu.resolved[metricsID] = sf.Frontier()
+				metrics.mu.Unlock()
 				if err := emitResolvedTimestamp(ctx, details, sink, progressedFn, sf); err != nil {
 					return err
 				}

@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func TestChangefeedBasics(t *testing.T) {
@@ -190,37 +192,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 	})
 
 	// Check that we eventually get a resolved timestamp greater than ts1.
-	for {
-		if !rows.Next() {
-			t.Fatal(`expected a resolved timestamp notification`)
-		}
-		var ignored interface{}
-		var value []byte
-		if err := rows.Scan(&ignored, &ignored, &value); err != nil {
-			t.Fatal(err)
-		}
-
-		var valueRaw struct {
-			CRDB struct {
-				Resolved string `json:"resolved"`
-			} `json:"__crdb__"`
-		}
-		if err := gojson.Unmarshal(value, &valueRaw); err != nil {
-			t.Fatal(err)
-		}
-
-		parseTimeToDecimal := func(s string) *apd.Decimal {
-			t.Helper()
-			d, _, err := apd.NewFromString(s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return d
-		}
-		if parseTimeToDecimal(valueRaw.CRDB.Resolved).Cmp(parseTimeToDecimal(ts1)) > 0 {
-			break
-		}
-	}
+	expectResolvedTimestampGreaterThan(t, rows, ts1)
 }
 
 func TestChangefeedSchemaChange(t *testing.T) {
@@ -456,6 +428,127 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	}
 }
 
+func TestChangefeedMonitoring(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	// TODO(dan): Work around a race in CANCEL QUERIES (#28033) by only
+	// canceling them once.
+	var cancelQueriesOnce sync.Once
+	closeFeedRowsCancelOnceHack := func(t *testing.T, sqlDB *sqlutils.SQLRunner, rows *gosql.Rows) {
+		cancelQueriesOnce.Do(func() {
+			// TODO(dan): We should just be able to close the `gosql.Rows` but
+			// that currently blocks forever without this.
+			sqlDB.Exec(t, `CANCEL QUERIES (
+				SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'CREATE CHANGEFEED%'
+			)`)
+		})
+		rows.Close()
+	}
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	start := timeutil.Now()
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+	if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 0 {
+		t.Errorf(`expected 0 got %d`, c)
+	}
+	if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
+		t.Errorf(`expected 0 got %d`, c)
+	}
+	if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c != 0 {
+		t.Errorf(`expected 0 got %d`, c)
+	}
+	if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
+		t.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
+	}
+
+	foo := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
+	defer closeFeedRowsCancelOnceHack(t, sqlDB, foo)
+	foo.Next()
+	testutils.SucceedsSoon(t, func() error {
+		if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
+			return errors.Errorf(`expected 1 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 11 {
+			return errors.Errorf(`expected 11 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
+			return errors.Errorf(`expected > 0 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c <= start.UnixNano() {
+			return errors.Errorf(`expected > %d got %d`, start.UnixNano(), c)
+		}
+		return nil
+	})
+
+	// Check that two changefeeds add correctly.
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+	fooCopy := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo`)
+	defer closeFeedRowsCancelOnceHack(t, sqlDB, fooCopy)
+	fooCopy.Next()
+	testutils.SucceedsSoon(t, func() error {
+		if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 4 {
+			return errors.Errorf(`expected 1 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 44 {
+			return errors.Errorf(`expected 11 got %d`, c)
+		}
+		return nil
+	})
+
+	// Not reading from fooTimestamps will backpressure the changefeed and the
+	// min_high_water will stagnate.
+	fooTimestamps := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH timestamps`)
+	defer closeFeedRowsCancelOnceHack(t, sqlDB, fooTimestamps)
+	stalled := s.MustGetSQLCounter(`changefeed.min_high_water`)
+	for i := 0; i < 100; {
+		i++
+		newMinResolved := s.MustGetSQLCounter(`changefeed.min_high_water`)
+		if newMinResolved != stalled {
+			stalled = newMinResolved
+			i = 0
+		}
+	}
+	// Reading until a resolved timestamp past that should updated the
+	// min_high_water.
+	fooTimestamps.Next()
+	fooTimestamps.Next()
+	expectResolvedTimestampGreaterThan(t, fooTimestamps, fmt.Sprintf("%d.0", stalled))
+	testutils.SucceedsSoon(t, func() error {
+		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c <= stalled {
+			return errors.Errorf(`expected > %d got %d`, stalled, c)
+		}
+		return nil
+	})
+
+	// Cancel all the changefeeds and check that the min_high_water returns to the
+	// no high-water sentinel.
+	cancelQueriesOnce.Do(func() {
+		// TODO(dan): We should just be able to close the `gosql.Rows` but
+		// that currently blocks forever without this.
+		sqlDB.Exec(t, `CANCEL QUERIES (
+			SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'CREATE CHANGEFEED%'
+		)`)
+	})
+	testutils.SucceedsSoon(t, func() error {
+		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
+			return errors.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
+		}
+		return nil
+	})
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -571,6 +664,41 @@ func assertPayloads(t *testing.T, rows *gosql.Rows, expected []string) {
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
+	}
+}
+
+func expectResolvedTimestampGreaterThan(t testing.TB, rows *gosql.Rows, ts string) {
+	t.Helper()
+	for {
+		if !rows.Next() {
+			t.Fatal(`expected a resolved timestamp notification`)
+		}
+		var ignored interface{}
+		var value []byte
+		if err := rows.Scan(&ignored, &ignored, &value); err != nil {
+			t.Fatal(err)
+		}
+
+		var valueRaw struct {
+			CRDB struct {
+				Resolved string `json:"resolved"`
+			} `json:"__crdb__"`
+		}
+		if err := gojson.Unmarshal(value, &valueRaw); err != nil {
+			t.Fatal(err)
+		}
+
+		parseTimeToDecimal := func(s string) *apd.Decimal {
+			t.Helper()
+			d, _, err := apd.NewFromString(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return d
+		}
+		if parseTimeToDecimal(valueRaw.CRDB.Resolved).Cmp(parseTimeToDecimal(ts)) > 0 {
+			break
+		}
 	}
 }
 

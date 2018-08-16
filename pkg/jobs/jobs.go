@@ -389,6 +389,13 @@ func (j *Job) Details() jobspb.Details {
 	return j.mu.payload.UnwrapDetails()
 }
 
+// RegistryMetrics returns the metrics for production monitoring of each job
+// type. They're all stored as the `metric.Struct` interface because of
+// dependency cycles.
+func (j *Job) RegistryMetrics() *Metrics {
+	return &j.registry.metrics
+}
+
 // FractionCompleted returns completion according to the in-memory job state.
 func (j *Job) FractionCompleted() float32 {
 	progress := j.Progress()
