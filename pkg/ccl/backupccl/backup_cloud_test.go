@@ -10,7 +10,6 @@ package backupccl_test
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"testing"
@@ -46,12 +45,6 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 		t.Skip("AWS_S3_BUCKET env var must be set")
 	}
 
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
@@ -81,14 +74,6 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	// TODO(dt): this prevents leaking an http conn goroutine -- presumably the
-	// conn is held open for reuse until the idle timeout. Ideally we'd test with
-	// conn reuse enabled though, to match expected production behavior.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
-
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
@@ -114,12 +99,6 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
-
-	// TODO(dt): this prevents leaking an http conn goroutine.
-	defer func(disableKeepAlives bool) {
-		http.DefaultTransport.(*http.Transport).DisableKeepAlives = disableKeepAlives
-	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
 	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
