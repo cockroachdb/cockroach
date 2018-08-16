@@ -137,10 +137,9 @@ namespace cockroach {
 
 // DBOpenHookOSS mode only verifies that no extra options are specified.
 rocksdb::Status DBOpenHookOSS(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
-                              const DBOptions opts, EnvManager* env_mgr) {
-  if (opts.extra_options.len != 0) {
-    return rocksdb::Status::InvalidArgument(
-        "DBOptions has extra_options, but OSS code cannot handle them");
+                              const DBOptions db_opts, EnvManager* env_mgr) {
+  if (db_opts.extra_options.len != 0) {
+    return rocksdb::Status::InvalidArgument("encryption options are not supported in OSS builds");
   }
   return rocksdb::Status::OK();
 }
@@ -197,6 +196,23 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
       return ToDBStatus(status);
     }
 
+    status = file_registry->CheckNoRegistryFile();
+    if (!status.ok()) {
+      // We have a file registry, this means we've used encryption flags before
+      // and are tracking all files on disk. Running without encryption (extra_options empty)
+      // will bypass the file registry and lose changes.
+      // In this case, we have multiple possibilities:
+      // - no extra_options: this fails here
+      // - extra_options:
+      //   - OSS: this fails in the OSS hook (OSS does not understand extra_options)
+      //   - CCL: fails if the options do not parse properly
+      if (db_opts.extra_options.len == 0) {
+        return ToDBStatus(rocksdb::Status::InvalidArgument(
+            "encryption was used on this store before, but no encryption flags specified. You need "
+            "a CCL build and must fully specify the --enterprise-encryption flag"));
+      }
+    }
+
     // EnvManager takes ownership of the file registry.
     env_mgr->file_registry.swap(file_registry);
   } else {
@@ -213,12 +229,6 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }
-
-  // TODO(mberhault):
-  // - check available ciphers somehow?
-  //   We may have a encrypted files in the registry file but running without encryption flags.
-  // - pass read-only flag though, we should not be modifying file/key registries (including key
-  //   rotation) in read-only mode.
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);

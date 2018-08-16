@@ -51,13 +51,16 @@ TEST_F(CCLTest, DBOpenHook) {
 }
 
 TEST_F(CCLTest, DBOpen) {
+  // Use a real directory, we need to create a file_registry.
+  TempDirHandler dir;
+
   {
     // Empty options: no encryption.
     DBOptions db_opts = defaultDBOptions();
     DBEngine* db;
     db_opts.use_file_registry = true;
 
-    EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STREQ(stats.encryption_status.data, NULL);
@@ -68,6 +71,24 @@ TEST_F(CCLTest, DBOpen) {
 
     DBClose(db);
   }
+  {
+    // No options but file registry exists.
+    DBOptions db_opts = defaultDBOptions();
+    DBEngine* db;
+    db_opts.use_file_registry = true;
+
+    // Create bogus file registry.
+    ASSERT_OK(rocksdb::WriteStringToFile(rocksdb::Env::Default(), "",
+                                         dir.Path(kFileRegistryFilename), true));
+
+    auto ret = DBOpen(&db, ToDBSlice(dir.Path("")), db_opts);
+    EXPECT_STREQ(std::string(ret.data, ret.len).c_str(),
+                 "Invalid argument: encryption was used on this store before, but no encryption "
+                 "flags specified. You need a CCL build and must fully specify the "
+                 "--enterprise-encryption flag");
+    ASSERT_OK(rocksdb::Env::Default()->DeleteFile(dir.Path(kFileRegistryFilename)));
+  }
+
   {
     // Encryption enabled.
     DBOptions db_opts = defaultDBOptions();
@@ -84,7 +105,7 @@ TEST_F(CCLTest, DBOpen) {
     ASSERT_TRUE(enc_opts.SerializeToString(&tmpstr));
     db_opts.extra_options = ToDBSlice(tmpstr);
 
-    EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
+    EXPECT_STREQ(DBOpen(&db, ToDBSlice(dir.Path("")), db_opts).data, NULL);
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STRNE(stats.encryption_status.data, NULL);
