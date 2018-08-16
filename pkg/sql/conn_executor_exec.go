@@ -960,9 +960,21 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.stmtType = recv.stmtType
 	planCtx.validExtendedEvalCtx = true
 
+	if len(planner.curPlan.subqueryPlans) != 0 {
+		evalCtxFactory := func() *extendedEvalContext {
+			evalCtx := ex.evalCtx(ctx, planner, planner.ExtendedEvalContext().StmtTimestamp)
+			evalCtx.Placeholders = &planner.semaCtx.Placeholders
+			return &evalCtx
+		}
+		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute) {
+			return recv.commErr
+		}
+	}
+
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
-	ex.server.cfg.DistSQLPlanner.PlanAndRun(ctx, evalCtx, &planCtx, planner.txn, planner, recv)
+	ex.server.cfg.DistSQLPlanner.PlanAndRun(
+		ctx, evalCtx, &planCtx, planner.txn, planner.curPlan.plan, recv)
 	return recv.commErr
 }
 
