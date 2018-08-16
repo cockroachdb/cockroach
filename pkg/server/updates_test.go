@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -322,6 +323,26 @@ func TestReportUsage(t *testing.T) {
 		if expected, actual := ts.node.Descriptor.NodeID, r.last.Node.NodeID; expected != actual {
 			return errors.Errorf("expected node id %v got %v", expected, actual)
 		}
+
+		if r.last.Node.Hardware.Mem.Total == 0 {
+			return errors.Errorf("expected non-zero total mem")
+		}
+		if r.last.Node.Hardware.Mem.Available == 0 {
+			return errors.Errorf("expected non-zero available mem")
+		}
+		if actual, expected := r.last.Node.Hardware.Cpu.Numcpu, runtime.NumCPU(); int(actual) != expected {
+			return errors.Errorf("expected %d num cpu, got %d", expected, actual)
+		}
+		if r.last.Node.Hardware.Cpu.Sockets == 0 {
+			return errors.Errorf("expected non-zero sockets")
+		}
+		if r.last.Node.Hardware.Cpu.Mhz == 0.0 {
+			return errors.Errorf("expected non-zero speed")
+		}
+		if r.last.Node.Os.Platform == "" {
+			return errors.Errorf("expected non-empty OS")
+		}
+
 		if minExpected, actual := totalKeys, r.last.Node.KeyCount; minExpected > actual {
 			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
 		}
