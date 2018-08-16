@@ -456,6 +456,11 @@ func (oi *optIndex) IdxName() string {
 	return oi.desc.Name
 }
 
+// InternalID is part of the opt.Index interface.
+func (oi *optIndex) InternalID() uint64 {
+	return uint64(oi.desc.ID)
+}
+
 // IsInverted is part of the opt.Index interface.
 func (oi *optIndex) IsInverted() bool {
 	return oi.desc.Type == sqlbase.IndexDescriptor_INVERTED

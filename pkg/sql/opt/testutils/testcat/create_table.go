@@ -162,6 +162,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		if len(tt.Indexes) != 0 {
 			panic("primary index should always be 0th index")
 		}
+		idx.Ordinal = len(tt.Indexes)
 		tt.Indexes = append(tt.Indexes, idx)
 		return
 	}
@@ -214,6 +215,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		}
 	}
 
+	idx.Ordinal = len(tt.Indexes)
 	tt.Indexes = append(tt.Indexes, idx)
 }
 

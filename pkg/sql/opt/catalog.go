@@ -166,6 +166,10 @@ type Index interface {
 	// IdxName is the name of the index.
 	IdxName() string
 
+	// InternalID returns the internal identifier of the index. Only used
+	// when the query contains a numeric index reference.
+	InternalID() uint64
+
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
 

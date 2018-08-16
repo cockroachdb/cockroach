@@ -3,11 +3,11 @@
 # This statement must be first for the numeric references tests.
 # The numeric references test assume that this is the first table.
 exec-ddl
-CREATE TABLE numeric_references (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+CREATE TABLE numeric_references (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
 ----
 TABLE numeric_references
  ├── a int not null
- ├── xx int
+ ├── y int
  ├── b int
  ├── c int
  ├── INDEX primary
@@ -18,11 +18,11 @@ TABLE numeric_references
       └── a int not null
 
 exec-ddl
-CREATE TABLE num_ref_hidden (x INT , xx INT)
+CREATE TABLE num_ref_hidden (x INT, y INT)
 ----
 TABLE num_ref_hidden
  ├── x int
- ├── xx int
+ ├── y int
  ├── rowid int not null (hidden)
  └── INDEX primary
       └── rowid int not null (hidden)
@@ -1129,7 +1129,7 @@ project
       └── columns: x:1(int!null) y:2(float)
 
 
-# Numeric Reference Test (1/11)
+# Numeric Reference Tests
 # Cockroach numeric references start after 53 for user tables.
 # See opt/testutils/testcat/create_table.go:117 for more info on
 # 53 as a magic number.
@@ -1138,66 +1138,72 @@ build
 SELECT * FROM [53 AS t]
 ----
 scan numeric_references
- └── columns: a:1(int!null) xx:2(int) b:3(int) c:4(int)
+ └── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
 
-# Numeric Reference Test (2/11)
 build
 SELECT * FROM [53(1) AS t]
 ----
 scan numeric_references
  └── columns: a:1(int!null)
 
-# Numeric Reference Test (3/11)
 build
 SELECT * FROM [53(1,2) AS t]
 ----
 scan numeric_references
- └── columns: a:1(int!null) xx:2(int)
+ └── columns: a:1(int!null) y:2(int)
 
-# Numeric Reference Test (4/11)
 build
 SELECT * FROM [53(4) AS t]
 ----
 scan numeric_references
  └── columns: c:4(int)
 
-# Numeric Reference Test (5/11)
 build
 SELECT * FROM [53(5) AS t]
 ----
 error (42703): column [5] does not exist
 
-# Numeric Reference Test (6/11)
 build
 SELECT * FROM [53(2,4) AS t]
 ----
 scan numeric_references
- └── columns: xx:2(int) c:4(int)
+ └── columns: y:2(int) c:4(int)
 
-# Numeric Reference Test (7/11)
 build
 SELECT * FROM [53(2,3) AS t(col1,col2)]
 ----
 scan numeric_references
  └── columns: col1:2(int) col2:3(int)
 
-# Numeric Reference Test (8/11)
 build
 SELECT * FROM [53() AS t]
 ----
 error (42601): an explicit list of column IDs must include at least one column
 
-# Numeric Reference Test (9/11)
 # Test that hidden columns are not presented
 build
 SELECT * FROM [54 AS t]
 ----
 project
- ├── columns: x:1(int) xx:2(int)
+ ├── columns: x:1(int) y:2(int)
  └── scan num_ref_hidden
-      └── columns: x:1(int) xx:2(int) rowid:3(int!null)
+      └── columns: x:1(int) y:2(int) rowid:3(int!null)
 
-# Numeric Reference Test (10/11)
+# Verify that we force the given index.
+build
+SELECT * FROM [53 AS t]@[1]
+----
+scan numeric_references
+ ├── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
+ └── flags: force-index=primary
+
+build
+SELECT * FROM [53 AS t]@[2]
+----
+scan numeric_references
+ ├── columns: a:1(int!null) y:2(int) b:3(int) c:4(int)
+ └── flags: force-index=bc
+
 # Test that hidden columns are not presented
 build
 SELECT * FROM [54(1,3) AS t]
@@ -1207,7 +1213,6 @@ project
  └── scan num_ref_hidden
       └── columns: x:1(int) rowid:3(int!null)
 
-# Numeric Reference Test (11/11)
 build
 SELECT rowid FROM [54(3) as t]
 ----

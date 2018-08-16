@@ -329,7 +329,9 @@ func (tt *Table) FindOrdinal(name string) int {
 
 // Index implements the opt.Index interface for testing purposes.
 type Index struct {
-	Name    string
+	Name string
+	// Ordinal is the ordinal of this index in the table.
+	Ordinal int
 	Columns []opt.IndexColumn
 
 	// KeyCount is the number of columns that make up the unique key for the
@@ -348,6 +350,11 @@ type Index struct {
 // IdxName is part of the opt.Index interface.
 func (ti *Index) IdxName() string {
 	return ti.Name
+}
+
+// InternalID is part of the opt.Index interface.
+func (ti *Index) InternalID() uint64 {
+	return 1 + uint64(ti.Ordinal)
 }
 
 // IsInverted is part of the opt.Index interface.

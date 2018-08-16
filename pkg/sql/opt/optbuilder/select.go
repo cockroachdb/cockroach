@@ -297,22 +297,26 @@ func (b *Builder) buildScan(
 
 		if indexFlags != nil {
 			def.Flags.NoIndexJoin = indexFlags.NoIndexJoin
-			if indexFlags.Index != "" {
+			if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 				idx := -1
 				for i := 0; i < tab.IndexCount(); i++ {
-					if tab.Index(i).IdxName() == string(indexFlags.Index) {
+					if tab.Index(i).IdxName() == string(indexFlags.Index) ||
+						tab.Index(i).InternalID() == uint64(indexFlags.IndexID) {
 						idx = i
 						break
 					}
 				}
 				if idx == -1 {
-					panic(builderError{errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))})
+					var err error
+					if indexFlags.Index != "" {
+						err = errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
+					} else {
+						err = errors.Errorf("index [%d] not found", indexFlags.IndexID)
+					}
+					panic(builderError{err})
 				}
 				def.Flags.ForceIndex = true
 				def.Flags.Index = idx
-			} else if indexFlags.IndexID != 0 {
-				// TODO(radu): support IndexIDs.
-				panic(unimplementedf("index IDs not supported in index flags"))
 			}
 		}
 
