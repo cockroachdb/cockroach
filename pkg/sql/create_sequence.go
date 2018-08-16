@@ -101,7 +101,7 @@ func doCreateSequence(
 	// desc.ValidateTable() needed here.
 
 	key := getSequenceKey(dbDesc, name.Table()).Key()
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
