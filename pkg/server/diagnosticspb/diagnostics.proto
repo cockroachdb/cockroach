@@ -40,6 +40,9 @@ message NodeInfo {
   int64 key_count = 3;
   int64 range_count = 4;
   roachpb.Locality locality = 5 [(gogoproto.nullable) = false];
+
+  HardwareInfo hardware = 6 [(gogoproto.nullable) = false];
+  OSInfo os = 7 [(gogoproto.nullable) = false];
 }
 
 message StoreInfo {
@@ -48,5 +51,39 @@ message StoreInfo {
   int64 bytes = 3;
   int64 key_count = 4;
   int64 range_count = 5;
+
+  int64 capacity  = 6;
+  int64 available = 7;
+  int64 used = 8;
+
+  // Want: sync times, observed read/write speeds
+}
+
+message CPUInfo {
+  int32 numcpu = 1; // go's reported runtime.NUMCPU()
+  int32 sockets = 2; // number of cpus reported
+  int32 cores = 3;  // gopsutil's reported cores for first cpu
+  string model = 4; // reported model name e.g. `Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz`
+  float mhz = 5;  // speed of first cpu e.g. 3100
+  repeated string features = 6; // cpu feature flags for first cpu
+}
+
+message HardwareInfo {
+  string virtualization = 1;
+  CPUInfo cpu = 2 [(gogoproto.nullable) = false];
+  MemInfo mem = 3 [(gogoproto.nullable) = false];
+  float loadavg15 = 4;
+  // TODO(dt, bram): Cloud-specific info like instance class.
+}
+
+message OSInfo {
+  string family = 1;
+  string platform = 2;
+  string version = 3;
+}
+
+message MemInfo {
+  uint64 total = 1;
+  uint64 available = 2;
 }
 
