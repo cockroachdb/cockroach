@@ -26,7 +26,7 @@ import (
 // control, like restricting rule application or the expressions that can be
 // part of the final expression.
 type forcingOptimizer struct {
-	o *xform.Optimizer
+	o xform.Optimizer
 
 	root     memo.GroupID
 	required *props.Physical
@@ -65,10 +65,10 @@ func newForcingOptimizer(
 	tester *OptTester, steps int, ignoreNormRules bool,
 ) (*forcingOptimizer, error) {
 	fo := &forcingOptimizer{
-		o:           xform.NewOptimizer(&tester.evalCtx),
 		remaining:   steps,
 		lastMatched: opt.InvalidRuleName,
 	}
+	fo.o.Init(&tester.evalCtx)
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if ignoreNormRules && ruleName.IsNormalize() {

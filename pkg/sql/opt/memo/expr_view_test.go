@@ -46,7 +46,8 @@ func BenchmarkExprView(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			o := xform.NewOptimizer(&evalCtx)
+			var o xform.Optimizer
+			o.Init(&evalCtx)
 			bld := optbuilder.New(
 				context.Background(), &semaCtx, &evalCtx, catalog, o.Factory(), stmt,
 			)

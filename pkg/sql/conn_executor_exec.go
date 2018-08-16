@@ -749,6 +749,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
 	optimizerPlanned, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
+	//optimizerPlanned, err := false, error(nil)
 	if !optimizerPlanned && err == nil {
 		isCorrelated := planner.curPlan.isCorrelated
 		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
