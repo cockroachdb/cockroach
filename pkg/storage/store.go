@@ -3412,47 +3412,45 @@ func (s *Store) processRaftSnapshotRequest(
 		// raft-ready processing of uninitialized replicas.
 		var addedPlaceholder bool
 		var removePlaceholder bool
-		if !r.IsInitialized() {
-			if err := func() error {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
-				if err != nil {
-					// If the storage cannot accept the snapshot, return an
-					// error before passing it to RawNode.Step, since our
-					// error handling options past that point are limited.
-					log.Infof(ctx, "cannot apply snapshot: %s", err)
-					return err
-				}
-
-				if placeholder != nil {
-					// NB: The placeholder added here is either removed below after a
-					// preemptive snapshot is applied or after the next call to
-					// Replica.handleRaftReady. Note that we can only get here if the
-					// replica doesn't exist or is uninitialized.
-					if err := s.addPlaceholderLocked(placeholder); err != nil {
-						log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
-					}
-					addedPlaceholder = true
-				}
-				return nil
-			}(); err != nil {
-				return roachpb.NewError(err)
+		if err := func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
+			if err != nil {
+				// If the storage cannot accept the snapshot, return an
+				// error before passing it to RawNode.Step, since our
+				// error handling options past that point are limited.
+				log.Infof(ctx, "cannot apply snapshot: %s", err)
+				return err
 			}
 
-			if addedPlaceholder {
-				// If we added a placeholder remove it before we return unless some other
-				// part of the code takes ownership of the removal (indicated by setting
-				// removePlaceholder to false).
-				removePlaceholder = true
-				defer func() {
-					if removePlaceholder {
-						if s.removePlaceholder(ctx, req.RangeID) {
-							atomic.AddInt32(&s.counts.removedPlaceholders, 1)
-						}
-					}
-				}()
+			if placeholder != nil {
+				// NB: The placeholder added here is either removed below after a
+				// preemptive snapshot is applied or after the next call to
+				// Replica.handleRaftReady. Note that we can only get here if the
+				// replica doesn't exist or is uninitialized.
+				if err := s.addPlaceholderLocked(placeholder); err != nil {
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
+				}
+				addedPlaceholder = true
 			}
+			return nil
+		}(); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		if addedPlaceholder {
+			// If we added a placeholder remove it before we return unless some other
+			// part of the code takes ownership of the removal (indicated by setting
+			// removePlaceholder to false).
+			removePlaceholder = true
+			defer func() {
+				if removePlaceholder {
+					if s.removePlaceholder(ctx, req.RangeID) {
+						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
+					}
+				}
+			}()
 		}
 
 		// Snapshots addressed to replica ID 0 are permitted; this is the
