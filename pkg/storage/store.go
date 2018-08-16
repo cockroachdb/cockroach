@@ -3397,13 +3397,13 @@ func (s *Store) processRaftRequestWithReplica(
 // TODO(benesch): handle snapshots that widen EndKey. These can occur if this
 // replica was behind when the range committed a merge.
 func (s *Store) processRaftSnapshotRequest(
-	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot,
+	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
-	return s.withReplicaForRequest(ctx, req, func(
+	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
 	) (pErr *roachpb.Error) {
-		if req.Message.Type != raftpb.MsgSnap {
-			log.Fatalf(ctx, "expected snapshot: %+v", req)
+		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
+			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
 		// Check to see if a snapshot can be applied. Snapshots can always be applied
@@ -3412,57 +3412,48 @@ func (s *Store) processRaftSnapshotRequest(
 		// raft-ready processing of uninitialized replicas.
 		var addedPlaceholder bool
 		var removePlaceholder bool
-		if !r.IsInitialized() {
-			if err := func() error {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
-				if err != nil {
-					// If the storage cannot accept the snapshot, return an
-					// error before passing it to RawNode.Step, since our
-					// error handling options past that point are limited.
-					log.Infof(ctx, "cannot apply snapshot: %s", err)
-					return err
-				}
-
-				if placeholder != nil {
-					// NB: The placeholder added here is either removed below after a
-					// preemptive snapshot is applied or after the next call to
-					// Replica.handleRaftReady. Note that we can only get here if the
-					// replica doesn't exist or is uninitialized.
-					if err := s.addPlaceholderLocked(placeholder); err != nil {
-						log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
-					}
-					addedPlaceholder = true
-				}
-				return nil
-			}(); err != nil {
-				return roachpb.NewError(err)
+		if err := func() error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader)
+			if err != nil {
+				// If the storage cannot accept the snapshot, return an
+				// error before passing it to RawNode.Step, since our
+				// error handling options past that point are limited.
+				log.Infof(ctx, "cannot apply snapshot: %s", err)
+				return err
 			}
 
-			if addedPlaceholder {
-				// If we added a placeholder remove it before we return unless some other
-				// part of the code takes ownership of the removal (indicated by setting
-				// removePlaceholder to false).
-				removePlaceholder = true
-				defer func() {
-					if removePlaceholder {
-						if s.removePlaceholder(ctx, req.RangeID) {
-							atomic.AddInt32(&s.counts.removedPlaceholders, 1)
-						}
-					}
-				}()
+			if placeholder != nil {
+				// NB: The placeholder added here is either removed below after a
+				// preemptive snapshot is applied or after the next call to
+				// Replica.handleRaftReady. Note that we can only get here if the
+				// replica doesn't exist or is uninitialized.
+				if err := s.addPlaceholderLocked(placeholder); err != nil {
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
+				}
+				addedPlaceholder = true
 			}
+			return nil
+		}(); err != nil {
+			return roachpb.NewError(err)
 		}
 
-		// Snapshots addressed to replica ID 0 are permitted; this is the
-		// mechanism by which preemptive snapshots work. No other requests to
-		// replica ID 0 are allowed.
-		//
-		// Note that just because the ToReplica's ID is 0 it does not necessarily
-		// mean that the replica's current ID is 0. We allow for preemptive snaphots
-		// to be applied to initialized replicas as of #8613.
-		if req.ToReplica.ReplicaID == 0 {
+		if addedPlaceholder {
+			// If we added a placeholder remove it before we return unless some other
+			// part of the code takes ownership of the removal (indicated by setting
+			// removePlaceholder to false).
+			removePlaceholder = true
+			defer func() {
+				if removePlaceholder {
+					if s.removePlaceholder(ctx, snapHeader.RaftMessageRequest.RangeID) {
+						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
+					}
+				}
+			}()
+		}
+
+		if snapHeader.IsPreemptive() {
 			defer func() {
 				s.mu.Lock()
 				defer s.mu.Unlock()
@@ -3471,7 +3462,7 @@ func (s *Store) processRaftSnapshotRequest(
 				// applied successfully or not.
 				if addedPlaceholder {
 					// Clear the replica placeholder; we are about to swap it with a real replica.
-					if !s.removePlaceholderLocked(ctx, req.RangeID) {
+					if !s.removePlaceholderLocked(ctx, snapHeader.RaftMessageRequest.RangeID) {
 						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
 					}
 					if pErr == nil {
@@ -3494,10 +3485,10 @@ func (s *Store) processRaftSnapshotRequest(
 			// get all of Raft's internal safety checks (it confuses messages
 			// at term zero for internal messages). The sending side uses the
 			// term from the snapshot itself, but we'll just check nonzero.
-			if req.Message.Term == 0 {
+			if snapHeader.RaftMessageRequest.Message.Term == 0 {
 				return roachpb.NewErrorf(
 					"preemptive snapshot from term %d received with zero term",
-					req.Message.Snapshot.Metadata.Term,
+					snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Term,
 				)
 			}
 			// TODO(tschottdorf): A lot of locking of the individual Replica
@@ -3563,7 +3554,7 @@ func (s *Store) processRaftSnapshotRequest(
 				return roachpb.NewError(err)
 			}
 			// We have a Raft group; feed it the message.
-			if err := raftGroup.Step(req.Message); err != nil {
+			if err := raftGroup.Step(snapHeader.RaftMessageRequest.Message); err != nil {
 				return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
 			}
 			// In the normal case, the group should ask us to apply a snapshot.
@@ -3603,7 +3594,7 @@ func (s *Store) processRaftSnapshotRequest(
 			return nil
 		}
 
-		if err := r.stepRaftGroup(req); err != nil {
+		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
 			return roachpb.NewError(err)
 		}
 
