@@ -15,10 +15,27 @@
 package telemetry
 
 import (
+	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// Bucket10 buckets a number by order of magnitude base 10, eg 637 -> 100.
+// This can be used in telemetry to get ballpark ideas of how users use a given
+// feature, such as file sizes, qps, etc, without being as revealing as the
+// raw numbers.
+func Bucket10(num int) int {
+	return int(math.Pow(10, math.Floor(math.Log10(float64(num)))))
+}
+
+// CountBucketed counts the feature identified by prefix and the value, using
+// the bucketed value to pick a feature bucket to increment, e.g. a prefix of
+// "foo.bar" and value of 632 would be counted as "foo.bar.100".
+func CountBucketed(prefix string, value int) {
+	Count(fmt.Sprintf("%s.%d", prefix, Bucket10(value)))
+}
 
 // Count retrieves and increments the usage counter for the passed feature.
 // High-volume callers may want to instead use `GetCounter` and hold on to the

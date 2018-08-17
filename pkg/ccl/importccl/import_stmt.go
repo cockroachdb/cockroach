@@ -11,6 +11,7 @@ package importccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"sort"
@@ -29,9 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -151,13 +154,13 @@ func MakeSimpleTableDescriptor(
 ) (*sqlbase.TableDescriptor, error) {
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
-		return nil, errors.New("unsupported IF NOT EXISTS")
+		return nil, pgerror.Unimplemented("import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
 	if create.Interleave != nil {
-		return nil, errors.New("interleaved not supported")
+		return nil, pgerror.Unimplemented("import.interleave", "interleaved not supported")
 	}
 	if create.AsSource != nil {
-		return nil, errors.New("CREATE AS not supported")
+		return nil, pgerror.Unimplemented("import.create-as", "CREATE AS not supported")
 	}
 
 	tableName, err := create.Table.Normalize()
@@ -175,7 +178,7 @@ func MakeSimpleTableDescriptor(
 			// ignore
 		case *tree.ColumnTableDef:
 			if def.Computed.Expr != nil {
-				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
+				return nil, pgerror.Unimplemented("import.computed", "computed columns not supported: %s", tree.AsString(def))
 			}
 
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, tableName); err != nil {
@@ -184,7 +187,7 @@ func MakeSimpleTableDescriptor(
 
 		case *tree.ForeignKeyConstraintTableDef:
 			if !fks.allowed {
-				return nil, errors.Errorf("this IMPORT format does not support foreign keys")
+				return nil, pgerror.Unimplemented("import.fk", "this IMPORT format does not support foreign keys")
 			}
 			if fks.skip {
 				continue
@@ -198,7 +201,7 @@ func MakeSimpleTableDescriptor(
 			def.Table.TableNameReference = refTable
 
 		default:
-			return nil, errors.Errorf("unsupported table definition: %s", tree.AsString(def))
+			return nil, pgerror.Unimplemented(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
 		}
 		// only append this def after we make it past the error checks and continues
 		filteredDefs = append(filteredDefs, create.Defs[i])
@@ -526,6 +529,7 @@ func importPlanHook(
 		format := roachpb.IOFileFormat{}
 		switch importStmt.FileFormat {
 		case "CSV":
+			telemetry.Count("import.format.csv")
 			format.Format = roachpb.IOFileFormat_CSV
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
@@ -564,6 +568,7 @@ func importPlanHook(
 				format.Csv.Skip = uint32(skip)
 			}
 		case "MYSQLOUTFILE":
+			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
 				RowSeparator:   '\n',
@@ -603,8 +608,10 @@ func importPlanHook(
 				format.MysqlOut.Escape = c
 			}
 		case "MYSQLDUMP":
+			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
 		case "PGCOPY":
+			telemetry.Count("import.format.pgcopy")
 			format.Format = roachpb.IOFileFormat_PgCopy
 			format.PgCopy = roachpb.PgCopyOptions{
 				Delimiter: '\t',
@@ -633,6 +640,7 @@ func importPlanHook(
 			}
 			format.PgCopy.MaxRowSize = maxRowSize
 		case "PGDUMP":
+			telemetry.Count("import.format.pgdump")
 			format.Format = roachpb.IOFileFormat_PgDump
 			maxRowSize := int32(defaultScanBuffer)
 			if override, ok := opts[pgMaxRowSize]; ok {
@@ -647,7 +655,7 @@ func importPlanHook(
 			}
 			format.PgDump.MaxRowSize = maxRowSize
 		default:
-			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
+			return pgerror.Unimplemented("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
 		if format.Format != roachpb.IOFileFormat_CSV {
@@ -692,7 +700,7 @@ func importPlanHook(
 				}
 			}
 			if !found {
-				return errors.Errorf("unsupported compression value: %q", override)
+				return pgerror.Unimplemented("import.compression", "unsupported compression value: %q", override)
 			}
 		}
 
@@ -786,6 +794,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
+			telemetry.Count("import.transform")
 		} else {
 			for _, tableDesc := range tableDescs {
 				if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
@@ -819,6 +828,8 @@ func importPlanHook(
 		for _, name := range names {
 			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
 		}
+
+		telemetry.CountBucketed("import.files", len(files))
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
@@ -1110,6 +1121,10 @@ func (r *importResumer) OnTerminal(
 	}
 
 	if status == jobs.StatusSucceeded {
+		telemetry.CountBucketed("import.rows", int(r.res.Rows))
+		const mb = 1 << 20
+		telemetry.CountBucketed("import.size-mb", int(r.res.DataSize/mb))
+
 		resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),

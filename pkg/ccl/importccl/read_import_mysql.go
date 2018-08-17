@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -452,7 +453,7 @@ func mysqlColToCockroach(
 		scale = num
 	}
 
-	switch col.SQLType() {
+	switch typ := col.SQLType(); typ {
 
 	case mysqltypes.Char:
 		def.Type = strOpt(coltypes.Char, length)
@@ -531,7 +532,7 @@ func mysqlColToCockroach(
 		// TODO(dt): is our type close enough to use here?
 		fallthrough
 	default:
-		return nil, errors.Errorf("unsupported mysql type %q", col.Type)
+		return nil, pgerror.Unimplemented(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
 	}
 
 	if col.NotNull {
@@ -543,7 +544,7 @@ func mysqlColToCockroach(
 	if col.Default != nil && !bytes.EqualFold(col.Default.Val, []byte("null")) {
 		expr, err := parser.ParseExpr(string(col.Default.Val))
 		if err != nil {
-			return nil, errors.Wrapf(err, "unsupported default expression for column %q", name)
+			return nil, pgerror.Unimplemented("import.mysql.default", "unsupported default expression for column %q: %v", name, err)
 		}
 		def.DefaultExpr.Expr = expr
 	}
