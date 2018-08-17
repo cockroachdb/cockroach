@@ -46,20 +46,18 @@ func (node *TName) TypeName() string { return "NAME" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TName) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("NAME")
+	buf.WriteString(node.TypeName())
 }
 
 // TBytes represents a BYTES or BLOB type.
-type TBytes struct {
-	Name string
-}
+type TBytes struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TBytes) TypeName() string { return node.Name }
+func (node *TBytes) TypeName() string { return "BYTES" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TCollatedString represents a STRING, CHAR or VARCHAR type with a

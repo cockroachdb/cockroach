@@ -5900,7 +5900,7 @@ const_typename:
 | const_json
 | BLOB
   {
-    $$.val = coltypes.Blob
+    $$.val = coltypes.Bytes
   }
 | BYTES
   {
@@ -5908,7 +5908,7 @@ const_typename:
   }
 | BYTEA
   {
-    $$.val = coltypes.Bytea
+    $$.val = coltypes.Bytes
   }
 | TEXT
   {
@@ -6084,7 +6084,7 @@ numeric:
   }
 | BOOLEAN
   {
-    $$.val = coltypes.Boolean
+    $$.val = coltypes.Bool
   }
 | BOOL
   {

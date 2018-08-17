@@ -64,5 +64,5 @@ func (node *TVector) TypeName() string { return node.Name }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TVector) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }

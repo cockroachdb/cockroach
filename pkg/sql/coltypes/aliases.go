@@ -21,9 +21,7 @@ import (
 
 var (
 	// Bool is an immutable T instance.
-	Bool = &TBool{Name: "BOOL"}
-	// Boolean is an immutable T instance.
-	Boolean = &TBool{Name: "BOOLEAN"}
+	Bool = &TBool{}
 
 	// Bit is an immutable T instance.
 	Bit = &TInt{Name: "BIT", Width: 1, ImplicitWidth: true}
@@ -98,12 +96,8 @@ var (
 	// Name is an immutable T instance.
 	Name = &TName{}
 
-	// Blob is an immutable T instance.
-	Blob = &TBytes{Name: "BLOB"}
 	// Bytes is an immutable T instance.
-	Bytes = &TBytes{Name: "BYTES"}
-	// Bytea is an immutable T instance.
-	Bytea = &TBytes{Name: "BYTEA"}
+	Bytes = &TBytes{}
 
 	// Int2vector is an immutable T instance.
 	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int}
