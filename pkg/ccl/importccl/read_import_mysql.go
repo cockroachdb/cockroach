@@ -226,6 +226,7 @@ func readMysqlCreateTable(
 	startingID, parentID sqlbase.ID,
 	match string,
 	fks fkHandler,
+	seqVals map[sqlbase.ID]int64,
 ) ([]*sqlbase.TableDescriptor, error) {
 	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
@@ -254,12 +255,12 @@ func readMysqlCreateTable(
 				continue
 			}
 			id := sqlbase.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks, seqVals)
 			if err != nil {
 				return nil, err
 			}
 			fkDefs = append(fkDefs, moreFKs...)
-			ret = append(ret, tbl)
+			ret = append(ret, tbl...)
 			if match == name {
 				found = true
 				break
@@ -288,12 +289,38 @@ func mysqlTableToCockroach(
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
-) (*sqlbase.TableDescriptor, []delayedFK, error) {
+	seqVals map[sqlbase.ID]int64,
+) ([]*sqlbase.TableDescriptor, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
 	}
 
 	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
+
+	const seqOpt = "auto_increment="
+	var seqName string
+	var seqDesc *sqlbase.TableDescriptor
+	for _, opt := range strings.Fields(strings.ToLower(in.Options)) {
+		if strings.HasPrefix(opt, seqOpt) {
+			i, err := strconv.Atoi(strings.TrimPrefix(opt, seqOpt))
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "parsing AUTO_INCREMENT value")
+			}
+			i64 := int64(i)
+			seqVals[id] = i64
+			priv := sqlbase.NewDefaultPrivilegeDescriptor()
+			opts := tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &i64}}
+			seqName = name + "_auto_inc"
+			desc, err := sql.MakeSequenceTableDesc(seqName, opts, parentID, id, time, priv, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			seqDesc = &desc
+			fks.resolver[seqName] = seqDesc
+			id++
+			break
+		}
+	}
 
 	stmt := &tree.CreateTable{
 		Table: tree.NormalizableTableName{tree.NewTableName("", tree.Name(name))},
@@ -305,6 +332,16 @@ func mysqlTableToCockroach(
 		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type, checks)
 		if err != nil {
 			return nil, nil, err
+		}
+		if raw.Type.Autoincrement {
+			if seqName == "" {
+				return nil, nil, errors.Errorf("column %q specifies AUTO_INCREMENT but table options did not include it", def.Name)
+			}
+			expr, err := parser.ParseExpr(fmt.Sprintf("nextval('%s':::STRING)", seqName))
+			if err != nil {
+				return nil, nil, err
+			}
+			def.DefaultExpr.Expr = expr
 		}
 		stmt.Defs = append(stmt.Defs, def)
 	}
@@ -365,7 +402,10 @@ func mysqlTableToCockroach(
 		}
 	}
 	fks.resolver[desc.Name] = desc
-	return desc, fkDefs, nil
+	if seqDesc != nil {
+		return []*sqlbase.TableDescriptor{seqDesc, desc}, fkDefs, nil
+	}
+	return []*sqlbase.TableDescriptor{desc}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
