@@ -133,7 +133,7 @@ type fkHandler struct {
 }
 
 // NoFKs is used by formats that do not support FKs.
-var NoFKs = fkHandler{}
+var NoFKs = fkHandler{resolver: make(fkResolver)}
 
 // MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
