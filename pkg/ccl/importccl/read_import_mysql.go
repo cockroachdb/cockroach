@@ -234,20 +234,12 @@ func readMysqlCreateTable(
 
 	var ret []*sqlbase.TableDescriptor
 	var fkDefs []delayedFK
-	var found []string
+	var found bool
+	var names []string
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
 		if err == io.EOF {
-			if match != "" {
-				return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(found, ", "))
-			}
-			if ret == nil {
-				return nil, errors.Errorf("no table definition found")
-			}
-			if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
-				return nil, err
-			}
-			return ret, nil
+			break
 		}
 		if err == mysql.ErrEmpty {
 			continue
@@ -258,7 +250,7 @@ func readMysqlCreateTable(
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
 			name := lex.NormalizeName(i.NewName.Name.String())
 			if match != "" && match != name {
-				found = append(found, name)
+				names = append(names, name)
 				continue
 			}
 			id := sqlbase.ID(int(startingID) + len(ret))
@@ -267,15 +259,23 @@ func readMysqlCreateTable(
 				return nil, err
 			}
 			fkDefs = append(fkDefs, moreFKs...)
-			if match == name {
-				return []*sqlbase.TableDescriptor{tbl}, nil
-			}
-			if fks.allowed {
-				fks.resolver[tbl.Name] = tbl
-			}
 			ret = append(ret, tbl)
+			if match == name {
+				found = true
+				break
+			}
 		}
 	}
+	if ret == nil {
+		return nil, errors.Errorf("no table definitions found")
+	}
+	if match != "" && !found {
+		return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(names, ", "))
+	}
+	if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // mysqlTableToCockroach creates a Cockroach TableDescriptor from a parsed mysql
@@ -294,10 +294,11 @@ func mysqlTableToCockroach(
 	}
 
 	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
-	priv := sqlbase.NewDefaultPrivilegeDescriptor()
-	desc := sql.InitTableDescriptor(id, parentID, name, time, priv)
 
-	colNames := make(map[string]string)
+	stmt := &tree.CreateTable{
+		Table: tree.NormalizableTableName{tree.NewTableName("", tree.Name(name))},
+	}
+
 	checks := make(map[string]*tree.CheckConstraintTableDef)
 
 	for _, raw := range in.Columns {
@@ -305,44 +306,30 @@ func mysqlTableToCockroach(
 		if err != nil {
 			return nil, nil, err
 		}
-		// The new types in the table imported from MySQL do not (yet?)
-		// use SERIAL so we need not process SERIAL types here.
-		//
-		// If/when we extend this functionality to support MySQL'sAUTO
-		// INCREMENT, this will need to be extended -- see the comments on
-		// MakeColumnDefDescs().
-		col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, evalCtx)
-		if err != nil {
-			return nil, nil, err
-		}
-		desc.AddColumn(*col)
-		colNames[raw.Name.String()] = col.Name
+		stmt.Defs = append(stmt.Defs, def)
 	}
 
 	for _, raw := range in.Indexes {
 		var elems tree.IndexElemList
 		for _, col := range raw.Columns {
-			elems = append(elems, tree.IndexElem{Column: tree.Name(colNames[col.Column.String()])})
+			elems = append(elems, tree.IndexElem{Column: tree.Name(col.Column.String())})
 		}
-		idx := sqlbase.IndexDescriptor{Name: raw.Info.Name.String(), Unique: raw.Info.Unique}
-		if err := idx.FillColumns(elems); err != nil {
-			return nil, nil, err
-		}
-		if err := desc.AddIndex(idx, raw.Info.Primary); err != nil {
-			return nil, nil, err
+
+		idx := tree.IndexTableDef{Name: tree.Name(raw.Info.Name.String()), Columns: elems}
+		if raw.Info.Primary || raw.Info.Unique {
+			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{idx, raw.Info.Primary})
+		} else {
+			stmt.Defs = append(stmt.Defs, &idx)
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	for _, c := range checks {
+		stmt.Defs = append(stmt.Defs, c)
+	}
+
+	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), nil, stmt, parentID, id, fks, time.WallTime)
+	if err != nil {
 		return nil, nil, err
-	}
-
-	for _, check := range checks {
-		ck, err := sql.MakeCheckConstraint(ctx, desc, check, nil, &tree.SemaContext{}, evalCtx, *tree.NewTableName("", tree.Name(name)))
-		if err != nil {
-			return nil, nil, err
-		}
-		desc.Checks = append(desc.Checks, ck)
 	}
 
 	var fkDefs []delayedFK
@@ -374,10 +361,11 @@ func mysqlTableToCockroach(
 			}
 
 			d.Table.TableNameReference = &toTable
-			fkDefs = append(fkDefs, delayedFK{&desc, d})
+			fkDefs = append(fkDefs, delayedFK{desc, d})
 		}
 	}
-	return &desc, fkDefs, nil
+	fks.resolver[desc.Name] = desc
+	return desc, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
