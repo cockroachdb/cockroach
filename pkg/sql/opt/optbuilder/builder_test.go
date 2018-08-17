@@ -98,7 +98,8 @@ func TestBuilder(t *testing.T) {
 				semaCtx := tree.MakeSemaContext(false /* privileged */)
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-				o := xform.NewOptimizer(&evalCtx)
+				var o xform.Optimizer
+				o.Init(&evalCtx)
 				for i, typ := range varTypes {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}

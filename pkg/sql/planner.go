@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -158,6 +159,10 @@ type planner struct {
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
 	alloc sqlbase.DatumAlloc
+
+	// optimizer caches an instance of the cost-based optimizer that can be reused
+	// to plan queries (reused in order to reduce allocations).
+	optimizer xform.Optimizer
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each

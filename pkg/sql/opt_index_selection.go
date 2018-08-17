@@ -131,10 +131,10 @@ func (p *planner) selectIndex(
 		c.init(s)
 	}
 
-	var optimizer *xform.Optimizer
+	var optimizer xform.Optimizer
 
 	if s.filter != nil {
-		optimizer = xform.NewOptimizer(p.EvalContext())
+		optimizer.Init(p.EvalContext())
 		md := optimizer.Memo().Metadata()
 		for i := range s.resultColumns {
 			md.AddColumn(s.resultColumns[i].Name, s.resultColumns[i].Typ)
@@ -148,7 +148,7 @@ func (p *planner) selectIndex(
 		filterExpr := memo.MakeNormExprView(optimizer.Memo(), filterGroup)
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
-				optimizer, filterExpr, p.EvalContext(),
+				&optimizer, filterExpr, p.EvalContext(),
 			); err != nil {
 				return nil, err
 			}
