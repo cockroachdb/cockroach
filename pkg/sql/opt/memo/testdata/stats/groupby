@@ -201,7 +201,7 @@ select
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
- │    ├── columns: s:4(string) column5:5(decimal)
+ │    ├── columns: s:4(string) sum:5(decimal)
  │    ├── grouping columns: s:4(string)
  │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
  │    ├── key: (4)
@@ -220,22 +220,22 @@ select
  │         └── sum [type=decimal, outer=(1)]
  │              └── variable: x [type=int, outer=(1)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-      └── column5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
 
 # Scalar GroupBy.
 build
 SELECT max(y), sum(z) FROM a HAVING sum(z) = 5.0
 ----
 select
- ├── columns: max:6(int) sum:5(float!null)
+ ├── columns: max:5(int) sum:6(float!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(5)=1]
+ ├── stats: [rows=1, distinct(6)=1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scalar-group-by
- │    ├── columns: column5:5(float) max:6(int)
+ │    ├── columns: max:5(int) sum:6(float)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(5)=1]
+ │    ├── stats: [rows=1, distinct(6)=1]
  │    ├── key: ()
  │    ├── fd: ()-->(5,6)
  │    ├── project
@@ -247,9 +247,9 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations [outer=(2,3)]
- │         ├── sum [type=float, outer=(3)]
- │         │    └── variable: z [type=float, outer=(3)]
- │         └── max [type=int, outer=(2)]
- │              └── variable: y [type=int, outer=(2)]
- └── filters [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight), fd=()-->(5)]
-      └── column5 = 5.0 [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight)]
+ │         ├── max [type=int, outer=(2)]
+ │         │    └── variable: y [type=int, outer=(2)]
+ │         └── sum [type=float, outer=(3)]
+ │              └── variable: z [type=float, outer=(3)]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
+      └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight)]
