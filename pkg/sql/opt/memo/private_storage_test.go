@@ -371,10 +371,10 @@ func TestInternColType(t *testing.T) {
 	test(coltypes.Float, coltypes.NewFloat(64, true), false)
 	test(coltypes.NewFloat(0, true), coltypes.NewFloat(0, true), true)
 
-	tdec := &coltypes.TDecimal{Name: "DECIMAL", Prec: 19}
-	test(coltypes.Numeric, &coltypes.TDecimal{Name: "NUMERIC"}, true)
+	tdec := &coltypes.TDecimal{Prec: 19}
+	test(coltypes.Decimal, &coltypes.TDecimal{}, true)
 	test(coltypes.Decimal, tdec, false)
-	test(tdec, &coltypes.TDecimal{Name: "DECIMAL", Prec: 19, Scale: 2}, false)
+	test(tdec, &coltypes.TDecimal{Prec: 19, Scale: 2}, false)
 
 	// Miscellaneous types.
 	test(coltypes.UUID, &coltypes.TUUID{}, true)
