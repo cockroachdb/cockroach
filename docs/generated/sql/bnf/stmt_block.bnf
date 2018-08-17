@@ -1173,7 +1173,6 @@ changefeed_targets ::=
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
-	| 
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst

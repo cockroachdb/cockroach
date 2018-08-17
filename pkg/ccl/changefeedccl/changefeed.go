@@ -265,7 +265,7 @@ func emitEntries(
 		keyColumns := row.tableDesc.PrimaryIndex.ColumnNames
 		jsonKeyRaw := make([]interface{}, len(keyColumns))
 		jsonValueRaw := make(map[string]interface{}, len(row.datums))
-		if _, ok := details.Opts[optTimestamps]; ok {
+		if _, ok := details.Opts[optUpdatedTimestamps]; ok {
 			jsonValueRaw[jsonMetaSentinel] = map[string]interface{}{
 				`updated`: tree.TimestampToDecimal(row.timestamp).Decimal.String(),
 			}
@@ -371,7 +371,7 @@ func emitResolvedTimestamp(
 		}
 	}
 
-	if _, ok := details.Opts[optTimestamps]; ok {
+	if _, ok := details.Opts[optResolvedTimestamps]; ok {
 		resolvedMetaRaw := map[string]interface{}{
 			jsonMetaSentinel: map[string]interface{}{
 				`resolved`: tree.TimestampToDecimal(resolved).Decimal.String(),

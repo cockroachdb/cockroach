@@ -45,7 +45,7 @@ func TestValidations(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR bank WITH timestamps`)
+		rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR bank WITH updated, resolved`)
 		defer closeFeedRowsHack(t, sqlDB, rows)
 
 		var done int64
