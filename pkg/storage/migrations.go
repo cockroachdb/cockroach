@@ -16,11 +16,14 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // clearLegacyTombstone removes the legacy tombstone for the given rangeID.
@@ -79,4 +82,72 @@ func migrateLegacyTombstones(ctx context.Context, eng engine.Engine) error {
 		return err
 	}
 	return batch.Commit(true /* sync */)
+}
+
+// removeLeakedRaftEntries iterates over all replicas and ensures that all
+// Raft entries that are beneath a replica's truncated index are removed.
+// Earlier versions of Cockroach permitted a race where a replica's truncated
+// index could be moved forward without the corresponding Raft entries being
+// deleted atomically. This introduced a window in which an untimely crash
+// could abandon Raft entries until the next log truncation.
+// TODO(nvanbenschoten): It can be removed in binaries post v2.1.
+func removeLeakedRaftEntries(
+	ctx context.Context, clock *hlc.Clock, eng engine.Engine, v *storeReplicaVisitor,
+) error {
+	// Check if migration has already been performed.
+	marker := keys.StoreRemovedLeakedRaftEntriesKey()
+	found, err := engine.MVCCGetProto(ctx, eng, marker, hlc.Timestamp{}, false, nil, nil)
+	found = false
+	if found || err != nil {
+		return err
+	}
+
+	// Iterate over replicas and clear out any leaked raft entries. Visit
+	// them in increasing rangeID order so all accesses to the engine are in
+	// increasing order, which experimentally speeds this up by about 35%.
+	tBegin := timeutil.Now()
+	leaked := 0
+	v.InOrder().Visit(func(r *Replica) bool {
+		var ts roachpb.RaftTruncatedState
+		ts, err = r.raftTruncatedState(ctx)
+		if err != nil {
+			return false
+		}
+
+		// If any Raft entries were leaked then it must be true that the last
+		// entry that was truncated was also leaked. We use this to create a
+		// fast-path to rule out replicas that have not leaked any entries.
+		last := keys.RaftLogKey(r.RangeID, ts.Index)
+		found, err = engine.MVCCGetProto(ctx, eng, last, hlc.Timestamp{}, false, nil, nil)
+		if !found || err != nil {
+			return err == nil
+		}
+		leaked++
+
+		// Start at index zero and clear entries up through the truncated index.
+		start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
+		end := engine.MakeMVCCMetadataKey(last.PrefixEnd())
+
+		iter := eng.NewIterator(engine.IterOptions{UpperBound: end.Key})
+		defer iter.Close()
+
+		err = eng.ClearIterRange(iter, start, end)
+		return err == nil
+	})
+	if err != nil {
+		return err
+	}
+
+	f := log.Eventf
+	dur := timeutil.Since(tBegin)
+	if leaked > 0 || dur > 2*time.Second {
+		f = log.Infof
+	}
+	f(ctx, "found %d replicas with abandoned raft entries in %s", leaked, dur)
+
+	// Set the migration marker so that we can avoid checking for leaked entries
+	// again in the future. It doesn't matter what we actually use as the value,
+	// so just use the current time.
+	now := clock.Now()
+	return engine.MVCCPutProto(ctx, eng, nil, marker, hlc.Timestamp{}, nil, &now)
 }
