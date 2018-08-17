@@ -22,16 +22,14 @@ import (
 )
 
 // TBool represents a BOOLEAN type.
-type TBool struct {
-	Name string
-}
+type TBool struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TBool) TypeName() string { return node.Name }
+func (node *TBool) TypeName() string { return "BOOL" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TBool) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TInt represents an INT, INTEGER, SMALLINT or BIGINT type.
