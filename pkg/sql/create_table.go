@@ -1443,6 +1443,13 @@ func validateComputedColumn(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) error {
+	if d.HasDefaultExpr() {
+		return pgerror.NewError(
+			pgerror.CodeInvalidTableDefinitionError,
+			"computed columns cannot have default values",
+		)
+	}
+
 	dependencies := make(map[string]struct{})
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
@@ -1490,13 +1497,6 @@ func validateComputedColumn(
 		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, evalCtx, false, /* allowImpure */
 	); err != nil {
 		return err
-	}
-
-	if d.HasDefaultExpr() {
-		return pgerror.NewError(
-			pgerror.CodeInvalidTableDefinitionError,
-			"computed columns cannot have default values",
-		)
 	}
 
 	return nil
