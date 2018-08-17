@@ -58,7 +58,7 @@ join                ·         ·                      (a, b, generate_series, g
  │    └── scan      ·         ·                      (b)                                       ·
  │                  table     u@primary              ·                                         ·
  │                  spans     ALL                    ·                                         ·
- └── project set    ·         ·                      (column5, column6)                        ·
+ └── project set    ·         ·                      (generate_series, generate_series)        ·
       │             render 0  generate_series(1, 2)  ·                                         ·
       │             render 1  generate_series(3, 4)  ·                                         ·
       └── emptyrow  ·         ·                      ()                                        ·
@@ -118,70 +118,70 @@ render                         ·               ·                              
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-render                      ·         ·                        (generate_series)  ·
- │                          render 0  column6                  ·                  ·
- └── project set            ·         ·                        (x, z, column6)    ·
-      │                     render 0  generate_series(@1, @2)  ·                  ·
-      └── join              ·         ·                        (x, z)             ·
-           │                type      semi                     ·                  ·
-           │                pred      z < column5              ·                  ·
-           ├── scan         ·         ·                        (x, z)             ·
-           │                table     xz@primary               ·                  ·
-           │                spans     ALL                      ·                  ·
-           └── project set  ·         ·                        (x, y, column5)    ·
-                │           render 0  generate_series(@1, @2)  ·                  ·
-                └── scan    ·         ·                        (x, y)             ·
-·                           table     xy@primary               ·                  ·
-·                           spans     ALL                      ·                  ·
+render                      ·         ·                        (generate_series)        ·
+ │                          render 0  generate_series          ·                        ·
+ └── project set            ·         ·                        (x, z, generate_series)  ·
+      │                     render 0  generate_series(@1, @2)  ·                        ·
+      └── join              ·         ·                        (x, z)                   ·
+           │                type      semi                     ·                        ·
+           │                pred      z < generate_series      ·                        ·
+           ├── scan         ·         ·                        (x, z)                   ·
+           │                table     xz@primary               ·                        ·
+           │                spans     ALL                      ·                        ·
+           └── project set  ·         ·                        (x, y, generate_series)  ·
+                │           render 0  generate_series(@1, @2)  ·                        ·
+                └── scan    ·         ·                        (x, y)                   ·
+·                           table     xy@primary               ·                        ·
+·                           spans     ALL                      ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-render               ·               ·                                        (generate_subscripts, generate_series, unnest, y, z)  ·
- │                   render 0        column5                                  ·                                                     ·
- │                   render 1        column6                                  ·                                                     ·
- │                   render 2        column7                                  ·                                                     ·
- │                   render 3        y                                        ·                                                     ·
- │                   render 4        z                                        ·                                                     ·
- └── project set     ·               ·                                        (x, y, x, z, column5, column6, column7)               ·
-      │              render 0        generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                     ·
-      │              render 1        generate_series(@1, @2)                  ·                                                     ·
-      │              render 2        unnest(ARRAY[0, @1, @2, @4])             ·                                                     ·
-      └── join       ·               ·                                        (x, y, x, z)                                          ·
-           │         type            left outer                               ·                                                     ·
-           │         equality        (x) = (x)                                ·                                                     ·
-           │         mergeJoinOrder  +"(x=x)"                                 ·                                                     ·
-           │         pred            x = x                                    ·                                                     ·
-           ├── scan  ·               ·                                        (x, y)                                                +x
-           │         table           xy@primary                               ·                                                     ·
-           │         spans           ALL                                      ·                                                     ·
-           └── scan  ·               ·                                        (x, z)                                                +x
-·                    table           xz@primary                               ·                                                     ·
-·                    spans           ALL                                      ·                                                     ·
+render               ·               ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
+ │                   render 0        generate_subscripts                      ·                                                           ·
+ │                   render 1        generate_series                          ·                                                           ·
+ │                   render 2        unnest                                   ·                                                           ·
+ │                   render 3        y                                        ·                                                           ·
+ │                   render 4        z                                        ·                                                           ·
+ └── project set     ·               ·                                        (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
+      │              render 0        generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                           ·
+      │              render 1        generate_series(@1, @2)                  ·                                                           ·
+      │              render 2        unnest(ARRAY[0, @1, @2, @4])             ·                                                           ·
+      └── join       ·               ·                                        (x, y, x, z)                                                ·
+           │         type            left outer                               ·                                                           ·
+           │         equality        (x) = (x)                                ·                                                           ·
+           │         mergeJoinOrder  +"(x=x)"                                 ·                                                           ·
+           │         pred            x = x                                    ·                                                           ·
+           ├── scan  ·               ·                                        (x, y)                                                      +x
+           │         table           xy@primary                               ·                                                           ·
+           │         spans           ALL                                      ·                                                           ·
+           └── scan  ·               ·                                        (x, z)                                                      +x
+·                    table           xz@primary                               ·                                                           ·
+·                    spans           ALL                                      ·                                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-root                        ·          ·                         (generate_series)  ·
- ├── render                 ·          ·                         (generate_series)  ·
- │    │                     render 0   column6                   ·                  ·
- │    └── project set       ·          ·                         (z, column6)       ·
- │         │                render 0   generate_series(@S1, @1)  ·                  ·
- │         └── scan         ·          ·                         (z)                ·
- │                          table      xz@primary                ·                  ·
- │                          spans      ALL                       ·                  ·
- └── subquery               ·          ·                         (generate_series)  ·
-      │                     id         @S1                       ·                  ·
-      │                     sql        <unknown>                 ·                  ·
-      │                     exec mode  one row                   ·                  ·
-      └── render            ·          ·                         (column5)          ·
-           │                render 0   column5                   ·                  ·
-           └── project set  ·          ·                         (x, y, column5)    ·
-                │           render 0   unnest(ARRAY[@1, @2])     ·                  ·
-                └── scan    ·          ·                         (x, y)             ·
-·                           table      xy@primary                ·                  ·
-·                           spans      ALL                       ·                  ·
+root                        ·          ·                         (generate_series)     ·
+ ├── render                 ·          ·                         (generate_series)     ·
+ │    │                     render 0   generate_series           ·                     ·
+ │    └── project set       ·          ·                         (z, generate_series)  ·
+ │         │                render 0   generate_series(@S1, @1)  ·                     ·
+ │         └── scan         ·          ·                         (z)                   ·
+ │                          table      xz@primary                ·                     ·
+ │                          spans      ALL                       ·                     ·
+ └── subquery               ·          ·                         (generate_series)     ·
+      │                     id         @S1                       ·                     ·
+      │                     sql        <unknown>                 ·                     ·
+      │                     exec mode  one row                   ·                     ·
+      └── render            ·          ·                         (unnest)              ·
+           │                render 0   unnest                    ·                     ·
+           └── project set  ·          ·                         (x, y, unnest)        ·
+                │           render 0   unnest(ARRAY[@1, @2])     ·                     ·
+                └── scan    ·          ·                         (x, y)                ·
+·                           table      xy@primary                ·                     ·
+·                           spans      ALL                       ·                     ·
 
 # Regression test for #24676.
 statement ok

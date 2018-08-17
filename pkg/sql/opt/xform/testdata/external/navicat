@@ -276,20 +276,20 @@ WHERE ((c.relkind = 'r'::CHAR) OR (c.relkind = 'f'::CHAR)) AND (n.nspname = 'pub
 ORDER BY schemaname, tablename
 ----
 sort
- ├── columns: oid:1(oid) schemaname:29(string) tablename:2(string) relacl:26(string[]) tableowner:129(string) description:130(string) relkind:17(string) cluster:92(string) hasoids:20(bool) hasindexes:13(bool) hasrules:22(bool) tablespace:33(string) param:27(string[]) hastriggers:23(bool) unlogged:15(string) ftoptions:120(string[]) srvname:122(string) reltuples:10(float) inhtable:135(bool) inhschemaname:69(string) inhtablename:42(string)
- ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,129,130), (2)-->(1,10,13,15,17,20,22,23,26,27,129,130)
+ ├── columns: oid:1(oid) schemaname:29(string) tablename:2(string) relacl:26(string[]) tableowner:133(string) description:134(string) relkind:17(string) cluster:92(string) hasoids:20(bool) hasindexes:13(bool) hasrules:22(bool) tablespace:33(string) param:27(string[]) hastriggers:23(bool) unlogged:15(string) ftoptions:120(string[]) srvname:122(string) reltuples:10(float) inhtable:135(bool) inhschemaname:69(string) inhtablename:42(string)
+ ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,133,134), (2)-->(1,10,13,15,17,20,22,23,26,27,133,134)
  ├── ordering: +2 opt(29)
  └── project
-      ├── columns: tableowner:129(string) description:130(string) inhtable:135(bool) pg_class.oid:1(oid) pg_class.relname:2(string) pg_class.reltuples:10(float) pg_class.relhasindex:13(bool) pg_class.relpersistence:15(string) pg_class.relkind:17(string) pg_class.relhasoids:20(bool) pg_class.relhasrules:22(bool) pg_class.relhastriggers:23(bool) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.nspname:29(string) spcname:33(string) pg_class.relname:42(string) pg_namespace.nspname:69(string) pg_class.relname:92(string) ftoptions:120(string[]) srvname:122(string)
-      ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,129,130), (2)-->(1,10,13,15,17,20,22,23,26,27,129,130)
+      ├── columns: tableowner:133(string) description:134(string) inhtable:135(bool) pg_class.oid:1(oid) pg_class.relname:2(string) pg_class.reltuples:10(float) pg_class.relhasindex:13(bool) pg_class.relpersistence:15(string) pg_class.relkind:17(string) pg_class.relhasoids:20(bool) pg_class.relhasrules:22(bool) pg_class.relhastriggers:23(bool) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.nspname:29(string) spcname:33(string) pg_class.relname:42(string) pg_namespace.nspname:69(string) pg_class.relname:92(string) ftoptions:120(string[]) srvname:122(string)
+      ├── fd: ()-->(29), (1)-->(2,10,13,15,17,20,22,23,26,27,133,134), (2)-->(1,10,13,15,17,20,22,23,26,27,133,134)
       ├── group-by
-      │    ├── columns: pg_class.oid:1(oid) pg_class.relname:2(string) pg_class.relowner:5(oid) pg_class.reltuples:10(float) pg_class.relhasindex:13(bool) pg_class.relpersistence:15(string) pg_class.relkind:17(string) pg_class.relhasoids:20(bool) pg_class.relhasrules:22(bool) pg_class.relhastriggers:23(bool) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.nspname:29(string) spcname:33(string) pg_class.relname:42(string) pg_namespace.nspname:69(string) pg_class.relname:92(string) ftoptions:120(string[]) srvname:122(string) count:134(int) rownum:136(int!null)
+      │    ├── columns: pg_class.oid:1(oid) pg_class.relname:2(string) pg_class.relowner:5(oid) pg_class.reltuples:10(float) pg_class.relhasindex:13(bool) pg_class.relpersistence:15(string) pg_class.relkind:17(string) pg_class.relhasoids:20(bool) pg_class.relhasrules:22(bool) pg_class.relhastriggers:23(bool) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.nspname:29(string) spcname:33(string) pg_class.relname:42(string) pg_namespace.nspname:69(string) pg_class.relname:92(string) ftoptions:120(string[]) srvname:122(string) count_rows:132(int) rownum:136(int!null)
       │    ├── grouping columns: rownum:136(int!null)
       │    ├── key: (136)
-      │    ├── fd: ()-->(29), (1)-->(2,5,10,13,15,17,20,22,23,26,27), (2)-->(1,5,10,13,15,17,20,22,23,26,27), (136)-->(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,134)
+      │    ├── fd: ()-->(29), (1)-->(2,5,10,13,15,17,20,22,23,26,27), (2)-->(1,5,10,13,15,17,20,22,23,26,27), (136)-->(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,132)
       │    ├── left-join (lookup pg_inherits@pg_inherits_parent_index)
-      │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null) pg_tablespace.oid:32(oid) spcname:33(string) pg_inherits.inhrelid:38(oid) pg_inherits.inhparent:39(oid) pg_class.oid:41(oid) pg_class.relname:42(string) pg_class.relnamespace:43(oid) pg_namespace.oid:68(oid) pg_namespace.nspname:69(string) indexrelid:72(oid) indrelid:73(oid) indisclustered:79(bool) pg_class.oid:91(oid) pg_class.relname:92(string) ftrelid:118(oid) ftserver:119(oid) ftoptions:120(string[]) pg_foreign_server.oid:121(oid) srvname:122(string) pg_inherits.inhparent:132(oid) rownum:136(int!null)
-      │    │    ├── key columns: [1] = [132]
+      │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null) pg_tablespace.oid:32(oid) spcname:33(string) pg_inherits.inhrelid:38(oid) pg_inherits.inhparent:39(oid) pg_class.oid:41(oid) pg_class.relname:42(string) pg_class.relnamespace:43(oid) pg_namespace.oid:68(oid) pg_namespace.nspname:69(string) indexrelid:72(oid) indrelid:73(oid) indisclustered:79(bool) pg_class.oid:91(oid) pg_class.relname:92(string) ftrelid:118(oid) ftserver:119(oid) ftoptions:120(string[]) pg_foreign_server.oid:121(oid) srvname:122(string) pg_inherits.inhparent:130(oid) rownum:136(int!null)
+      │    │    ├── key columns: [1] = [130]
       │    │    ├── fd: ()-->(3,28,29), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (3)==(28), (28)==(3), (32)-->(33), (33)-->(32), (41)-->(42,43), (42,43)-->(41), (39)==(41), (41)==(39), (68)~~>(69), (69)~~>(68), (72)-->(73), ()~~>(79), (91)-->(92), (118)-->(119,120), (121)-->(122), (122)-->(121), (136)-->(1,2,5,8,10,13,15,17,20,22,23,26,27,32,33,38,39,41-43,68,69,72,73,79,91,92,118-122)
       │    │    ├── row-number
       │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[]) pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null) pg_tablespace.oid:32(oid) spcname:33(string) pg_inherits.inhrelid:38(oid) pg_inherits.inhparent:39(oid) pg_class.oid:41(oid) pg_class.relname:42(string) pg_class.relnamespace:43(oid) pg_namespace.oid:68(oid) pg_namespace.nspname:69(string) indexrelid:72(oid) indrelid:73(oid) indisclustered:79(bool) pg_class.oid:91(oid) pg_class.relname:92(string) ftrelid:118(oid) ftserver:119(oid) ftoptions:120(string[]) pg_foreign_server.oid:121(oid) srvname:122(string) rownum:136(int!null)
@@ -382,11 +382,11 @@ sort
       │    │    │         │         └── ftrelid = pg_class.oid [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
       │    │    │         └── filters [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ]), fd=(119)==(121), (121)==(119)]
       │    │    │              └── ftserver = pg_foreign_server.oid [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(1,132), constraints=(/1: (/NULL - ]; /132: (/NULL - ]), fd=(1)==(132), (132)==(1)]
-      │    │         └── pg_inherits.inhparent = pg_class.oid [type=bool, outer=(1,132), constraints=(/1: (/NULL - ]; /132: (/NULL - ])]
-      │    └── aggregations [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,132)]
-      │         ├── count [type=int, outer=(132)]
-      │         │    └── variable: pg_inherits.inhparent [type=oid, outer=(132)]
+      │    │    └── filters [type=bool, outer=(1,130), constraints=(/1: (/NULL - ]; /130: (/NULL - ]), fd=(1)==(130), (130)==(1)]
+      │    │         └── pg_inherits.inhparent = pg_class.oid [type=bool, outer=(1,130), constraints=(/1: (/NULL - ]; /130: (/NULL - ])]
+      │    └── aggregations [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,130)]
+      │         ├── count [type=int, outer=(130)]
+      │         │    └── variable: pg_inherits.inhparent [type=oid, outer=(130)]
       │         ├── const-agg [type=oid, outer=(1)]
       │         │    └── variable: pg_class.oid [type=oid, outer=(1)]
       │         ├── const-agg [type=string, outer=(2)]
@@ -425,7 +425,7 @@ sort
       │         │    └── variable: ftoptions [type=string[], outer=(120)]
       │         └── const-agg [type=string, outer=(122)]
       │              └── variable: srvname [type=string, outer=(122)]
-      └── projections [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,134)]
+      └── projections [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,132)]
            ├── pg_get_userbyid(pg_class.relowner) [type=string, outer=(5)]
            ├── obj_description(pg_class.oid) [type=string, outer=(1)]
-           └── count > 0 [type=bool, outer=(134)]
+           └── count_rows > 0 [type=bool, outer=(132)]
