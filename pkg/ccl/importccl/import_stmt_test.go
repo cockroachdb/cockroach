@@ -1988,7 +1988,7 @@ func TestImportMysql(t *testing.T) {
 				}
 			}
 			if c.expected&expectEverything != 0 {
-				res := sqlDB.QueryStr(t, "SELECT i, c, iw, fl, d53 FROM everything ORDER BY i")
+				res := sqlDB.QueryStr(t, "SELECT i, c, iw, fl, d53, j FROM everything ORDER BY i")
 				if expected, actual := len(everythingTestRows), len(res); expected != actual {
 					t.Fatalf("expected %d, got %d", expected, actual)
 				}
@@ -2006,6 +2006,9 @@ func TestImportMysql(t *testing.T) {
 						t.Fatalf("expected %s got %s", expected, got)
 					}
 					if got, expected := res[i][4], everythingTestRows[i].d53; got != expected {
+						t.Fatalf("expected %s got %s", expected, got)
+					}
+					if got, expected := res[i][5], everythingTestRows[i].j; got != expected {
 						t.Fatalf("expected %s got %s", expected, got)
 					}
 				}

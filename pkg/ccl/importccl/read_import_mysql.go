@@ -520,12 +520,12 @@ func mysqlColToCockroach(
 			Expr: expr,
 		}
 
+	case mysqltypes.TypeJSON:
+		def.Type = coltypes.JSON
+
 	case mysqltypes.Set:
 		fallthrough
 	case mysqltypes.Geometry:
-		fallthrough
-	case mysqltypes.TypeJSON:
-		// TODO(dt): is our type close enough to use here?
 		fallthrough
 	case mysqltypes.Bit:
 		// TODO(dt): is our type close enough to use here?

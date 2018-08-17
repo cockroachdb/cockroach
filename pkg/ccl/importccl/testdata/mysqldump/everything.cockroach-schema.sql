@@ -35,5 +35,6 @@ CREATE TABLE everything (
   f17   FLOAT4,
   f47   DOUBLE PRECISION,
   f75   FLOAT4,
+  j     JSON,
   CONSTRAINT imported_from_enum_e CHECK (e IN ('Small':::STRING, 'Medium':::STRING, 'Large':::STRING))
 )
