@@ -38,16 +38,14 @@ func (node *TUUID) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 }
 
 // TIPAddr represents an INET or CIDR type.
-type TIPAddr struct {
-	Name string
-}
+type TIPAddr struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TIPAddr) TypeName() string { return node.Name }
+func (node *TIPAddr) TypeName() string { return "INET" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TIPAddr) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TJSON represents the JSON column type.
