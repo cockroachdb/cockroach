@@ -1617,37 +1617,6 @@ TABLE t3
       └── rowid int not null (hidden)
 
 build
-SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
-----
-project
- ├── columns: max:10(int)
- ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
- └── projections
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: max:9(int)
-                └── project
-                     ├── columns: max:9(int)
-                     ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
-                     └── projections
-                          └── subquery [type=int]
-                               └── max1-row
-                                    ├── columns: max:8(int)
-                                    └── scalar-group-by
-                                         ├── columns: max:8(int)
-                                         ├── project
-                                         │    ├── columns: a:7(int)
-                                         │    ├── scan t1
-                                         │    │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
-                                         │    └── projections
-                                         │         └── variable: t3.a [type=int]
-                                         └── aggregations
-                                              └── max [type=int]
-                                                   └── variable: a [type=int]
-
-build
 SELECT (SELECT (SELECT DISTINCT t3.a FROM t1) FROM t2) FROM t3
 ----
 project
@@ -1822,42 +1791,48 @@ build
 SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
 ----
 project
- ├── columns: r:13(decimal)
- ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
+ ├── columns: r:17(decimal)
+ ├── scalar-group-by
+ │    ├── columns: column11:11(int) column13:13(int)
+ │    ├── project
+ │    │    ├── columns: a:10(int) a:12(int)
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
+ │    │    └── projections
+ │    │         ├── variable: t3.a [type=int]
+ │    │         └── variable: t3.a [type=int]
+ │    └── aggregations
+ │         ├── max [type=int]
+ │         │    └── variable: a [type=int]
+ │         └── min [type=int]
+ │              └── variable: a [type=int]
  └── projections
       └── subquery [type=decimal]
            └── max1-row
-                ├── columns: r:12(decimal)
+                ├── columns: r:16(decimal)
                 └── project
-                     ├── columns: r:12(decimal)
+                     ├── columns: r:16(decimal)
                      ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
                      └── projections
                           └── subquery [type=decimal]
                                └── max1-row
-                                    ├── columns: r:11(decimal)
+                                    ├── columns: r:15(decimal)
                                     └── project
-                                         ├── columns: r:11(decimal)
+                                         ├── columns: r:15(decimal)
                                          ├── group-by
-                                         │    ├── columns: a:7(int) column9:9(int) column10:10(int)
-                                         │    ├── grouping columns: a:7(int)
-                                         │    ├── project
-                                         │    │    ├── columns: a:7(int) a:8(int)
-                                         │    │    ├── scan t1
-                                         │    │    │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
-                                         │    │    └── projections
-                                         │    │         ├── variable: t2.a [type=int]
-                                         │    │         └── variable: t3.a [type=int]
-                                         │    └── aggregations
-                                         │         ├── max [type=int]
-                                         │         │    └── variable: a [type=int]
-                                         │         └── min [type=int]
-                                         │              └── variable: a [type=int]
+                                         │    ├── columns: a:14(int)
+                                         │    ├── grouping columns: a:14(int)
+                                         │    └── project
+                                         │         ├── columns: a:14(int)
+                                         │         ├── scan t1
+                                         │         │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
+                                         │         └── projections
+                                         │              └── variable: t2.a [type=int]
                                          └── projections
                                               └── div [type=decimal]
-                                                   ├── variable: column9 [type=int]
-                                                   └── variable: column10 [type=int]
+                                                   ├── variable: column11 [type=int]
+                                                   └── variable: column13 [type=int]
 
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
@@ -2002,3 +1977,369 @@ project
                 ├── const: 1 [type=int]
                 ├── const: 2 [type=int]
                 └── const: 3 [type=int]
+
+# Test aggregates at different scoping levels.
+build
+SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
+----
+project
+ ├── columns: max:14(int)
+ ├── scalar-group-by
+ │    ├── columns: column11:11(int)
+ │    ├── project
+ │    │    ├── columns: a:10(int)
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
+ │    │    └── projections
+ │    │         └── variable: t3.a [type=int]
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: max:13(int)
+                └── project
+                     ├── columns: max:13(int)
+                     ├── scan t2
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
+                     └── projections
+                          └── subquery [type=int]
+                               └── max1-row
+                                    ├── columns: max:12(int)
+                                    └── project
+                                         ├── columns: max:12(int)
+                                         ├── scan t1
+                                         │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
+                                         └── projections
+                                              └── variable: column11 [type=int]
+
+build
+SELECT (
+        SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t3.a)) FROM t1)
+        FROM t2
+       )
+FROM t3;
+----
+project
+ ├── columns: row:17(tuple{int, int, int})
+ ├── scan t3
+ │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
+ └── projections
+      └── subquery [type=tuple{int, int, int}]
+           └── max1-row
+                ├── columns: row:16(tuple{int, int, int})
+                └── project
+                     ├── columns: row:16(tuple{int, int, int})
+                     ├── scalar-group-by
+                     │    ├── columns: column12:12(int)
+                     │    ├── project
+                     │    │    ├── columns: a:11(int)
+                     │    │    ├── scan t2
+                     │    │    │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
+                     │    │    └── projections
+                     │    │         └── variable: t2.a [type=int]
+                     │    └── aggregations
+                     │         └── max [type=int]
+                     │              └── variable: a [type=int]
+                     └── projections
+                          └── subquery [type=tuple{int, int, int}]
+                               └── max1-row
+                                    ├── columns: row:15(tuple{int, int, int})
+                                    └── project
+                                         ├── columns: row:15(tuple{int, int, int})
+                                         ├── scalar-group-by
+                                         │    ├── columns: column10:10(int) column14:14(int)
+                                         │    ├── project
+                                         │    │    ├── columns: column13:13(int) t1.a:7(int)
+                                         │    │    ├── scan t1
+                                         │    │    │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
+                                         │    │    └── projections
+                                         │    │         └── plus [type=int]
+                                         │    │              ├── variable: t1.a [type=int]
+                                         │    │              └── variable: t3.a [type=int]
+                                         │    └── aggregations
+                                         │         ├── max [type=int]
+                                         │         │    └── variable: t1.a [type=int]
+                                         │         └── max [type=int]
+                                         │              └── variable: column13 [type=int]
+                                         └── projections
+                                              └── tuple [type=tuple{int, int, int}]
+                                                   ├── variable: column10 [type=int]
+                                                   ├── variable: column12 [type=int]
+                                                   └── variable: column14 [type=int]
+
+build
+SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2;
+----
+error (42803): subquery uses ungrouped column "a" from outer query
+
+build
+SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2 GROUP BY t2.a;
+----
+project
+ ├── columns: row:13(tuple{int, int, int})
+ ├── group-by
+ │    ├── columns: t2.a:1(int) column9:9(int)
+ │    ├── grouping columns: t2.a:1(int)
+ │    ├── project
+ │    │    ├── columns: a:8(int) t2.a:1(int)
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1(int) t2.b:2(int) t2.rowid:3(int!null)
+ │    │    └── projections
+ │    │         └── variable: t2.a [type=int]
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      └── subquery [type=tuple{int, int, int}]
+           └── max1-row
+                ├── columns: row:12(tuple{int, int, int})
+                └── project
+                     ├── columns: row:12(tuple{int, int, int})
+                     ├── scalar-group-by
+                     │    ├── columns: column7:7(int) column11:11(int)
+                     │    ├── project
+                     │    │    ├── columns: column10:10(int) t1.a:4(int)
+                     │    │    ├── scan t1
+                     │    │    │    └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+                     │    │    └── projections
+                     │    │         └── plus [type=int]
+                     │    │              ├── variable: t1.a [type=int]
+                     │    │              └── variable: t2.a [type=int]
+                     │    └── aggregations
+                     │         ├── max [type=int]
+                     │         │    └── variable: t1.a [type=int]
+                     │         └── max [type=int]
+                     │              └── variable: column10 [type=int]
+                     └── projections
+                          └── tuple [type=tuple{int, int, int}]
+                               ├── variable: column7 [type=int]
+                               ├── variable: column9 [type=int]
+                               └── variable: column11 [type=int]
+
+build
+SELECT
+    (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    5 IN (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    100 < ANY (SELECT max(t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    (SELECT max(t1.a) FROM t1 GROUP BY t1.b),
+    (SELECT max(t2.a) FROM t1 GROUP BY t1.b)
+FROM
+    t2;
+----
+project
+ ├── columns: max:14(int) max:15(int)
+ ├── scalar-group-by
+ │    ├── columns: column12:12(int)
+ │    ├── project
+ │    │    ├── columns: a:11(int)
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1(int) t2.b:2(int) t2.rowid:3(int!null)
+ │    │    └── projections
+ │    │         └── variable: t2.a [type=int]
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: column7:7(int)
+      │         └── project
+      │              ├── columns: column7:7(int)
+      │              └── group-by
+      │                   ├── columns: t1.b:5(int) column7:7(int)
+      │                   ├── grouping columns: t1.b:5(int)
+      │                   ├── project
+      │                   │    ├── columns: t1.a:4(int) t1.b:5(int)
+      │                   │    └── scan t1
+      │                   │         └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+      │                   └── aggregations
+      │                        └── max [type=int]
+      │                             └── variable: t1.a [type=int]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: max:13(int)
+                └── project
+                     ├── columns: max:13(int)
+                     ├── group-by
+                     │    ├── columns: t1.b:9(int)
+                     │    ├── grouping columns: t1.b:9(int)
+                     │    └── project
+                     │         ├── columns: t1.b:9(int)
+                     │         └── scan t1
+                     │              └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
+                     └── projections
+                          └── variable: column12 [type=int]
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1),
+    ARRAY (SELECT max(t2.a) FROM t1)
+FROM
+    t2
+GROUP BY t2.b;
+----
+project
+ ├── columns: array:15(tuple{int}[]) array:17(tuple{int}[])
+ ├── group-by
+ │    ├── columns: t2.b:2(int) column12:12(int)
+ │    ├── grouping columns: t2.b:2(int)
+ │    ├── project
+ │    │    ├── columns: a:11(int) t2.b:2(int)
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1(int) t2.b:2(int) t2.rowid:3(int!null)
+ │    │    └── projections
+ │    │         └── variable: t2.a [type=int]
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      ├── coalesce [type=int[]]
+      │    ├── subquery [type=int[]]
+      │    │    └── scalar-group-by
+      │    │         ├── columns: array_agg:14(int[])
+      │    │         ├── scalar-group-by
+      │    │         │    ├── columns: column7:7(int)
+      │    │         │    ├── project
+      │    │         │    │    ├── columns: t1.a:4(int)
+      │    │         │    │    └── scan t1
+      │    │         │    │         └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+      │    │         │    └── aggregations
+      │    │         │         └── max [type=int]
+      │    │         │              └── variable: t1.a [type=int]
+      │    │         └── aggregations
+      │    │              └── array-agg [type=int[]]
+      │    │                   └── variable: column7 [type=int]
+      │    └── array: [type=int[]]
+      └── coalesce [type=int[]]
+           ├── subquery [type=int[]]
+           │    └── scalar-group-by
+           │         ├── columns: array_agg:16(int[])
+           │         ├── project
+           │         │    ├── columns: max:13(int)
+           │         │    ├── scan t1
+           │         │    │    └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
+           │         │    └── projections
+           │         │         └── variable: column12 [type=int]
+           │         └── aggregations
+           │              └── array-agg [type=int[]]
+           │                   └── variable: max [type=int]
+           └── array: [type=int[]]
+
+build
+SELECT
+    ARRAY (SELECT max(t1.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t2.a) FROM t1 GROUP BY t2.b),
+    ARRAY (SELECT max(t1.a + t2.a) FROM t1 GROUP BY t2.b)
+FROM
+    t2
+GROUP BY t2.a, t2.b;
+----
+project
+ ├── columns: array:23(tuple{int}[]) array:25(tuple{int}[]) array:27(tuple{int}[])
+ ├── group-by
+ │    ├── columns: t2.a:1(int) t2.b:2(int) column13:13(int)
+ │    ├── grouping columns: t2.a:1(int) t2.b:2(int)
+ │    ├── project
+ │    │    ├── columns: a:12(int) t2.a:1(int) t2.b:2(int)
+ │    │    ├── scan t2
+ │    │    │    └── columns: t2.a:1(int) t2.b:2(int) t2.rowid:3(int!null)
+ │    │    └── projections
+ │    │         └── variable: t2.a [type=int]
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      ├── coalesce [type=int[]]
+      │    ├── subquery [type=int[]]
+      │    │    └── scalar-group-by
+      │    │         ├── columns: array_agg:22(int[])
+      │    │         ├── project
+      │    │         │    ├── columns: column7:7(int)
+      │    │         │    └── group-by
+      │    │         │         ├── columns: column7:7(int) b:8(int)
+      │    │         │         ├── grouping columns: b:8(int)
+      │    │         │         ├── project
+      │    │         │         │    ├── columns: b:8(int) t1.a:4(int)
+      │    │         │         │    ├── scan t1
+      │    │         │         │    │    └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
+      │    │         │         │    └── projections
+      │    │         │         │         └── variable: t2.b [type=int]
+      │    │         │         └── aggregations
+      │    │         │              └── max [type=int]
+      │    │         │                   └── variable: t1.a [type=int]
+      │    │         └── aggregations
+      │    │              └── array-agg [type=int[]]
+      │    │                   └── variable: column7 [type=int]
+      │    └── array: [type=int[]]
+      ├── coalesce [type=int[]]
+      │    ├── subquery [type=int[]]
+      │    │    └── scalar-group-by
+      │    │         ├── columns: array_agg:24(int[])
+      │    │         ├── project
+      │    │         │    ├── columns: max:15(int)
+      │    │         │    ├── group-by
+      │    │         │    │    ├── columns: b:14(int)
+      │    │         │    │    ├── grouping columns: b:14(int)
+      │    │         │    │    └── project
+      │    │         │    │         ├── columns: b:14(int)
+      │    │         │    │         ├── scan t1
+      │    │         │    │         │    └── columns: t1.a:9(int) t1.b:10(int) t1.rowid:11(int!null)
+      │    │         │    │         └── projections
+      │    │         │    │              └── variable: t2.b [type=int]
+      │    │         │    └── projections
+      │    │         │         └── variable: column13 [type=int]
+      │    │         └── aggregations
+      │    │              └── array-agg [type=int[]]
+      │    │                   └── variable: max [type=int]
+      │    └── array: [type=int[]]
+      └── coalesce [type=int[]]
+           ├── subquery [type=int[]]
+           │    └── scalar-group-by
+           │         ├── columns: array_agg:26(int[])
+           │         ├── project
+           │         │    ├── columns: column20:20(int)
+           │         │    └── group-by
+           │         │         ├── columns: column20:20(int) b:21(int)
+           │         │         ├── grouping columns: b:21(int)
+           │         │         ├── project
+           │         │         │    ├── columns: column19:19(int) b:21(int)
+           │         │         │    ├── scan t1
+           │         │         │    │    └── columns: t1.a:16(int) t1.b:17(int) t1.rowid:18(int!null)
+           │         │         │    └── projections
+           │         │         │         ├── plus [type=int]
+           │         │         │         │    ├── variable: t1.a [type=int]
+           │         │         │         │    └── variable: t2.a [type=int]
+           │         │         │         └── variable: t2.b [type=int]
+           │         │         └── aggregations
+           │         │              └── max [type=int]
+           │         │                   └── variable: column19 [type=int]
+           │         └── aggregations
+           │              └── array-agg [type=int[]]
+           │                   └── variable: column20 [type=int]
+           └── array: [type=int[]]
