@@ -57,14 +57,14 @@ var simpleTestRows = func() []simpleTestRow {
 	badChars := []rune{'a', ';', '\n', ',', '"', '\\', '\r', '<', '\t', '✅', 'π', rune(0), rune(10), rune(2425), rune(5183), utf8.RuneError}
 	r := rand.New(rand.NewSource(1))
 	testRows := []simpleTestRow{
-		{i: 0, s: `str`},
-		{i: 1, s: ``},
-		{i: 2, s: ` `},
-		{i: 3, s: `,`},
-		{i: 4, s: "\n"},
-		{i: 5, s: `\n`},
-		{i: 6, s: "\r\n"},
-		{i: 7, s: "\r"},
+		{i: 1, s: `str`},
+		{i: 2, s: ``},
+		{i: 3, s: ` `},
+		{i: 4, s: `,`},
+		{i: 5, s: "\n"},
+		{i: 6, s: `\n`},
+		{i: 7, s: "\r\n"},
+		{i: 8, s: "\r"},
 		{i: 9, s: `"`},
 
 		{i: 10, s: injectNull},
@@ -77,16 +77,16 @@ var simpleTestRows = func() []simpleTestRow {
 		{i: 15, s: `✅`},
 		{i: 16, s: `","\n,™¢`},
 		{i: 17, s: string([]rune{rune(0)})},
-		{i: 19, s: `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
-		{i: 20, s: `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
-		{i: 21, s: `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
+		{i: 18, s: `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
+		{i: 19, s: `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
+		{i: 20, s: `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
 	}
 
 	for i := 0; i < 10; i++ {
 		buf := make([]byte, 200)
 		r.Seed(int64(i))
 		r.Read(buf)
-		testRows = append(testRows, simpleTestRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
+		testRows = append(testRows, simpleTestRow{i: len(testRows) + 1, s: randStr(r, badChars, 1000), b: buf})
 	}
 	return testRows
 }()
@@ -239,7 +239,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 	}
 
 	for _, schema := range []string{
-		`CREATE TABLE simple (i INT PRIMARY KEY, s text, b binary(200))`,
+		`CREATE TABLE simple (i INT PRIMARY KEY AUTO_INCREMENT, s text, b binary(200))`,
 		`CREATE TABLE SECOND (
 			i INT PRIMARY KEY,
 			k INT,
@@ -304,7 +304,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 			s = nil
 		}
 		if _, err := db.Exec(
-			`INSERT INTO simple VALUES (?, ?, ?)`, tc.i, s, tc.b,
+			`INSERT INTO simple (s, b) VALUES (?, ?)`, s, tc.b,
 		); err != nil {
 			t.Fatal(err)
 		}
