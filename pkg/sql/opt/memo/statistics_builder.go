@@ -116,7 +116,7 @@ var statsAnnID = opt.NewTableAnnID()
 // statistic, colStatFromChild retrieves the table statistics from the metadata
 // (the metadata may in turn need to fetch the stats from the database if they
 // are not already cached). If a particular table statistic is not available, a
-// best-effort guess is made (see colStatMetadata for details).
+// best-effort guess is made (see colStatLeaf for details).
 //
 // To better understand how the statisticsBuilder works, let us consider this
 // simple query, which consists of a scan followed by an aggregation:
@@ -155,20 +155,22 @@ var statsAnnID = opt.NewTableAnnID()
 //                                 | colStatFromChild (x, y) |
 //                                 +-------------------------+
 //                                             |
-//                                 +------------------------+
-//                                 | colStatMetadata (x, y) |
-//                                 +------------------------+
+//                                   +--------------------+
+//                                   | colStatLeaf (x, y) |
+//                                   +--------------------+
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
 	evalCtx *tree.EvalContext
+	md      *opt.Metadata
 
 	// keyBuf is temporary "scratch" storage that's used to build keys.
 	keyBuf *keyBuffer
 }
 
-func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, keyBuf *keyBuffer) {
+func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, md *opt.Metadata, keyBuf *keyBuffer) {
 	sb.evalCtx = evalCtx
+	sb.md = md
 	sb.keyBuf = keyBuf
 }
 
@@ -180,9 +182,8 @@ func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, keyBuf *keyBuffer) 
 // the columns in colSet are outer columns, and therefore can be treated as
 // constant for the current expression.
 //
-// If the expression is a scan or virtual scan (and therefore has no children),
-// the statistics are retrieved from the metadata via a call to
-// colStatMetadata.
+// For the purposes of this function scans (including virtual scans) have the
+// "raw" table (without constraints, limits etc) as their "child".
 func (sb *statisticsBuilder) colStatFromChild(
 	colSet opt.ColSet, ev ExprView, childIdx int, relProps *props.Relational,
 ) *props.ColumnStatistic {
@@ -196,9 +197,9 @@ func (sb *statisticsBuilder) colStatFromChild(
 			table = ev.Private().(*VirtualScanOpDef).Table
 		}
 
-		s := sb.makeTableStatistics(table, ev.Metadata())
+		s := sb.makeTableStatistics(table)
 		fd := &relProps.FuncDeps
-		return sb.colStatMetadata(colSet, s, fd, ev.Metadata())
+		return sb.colStatLeaf(colSet, s, fd)
 	}
 
 	// Helper function to return the column statistic if the output columns of
@@ -236,7 +237,7 @@ func (sb *statisticsBuilder) colStatFromChild(
 // populating either s.ColStats or s.MultiColStats with the statistic as it
 // gets passed up the expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
-	if colSet.Len() == 0 {
+	if colSet.Empty() {
 		panic("column statistics cannot be determined for empty column set")
 	}
 
@@ -292,7 +293,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := ev.Logical().Relational
-		return sb.colStatMetadata(colSet, &relProps.Stats, &relProps.FuncDeps, ev.Metadata())
+		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -313,14 +314,12 @@ func (sb *statisticsBuilder) colStatFromCache(
 	return colStat, ok
 }
 
-// +----------+
-// | Metadata |
-// +----------+
-
-// colStatMetadata updates the statistics in the metadata to include an
-// estimated column statistic for the given column set.
-func (sb *statisticsBuilder) colStatMetadata(
-	colSet opt.ColSet, s *props.Statistics, fd *props.FuncDepSet, md *opt.Metadata,
+// colStatLeaf creates a column statistic for a given column set (if it doesn't
+// already exist in s), by deriving the statistic from the general statistics.
+// Used when there is no child expression to retrieve statistics from, typically
+// with the Statistics derived for a table.
+func (sb *statisticsBuilder) colStatLeaf(
+	colSet opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
 ) *props.ColumnStatistic {
 	// Check if the requested column statistic is already cached.
 	if stat, ok := sb.colStatFromCache(colSet, s); ok {
@@ -346,13 +345,13 @@ func (sb *statisticsBuilder) colStatMetadata(
 	if colSet.Len() == 1 {
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
-		if md.ColumnType(opt.ColumnID(col)) == types.Bool {
+		if sb.md.ColumnType(opt.ColumnID(col)) == types.Bool {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
 	} else {
 		distinctCount := 1.0
 		colSet.ForEach(func(i int) {
-			distinctCount *= sb.colStatMetadata(util.MakeFastIntSet(i), s, fd, md).DistinctCount
+			distinctCount *= sb.colStatLeaf(util.MakeFastIntSet(i), s, fd).DistinctCount
 		})
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 	}
@@ -392,7 +391,7 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 
 	// Calculate row count
 	// -------------------
-	inputStats := sb.makeTableStatistics(def.Table, ev.Metadata())
+	inputStats := sb.makeTableStatistics(def.Table)
 	sb.applySelectivity(inputStats.RowCount, s)
 	sb.finalizeFromCardinality(relProps)
 }
@@ -402,7 +401,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 	s := &relProps.Stats
 	def := ev.Private().(*ScanOpDef)
 
-	inputStats := sb.makeTableStatistics(def.Table, ev.Metadata())
+	inputStats := sb.makeTableStatistics(def.Table)
 	colStat := sb.copyColStatFromChild(colSet, ev, -1 /* childIdx */, relProps)
 	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
 
@@ -428,7 +427,7 @@ func (sb *statisticsBuilder) buildVirtualScan(ev ExprView, relProps *props.Relat
 	}
 
 	def := ev.Private().(*VirtualScanOpDef)
-	inputStats := sb.makeTableStatistics(def.Table, ev.Metadata())
+	inputStats := sb.makeTableStatistics(def.Table)
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
@@ -464,7 +463,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
 	inputFD := &ev.Child(0).Logical().Relational.FuncDeps
-	constrainedCols = sb.tryReduceCols(constrainedCols, ev, s, inputFD)
+	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
 
 	// Calculate selectivity
 	// ---------------------
@@ -537,7 +536,7 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *pro
 
 	colStat := sb.makeColStat(colSet, s)
 
-	if reqInputCols.Len() > 0 {
+	if !reqInputCols.Empty() {
 		// Inherit column statistics from input, using the reqInputCols identified
 		// above.
 		inputColStat := sb.colStatFromChild(reqInputCols, ev, 0 /* childIdx */, relProps)
@@ -618,8 +617,8 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 	// calculation based on functional dependencies.
 	leftCols := constrainedCols.Intersection(leftProps.OutputCols)
 	rightCols := constrainedCols.Intersection(rightProps.OutputCols)
-	leftCols = sb.tryReduceCols(leftCols, ev, s, &leftProps.FuncDeps)
-	rightCols = sb.tryReduceCols(rightCols, ev, s, &rightProps.FuncDeps)
+	leftCols = sb.tryReduceCols(leftCols, s, &leftProps.FuncDeps)
+	rightCols = sb.tryReduceCols(rightCols, s, &rightProps.FuncDeps)
 	constrainedCols = leftCols.Union(rightCols)
 
 	// Calculate selectivity
@@ -721,13 +720,13 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		//   columns.
 		var colStat *props.ColumnStatistic
 		inputRowCount := leftStats.RowCount * rightStats.RowCount
-		if rightCols.Len() == 0 {
+		if rightCols.Empty() {
 			colStat = sb.copyColStatFromChild(leftCols, ev, 0 /* childIdx */, relProps)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
 				sb.applySelectivityToColStat(colStat, s.Selectivity, inputRowCount)
 			}
-		} else if leftCols.Len() == 0 {
+		} else if leftCols.Empty() {
 			colStat = sb.copyColStatFromChild(rightCols, ev, 1 /* childIdx */, relProps)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
@@ -1154,7 +1153,7 @@ func (sb *statisticsBuilder) copyColStatFromChild(
 // Then, ensureColStat sets the distinct count to the minimum of the existing
 // value and the new value.
 func (sb *statisticsBuilder) ensureColStat(
-	col opt.ColumnID, distinctCount float64, ev ExprView, relProps *props.Relational,
+	col opt.ColumnID, maxDistinctCount float64, ev ExprView, relProps *props.Relational,
 ) *props.ColumnStatistic {
 	s := &relProps.Stats
 
@@ -1165,7 +1164,7 @@ func (sb *statisticsBuilder) ensureColStat(
 		)
 	}
 
-	colStat.DistinctCount = min(colStat.DistinctCount, distinctCount)
+	colStat.DistinctCount = min(colStat.DistinctCount, maxDistinctCount)
 	return colStat
 }
 
@@ -1191,17 +1190,15 @@ func (sb *statisticsBuilder) makeColStat(
 // Statistics are derived lazily and are cached in the metadata, since they may
 // be accessed multiple times during query optimization. For more details, see
 // props.Statistics.
-func (sb *statisticsBuilder) makeTableStatistics(
-	tabID opt.TableID, md *opt.Metadata,
-) *props.Statistics {
-	stats, ok := md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
+func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Statistics {
+	stats, ok := sb.md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
 	if ok {
 		// Already made.
 		return stats
 	}
 
 	// Make now and annotate the metadata table with it for next time.
-	tab := md.Table(tabID)
+	tab := sb.md.Table(tabID)
 	stats = &props.Statistics{}
 	if tab.StatisticCount() == 0 {
 		// No statistics.
@@ -1217,7 +1214,10 @@ func (sb *statisticsBuilder) makeTableStatistics(
 		stats.MultiColStats = make(map[string]*props.ColumnStatistic)
 		for i := 0; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			cols := sb.colSetFromTableStatistic(stat, tabID, md)
+			var cols opt.ColSet
+			for i := 0; i < stat.ColumnCount(); i++ {
+				cols.Add(int(tabID.ColumnID(stat.ColumnOrdinal(i))))
+			}
 
 			if cols.Len() == 1 {
 				col, _ := cols.Next(0)
@@ -1244,17 +1244,8 @@ func (sb *statisticsBuilder) makeTableStatistics(
 			}
 		}
 	}
-	md.SetTableAnnotation(tabID, statsAnnID, stats)
+	sb.md.SetTableAnnotation(tabID, statsAnnID, stats)
 	return stats
-}
-
-func (sb *statisticsBuilder) colSetFromTableStatistic(
-	stat opt.TableStatistic, tableID opt.TableID, md *opt.Metadata,
-) (cols opt.ColSet) {
-	for i := 0; i < stat.ColumnCount(); i++ {
-		cols.Add(int(tableID.ColumnID(stat.ColumnOrdinal(i))))
-	}
-	return cols
 }
 
 // translateColSet is used to translate a ColSet from one set of column IDs
@@ -1775,10 +1766,10 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConstraints(
 // this reduced column set to be used for selectivity calculation.
 //
 func (sb *statisticsBuilder) tryReduceCols(
-	cols opt.ColSet, ev ExprView, s *props.Statistics, fd *props.FuncDepSet,
+	cols opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
 ) opt.ColSet {
 	reducedCols := fd.ReduceCols(cols)
-	if reducedCols.Len() == 0 {
+	if reducedCols.Empty() {
 		// There are no reduced columns so we return the original column set.
 		return cols
 	}
