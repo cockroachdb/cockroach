@@ -285,13 +285,13 @@ func TestFormatExpr2(t *testing.T) {
 		expected string
 	}{
 		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegClass, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regclass(10,'foo'):::REGCLASS`},
+			tree.FmtParsable, `crdb_internal.create_REGCLASS(10,'foo'):::REGCLASS`},
 		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegProc, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
+			tree.FmtParsable, `crdb_internal.create_REGPROC(10,'foo'):::REGPROC`},
 		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegType, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
+			tree.FmtParsable, `crdb_internal.create_REGTYPE(10,'foo'):::REGTYPE`},
 		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegNamespace, "foo"),
-			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
+			tree.FmtParsable, `crdb_internal.create_REGNAMESPACE(10,'foo'):::REGNAMESPACE`},
 
 		// Ensure that nulls get properly type annotated when printed in an
 		// enclosing tuple that has a type for their position within the tuple.
