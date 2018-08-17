@@ -151,14 +151,14 @@ func UnimplementedWithIssueError(issue int, msg string) error {
 // Unimplemented constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error printed.
-func Unimplemented(feature, msg string) *Error {
-	return UnimplementedWithDepth(1, feature, msg)
+func Unimplemented(feature, msg string, args ...interface{}) *Error {
+	return UnimplementedWithDepth(1, feature, msg, args...)
 }
 
 // UnimplementedWithDepth constructs an implemented feature error,
 // tracking the context at the specified depth.
-func UnimplementedWithDepth(depth int, feature, msg string) *Error {
-	err := NewErrorWithDepthf(depth+1, CodeFeatureNotSupportedError, "%s", msg)
+func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{}) *Error {
+	err := NewErrorWithDepthf(depth+1, CodeFeatureNotSupportedError, msg, args...)
 	err.InternalCommand = feature
 	return err
 }
