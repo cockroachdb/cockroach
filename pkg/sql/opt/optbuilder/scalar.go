@@ -122,7 +122,8 @@ func (b *Builder) buildScalarHelper(
 	// Note that GROUP BY columns cannot be reused inside an aggregate input
 	// expression (when inAgg=true) because the aggregate input expressions and
 	// grouping expressions are built as part of the same projection.
-	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg
+	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg &&
+		!inScope.groupby.inGroupings
 	if inGroupingContext {
 		// TODO(rytaft): This currently regenerates a string for each subexpression.
 		// Change this to generate the string once for the top-level expression and
@@ -149,7 +150,11 @@ func (b *Builder) buildScalarHelper(
 				tree.ErrString(&t.name),
 			)})
 		}
+
 		return b.finishBuildScalarRef(t, label, inScope, outScope)
+
+	case *aggregateInfo:
+		return b.finishBuildScalarRef(t.col, label, inScope.groupby.aggOutScope, outScope)
 
 	case *tree.AndExpr:
 		left := b.buildScalarHelper(t.TypedLeft(), "", inScope, nil)
@@ -234,6 +239,12 @@ func (b *Builder) buildScalarHelper(
 			b.factory.ConstructArray(memo.EmptyList, typID),
 		}))
 
+		// Check that any outer columns referencing this scope are either
+		// aggregate or grouping columns in this scope.
+		if inGroupingContext {
+			b.checkSubqueryOuterCols(out, inScope)
+		}
+
 	case *tree.BinaryExpr:
 		// It's possible for an overload to be selected that expects different
 		// types than the TypedExpr arguments return:
@@ -302,6 +313,11 @@ func (b *Builder) buildScalarHelper(
 	case *tree.ComparisonExpr:
 		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
 			out, _ = b.buildMultiRowSubquery(t, inScope)
+			// Check that any outer columns referencing this scope are either
+			// aggregate or grouping columns in this scope.
+			if inGroupingContext {
+				b.checkSubqueryOuterCols(out, inScope)
+			}
 		} else if b.hasSubOperator(t) {
 			// Cases where the RHS is a subquery and not a scalar (of which only an
 			// array or tuple is legal) were handled above.
@@ -384,6 +400,11 @@ func (b *Builder) buildScalarHelper(
 
 	case *subquery:
 		out, _ = b.buildSingleRowSubquery(t, inScope)
+		// Check that any outer columns referencing this scope are either
+		// aggregate or grouping columns in this scope.
+		if inGroupingContext {
+			b.checkSubqueryOuterCols(out, inScope)
+		}
 
 	case *tree.Tuple:
 		list := make([]memo.GroupID, len(t.Exprs))
@@ -488,7 +509,7 @@ func (b *Builder) buildFunction(
 	}
 
 	if isAggregate(def) {
-		return b.buildAggregateFunction(f, funcDef, label, inScope, outScope)
+		panic("aggregate function should have been replaced")
 	}
 
 	argList := make([]memo.GroupID, len(f.Exprs))
@@ -547,6 +568,25 @@ func (b *Builder) buildRangeCond(
 		out = b.factory.ConstructNot(out)
 	}
 	return out
+}
+
+// checkSubqueryOuterCols checks that any outer columns from the given subquery
+// that reference inScope are either aggregate or grouping columns in inScope.
+func (b *Builder) checkSubqueryOuterCols(subqueryGroup memo.GroupID, inScope *scope) {
+	subqueryOuterCols := b.factory.Memo().GroupProperties(subqueryGroup).OuterCols()
+	if !subqueryOuterCols.Empty() {
+		subqueryOuterCols.IntersectionWith(inScope.colSet())
+		if !subqueryOuterCols.Empty() &&
+			!subqueryOuterCols.SubsetOf(inScope.groupby.aggOutScope.colSet()) {
+			subqueryOuterCols.DifferenceWith(inScope.groupby.aggOutScope.colSet())
+			colID, _ := subqueryOuterCols.Next(0)
+			col := inScope.getColumn(opt.ColumnID(colID))
+			panic(builderError{pgerror.NewErrorf(
+				pgerror.CodeGroupingError,
+				"subquery uses ungrouped column \"%s\" from outer query",
+				tree.ErrString(&col.name))})
+		}
+	}
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create

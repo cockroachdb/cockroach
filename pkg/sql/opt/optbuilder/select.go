@@ -402,6 +402,14 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		for i := range outScope.cols {
 			b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
 		}
+		labels := make([]string, len(projectionsScope.cols))
+		exprs := make(tree.TypedExprs, len(projectionsScope.cols))
+		for i := range projectionsScope.cols {
+			col := &projectionsScope.cols[i]
+			labels[i] = string(col.name)
+			exprs[i] = col
+		}
+		orderBy = b.analyzeOrderBy(orderBy, labels, exprs, outScope)
 		b.buildOrderBy(orderBy, outScope, projectionsScope)
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
@@ -428,14 +436,28 @@ func (b *Builder) buildSelectClause(
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
 
+	// This is where the magic happens. When this call reaches an aggregate
+	// function that refers to variables in fromScope or an ancestor scope,
+	// buildAggregateFunction is called which adds columns to the appropriate
+	// aggInScope and aggOutScope.
+	labels, selExprs := b.analyzeProjectionList(sel.Exprs, fromScope)
+
+	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
+	// exist) will be added here.
+	havingExpr := b.analyzeHaving(sel.Having, fromScope)
+	orderBy = b.analyzeOrderBy(orderBy, labels, selExprs, fromScope)
+	distinctOn := b.analyzeDistinctOnArgs(sel.DistinctOn, labels, selExprs, fromScope)
+
 	var projectionsScope *scope
-	if b.needsAggregation(sel, orderBy) {
-		outScope, projectionsScope = b.buildAggregation(sel, orderBy, fromScope)
+	if b.needsAggregation(sel, orderBy, fromScope) {
+		outScope, projectionsScope = b.buildAggregation(
+			sel, labels, selExprs, havingExpr, orderBy, distinctOn, fromScope,
+		)
 	} else {
 		projectionsScope = fromScope.replace()
-		b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
+		b.buildProjectionList(labels, selExprs, fromScope, projectionsScope)
 		b.buildOrderBy(orderBy, fromScope, projectionsScope)
-		b.buildDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+		b.buildDistinctOnArgs(distinctOn, fromScope, projectionsScope)
 		outScope = fromScope
 	}
 
@@ -494,7 +516,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(joinTables, tableScope)
 
-		outScope.appendColumns(tableScope)
+		outScope.appendColumnsFromScope(tableScope)
 		outScope.group = b.factory.ConstructInnerJoin(
 			outScope.group, tableScope.group, b.factory.ConstructTrue(),
 		)

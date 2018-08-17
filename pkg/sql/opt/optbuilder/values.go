@@ -61,7 +61,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 		}
 
 		for i, expr := range tuple {
-			texpr := inScope.resolveType(expr, types.Any)
+			texpr := inScope.resolveType(expr, types.Any, "VALUES")
 			typ := texpr.ResolvedType()
 			elems[i] = b.buildScalar(texpr, inScope)
 

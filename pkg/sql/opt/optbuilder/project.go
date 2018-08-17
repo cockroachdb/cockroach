@@ -67,26 +67,26 @@ func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.
 	)
 }
 
-// buildProjectionList builds a set of memo groups that represent the given
-// list of select expressions.
-//
-// See Builder.buildStmt for a description of the remaining input values.
+// analyzeProjectionList analyzes the given list of select expressions, and
+// returns them as a slice of labels and a slice of typed expressions.
 //
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
-func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, outScope *scope) {
+func (b *Builder) analyzeProjectionList(
+	selects tree.SelectExprs, inScope *scope,
+) (labels []string, exprs tree.TypedExprs) {
 	// We need to save and restore the previous values of the replaceSRFs field
 	// and the field in semaCtx in case we are recursively called within a
 	// subquery context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	defer func(replaceSRFs bool) { inScope.replaceSRFs = replaceSRFs }(inScope.replaceSRFs)
 
-	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
+	ctx := "SELECT"
+	b.semaCtx.Properties.Require(ctx, tree.RejectNestedGenerators)
 	inScope.replaceSRFs = true
 
-	if outScope.cols == nil {
-		outScope.cols = make([]scopeColumn, 0, len(selects))
-	}
+	labels = make([]string, 0, len(selects))
+	exprs = make(tree.TypedExprs, 0, len(selects))
 
 	for _, e := range selects {
 		// Start with fast path, looking for simple column reference.
@@ -107,22 +107,39 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 							"%q cannot be aliased", tree.ErrString(v))})
 					}
 
-					labels, exprs := b.expandStar(e.Expr, inScope)
-					for i, e := range exprs {
-						b.buildScalarProjection(e, labels[i], inScope, outScope)
-					}
+					starLabels, starExprs := b.expandStar(e.Expr, inScope, ctx)
+					labels = append(labels, starLabels...)
+					exprs = append(exprs, starExprs...)
 					continue
 				}
 			}
 
-			texpr = inScope.resolveType(e.Expr, types.Any)
+			texpr = inScope.resolveType(e.Expr, types.Any, ctx)
 		}
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
-		label := b.getColName(e)
-		b.buildScalarProjection(texpr, label, inScope, outScope)
+		labels = append(labels, b.getColName(e))
+		exprs = append(exprs, texpr)
+	}
+
+	return labels, exprs
+}
+
+// buildProjectionList builds a set of memo groups that represent the given
+// list of select expressions.
+//
+// See Builder.buildStmt for a description of the remaining input values.
+func (b *Builder) buildProjectionList(
+	labels []string, exprs []tree.TypedExpr, inScope *scope, outScope *scope,
+) {
+	if outScope.cols == nil {
+		outScope.cols = make([]scopeColumn, 0, len(exprs))
+	}
+
+	for i, e := range exprs {
+		b.buildScalarProjection(e, labels[i], inScope, outScope)
 	}
 }
 

@@ -92,7 +92,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			panic(builderError{err})
 		}
 
-		texpr := inScope.resolveType(expr, types.Any)
+		texpr := inScope.resolveType(expr, types.Any, "FROM")
 		elems[i] = b.buildScalarHelper(texpr, label, inScope, outScope)
 	}
 
