@@ -167,14 +167,13 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	return outScope
 }
 
-// buildDistinctOnArgs builds the DISTINCT ON columns, adding to
-// projectionsScope.extraCols as necessary.
-// The set of DISTINCT ON columns is stored in projectionsScope.distinctOnCols.
-func (b *Builder) buildDistinctOnArgs(
-	distinctOn tree.DistinctOn, inScope, projectionsScope *scope,
-) {
+// analyzeDistinctOnArgs analyzes the DISTINCT ON columns and returns them as
+// a list of typed expressions.
+func (b *Builder) analyzeDistinctOnArgs(
+	distinctOn tree.DistinctOn, labels []string, selExprs tree.TypedExprs, inScope *scope,
+) tree.TypedExprs {
 	if len(distinctOn) == 0 {
-		return
+		return nil
 	}
 
 	// We need to save and restore the previous value of the field in
@@ -183,10 +182,28 @@ func (b *Builder) buildDistinctOnArgs(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require("DISTINCT ON", tree.RejectGenerators)
 
+	distinctOnOut := make(tree.TypedExprs, 0, len(distinctOn))
+	for i := range distinctOn {
+		do := b.analyzeExtraArgument(distinctOn[i], labels, selExprs, inScope, "DISTINCT ON")
+		distinctOnOut = append(distinctOnOut, do...)
+	}
+	return distinctOnOut
+}
+
+// buildDistinctOnArgs builds the DISTINCT ON columns, adding to
+// projectionsScope.extraCols as necessary.
+// The set of DISTINCT ON columns is stored in projectionsScope.distinctOnCols.
+func (b *Builder) buildDistinctOnArgs(
+	distinctOn tree.TypedExprs, inScope, projectionsScope *scope,
+) {
+	if len(distinctOn) == 0 {
+		return
+	}
+
 	distinctOnScope := inScope.push()
 
 	for i := range distinctOn {
-		b.buildExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope, "DISTINCT ON")
+		b.addExtraColumn(distinctOn[i], inScope, projectionsScope, distinctOnScope)
 	}
 	projectionsScope.addExtraColumns(distinctOnScope.cols)
 	projectionsScope.distinctOnCols = distinctOnScope.colSet()

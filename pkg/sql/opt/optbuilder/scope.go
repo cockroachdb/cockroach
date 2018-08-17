@@ -68,6 +68,10 @@ type scope struct {
 	// used by the Builder to convert the input from the FROM clause to a lateral
 	// cross join between the input and a Zip of all the srfs in this slice.
 	srfs []*srf
+
+	// context is the current context in the SQL query (e.g., "SELECT" or
+	// "HAVING"). It is used for error messages.
+	context string
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -112,11 +116,17 @@ func (s *scope) replace() *scope {
 	return r
 }
 
+// appendColumnsFromScope adds newly bound variables to this scope.
+// The groups in the new columns are reset to 0.
+func (s *scope) appendColumnsFromScope(src *scope) {
+	s.appendColumns(src.cols)
+}
+
 // appendColumns adds newly bound variables to this scope.
 // The groups in the new columns are reset to 0.
-func (s *scope) appendColumns(src *scope) {
+func (s *scope) appendColumns(cols []scopeColumn) {
 	l := len(s.cols)
-	s.cols = append(s.cols, src.cols...)
+	s.cols = append(s.cols, cols...)
 	// We want to reset the groups, as these become pass-through columns in the
 	// new scope.
 	for i := l; i < len(s.cols); i++ {
@@ -244,7 +254,11 @@ func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 // The desired type is a suggestion, but resolveType does not throw an error if
 // the resolved type turns out to be different from desired (in contrast to
 // resolveAndRequireType, which panics with a builderError).
-func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+//
+// context is a string used for error reporting. It shows the context in
+// which this function was called (e.g., "SELECT", "FROM").
+func (s *scope) resolveType(expr tree.Expr, desired types.T, context string) tree.TypedExpr {
+	s.context = context
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
 	if err != nil {
@@ -263,14 +277,15 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 // panics with a builderError (in contrast to resolveType, which returns the
 // typed expression with no error).
 //
-// typingContext is a string used for error reporting in case the resolved
-// type and desired type do not match. It shows the context in which
+// context is a string used for error reporting (e.g., in case the resolved
+// type and desired type do not match). It shows the context in which
 // this function was called (e.g., "LIMIT", "OFFSET").
 func (s *scope) resolveAndRequireType(
-	expr tree.Expr, desired types.T, typingContext string,
+	expr tree.Expr, desired types.T, context string,
 ) tree.TypedExpr {
+	s.context = context
 	expr = s.walkExprTree(expr)
-	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, typingContext)
+	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, context)
 	if err != nil {
 		panic(builderError{err})
 	}
@@ -281,6 +296,10 @@ func (s *scope) resolveAndRequireType(
 // isOuterColumn returns true if the given column is not present in the current
 // scope (it may or may not be present in an ancestor scope).
 func (s *scope) isOuterColumn(id opt.ColumnID) bool {
+	if s == nil || len(s.cols) == 0 {
+		return true
+	}
+
 	for i := range s.cols {
 		col := &s.cols[i]
 		if col.id == id {
@@ -369,16 +388,41 @@ func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
 }
 
 // getAggregateCols returns the columns in this scope corresponding
-// to aggregate functions.
+// to aggregate functions. This call is only valid on an aggOutScope.
 func (s *scope) getAggregateCols() []scopeColumn {
-	// Aggregates are always clustered at the end of the column list, in the
-	// same order as s.groupby.aggs.
-	return s.cols[len(s.cols)-len(s.groupby.aggs):]
+	// Aggregates are always clustered at the beginning of the column list, in
+	// the same order as s.groupby.aggs.
+	return s.cols[:len(s.groupby.aggs)]
+}
+
+// getAggregateArgCols returns the columns in this scope corresponding
+// to arguments to aggregate functions. This call is only valid on an
+// aggInScope.
+func (s *scope) getAggregateArgCols(groupingsLen int) []scopeColumn {
+	// Aggregate args are always clustered at the beginning of the column list.
+	return s.cols[:len(s.cols)-groupingsLen]
+}
+
+// getGroupingCols returns the columns in this scope corresponding
+// to grouping columns. This call is valid on an aggInScope or aggOutScope.
+func (s *scope) getGroupingCols(groupingsLen int) []scopeColumn {
+	// Grouping cols are always clustered at the end of the column list.
+	return s.cols[len(s.cols)-groupingsLen:]
+}
+
+// hasAggregates returns true if this scope contains aggregate functions.
+func (s *scope) hasAggregates() bool {
+	aggOutScope := s.groupby.aggOutScope
+	return aggOutScope != nil && len(aggOutScope.groupby.aggs) > 0
 }
 
 // findAggregate finds the given aggregate among the bound variables
 // in this scope. Returns nil if the aggregate is not found.
 func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
+	if s.groupby.aggs == nil {
+		return nil
+	}
+
 	for i, a := range s.groupby.aggs {
 		// Find an existing aggregate that has the same function and the same
 		// arguments.
@@ -402,17 +446,53 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 }
 
 // startAggFunc is called when the builder starts building an aggregate
-// function. It is used to disallow nested aggregates and ensure that aggregate
-// functions are only used in a groupings scope.
-func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
-	for curr := s; curr != nil; curr = curr.parent {
-		if curr.groupby.inAgg {
-			panic(builderError{sqlbase.NewAggInAggError()})
-		}
+// function. It is used to disallow nested aggregates and ensure that a
+// grouping error is not called on the aggregate arguments. For example:
+//   SELECT max(v) FROM kv GROUP BY k
+// should mot throw an error, even though v is not a grouping column.
+// Non-grouping columns are allowed inside aggregate functions.
+//
+// startAggFunc returns a temporary scope for building the aggregate arguments.
+// It is not possible to know the correct scope until the arguments are fully
+// built. At that point, endAggFunc can be used to find the correct scope.
+// If endAggFunc returns a different scope than startAggFunc, the columns
+// will be transferred to the correct scope by buildAggregateFunction.
+func (s *scope) startAggFunc() *scope {
+	if s.groupby.inAgg {
+		panic(builderError{sqlbase.NewAggInAggError()})
+	}
+	s.groupby.inAgg = true
 
-		if curr.groupby.aggInScope != nil {
-			// The aggregate will be added to the innermost groupings scope.
-			s.groupby.inAgg = true
+	if s.groupby.aggInScope == nil {
+		return s.builder.allocScope()
+	}
+	return s.groupby.aggInScope
+}
+
+// endAggFunc is called when the builder finishes building an aggregate
+// function. It is used in combination with startAggFunc to disallow nested
+// aggregates and prevent grouping errors while building aggregate arguments.
+//
+// In addition, endAggFunc finds the correct aggInScope and aggOutScope, given
+// that the aggregate references the columns in cols. The reference scope
+// is the one closest to the current scope which contains at least one of the
+// variables referenced by the aggregate (or the current scope if the aggregate
+// references no variables). endAggFunc also ensures that aggregate functions
+// are only used in a groupings scope.
+func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
+	if !s.groupby.inAgg {
+		panic(fmt.Errorf("mismatched calls to start/end aggFunc"))
+	}
+	s.groupby.inAgg = false
+
+	for curr := s; curr != nil; curr = curr.parent {
+		if cols.Len() == 0 || cols.Intersects(curr.colSet()) {
+			if curr.groupby.aggInScope == nil {
+				curr.groupby.aggInScope = curr.replace()
+			}
+			if curr.groupby.aggOutScope == nil {
+				curr.groupby.aggOutScope = curr.replace()
+			}
 			return curr.groupby.aggInScope, curr.groupby.aggOutScope
 		}
 	}
@@ -420,16 +500,27 @@ func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 	panic(fmt.Errorf("aggregate function is not allowed in this context"))
 }
 
-// endAggFunc is called when the builder finishes building an aggregate
-// function. It is used in combination with startAggFunc to disallow nested
-// aggregates and ensure that aggregate functions are only used in a groupings
-// scope. It returns the reference scope to which the new aggregate should be
-// added.
-func (s *scope) endAggFunc() {
-	if !s.groupby.inAgg {
-		panic(fmt.Errorf("mismatched calls to start/end aggFunc"))
+// startGroupings is called when the builder starts building the grouping
+// columns. It is used to ensure that a grouping error is not called
+// prematurely. For example:
+//   SELECT count(*), k FROM kv GROUP BY k
+// is legal, but
+//   SELECT count(*), v FROM kv GROUP BY k
+// will throw the error, `column "v" must appear in the GROUP BY clause or be
+// used in an aggregate function`. The builder cannot know whether there is
+// a grouping error until the grouping columns are fully built.
+func (s *scope) startGroupings() {
+	s.groupby.inGroupings = true
+}
+
+// endGroupings is called when the builder finishes building the grouping
+// columns. It is used in combination with startGroupings to ensure that a
+// grouping error is not called prematurely.
+func (s *scope) endGroupings() {
+	if !s.groupby.inGroupings {
+		panic(fmt.Errorf("mismatched calls to start/end groupings"))
 	}
-	s.groupby.inAgg = false
+	s.groupby.inGroupings = false
 }
 
 // scope implements the tree.Visitor interface so that it can walk through
@@ -643,7 +734,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
 		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
 		//
-		labels, exprs := s.builder.expandStar(expr, s)
+		labels, exprs := s.builder.expandStar(expr, s, s.context)
 		// We return an untyped tuple because name resolution occurs
 		// before type checking, and type checking will resolve the
 		// tuple's type. However we need to preserve the labels in
@@ -665,6 +756,10 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
+		if t.WindowDef != nil {
+			panic(unimplementedf("window functions are not supported"))
+		}
+
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
 		if err != nil {
 			panic(builderError{err})
@@ -675,45 +770,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			break
 		}
 
-		if len(t.Exprs) != 1 {
+		if isAggregate(def) {
+			expr = s.replaceAggregate(t, def)
 			break
-		}
-		vn, ok := t.Exprs[0].(tree.VarName)
-		if !ok {
-			break
-		}
-		vn, err = vn.NormalizeVarName()
-		if err != nil {
-			panic(builderError{err})
-		}
-		t.Exprs[0] = vn
-
-		if strings.EqualFold(def.Name, "count") && t.Type == 0 {
-			if _, ok := vn.(tree.UnqualifiedStar); ok {
-				// Special case handling for COUNT(*). This is a special construct to
-				// count the number of rows; in this case * does NOT refer to a set of
-				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
-				// Replace the function with COUNT_ROWS (which doesn't take any
-				// arguments).
-				e := &tree.FuncExpr{
-					Func: tree.ResolvableFunctionReference{
-						FunctionReference: &tree.UnresolvedName{
-							NumParts: 1, Parts: tree.NameParts{"count_rows"},
-						},
-					},
-				}
-				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
-				// expression; we should not hit an error here.
-				if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
-					panic(builderError{err})
-				}
-				e.Filter = t.Filter
-				e.WindowDef = t.WindowDef
-				return true, e
-			}
-			// TODO(rytaft): Add handling for tree.AllColumnsSelector to support
-			// expressions like SELECT COUNT(kv.*) FROM kv
-			// Similar to the work done in PR #17833.
 		}
 
 	case *tree.ArrayFlatten:
@@ -781,7 +840,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr) *srf {
 	// context.
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
-	s.builder.semaCtx.Properties.Require("SELECT",
+	s.builder.semaCtx.Properties.Require(s.context,
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	expr := f.Walk(s)
@@ -803,6 +862,97 @@ func (s *scope) replaceSRF(f *tree.FuncExpr) *srf {
 	// by the build process will not be treated as outer columns.
 	s.cols = append(s.cols, srf.cols...)
 	return srf
+}
+
+// replaceAggregate returns an aggregateInfo that can be used to replace a raw
+// aggregate function. When an aggregateInfo is encountered during the build
+// process, it is replaced with a reference to the column returned by the
+// aggregation.
+//
+// replaceAggregate also stores the aggregateInfo in the aggregation scope for
+// this aggregate, using the aggOutScope.groupby.aggs slice. The aggregation
+// scope is the one closest to the current scope which contains at least one of
+// the variables referenced by the aggregate (or the current scope if the
+// aggregate references no variables). The aggOutScope.groupby.aggs slice is
+// used later by the Builder to build aggregations in the aggregation scope.
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) *aggregateInfo {
+	f, def = s.replaceCount(f, def)
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
+
+	s.builder.semaCtx.Properties.Require(s.context,
+		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
+
+	expr := f.Walk(s)
+	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	if err != nil {
+		panic(builderError{err})
+	}
+	f = typedFunc.(*tree.FuncExpr)
+
+	funcDef := memo.FuncOpDef{
+		Name:       def.Name,
+		Type:       f.ResolvedType(),
+		Properties: &def.FunctionProperties,
+		Overload:   f.ResolvedOverload(),
+	}
+
+	return s.builder.buildAggregateFunction(f, funcDef, "", s)
+}
+
+// replaceCount replaces count(*) with count_rows().
+func (s *scope) replaceCount(
+	f *tree.FuncExpr, def *tree.FunctionDefinition,
+) (*tree.FuncExpr, *tree.FunctionDefinition) {
+	if len(f.Exprs) != 1 {
+		return f, def
+	}
+	vn, ok := f.Exprs[0].(tree.VarName)
+	if !ok {
+		return f, def
+	}
+	vn, err := vn.NormalizeVarName()
+	if err != nil {
+		panic(builderError{err})
+	}
+	f.Exprs[0] = vn
+
+	if strings.EqualFold(def.Name, "count") && f.Type == 0 {
+		if _, ok := vn.(tree.UnqualifiedStar); ok {
+			// Special case handling for COUNT(*). This is a special construct to
+			// count the number of rows; in this case * does NOT refer to a set of
+			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
+			// Replace the function with COUNT_ROWS (which doesn't take any
+			// arguments).
+			e := &tree.FuncExpr{
+				Func: tree.ResolvableFunctionReference{
+					FunctionReference: &tree.UnresolvedName{
+						NumParts: 1, Parts: tree.NameParts{"count_rows"},
+					},
+				},
+			}
+			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
+			// expression; we should not hit an error here.
+			if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
+				panic(builderError{err})
+			}
+			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+			if err != nil {
+				panic(builderError{err})
+			}
+			e.Filter = f.Filter
+			e.WindowDef = f.WindowDef
+			return e, newDef
+		}
+		// TODO(rytaft): Add handling for tree.AllColumnsSelector to support
+		// expressions like SELECT COUNT(kv.*) FROM kv
+		// Similar to the work done in PR #17833.
+	}
+
+	return f, def
 }
 
 // Replace a raw subquery node with a typed subquery. multiRow specifies
@@ -842,7 +992,7 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	if len(outScope.extraCols) > 0 {
 		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
-		projScope.appendColumns(outScope)
+		projScope.appendColumnsFromScope(outScope)
 		projScope.group = s.builder.constructProject(outScope.group, projScope.cols)
 		outScope = projScope
 	}

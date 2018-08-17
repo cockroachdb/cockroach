@@ -36,12 +36,15 @@ func checkFrom(expr tree.Expr, inScope *scope) {
 
 // expandStar expands expr into a list of columns if expr
 // corresponds to a "*", "<table>.*" or "(Expr).*".
+//
+// context is the context in which this function was called (e.g. "SELECT",
+// "ORDER BY") and is used for error reporting.
 func (b *Builder) expandStar(
-	expr tree.Expr, inScope *scope,
+	expr tree.Expr, inScope *scope, context string,
 ) (labels []string, exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
 	case *tree.TupleStar:
-		texpr := inScope.resolveType(t.Expr, types.Any)
+		texpr := inScope.resolveType(t.Expr, types.Any, context)
 		typ := texpr.ResolvedType()
 		tType, ok := typ.(types.TTuple)
 		if !ok || tType.Labels == nil {
@@ -120,22 +123,25 @@ func (b *Builder) expandStar(
 // expr corresponds to a "*", "<table>.*" or "(Expr).*". Otherwise,
 // expandStarAndResolveType resolves the type of expr and returns it
 // as a []TypedExpr.
+//
+// context is the context in which this function was called (e.g. "SELECT",
+// "ORDER BY") and is used for error reporting.
 func (b *Builder) expandStarAndResolveType(
-	expr tree.Expr, inScope *scope,
+	expr tree.Expr, inScope *scope, context string,
 ) (exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
 	case *tree.AllColumnsSelector, tree.UnqualifiedStar, *tree.TupleStar:
-		_, exprs = b.expandStar(expr, inScope)
+		_, exprs = b.expandStar(expr, inScope, context)
 
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
 			panic(builderError{err})
 		}
-		return b.expandStarAndResolveType(vn, inScope)
+		return b.expandStarAndResolveType(vn, inScope, context)
 
 	default:
-		texpr := inScope.resolveType(t, types.Any)
+		texpr := inScope.resolveType(t, types.Any, context)
 		exprs = []tree.TypedExpr{texpr}
 	}
 
@@ -238,7 +244,9 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 // If there are no aliases in columns that expr refers to, then -1 is returned.
 // This method is pertinent to ORDER BY and DISTINCT ON clauses that may refer
 // to a column alias.
-func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
+func colIdxByProjectionAlias(
+	expr tree.Expr, op string, labels []string, selExprs tree.TypedExprs,
+) int {
 	index := -1
 
 	if vBase, ok := expr.(tree.VarName); ok {
@@ -254,8 +262,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			//   SELECT a AS b FROM t ORDER BY b
 			//   SELECT DISTINCT ON (b) a AS b FROM t
 			target := c.ColumnName
-			for j, col := range scope.cols {
-				if col.name == target {
+			for j := range selExprs {
+				if labels[j] == string(target) {
 					if index != -1 {
 						// There is more than one projection alias that matches the clause.
 						// Here, SQL92 is specific as to what should be done: if the
@@ -263,7 +271,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 						// accept that and ignore the ambiguity. This plays nice with
 						// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
 						// ambiguity error.
-						if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
+						if symbolicExprStr(selExprs[j]) != symbolicExprStr(selExprs[index]) {
 							panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
 								"%s \"%s\" is ambiguous", op, target)})
 						}

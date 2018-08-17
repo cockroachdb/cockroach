@@ -59,8 +59,8 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
 		outScope = inScope.push()
-		outScope.appendColumns(leftScope)
-		outScope.appendColumns(rightScope)
+		outScope.appendColumnsFromScope(leftScope)
+		outScope.appendColumnsFromScope(rightScope)
 
 		var filter memo.GroupID
 		if on, ok := cond.(*tree.OnJoinCond); ok {
