@@ -3078,12 +3078,16 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
 		d.DInt.Format(ctx)
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
-		ctx.Buffer.WriteString("crdb_internal.create_" + strings.ToLower(d.semanticType.Name) + "(")
-		ctx.Buffer.WriteString(d.DInt.String())
-		ctx.Buffer.WriteString(`,'`)
-		ctx.Buffer.WriteString(d.name)
-		ctx.Buffer.WriteString(`')`)
+		ctx.WriteString("crdb_internal.create_")
+		ctx.WriteString(d.semanticType.Name)
+		ctx.WriteByte('(')
+		d.DInt.Format(ctx)
+		ctx.WriteByte(',')
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncNoFlags)
+		ctx.WriteByte(')')
 	} else {
+		// This is used to print the name of pseudo-procedures in e.g.
+		// pg_catalog.pg_type.typinput
 		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
 	}
 }

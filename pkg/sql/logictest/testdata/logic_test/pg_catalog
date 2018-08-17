@@ -803,6 +803,7 @@ ORDER BY oid
 oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 16    bool          2980797153    NULL      1       true      b
 17    bytea         2980797153    NULL      -1      false     b
+18    char          2980797153    NULL      -1      false     b
 19    name          2980797153    NULL      -1      false     b
 20    int8          2980797153    NULL      8       true      b
 21    int2          2980797153    NULL      8       true      b
@@ -817,16 +818,19 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 869   inet          2980797153    NULL      24      true      b
 1000  _bool         2980797153    NULL      -1      false     b
 1001  _bytea        2980797153    NULL      -1      false     b
+1002  _char         2980797153    NULL      -1      false     b
 1003  _name         2980797153    NULL      -1      false     b
 1005  _int2         2980797153    NULL      -1      false     b
 1007  _int4         2980797153    NULL      -1      false     b
 1009  _text         2980797153    NULL      -1      false     b
+1014  _bpchar       2980797153    NULL      -1      false     b
 1015  _varchar      2980797153    NULL      -1      false     b
 1016  _int8         2980797153    NULL      -1      false     b
 1021  _float4       2980797153    NULL      -1      false     b
 1022  _float8       2980797153    NULL      -1      false     b
 1028  _oid          2980797153    NULL      -1      false     b
 1041  _inet         2980797153    NULL      -1      false     b
+1042  bpchar        2980797153    NULL      -1      false     b
 1043  varchar       2980797153    NULL      -1      false     b
 1082  date          2980797153    NULL      8       true      b
 1083  time          2980797153    NULL      8       true      b
@@ -839,6 +843,8 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 1186  interval      2980797153    NULL      24      true      b
 1187  _interval     2980797153    NULL      -1      false     b
 1231  _numeric      2980797153    NULL      -1      false     b
+1560  bit           2980797153    NULL      8       true      b
+1561  _bit          2980797153    NULL      -1      false     b
 1700  numeric       2980797153    NULL      -1      false     b
 2202  regprocedure  2980797153    NULL      8       true      b
 2205  regclass      2980797153    NULL      8       true      b
@@ -859,6 +865,7 @@ ORDER BY oid
 oid   typname       typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
 16    bool          B            false           true          ,         0         0        1000
 17    bytea         U            false           true          ,         0         0        1001
+18    char          S            false           true          ,         0         0        1002
 19    name          S            false           true          ,         0         0        1003
 20    int8          N            false           true          ,         0         0        1016
 21    int2          N            false           true          ,         0         0        1005
@@ -873,16 +880,19 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 869   inet          I            false           true          ,         0         0        1041
 1000  _bool         A            false           true          ,         0         16       0
 1001  _bytea        A            false           true          ,         0         17       0
+1002  _char         A            false           true          ,         0         18       0
 1003  _name         A            false           true          ,         0         19       0
 1005  _int2         A            false           true          ,         0         21       0
 1007  _int4         A            false           true          ,         0         23       0
 1009  _text         A            false           true          ,         0         25       0
+1014  _bpchar       A            false           true          ,         0         1042     0
 1015  _varchar      A            false           true          ,         0         1043     0
 1016  _int8         A            false           true          ,         0         20       0
 1021  _float4       A            false           true          ,         0         700      0
 1022  _float8       A            false           true          ,         0         701      0
 1028  _oid          A            false           true          ,         0         26       0
 1041  _inet         A            false           true          ,         0         869      0
+1042  bpchar        S            false           true          ,         0         0        1014
 1043  varchar       S            false           true          ,         0         0        1015
 1082  date          D            false           true          ,         0         0        1182
 1083  time          D            false           true          ,         0         0        1183
@@ -895,6 +905,8 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 1186  interval      T            false           true          ,         0         0        1187
 1187  _interval     A            false           true          ,         0         1186     0
 1231  _numeric      A            false           true          ,         0         1700     0
+1560  bit           N            false           true          ,         0         0        1561
+1561  _bit          A            false           true          ,         0         1560     0
 1700  numeric       N            false           true          ,         0         0        1231
 2202  regprocedure  N            false           true          ,         0         0        0
 2205  regclass      N            false           true          ,         0         0        0
@@ -915,6 +927,7 @@ ORDER BY oid
 oid   typname       typinput        typoutput        typreceive        typsend           typmodin  typmodout  typanalyze
 16    bool          boolin          boolout          boolrecv          boolsend          0         0          0
 17    bytea         byteain         byteaout         bytearecv         byteasend         0         0          0
+18    char          charin          charout          charrecv          charsend          0         0          0
 19    name          namein          nameout          namerecv          namesend          0         0          0
 20    int8          int8in          int8out          int8recv          int8send          0         0          0
 21    int2          int2in          int2out          int2recv          int2send          0         0          0
@@ -929,16 +942,19 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 869   inet          inetin          inetout          inetrecv          inetsend          0         0          0
 1000  _bool         array_in        array_out        array_recv        array_send        0         0          0
 1001  _bytea        array_in        array_out        array_recv        array_send        0         0          0
+1002  _char         array_in        array_out        array_recv        array_send        0         0          0
 1003  _name         array_in        array_out        array_recv        array_send        0         0          0
 1005  _int2         array_in        array_out        array_recv        array_send        0         0          0
 1007  _int4         array_in        array_out        array_recv        array_send        0         0          0
 1009  _text         array_in        array_out        array_recv        array_send        0         0          0
+1014  _bpchar       array_in        array_out        array_recv        array_send        0         0          0
 1015  _varchar      array_in        array_out        array_recv        array_send        0         0          0
 1016  _int8         array_in        array_out        array_recv        array_send        0         0          0
 1021  _float4       array_in        array_out        array_recv        array_send        0         0          0
 1022  _float8       array_in        array_out        array_recv        array_send        0         0          0
 1028  _oid          array_in        array_out        array_recv        array_send        0         0          0
 1041  _inet         array_in        array_out        array_recv        array_send        0         0          0
+1042  bpchar        bpcharin        bpcharout        bpcharrecv        bpcharsend        0         0          0
 1043  varchar       varcharin       varcharout       varcharrecv       varcharsend       0         0          0
 1082  date          date_in         date_out         date_recv         date_send         0         0          0
 1083  time          time_in         time_out         time_recv         time_send         0         0          0
@@ -951,6 +967,8 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 1186  interval      interval_in     interval_out     interval_recv     interval_send     0         0          0
 1187  _interval     array_in        array_out        array_recv        array_send        0         0          0
 1231  _numeric      array_in        array_out        array_recv        array_send        0         0          0
+1560  bit           bitin           bitout           bitrecv           bitsend           0         0          0
+1561  _bit          array_in        array_out        array_recv        array_send        0         0          0
 1700  numeric       numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
 2202  regprocedure  regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
@@ -971,6 +989,7 @@ ORDER BY oid
 oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 16    bool          NULL      NULL        false       0            -1
 17    bytea         NULL      NULL        false       0            -1
+18    char          NULL      NULL        false       0            -1
 19    name          NULL      NULL        false       0            -1
 20    int8          NULL      NULL        false       0            -1
 21    int2          NULL      NULL        false       0            -1
@@ -985,16 +1004,19 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 869   inet          NULL      NULL        false       0            -1
 1000  _bool         NULL      NULL        false       0            -1
 1001  _bytea        NULL      NULL        false       0            -1
+1002  _char         NULL      NULL        false       0            -1
 1003  _name         NULL      NULL        false       0            -1
 1005  _int2         NULL      NULL        false       0            -1
 1007  _int4         NULL      NULL        false       0            -1
 1009  _text         NULL      NULL        false       0            -1
+1014  _bpchar       NULL      NULL        false       0            -1
 1015  _varchar      NULL      NULL        false       0            -1
 1016  _int8         NULL      NULL        false       0            -1
 1021  _float4       NULL      NULL        false       0            -1
 1022  _float8       NULL      NULL        false       0            -1
 1028  _oid          NULL      NULL        false       0            -1
 1041  _inet         NULL      NULL        false       0            -1
+1042  bpchar        NULL      NULL        false       0            -1
 1043  varchar       NULL      NULL        false       0            -1
 1082  date          NULL      NULL        false       0            -1
 1083  time          NULL      NULL        false       0            -1
@@ -1007,6 +1029,8 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 1186  interval      NULL      NULL        false       0            -1
 1187  _interval     NULL      NULL        false       0            -1
 1231  _numeric      NULL      NULL        false       0            -1
+1560  bit           NULL      NULL        false       0            -1
+1561  _bit          NULL      NULL        false       0            -1
 1700  numeric       NULL      NULL        false       0            -1
 2202  regprocedure  NULL      NULL        false       0            -1
 2205  regclass      NULL      NULL        false       0            -1
@@ -1027,6 +1051,7 @@ ORDER BY oid
 oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 16    bool          0         0             NULL           NULL        NULL
 17    bytea         0         0             NULL           NULL        NULL
+18    char          0         1661428263    NULL           NULL        NULL
 19    name          0         1661428263    NULL           NULL        NULL
 20    int8          0         0             NULL           NULL        NULL
 21    int2          0         0             NULL           NULL        NULL
@@ -1041,16 +1066,19 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 869   inet          0         0             NULL           NULL        NULL
 1000  _bool         0         0             NULL           NULL        NULL
 1001  _bytea        0         0             NULL           NULL        NULL
+1002  _char         0         1661428263    NULL           NULL        NULL
 1003  _name         0         1661428263    NULL           NULL        NULL
 1005  _int2         0         0             NULL           NULL        NULL
 1007  _int4         0         0             NULL           NULL        NULL
 1009  _text         0         1661428263    NULL           NULL        NULL
+1014  _bpchar       0         1661428263    NULL           NULL        NULL
 1015  _varchar      0         1661428263    NULL           NULL        NULL
 1016  _int8         0         0             NULL           NULL        NULL
 1021  _float4       0         0             NULL           NULL        NULL
 1022  _float8       0         0             NULL           NULL        NULL
 1028  _oid          0         0             NULL           NULL        NULL
 1041  _inet         0         0             NULL           NULL        NULL
+1042  bpchar        0         1661428263    NULL           NULL        NULL
 1043  varchar       0         1661428263    NULL           NULL        NULL
 1082  date          0         0             NULL           NULL        NULL
 1083  time          0         0             NULL           NULL        NULL
@@ -1063,6 +1091,8 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 1186  interval      0         0             NULL           NULL        NULL
 1187  _interval     0         0             NULL           NULL        NULL
 1231  _numeric      0         0             NULL           NULL        NULL
+1560  bit           0         0             NULL           NULL        NULL
+1561  _bit          0         0             NULL           NULL        NULL
 1700  numeric       0         0             NULL           NULL        NULL
 2202  regprocedure  0         0             NULL           NULL        NULL
 2205  regclass      0         0             NULL           NULL        NULL

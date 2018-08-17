@@ -102,6 +102,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
+		{`CREATE TABLE a (b "char")`},
 		{`CREATE TABLE a (b INT NULL)`},
 		{`CREATE TABLE a (b INT CONSTRAINT maybe NULL)`},
 		{`CREATE TABLE a (b INT NOT NULL)`},
@@ -1118,7 +1119,6 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
-		{`SELECT CAST(1 AS "char")`, `SELECT CAST(1 AS CHAR)`},
 		{`SELECT CAST(1 AS "timestamp")`, `SELECT CAST(1 AS TIMESTAMP)`},
 		{`SELECT CAST(1 AS _int8)`, `SELECT CAST(1 AS INT[])`},
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT[])`},
