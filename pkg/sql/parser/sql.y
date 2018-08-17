@@ -5926,6 +5926,10 @@ const_typename:
   {
     $$.val = coltypes.Serial2
   }
+| SMALLSERIAL
+  {
+    $$.val = coltypes.Serial2
+  }
 | SERIAL4
   {
     $$.val = coltypes.Serial4
@@ -5934,9 +5938,9 @@ const_typename:
   {
     $$.val = coltypes.Serial8
   }
-| SMALLSERIAL
+| BIGSERIAL
   {
-    $$.val = coltypes.Serial2
+    $$.val = coltypes.Serial8
   }
 | UUID
   {
@@ -5945,10 +5949,6 @@ const_typename:
 | INET
   {
     $$.val = coltypes.INet
-  }
-| BIGSERIAL
-  {
-    $$.val = coltypes.Serial8
   }
 | OID
   {
