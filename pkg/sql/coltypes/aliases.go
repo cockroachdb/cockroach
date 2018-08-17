@@ -112,7 +112,7 @@ var (
 	UUID = &TUUID{}
 
 	// INet is an immutable T instance.
-	INet = &TIPAddr{Name: "INET"}
+	INet = &TIPAddr{}
 
 	// JSON is an immutable T instance.
 	JSON = &TJSON{Name: "JSON"}

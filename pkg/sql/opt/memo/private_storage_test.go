@@ -378,7 +378,7 @@ func TestInternColType(t *testing.T) {
 
 	// Miscellaneous types.
 	test(coltypes.UUID, &coltypes.TUUID{}, true)
-	test(coltypes.INet, &coltypes.TIPAddr{Name: "INET"}, true)
+	test(coltypes.INet, &coltypes.TIPAddr{}, true)
 	test(coltypes.JSON, &coltypes.TJSON{Name: "JSON"}, true)
 	test(coltypes.JSONB, &coltypes.TJSON{Name: "JSONB"}, true)
 	test(coltypes.JSON, coltypes.JSONB, false)
