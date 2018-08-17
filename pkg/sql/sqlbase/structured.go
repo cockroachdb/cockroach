@@ -2187,11 +2187,22 @@ func (c *ColumnType) SQLString() string {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
-		}
-		if c.VisibleType == ColumnType_DOUBLE_PRECISION {
-			return "DOUBLE PRECISION"
+		const realName = "FLOAT4"
+		const doubleName = "FLOAT8"
+
+		switch c.VisibleType {
+		case ColumnType_REAL:
+			return realName
+		default:
+			// NONE now means double precision.
+			// Pre-2.1 there were 3 cases:
+			// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
+			// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
+			// - VisibleType = NONE, Width > 0 -> we need to derive the precision.
+			if c.Precision >= 1 && c.Precision <= 24 {
+				return realName
+			}
+			return doubleName
 		}
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
@@ -2253,10 +2264,20 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 	case ColumnType_INT:
 		return 64, true
 	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return c.Precision, true
+		switch c.VisibleType {
+		case ColumnType_REAL:
+			return 24, true
+		default:
+			// NONE now means double precision.
+			// Pre-2.1 there were 3 cases:
+			// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
+			// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
+			// - VisibleType = NONE, Width > 0 -> we need to derive the precision.
+			if c.Precision >= 1 && c.Precision <= 24 {
+				return 24, true
+			}
+			return 53, true
 		}
-		return 53, true
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			return c.Precision, true

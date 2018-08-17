@@ -58,10 +58,8 @@ import "gogoproto/gogo.proto";
 // | BIT                            | INT            | BIT              | 0         | 1     | Incorrect, #20991 |
 // | BIT(N)                         | INT            | BIT              | 0         | N     | Incorrect, #20991 |
 // |                                |                |                  |           |       |                   |
-// | FLOAT                          | FLOAT          | NONE             | 0         | 0     |                   |
-// | REAL,FLOAT4                    | FLOAT          | REAL             | 0         | 0     |                   |
-// | FLOAT(N)                       | FLOAT          | NONE             | N         | 0     | Incorrect, #28776 |
-// | DOUBLE PRECISION,DOUBLE,FLOAT8 | FLOAT          | DOUBLE PRECISION | 0         | 0     | Incorrect, #28776 |
+// | FLOAT8                         | FLOAT          | NONE             | 0         | 0     |                   |
+// | FLOAT4                         | FLOAT          | REAL             | 0         | 0     |                   |
 // |                                |                |                  |           |       |                   |
 // | INT                            | INT            | NONE             | 0         | 0     | See #28690        |
 // | INTEGER                        | INT            | INTEGER          | 0         | 0     | See #28690        |
@@ -151,13 +149,14 @@ message ColumnType {
     BIGINT = 3;
     BIT = 4;
     REAL = 5;
-    DOUBLE_PRECISION = 6;
+    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  // BIT, INT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
-  // FLOAT and DECIMAL.
+  // DECIMAL
+  // Also FLOAT pre-2.1 (this was incorrect.)
   optional int32 precision = 3 [(gogoproto.nullable) = false];
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.

@@ -80,12 +80,12 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"FLOAT(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 3},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, VisibleType: sqlbase.ColumnType_REAL},
 			true,
 		},
 		{
 			"DOUBLE PRECISION",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, VisibleType: sqlbase.ColumnType_DOUBLE_PRECISION},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT},
 			true,
 		},
 		{

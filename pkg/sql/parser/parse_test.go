@@ -97,7 +97,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b VARCHAR(3))`},
 		{`CREATE TABLE a (b STRING)`},
 		{`CREATE TABLE a (b STRING(3))`},
-		{`CREATE TABLE a (b FLOAT)`},
+		{`CREATE TABLE a (b FLOAT4)`},
+		{`CREATE TABLE a (b FLOAT8)`},
 		{`CREATE TABLE a (b SERIAL)`},
 		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b UUID)`},
@@ -584,7 +585,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT BOOL 'foo'`},
 		{`SELECT INT 'foo'`},
-		{`SELECT REAL 'foo'`},
+		{`SELECT FLOAT4 'foo'`},
 		{`SELECT DECIMAL 'foo'`},
 		{`SELECT BIT '1'`},
 		{`SELECT CHAR 'foo'`},
@@ -700,7 +701,7 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IS false`},
 		{`SELECT a FROM t WHERE a IS NOT false`},
 		{`SELECT a FROM t WHERE a IS OF (INT)`},
-		{`SELECT a FROM t WHERE a IS NOT OF (FLOAT, STRING)`},
+		{`SELECT a FROM t WHERE a IS NOT OF (FLOAT8, STRING)`},
 		{`SELECT a FROM t WHERE a IS DISTINCT FROM b`},
 		{`SELECT a FROM t WHERE a IS NOT DISTINCT FROM b`},
 		{`SELECT a FROM t WHERE a < b`},
@@ -1116,6 +1117,8 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL)`,
 			`CREATE TABLE a (b SERIAL8, c SERIAL2)`},
+		{`CREATE TABLE a (b FLOAT, c FLOAT(10), d FLOAT(40), e REAL, f DOUBLE PRECISION)`,
+			`CREATE TABLE a (b FLOAT8, c FLOAT4, d FLOAT8, e FLOAT4, f FLOAT8)`},
 		{`CREATE TABLE a (b NUMERIC, c NUMERIC(10), d DEC)`,
 			`CREATE TABLE a (b DECIMAL, c DECIMAL(10), d DECIMAL)`},
 		{`CREATE TABLE a (b BOOLEAN)`,
@@ -1166,6 +1169,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
 
 		{`SELECT NUMERIC 'foo'`, `SELECT DECIMAL 'foo'`},
+		{`SELECT REAL 'foo'`, `SELECT FLOAT4 'foo'`},
+		{`SELECT DOUBLE PRECISION 'foo'`, `SELECT FLOAT8 'foo'`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to

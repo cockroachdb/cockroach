@@ -2085,7 +2085,7 @@ group-by
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2)
  │    │    │    └── filters [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
- │    │    │         └── a.f = y::FLOAT [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
+ │    │    │         └── a.f = y::FLOAT8 [type=bool, outer=(2,10), constraints=(/10: (/NULL - ])]
  │    │    └── aggregations [outer=(2,4,9)]
  │    │         ├── max [type=int, outer=(9)]
  │    │         │    └── variable: a.i [type=int, outer=(9)]

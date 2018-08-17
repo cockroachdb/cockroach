@@ -134,9 +134,9 @@ project
  │         └── xor-agg [type=bytes]
  │              └── variable: column15 [type=bytes]
  └── projections
-      ├── cast: FLOAT [type=float]
+      ├── cast: FLOAT8 [type=float]
       │    └── variable: column6 [type=decimal]
-      ├── cast: FLOAT [type=float]
+      ├── cast: FLOAT8 [type=float]
       │    └── variable: column10 [type=decimal]
       └── function: to_hex [type=string]
            └── variable: column16 [type=bytes]
@@ -1621,7 +1621,7 @@ project
  │    │    └── projections
  │    │         ├── cast: INT [type=int]
  │    │         │    └── const: 1 [type=int]
- │    │         ├── cast: FLOAT [type=float]
+ │    │         ├── cast: FLOAT8 [type=float]
  │    │         │    └── const: 2.0 [type=float]
  │    │         └── cast: DECIMAL [type=decimal]
  │    │              └── const: 3 [type=decimal]
@@ -1633,11 +1633,11 @@ project
  │         └── avg [type=decimal]
  │              └── variable: column7 [type=decimal]
  └── projections
-      ├── cast: FLOAT [type=float]
+      ├── cast: FLOAT8 [type=float]
       │    └── variable: column2 [type=decimal]
-      ├── cast: FLOAT [type=float]
+      ├── cast: FLOAT8 [type=float]
       │    └── variable: column5 [type=float]
-      └── cast: FLOAT [type=float]
+      └── cast: FLOAT8 [type=float]
            └── variable: column8 [type=decimal]
 
 build
@@ -1652,7 +1652,7 @@ scalar-group-by
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 2 [type=int]
- │         ├── cast: FLOAT [type=float]
+ │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 3.0 [type=float]
  │         └── cast: DECIMAL [type=decimal]
  │              └── const: 4 [type=decimal]
@@ -1676,7 +1676,7 @@ scalar-group-by
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT [type=float]
+ │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 2.0 [type=float]
  │         └── cast: DECIMAL [type=decimal]
  │              └── const: 3 [type=decimal]
@@ -1700,7 +1700,7 @@ scalar-group-by
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT [type=float]
+ │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 1.0 [type=float]
  │         └── cast: DECIMAL [type=decimal]
  │              └── const: 1 [type=decimal]
@@ -1724,7 +1724,7 @@ scalar-group-by
  │    └── projections
  │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT [type=float]
+ │         ├── cast: FLOAT8 [type=float]
  │         │    └── const: 1.0 [type=float]
  │         └── cast: DECIMAL [type=decimal]
  │              └── const: 1 [type=decimal]
