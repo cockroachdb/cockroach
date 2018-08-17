@@ -181,23 +181,6 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
-	col := &ColumnDescriptor{
-		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
-	}
-
-	// Set Type.SemanticType and Type.Locale.
-	colDatumType := coltypes.CastTargetToDatumType(d.Type)
-	colTyp, err := DatumTypeToColumnType(colDatumType)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	if _, ok := d.Type.(*coltypes.TSerial); ok {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
@@ -215,6 +198,23 @@ func MakeColumnDefDescs(
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
+	}
+
+	col := &ColumnDescriptor{
+		Name:     string(d.Name),
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
+	}
+
+	// Set Type.SemanticType and Type.Locale.
+	colDatumType := coltypes.CastTargetToDatumType(d.Type)
+	colTyp, err := DatumTypeToColumnType(colDatumType)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	var typedExpr tree.TypedExpr
