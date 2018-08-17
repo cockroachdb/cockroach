@@ -198,7 +198,7 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, err
 	}
 
-	if t, ok := d.Type.(*coltypes.TInt); ok && t.IsSerial() {
+	if _, ok := d.Type.(*coltypes.TSerial); ok {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
 		// prior to calling MakeColumnDefDescs. The dependent sequences
