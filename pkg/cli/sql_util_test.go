@@ -128,15 +128,16 @@ SET
 		"column_default",
 		"generation_expression",
 		"indices",
+		"is_hidden",
 	}
 	if !reflect.DeepEqual(expectedCols, cols) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
 	}
 
 	expectedRows := [][]string{
-		{`parentID`, `INT`, `false`, `NULL`, ``, `{"primary"}`},
-		{`name`, `STRING`, `false`, `NULL`, ``, `{"primary"}`},
-		{`id`, `INT`, `true`, `NULL`, ``, `{}`},
+		{`parentID`, `INT`, `false`, `NULL`, ``, `{"primary"}`, `false`},
+		{`name`, `STRING`, `false`, `NULL`, ``, `{"primary"}`, `false`},
+		{`id`, `INT`, `true`, `NULL`, ``, `{}`, `false`},
 	}
 	if !reflect.DeepEqual(expectedRows, rows) {
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
@@ -148,11 +149,11 @@ SET
 	}
 
 	expected = `
-  column_name | data_type | is_nullable | column_default | generation_expression |   indices    
-+-------------+-----------+-------------+----------------+-----------------------+-------------+
-  parentID    | INT       |    false    | NULL           |                       | {"primary"}  
-  name        | STRING    |    false    | NULL           |                       | {"primary"}  
-  id          | INT       |    true     | NULL           |                       | {}           
+  column_name | data_type | is_nullable | column_default | generation_expression |   indices   | is_hidden  
++-------------+-----------+-------------+----------------+-----------------------+-------------+-----------+
+  parentID    | INT       |    false    | NULL           |                       | {"primary"} |   false    
+  name        | STRING    |    false    | NULL           |                       | {"primary"} |   false    
+  id          | INT       |    true     | NULL           |                       | {}          |   false    
 (3 rows)
 `
 

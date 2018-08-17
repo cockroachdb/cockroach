@@ -896,9 +896,9 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.CheckQueryResults(t,
 		"SHOW COLUMNS FROM t.test",
 		[][]string{
-			{"a", "STRING", "false", "NULL", "", "{\"primary\",\"ufo\"}"},
-			{"d", "STRING", "true", "NULL", "", "{\"ufo\"}"},
-			{"e", "STRING", "true", "NULL", "", "{}"},
+			{"a", "STRING", "false", "NULL", "", "{\"primary\",\"ufo\"}", "false"},
+			{"d", "STRING", "true", "NULL", "", "{\"ufo\"}", "false"},
+			{"e", "STRING", "true", "NULL", "", "{}", "false"},
 		},
 	)
 

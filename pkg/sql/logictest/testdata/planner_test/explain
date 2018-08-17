@@ -214,8 +214,9 @@ sort                                       ·            ·
            │                               aggregate 3  column_default
            │                               aggregate 4  generation_expression
            │                               aggregate 5  ordinal_position
-           │                               aggregate 6  array_agg(index_name)
-           │                               group by     @1-@6
+           │                               aggregate 6  is_hidden
+           │                               aggregate 7  array_agg(index_name)
+           │                               group by     @1-@7
            └── render                      ·            ·
                 └── join                   ·            ·
                      │                     type         left outer
@@ -223,7 +224,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         18 columns, 908 rows
+                     │                     size         19 columns, 910 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
