@@ -53,7 +53,7 @@ func TestParseColumnType(t *testing.T) {
 		{"NUMERIC(8)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 8}},
 		{"NUMERIC(9,10)", &coltypes.TDecimal{Name: "NUMERIC", Prec: 9, Scale: 10}},
 		{"UUID", &coltypes.TUUID{}},
-		{"INET", &coltypes.TIPAddr{Name: "INET"}},
+		{"INET", &coltypes.TIPAddr{}},
 		{"DATE", &coltypes.TDate{}},
 		{"TIME", &coltypes.TTime{}},
 		{"TIMESTAMP", &coltypes.TTimestamp{}},
