@@ -202,9 +202,8 @@ func (p *planner) LookupObject(
 	ctx context.Context, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	sc := p.LogicalSchemaAccessor()
-	// TODO(knz): elide this allocation of TableName.
-	tn := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
-	objDesc, _, err := sc.GetObjectDesc(&tn, p.ObjectLookupFlags(ctx, false /*required*/))
+	p.tableName = tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
+	objDesc, _, err := sc.GetObjectDesc(&p.tableName, p.ObjectLookupFlags(ctx, false /*required*/))
 	return objDesc != nil, objDesc, err
 }
 

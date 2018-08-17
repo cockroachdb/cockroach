@@ -58,34 +58,17 @@ func MakeSearchPath(paths []string) SearchPath {
 // searched in the specified order. If pg_catalog is not in the path then it
 // will be searched before searching any of the path items."
 // - https://www.postgresql.org/docs/9.1/static/runtime-config-client.html
-func (s SearchPath) Iter() func() (next string, ok bool) {
-	i := -1
+func (s SearchPath) Iter() SearchPathIter {
 	if s.containsPgCatalog {
-		i = 0
+		return SearchPathIter{paths: s.paths, i: 0}
 	}
-	return func() (next string, ok bool) {
-		if i == -1 {
-			i++
-			return PgCatalogName, true
-		}
-		if i < len(s.paths) {
-			i++
-			return s.paths[i-1], true
-		}
-		return "", false
-	}
+	return SearchPathIter{paths: s.paths, i: -1}
 }
 
-// IterWithoutImplicitPGCatalog is the same as Iter, but does not include the implicit pg_catalog.
-func (s SearchPath) IterWithoutImplicitPGCatalog() func() (next string, ok bool) {
-	i := 0
-	return func() (next string, ok bool) {
-		if i < len(s.paths) {
-			i++
-			return s.paths[i-1], true
-		}
-		return "", false
-	}
+// IterWithoutImplicitPGCatalog is the same as Iter, but does not include the
+// implicit pg_catalog.
+func (s SearchPath) IterWithoutImplicitPGCatalog() SearchPathIter {
+	return SearchPathIter{paths: s.paths, i: 0}
 }
 
 // GetPathArray returns the underlying path array of this SearchPath. The
@@ -96,4 +79,26 @@ func (s SearchPath) GetPathArray() []string {
 
 func (s SearchPath) String() string {
 	return strings.Join(s.paths, ", ")
+}
+
+// SearchPathIter enables iteration over the search paths without triggering an
+// allocation. Use one of the SearchPath.Iter methods to get an instance of the
+// iterator, and then repeatedly call the Next method in order to iterate over
+// each search path.
+type SearchPathIter struct {
+	paths []string
+	i     int
+}
+
+// Next returns the next search path, or false if there are no remaining paths.
+func (iter *SearchPathIter) Next() (path string, ok bool) {
+	if iter.i == -1 {
+		iter.i++
+		return PgCatalogName, true
+	}
+	if iter.i < len(iter.paths) {
+		iter.i++
+		return iter.paths[iter.i-1], true
+	}
+	return "", false
 }
