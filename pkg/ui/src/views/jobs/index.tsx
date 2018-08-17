@@ -71,12 +71,19 @@ const formatDuration = (d: moment.Duration) =>
     .join(":");
 
 class JobStatusCell extends React.Component<{ job: Job }, {}> {
-  is(...statuses: string[]) {
+  statusIsOneOf(...statuses: string[]) {
     return statuses.indexOf(this.props.job.status) !== -1;
   }
 
   renderProgress() {
-    if (this.is("succeeded", "failed", "canceled")) {
+    if (this.statusIsOneOf("failed")) {
+      return (
+        <ToolTipWrapper text={<pre>{this.props.job.error}</pre>}>
+          Failed
+        </ToolTipWrapper>
+      );
+    }
+    if (this.statusIsOneOf("succeeded", "canceled")) {
       return <div className="jobs-table__status">{this.props.job.status}</div>;
     }
     const percent = this.props.job.fraction_completed * 100;
@@ -90,16 +97,16 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     const started = TimestampToMoment(this.props.job.started);
     const finished = TimestampToMoment(this.props.job.finished);
     const modified = TimestampToMoment(this.props.job.modified);
-    if (this.is("pending", "paused")) {
+    if (this.statusIsOneOf("pending", "paused")) {
       return _.capitalize(this.props.job.status);
-    } else if (this.is("running")) {
+    } else if (this.statusIsOneOf("running")) {
       const fractionCompleted = this.props.job.fraction_completed;
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
         const remaining = duration / fractionCompleted - duration;
         return formatDuration(moment.duration(remaining)) + " remaining";
       }
-    } else if (this.is("succeeded")) {
+    } else if (this.statusIsOneOf("succeeded")) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
     }
   }
