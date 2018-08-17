@@ -880,6 +880,7 @@ func WriteTableDescs(
 	tables []*sqlbase.TableDescriptor,
 	user string,
 	settings *cluster.Settings,
+	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteTableDescs")
 	defer tracing.FinishSpan(span)
@@ -911,6 +912,9 @@ func WriteTableDescs(
 			}
 			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
+		}
+		for _, kv := range extra {
+			b.InitPut(kv.Key, &kv.Value, false)
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
@@ -1429,7 +1433,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 
