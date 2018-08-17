@@ -52,7 +52,7 @@ project
  ├── columns: count:5(int)
  ├── stats: [rows=49.2384513]
  └── group-by
-      ├── columns: y:2(int) count:5(int)
+      ├── columns: y:2(int) count_rows:5(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=49.2384513, distinct(2)=49.2384513]
       ├── key: (2)

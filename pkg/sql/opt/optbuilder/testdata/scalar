@@ -924,21 +924,21 @@ project
            │         ├── columns: array_agg:2(int[])
            │         ├── internal-ordering: -1
            │         ├── sort
-           │         │    ├── columns: column1:1(int)
+           │         │    ├── columns: generate_series:1(int)
            │         │    ├── ordering: -1
            │         │    └── inner-join-apply
-           │         │         ├── columns: column1:1(int)
+           │         │         ├── columns: generate_series:1(int)
            │         │         ├── values
            │         │         │    └── tuple [type=tuple]
            │         │         ├── zip
-           │         │         │    ├── columns: column1:1(int)
+           │         │         │    ├── columns: generate_series:1(int)
            │         │         │    └── function: generate_series [type=int]
            │         │         │         ├── const: 1 [type=int]
            │         │         │         └── const: 100 [type=int]
            │         │         └── true [type=bool]
            │         └── aggregations
            │              └── array-agg [type=int[]]
-           │                   └── variable: column1 [type=int]
+           │                   └── variable: generate_series [type=int]
            └── array: [type=int[]]
 
 build-scalar
