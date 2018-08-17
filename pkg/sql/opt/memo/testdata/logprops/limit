@@ -54,7 +54,7 @@ limit
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── scalar-group-by
- │    ├── columns: count:5(int)
+ │    ├── columns: column5:5(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()

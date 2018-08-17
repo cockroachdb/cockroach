@@ -289,7 +289,7 @@ SELECT min(y) FROM xyz GROUP BY y
 project
  ├── columns: min:4(int)
  └── group-by
-      ├── columns: y:2(int) min:4(int)
+      ├── columns: y:2(int) column4:4(int)
       ├── grouping columns: y:2(int)
       ├── key: (2)
       ├── fd: (2)-->(4)
@@ -307,7 +307,7 @@ SELECT max(y) FROM xyz GROUP BY y
 project
  ├── columns: max:4(int)
  └── group-by
-      ├── columns: y:2(int) max:4(int)
+      ├── columns: y:2(int) column4:4(int)
       ├── grouping columns: y:2(int)
       ├── key: (2)
       ├── fd: (2)-->(4)
@@ -325,7 +325,7 @@ SELECT min(y) FROM xyz GROUP BY x
 project
  ├── columns: min:4(int)
  └── group-by
-      ├── columns: x:1(int!null) min:4(int)
+      ├── columns: x:1(int!null) column4:4(int)
       ├── grouping columns: x:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -422,7 +422,7 @@ SELECT min(x), count(y) FROM xyz GROUP BY x,y
 project
  ├── columns: min:4(int) count:5(int)
  └── group-by
-      ├── columns: x:1(int!null) min:4(int) count:5(int)
+      ├── columns: x:1(int!null) column4:4(int) column5:5(int)
       ├── grouping columns: x:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(4,5)
@@ -444,7 +444,7 @@ SELECT max(x), count(y) FROM xyz GROUP BY x,y
 project
  ├── columns: max:4(int) count:5(int)
  └── group-by
-      ├── columns: x:1(int!null) max:4(int) count:5(int)
+      ├── columns: x:1(int!null) column4:4(int) column5:5(int)
       ├── grouping columns: x:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(4,5)

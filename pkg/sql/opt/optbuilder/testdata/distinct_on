@@ -236,7 +236,7 @@ distinct-on
  ├── columns: max:6(int)
  ├── grouping columns: column7:7(int)
  ├── scalar-group-by
- │    ├── columns: max:6(int) column7:7(int)
+ │    ├── columns: column6:6(int) column7:7(int)
  │    ├── project
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── scan xyz
@@ -248,7 +248,7 @@ distinct-on
  │              └── variable: y [type=int]
  └── aggregations
       └── first-agg [type=int]
-           └── variable: max [type=int]
+           └── variable: column6 [type=int]
 
 build
 SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
@@ -257,7 +257,7 @@ distinct-on
  ├── columns: max:4(string)
  ├── grouping columns: column5:5(string) column6:6(string) column7:7(string)
  ├── scalar-group-by
- │    ├── columns: max:4(string) column5:5(string) column6:6(string) column7:7(string)
+ │    ├── columns: column4:4(string) column5:5(string) column6:6(string) column7:7(string)
  │    ├── scan abc
  │    │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
  │    └── aggregations
@@ -271,7 +271,7 @@ distinct-on
  │              └── variable: c [type=string]
  └── aggregations
       └── first-agg [type=string]
-           └── variable: max [type=string]
+           └── variable: column4 [type=string]
 
 #################
 # With GROUP BY #
@@ -284,7 +284,7 @@ distinct-on
  ├── columns: min:6(int)
  ├── grouping columns: y:2(int)
  ├── group-by
- │    ├── columns: y:2(int) min:6(int)
+ │    ├── columns: y:2(int) column6:6(int)
  │    ├── grouping columns: y:2(int)
  │    ├── project
  │    │    ├── columns: x:1(int) y:2(int)
@@ -295,7 +295,7 @@ distinct-on
  │              └── variable: x [type=int]
  └── aggregations
       └── first-agg [type=int]
-           └── variable: min [type=int]
+           └── variable: column6 [type=int]
 
 build
 SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1

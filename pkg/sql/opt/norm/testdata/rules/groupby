@@ -183,7 +183,7 @@ SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GR
 project
  ├── columns: min:16(string)
  └── group-by
-      ├── columns: i:12(int!null) min:16(string)
+      ├── columns: i:12(int!null) column16:16(string)
       ├── grouping columns: i:12(int!null)
       ├── key: (12)
       ├── fd: (12)-->(16)
@@ -263,7 +263,7 @@ SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 project
  ├── columns: min:7(string)
  └── group-by
-      ├── columns: i2:6(int) min:7(string)
+      ├── columns: i2:6(int) column7:7(string)
       ├── grouping columns: i2:6(int)
       ├── key: (6)
       ├── fd: (6)-->(7)
@@ -334,7 +334,7 @@ SELECT min(f) FROM a GROUP BY i, s, k
 project
  ├── columns: min:6(float)
  └── group-by
-      ├── columns: i:2(int!null) s:4(string!null) min:6(float)
+      ├── columns: i:2(int!null) s:4(string!null) column6:6(float)
       ├── grouping columns: i:2(int!null) s:4(string!null)
       ├── key: (2,4)
       ├── fd: (2,4)-->(6)
@@ -429,7 +429,7 @@ SELECT sum(DISTINCT k) FROM a GROUP BY i
 project
  ├── columns: sum:6(decimal)
  └── group-by
-      ├── columns: i:2(int!null) sum:6(decimal)
+      ├── columns: i:2(int!null) column6:6(decimal)
       ├── grouping columns: i:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(6)
@@ -448,7 +448,7 @@ SELECT sum(DISTINCT a) FROM abc GROUP BY b
 project
  ├── columns: sum:4(decimal)
  └── group-by
-      ├── columns: b:2(int!null) sum:4(decimal)
+      ├── columns: b:2(int!null) column4:4(decimal)
       ├── grouping columns: b:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(4)
@@ -466,7 +466,7 @@ SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
 project
  ├── columns: sum:4(decimal)
  └── group-by
-      ├── columns: b:2(int!null) c:3(int!null) sum:4(decimal)
+      ├── columns: b:2(int!null) c:3(int!null) column4:4(decimal)
       ├── grouping columns: b:2(int!null) c:3(int!null)
       ├── key: (2,3)
       ├── fd: (2,3)-->(4)
@@ -484,7 +484,7 @@ SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
 project
  ├── columns: sum:6(decimal) avg:7(float)
  └── group-by
-      ├── columns: k:1(int!null) sum:6(decimal) avg:7(float)
+      ├── columns: k:1(int!null) column6:6(decimal) column7:7(float)
       ├── grouping columns: k:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(6,7)
@@ -506,7 +506,7 @@ SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 project
  ├── columns: sum:6(decimal) stddev:7(decimal) avg:8(decimal)
  └── group-by
-      ├── columns: v:2(int!null) sum:6(decimal) stddev:7(decimal) avg:8(decimal)
+      ├── columns: v:2(int!null) column6:6(decimal) column7:7(decimal) column8:8(decimal)
       ├── grouping columns: v:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(6-8)

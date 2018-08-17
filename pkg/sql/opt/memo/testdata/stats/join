@@ -446,7 +446,7 @@ project
  ├── columns: count:8(int)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count:8(int)
+      ├── columns: y:2(int) column8:8(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400]
       ├── key: (2)
@@ -486,7 +486,7 @@ project
  ├── columns: count:8(int)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count:8(int)
+      ├── columns: y:2(int) column8:8(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400]
       ├── key: (2)
@@ -526,7 +526,7 @@ project
  ├── columns: count:8(int)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count:8(int)
+      ├── columns: y:2(int) column8:8(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400]
       ├── key: (2)
@@ -565,7 +565,7 @@ project
  ├── columns: count:8(int)
  ├── stats: [rows=399.903879]
  └── group-by
-      ├── columns: y:2(int) count:8(int)
+      ├── columns: y:2(int) column8:8(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=399.903879, distinct(2)=399.903879]
       ├── key: (2)
@@ -604,7 +604,7 @@ project
  ├── columns: count:8(int)
  ├── stats: [rows=400]
  └── group-by
-      ├── columns: y:2(int) count:8(int)
+      ├── columns: y:2(int) column8:8(int)
       ├── grouping columns: y:2(int)
       ├── stats: [rows=400, distinct(2)=400]
       ├── key: (2)

@@ -221,13 +221,13 @@ build
 SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
 ----
 project
- ├── columns: "?column?":2(int) "?column?":4(int)
+ ├── columns: "?column?":3(int) "?column?":4(int)
  ├── inner-join-apply
- │    ├── columns: column1:1(int) column3:3(int)
+ │    ├── columns: column1:1(int) column2:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    ├── zip
- │    │    ├── columns: column1:1(int) column3:3(int)
+ │    │    ├── columns: column1:1(int) column2:2(int)
  │    │    ├── function: generate_series [type=int]
  │    │    │    ├── const: 0 [type=int]
  │    │    │    └── const: 1 [type=int]
@@ -241,7 +241,7 @@ project
       │    ├── const: 1 [type=int]
       │    └── variable: column1 [type=int]
       └── minus [type=int]
-           ├── variable: column3 [type=int]
+           ├── variable: column2 [type=int]
            └── const: 1 [type=int]
 
 build
@@ -431,15 +431,15 @@ build
 SELECT 'a', pg_get_keywords(), 'c' LIMIT 1
 ----
 limit
- ├── columns: "?column?":1(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
- │    ├── columns: "?column?":1(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ │    ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  │    ├── inner-join-apply
- │    │    ├── columns: word:2(string) catcode:3(string) catdesc:4(string)
+ │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    ├── zip
- │    │    │    ├── columns: word:2(string) catcode:3(string) catdesc:4(string)
+ │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  │    │    └── true [type=bool]
  │    └── projections
@@ -455,15 +455,15 @@ build
 SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
 ----
 limit
- ├── columns: "?column?":1(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
- │    ├── columns: "?column?":1(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
+ │    ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  │    ├── inner-join-apply
- │    │    ├── columns: word:2(string) catcode:3(string) catdesc:4(string)
+ │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    ├── zip
- │    │    │    ├── columns: word:2(string) catcode:3(string) catdesc:4(string)
+ │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  │    │    └── true [type=bool]
  │    └── projections
@@ -737,39 +737,39 @@ build
 SELECT max(a) FROM t HAVING max(a::int) > (SELECT generate_series(0, b::int) FROM u limit 1)
 ----
 project
- ├── columns: max:8(string)
+ ├── columns: max:3(string)
  └── select
-      ├── columns: column7:7(int!null) max:8(string)
+      ├── columns: column3:3(string) column5:5(int!null)
       ├── scalar-group-by
-      │    ├── columns: column7:7(int) max:8(string)
+      │    ├── columns: column3:3(string) column5:5(int)
       │    ├── project
-      │    │    ├── columns: column6:6(int) a:1(string)
+      │    │    ├── columns: column4:4(int) a:1(string)
       │    │    ├── scan t
       │    │    │    └── columns: a:1(string) t.rowid:2(int!null)
       │    │    └── projections
       │    │         └── cast: INT [type=int]
       │    │              └── variable: a [type=string]
       │    └── aggregations
-      │         ├── max [type=int]
-      │         │    └── variable: column6 [type=int]
-      │         └── max [type=string]
-      │              └── variable: a [type=string]
+      │         ├── max [type=string]
+      │         │    └── variable: a [type=string]
+      │         └── max [type=int]
+      │              └── variable: column4 [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
-                ├── variable: column7 [type=int]
+                ├── variable: column5 [type=int]
                 └── subquery [type=int]
                      └── max1-row
-                          ├── columns: column5:5(int)
+                          ├── columns: column8:8(int)
                           └── limit
-                               ├── columns: column5:5(int)
+                               ├── columns: column8:8(int)
                                ├── project
-                               │    ├── columns: column5:5(int)
+                               │    ├── columns: column8:8(int)
                                │    └── inner-join-apply
-                               │         ├── columns: b:3(string) u.rowid:4(int!null) column5:5(int)
+                               │         ├── columns: b:6(string) u.rowid:7(int!null) column8:8(int)
                                │         ├── scan u
-                               │         │    └── columns: b:3(string) u.rowid:4(int!null)
+                               │         │    └── columns: b:6(string) u.rowid:7(int!null)
                                │         ├── zip
-                               │         │    ├── columns: column5:5(int)
+                               │         │    ├── columns: column8:8(int)
                                │         │    └── function: generate_series [type=int]
                                │         │         ├── const: 0 [type=int]
                                │         │         └── cast: INT [type=int]
@@ -836,7 +836,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: json_array_elements:6(jsonb) jsonb_each:10(tuple{string AS key, jsonb AS value}) jsonb_object_keys:17(string) generate_series:21(int)
+ ├── columns: json_array_elements:6(jsonb) jsonb_each:19(tuple{string AS key, jsonb AS value}) jsonb_object_keys:20(string) generate_series:21(int)
  ├── inner-join-apply
  │    ├── columns: a.x:1(int!null) a.j:2(jsonb) a.k:3(jsonb) a.m:4(jsonb) a.n:5(jsonb) column6:6(jsonb)
  │    ├── scan a
@@ -867,41 +867,41 @@ project
       │                        └── variable: value [type=jsonb]
       ├── subquery [type=string]
       │    └── max1-row
-      │         ├── columns: column16:16(string)
+      │         ├── columns: column15:15(string)
       │         └── project
-      │              ├── columns: column16:16(string)
+      │              ├── columns: column15:15(string)
       │              └── inner-join-apply
-      │                   ├── columns: a.x:11(int!null) a.j:12(jsonb) a.k:13(jsonb) a.m:14(jsonb) a.n:15(jsonb) column16:16(string)
+      │                   ├── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb) column15:15(string)
       │                   ├── scan a
-      │                   │    └── columns: a.x:11(int!null) a.j:12(jsonb) a.k:13(jsonb) a.m:14(jsonb) a.n:15(jsonb)
+      │                   │    └── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb)
       │                   ├── zip
-      │                   │    ├── columns: column16:16(string)
+      │                   │    ├── columns: column15:15(string)
       │                   │    └── function: jsonb_object_keys [type=string]
       │                   │         └── variable: a.m [type=jsonb]
       │                   └── true [type=bool]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: column20:20(int)
+                ├── columns: column18:18(int)
                 └── inner-join-apply
-                     ├── columns: column20:20(int)
+                     ├── columns: column18:18(int)
                      ├── values
                      │    └── tuple [type=tuple]
                      ├── zip
-                     │    ├── columns: column20:20(int)
+                     │    ├── columns: column18:18(int)
                      │    └── function: generate_series [type=int]
                      │         ├── subquery [type=int]
                      │         │    └── max1-row
-                     │         │         ├── columns: column19:19(int)
+                     │         │         ├── columns: column17:17(int)
                      │         │         └── project
-                     │         │              ├── columns: column19:19(int)
+                     │         │              ├── columns: column17:17(int)
                      │         │              └── inner-join-apply
-                     │         │                   ├── columns: jsonb_array_elements_text:18(string) column19:19(int)
+                     │         │                   ├── columns: jsonb_array_elements_text:16(string) column17:17(int)
                      │         │                   ├── zip
-                     │         │                   │    ├── columns: jsonb_array_elements_text:18(string)
+                     │         │                   │    ├── columns: jsonb_array_elements_text:16(string)
                      │         │                   │    └── function: jsonb_array_elements_text [type=string]
                      │         │                   │         └── variable: a.n [type=jsonb]
                      │         │                   ├── zip
-                     │         │                   │    ├── columns: column19:19(int)
+                     │         │                   │    ├── columns: column17:17(int)
                      │         │                   │    └── function: generate_series [type=int]
                      │         │                   │         ├── variable: a.x [type=int]
                      │         │                   │         └── const: 100 [type=int]

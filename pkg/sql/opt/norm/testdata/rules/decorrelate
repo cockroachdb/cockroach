@@ -741,7 +741,7 @@ SELECT (SELECT sum(y + v) FROM xy, uv WHERE x=u AND x=k) FROM a
 project
  ├── columns: sum:12(decimal)
  ├── group-by
- │    ├── columns: k:1(int!null) sum:11(decimal)
+ │    ├── columns: k:1(int!null) column11:11(decimal)
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(11)
@@ -789,7 +789,7 @@ project
  │         └── sum [type=decimal, outer=(10)]
  │              └── variable: column10 [type=int, outer=(10)]
  └── projections [outer=(11)]
-      └── variable: sum [type=decimal, outer=(11)]
+      └── variable: column11 [type=decimal, outer=(11)]
 
 # --------------------------------------------------
 # TryDecorrelateInnerJoin
@@ -891,11 +891,11 @@ project
  ├── columns: k:1(int!null)
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) count:10(int)
+      ├── columns: k:1(int!null) column10:10(int)
       ├── key: (1)
       ├── fd: (1)-->(10)
       ├── group-by
-      │    ├── columns: k:1(int!null) count:10(int)
+      │    ├── columns: k:1(int!null) column10:10(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(10)
@@ -934,7 +934,7 @@ project
       │         └── count [type=int, outer=(6)]
       │              └── variable: x [type=int, outer=(6)]
       └── filters [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
-           └── count IS DISTINCT FROM 1 [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
+           └── column10 IS DISTINCT FROM 1 [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
 
 # Can't decorrelate left-join as inner.
 opt
@@ -1165,11 +1165,11 @@ group-by
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) cnt:10(int!null)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) column10:10(int!null)
  │    ├── key: (1,6,9)
  │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(3-5,10), (6)==(10), (10)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) cnt:10(int)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) column10:10(int)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
@@ -1206,7 +1206,7 @@ group-by
  │    │         └── const-agg [type=jsonb, outer=(5)]
  │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
- │         └── x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ │         └── x = column10 [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
       │    └── variable: i [type=int, outer=(2)]
@@ -1231,11 +1231,11 @@ group-by
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) cnt:10(int!null)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) column10:10(int!null)
  │    ├── key: (1,6,9)
  │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(3-5,10), (6)==(10), (10)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) cnt:10(int)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int) column10:10(int)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
@@ -1274,7 +1274,7 @@ group-by
  │    │         └── const-agg [type=jsonb, outer=(5)]
  │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
- │         └── x = cnt [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ │         └── x = column10 [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
       │    └── variable: i [type=int, outer=(2)]
@@ -1296,11 +1296,11 @@ project
  ├── key: (3)
  ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int!null)
+      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) column10:10(int!null)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1), (3)==(10), (10)==(3)
       ├── group-by
-      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) column10:10(int)
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
@@ -1344,7 +1344,7 @@ project
       │         └── const-agg [type=int, outer=(1)]
       │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
-           └── u = max [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
+           └── u = column10 [type=bool, outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ])]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
 # IS DISTINCT FROM to retain left join.
@@ -1358,11 +1358,11 @@ project
  ├── key: (3)
  ├── fd: (1)-->(2), (3)-->(1,2,4), (1)==(4), (4)==(1)
  └── select
-      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) column10:10(int)
       ├── key: (3)
       ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
       ├── group-by
-      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) max:10(int)
+      │    ├── columns: x:1(int) y:2(int) u:3(int!null) v:4(int) column10:10(int)
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
@@ -1400,7 +1400,7 @@ project
       │         └── const-agg [type=int, outer=(1)]
       │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(3,10)]
-           └── u IS DISTINCT FROM max [type=bool, outer=(3,10)]
+           └── u IS DISTINCT FROM column10 [type=bool, outer=(3,10)]
 
 # Synthesize key when one is not present.
 opt
@@ -1415,11 +1415,11 @@ project
  ├── columns: y:2(int) cst:3(string!null)
  ├── fd: ()-->(2,3)
  ├── select
- │    ├── columns: y:2(int) max:9(string!null) rownum:10(int!null)
+ │    ├── columns: y:2(int) column9:9(string!null) rownum:10(int!null)
  │    ├── key: (10)
  │    ├── fd: ()-->(2,9)
  │    ├── group-by
- │    │    ├── columns: y:2(int) max:9(string) rownum:10(int!null)
+ │    │    ├── columns: y:2(int) column9:9(string) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
  │    │    ├── fd: ()-->(2), (10)-->(2,9)
@@ -1446,7 +1446,7 @@ project
  │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight), fd=()-->(9)]
- │         └── max = 'bar' [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight)]
+ │         └── column9 = 'bar' [type=bool, outer=(9), constraints=(/9: [/'bar' - /'bar']; tight)]
  └── projections [outer=(2)]
       └── const: 'foo' [type=string]
 
@@ -1542,11 +1542,11 @@ group-by
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) cnt:11(int!null)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) column11:11(int!null)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11), (6)==(11), (11)==(6)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) cnt:11(int)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) column11:11(int)
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11)
@@ -1585,7 +1585,7 @@ group-by
  │    │         └── const-agg [type=jsonb, outer=(5)]
  │    │              └── variable: j [type=jsonb, outer=(5)]
  │    └── filters [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
- │         └── x = cnt [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
+ │         └── x = column11 [type=bool, outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ])]
  └── aggregations [outer=(2-5)]
       ├── const-agg [type=int, outer=(2)]
       │    └── variable: i [type=int, outer=(2)]
@@ -1604,11 +1604,11 @@ project
  ├── columns: i:2(int) cst:6(string!null)
  ├── fd: ()-->(6)
  ├── select
- │    ├── columns: i:2(int) max:9(int!null) rownum:10(int!null)
+ │    ├── columns: i:2(int) column9:9(int!null) rownum:10(int!null)
  │    ├── key: (10)
  │    ├── fd: ()-->(9), (10)-->(2)
  │    ├── group-by
- │    │    ├── columns: i:2(int) max:9(int) rownum:10(int!null)
+ │    │    ├── columns: i:2(int) column9:9(int) rownum:10(int!null)
  │    │    ├── grouping columns: rownum:10(int!null)
  │    │    ├── key: (10)
  │    │    ├── fd: (10)-->(2,9)
@@ -1640,7 +1640,7 @@ project
  │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: i [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
- │         └── max = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
+ │         └── column9 = 5 [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
  └── projections [outer=(2)]
       └── const: 'foo' [type=string]
 
@@ -1654,7 +1654,7 @@ project
  ├── key: (1)
  ├── fd: (1)-->(9)
  ├── group-by
- │    ├── columns: k:1(int!null) y:7(int) array_agg:10(int[])
+ │    ├── columns: k:1(int!null) y:7(int) column8:10(int[])
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(7,10)
@@ -1673,7 +1673,7 @@ project
  │         └── any-not-null-agg [type=int, outer=(7)]
  │              └── variable: y [type=int, outer=(7)]
  └── projections [outer=(1,7,10)]
-      └── CASE WHEN y IS NOT NULL THEN array_agg END [type=int[], outer=(7,10)]
+      └── CASE WHEN y IS NOT NULL THEN column8 END [type=int[], outer=(7,10)]
 
 # With multiple columns. Without LATERAL these tests are a bit verbose.
 norm
@@ -1684,7 +1684,7 @@ project
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── group-by
- │    ├── columns: k:1(int!null) y:7(int) q:9(int) r:12(int[])
+ │    ├── columns: k:1(int!null) y:7(int) column9:9(int) column8:12(int[])
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(7,9,12)
@@ -1705,7 +1705,7 @@ project
  │         └── any-not-null-agg [type=int, outer=(7)]
  │              └── variable: y [type=int, outer=(7)]
  └── projections [outer=(1,7,9,12)]
-      └── (CASE WHEN y IS NOT NULL THEN r END, q) [type=tuple{int[], int}, outer=(7,9,12)]
+      └── (CASE WHEN y IS NOT NULL THEN column8 END, column9) [type=tuple{int[], int}, outer=(7,9,12)]
 
 
 # With an aggregate that can't ignore nulls and when a non-nullable column must be synthesized.
@@ -1807,16 +1807,16 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:11(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column11:11(int)
       ├── key: (1)
       ├── fd: ()-->(11), (1)-->(2-5)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:11(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column11:11(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,11)
       │    ├── left-join-apply
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) max:10(int)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) column10:10(int)
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2-5), (1,6)-->(7,10)
       │    │    ├── scan a
@@ -1824,12 +1824,12 @@ project
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-5)
       │    │    ├── select
-      │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
+      │    │    │    ├── columns: x:6(int!null) y:7(int) column10:10(int)
       │    │    │    ├── outer: (1)
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: ()-->(10), (6)-->(7)
       │    │    │    ├── group-by
-      │    │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
+      │    │    │    │    ├── columns: x:6(int!null) y:7(int) column10:10(int)
       │    │    │    │    ├── grouping columns: x:6(int!null)
       │    │    │    │    ├── outer: (1)
       │    │    │    │    ├── key: (6)
@@ -1855,7 +1855,7 @@ project
       │    │    │    │         └── const-agg [type=int, outer=(7)]
       │    │    │    │              └── variable: y [type=int, outer=(7)]
       │    │    │    └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
-      │    │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+      │    │    │         └── column10 IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
       │    │    └── true [type=bool]
       │    └── aggregations [outer=(2-5,7)]
       │         ├── max [type=int, outer=(7)]
@@ -1869,7 +1869,7 @@ project
       │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
-           └── max IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
+           └── column11 IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
 
 # ScalarGroupBy with non-null ignoring and a non-nullable column.
 norm
@@ -1887,15 +1887,15 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── select
-      ├── columns: c:1(int!null) d:2(int) array_agg:5(int[]!null)
+      ├── columns: c:1(int!null) d:2(int) column5:5(int[]!null)
       ├── key: (1)
       ├── fd: (1)-->(2,5)
       ├── project
-      │    ├── columns: array_agg:5(int[]) c:1(int!null) d:2(int)
+      │    ├── columns: column5:5(int[]) c:1(int!null) d:2(int)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,5)
       │    ├── group-by
-      │    │    ├── columns: c:1(int!null) d:2(int) x:3(int) array_agg:6(int[])
+      │    │    ├── columns: c:1(int!null) d:2(int) x:3(int) column5:6(int[])
       │    │    ├── grouping columns: c:1(int!null)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2,3,6)
@@ -1921,9 +1921,9 @@ project
       │    │         └── any-not-null-agg [type=int, outer=(3)]
       │    │              └── variable: x [type=int, outer=(3)]
       │    └── projections [outer=(1-3,6)]
-      │         └── CASE WHEN x IS NOT NULL THEN array_agg END [type=int[], outer=(3,6)]
+      │         └── CASE WHEN x IS NOT NULL THEN column5 END [type=int[], outer=(3,6)]
       └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
-           └── array_agg = ARRAY[] [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
+           └── column5 = ARRAY[] [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
 
 norm
 SELECT * FROM a WHERE 'foo'=(SELECT concat_agg(y::string) FROM xy WHERE x=k)
@@ -1933,15 +1933,15 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) concat_agg:9(string!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column9:9(string!null)
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2-5)
       ├── project
-      │    ├── columns: concat_agg:9(string) k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── columns: column9:9(string) k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,9)
       │    ├── group-by
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) canary:10(bool) concat_agg:11(string)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) canary:10(bool) column9:11(string)
       │    │    ├── grouping columns: k:1(int!null)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-5,10,11), ()~~>(10)
@@ -1980,9 +1980,9 @@ project
       │    │         └── any-not-null-agg [type=bool, outer=(10)]
       │    │              └── variable: canary [type=bool, outer=(10)]
       │    └── projections [outer=(1-5,10,11)]
-      │         └── CASE WHEN canary IS NOT NULL THEN concat_agg END [type=string, outer=(10,11)]
+      │         └── CASE WHEN canary IS NOT NULL THEN column9 END [type=string, outer=(10,11)]
       └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
-           └── concat_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
+           └── column9 = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
 
 # Don't decorrelate when the group by input is ordered.
 opt
@@ -1993,11 +1993,11 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:10(string!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column10:10(string!null)
       ├── key: (1)
       ├── fd: ()-->(10), (1)-->(2-5)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:10(string)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column10:10(string)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,10)
@@ -2034,7 +2034,7 @@ project
       │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight), fd=()-->(10)]
-           └── max = 'foo' [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight)]
+           └── column10 = 'foo' [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # TryDecorrelateSemiJoin
@@ -2055,11 +2055,11 @@ group-by
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── select
- │    ├── columns: x:1(int!null) y:2(int) a.k:3(int!null) a.i:4(int!null) max:13(int!null)
+ │    ├── columns: x:1(int!null) y:2(int) a.k:3(int!null) a.i:4(int!null) column13:13(int!null)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13), (4)==(13), (13)==(4)
  │    ├── group-by
- │    │    ├── columns: x:1(int!null) y:2(int) a.k:3(int!null) a.i:4(int) max:13(int)
+ │    │    ├── columns: x:1(int!null) y:2(int) a.k:3(int!null) a.i:4(int) column13:13(int)
  │    │    ├── grouping columns: x:1(int!null) a.k:3(int!null)
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13)
@@ -2094,7 +2094,7 @@ group-by
  │    │         └── const-agg [type=int, outer=(2)]
  │    │              └── variable: y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]
- │         └── a.i = max [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ])]
+ │         └── a.i = column13 [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ])]
  └── aggregations [outer=(2)]
       └── const-agg [type=int, outer=(2)]
            └── variable: y [type=int, outer=(2)]
@@ -2951,16 +2951,16 @@ project
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,10)
       │    ├── right-join
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int!null) xy.y:10(int)
       │    │    ├── fd: (1)-->(2-5,8)
       │    │    ├── scan xy
       │    │    │    └── columns: xy.y:10(int)
       │    │    ├── select
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int!null)
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(2-5,8)
       │    │    │    ├── group-by
-      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+      │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
       │    │    │    │    ├── grouping columns: k:1(int!null)
       │    │    │    │    ├── key: (1)
       │    │    │    │    ├── fd: (1)-->(2-5,8)
@@ -2987,7 +2987,7 @@ project
       │    │    │    │         └── const-agg [type=jsonb, outer=(5)]
       │    │    │    │              └── variable: j [type=jsonb, outer=(5)]
       │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
-      │    │    │         └── count > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    │    │         └── column8 > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
       │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── xy.y = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
       │    └── aggregations [outer=(2-5,10)]
@@ -3014,11 +3014,11 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
       ├── key: (1)
       ├── fd: (1)-->(2-5,8)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,8)
@@ -3052,7 +3052,7 @@ project
       │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: j [type=jsonb, outer=(5)]
       └── filters [type=bool, outer=(2,8)]
-           └── ((0, length(count::STRING)) > (0, 1)) OR (i = 1) [type=bool, outer=(2,8)]
+           └── ((0, length(column8::STRING)) > (0, 1)) OR (i = 1) [type=bool, outer=(2,8)]
 
 # Exists within a disjunction.
 opt
@@ -3241,57 +3241,57 @@ SELECT
 FROM a
 ----
 project
- ├── columns: a:6(int!null) x:9(int) y:12(int) b:15(bool) exists:18(bool) count:22(int)
- ├── fd: ()-->(6,12,15,18)
+ ├── columns: a:17(int!null) x:18(int) y:19(int) b:20(bool) exists:21(bool) count:22(int)
+ ├── fd: ()-->(17,19-21)
  ├── group-by
- │    ├── columns: k:1(int!null) xy.x:7(int) count:21(int)
- │    ├── grouping columns: k:1(int!null) xy.x:7(int)
- │    ├── key: (1,7)
- │    ├── fd: (1,7)-->(21)
+ │    ├── columns: k:1(int!null) xy.x:6(int) column16:16(int)
+ │    ├── grouping columns: k:1(int!null) xy.x:6(int)
+ │    ├── key: (1,6)
+ │    ├── fd: (1,6)-->(16)
  │    ├── left-join
- │    │    ├── columns: k:1(int!null) xy.x:7(int) xy.y:20(int)
+ │    │    ├── columns: k:1(int!null) xy.x:6(int) xy.y:15(int)
  │    │    ├── left-join (merge)
- │    │    │    ├── columns: k:1(int!null) xy.x:7(int)
- │    │    │    ├── key: (1,7)
+ │    │    │    ├── columns: k:1(int!null) xy.x:6(int)
+ │    │    │    ├── key: (1,6)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null)
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── ordering: +1
  │    │    │    ├── scan xy
- │    │    │    │    ├── columns: xy.x:7(int!null)
- │    │    │    │    ├── key: (7)
- │    │    │    │    └── ordering: +7
+ │    │    │    │    ├── columns: xy.x:6(int!null)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    └── ordering: +6
  │    │    │    └── merge-on
  │    │    │         ├── left ordering: +1
- │    │    │         ├── right ordering: +7
- │    │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    │              └── xy.x = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    │         ├── right ordering: +6
+ │    │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │    │              └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │    ├── scan xy
- │    │    │    └── columns: xy.y:20(int)
- │    │    └── filters [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ]), fd=(1)==(20), (20)==(1)]
- │    │         └── xy.y = k [type=bool, outer=(1,20), constraints=(/1: (/NULL - ]; /20: (/NULL - ])]
- │    └── aggregations [outer=(20)]
- │         └── count [type=int, outer=(20)]
- │              └── variable: xy.y [type=int, outer=(20)]
- └── projections [outer=(7,21)]
+ │    │    │    └── columns: xy.y:15(int)
+ │    │    └── filters [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
+ │    │         └── xy.y = k [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ])]
+ │    └── aggregations [outer=(15)]
+ │         └── count [type=int, outer=(15)]
+ │              └── variable: xy.y [type=int, outer=(15)]
+ └── projections [outer=(6,16)]
       ├── const: 5 [type=int]
-      ├── variable: xy.x [type=int, outer=(7)]
+      ├── variable: xy.x [type=int, outer=(6)]
       ├── subquery [type=int]
       │    └── scan xy
-      │         ├── columns: xy.y:11(int)
+      │         ├── columns: xy.y:9(int)
       │         ├── limit: 1
       │         ├── key: ()
-      │         └── fd: ()-->(11)
+      │         └── fd: ()-->(9)
       ├── any: eq [type=bool]
       │    ├── scan xy
-      │    │    └── columns: xy.y:14(int)
+      │    │    └── columns: xy.y:11(int)
       │    └── const: 5 [type=int]
       ├── exists [type=bool]
       │    └── scan xy
-      │         ├── columns: xy.x:16(int!null) xy.y:17(int)
-      │         ├── key: (16)
-      │         └── fd: (16)-->(17)
-      └── variable: count [type=int, outer=(21)]
+      │         ├── columns: xy.x:12(int!null) xy.y:13(int)
+      │         ├── key: (12)
+      │         └── fd: (12)-->(13)
+      └── variable: column16 [type=int, outer=(16)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
 opt

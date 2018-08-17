@@ -234,11 +234,11 @@ SELECT DISTINCT max(x) FROM xyz GROUP BY x
 ----
 distinct-on
  ├── columns: max:4(int)
- ├── grouping columns: max:4(int)
+ ├── grouping columns: column4:4(int)
  └── project
-      ├── columns: max:4(int)
+      ├── columns: column4:4(int)
       └── group-by
-           ├── columns: x:1(int!null) max:4(int)
+           ├── columns: x:1(int!null) column4:4(int)
            ├── grouping columns: x:1(int!null)
            ├── project
            │    ├── columns: x:1(int!null)
@@ -294,13 +294,13 @@ SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
 ----
 distinct-on
  ├── columns: max:4(float) r:5(int) s:6(int!null)
- ├── grouping columns: max:4(float) r:5(int) s:6(int!null)
+ ├── grouping columns: column4:4(float) r:5(int) s:6(int!null)
  └── project
-      ├── columns: r:5(int) s:6(int!null) max:4(float)
+      ├── columns: r:5(int) s:6(int!null) column4:4(float)
       ├── select
-      │    ├── columns: x:1(int!null) y:2(int!null) max:4(float)
+      │    ├── columns: x:1(int!null) y:2(int!null) column4:4(float)
       │    ├── group-by
-      │    │    ├── columns: x:1(int!null) y:2(int) max:4(float)
+      │    │    ├── columns: x:1(int!null) y:2(int) column4:4(float)
       │    │    ├── grouping columns: x:1(int!null) y:2(int)
       │    │    ├── scan xyz
       │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
