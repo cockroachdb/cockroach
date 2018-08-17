@@ -361,7 +361,7 @@ func TestInternColType(t *testing.T) {
 	}
 
 	// Arithmetic types.
-	test(coltypes.Boolean, &coltypes.TBool{Name: "BOOLEAN"}, true)
+	test(coltypes.Bool, &coltypes.TBool{}, true)
 
 	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
 	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)

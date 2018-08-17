@@ -1116,6 +1116,8 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL)`,
 			`CREATE TABLE a (b SERIAL8, c SERIAL2)`},
+		{`CREATE TABLE a (b BOOLEAN)`,
+			`CREATE TABLE a (b BOOL)`},
 		{`CREATE TABLE a (b BYTES, c BYTEA, d BLOB)`,
 			`CREATE TABLE a (b BYTES, c BYTES, d BYTES)`},
 

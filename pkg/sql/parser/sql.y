@@ -6084,7 +6084,7 @@ numeric:
   }
 | BOOLEAN
   {
-    $$.val = coltypes.Boolean
+    $$.val = coltypes.Bool
   }
 | BOOL
   {

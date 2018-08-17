@@ -31,8 +31,7 @@ func TestParseColumnType(t *testing.T) {
 	}{
 		{"BIT", &coltypes.TInt{Name: "BIT", Width: 1, ImplicitWidth: true}},
 		{"BIT(2)", &coltypes.TInt{Name: "BIT", Width: 2}},
-		{"BOOL", &coltypes.TBool{Name: "BOOL"}},
-		{"BOOLEAN", &coltypes.TBool{Name: "BOOLEAN"}},
+		{"BOOL", &coltypes.TBool{}},
 		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
 		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},
 		{"INTEGER", &coltypes.TInt{Name: "INTEGER"}},
