@@ -378,6 +378,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 			AND TABLE_SCHEMA = $2
 			AND TABLE_NAME = $3
 			AND GENERATION_EXPRESSION = ''
+			AND IS_HIDDEN = 'NO'
 		`, &md.name.CatalogName, lex.EscapeSQLString(ts)),
 		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {

@@ -31,13 +31,13 @@ CREATE TABLE t (
   c FLOAT DEFAULT random()
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default     generation_expression  indices
-a            INT        false        42:::INT           ·                      {"primary"}
-b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}
-c            FLOAT      true         random()           ·                      {}
+column_name  data_type  is_nullable  column_default     generation_expression  indices      is_hidden
+a            INT        false        42:::INT           ·                      {"primary"}  false
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}           false
+c            FLOAT      true         random()           ·                      {}           false
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
@@ -113,10 +113,10 @@ UPDATE v SET a = DEFAULT
 statement ok
 UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM v
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary"}
-b            TIMESTAMP  true         NULL            ·                      {}
-c            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            TIMESTAMP  true         NULL            ·                      {}           false
+c            INT        true         NULL            ·                      {}           false

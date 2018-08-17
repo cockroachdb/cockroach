@@ -120,6 +120,9 @@ message TableDetailsResponse {
 
     // generation_expression is the generator expression if the column is computed.
     string generation_expression = 5;
+
+    // hidden is whether this column is hidden.
+    bool hidden = 6;
   }
 
   message Index {

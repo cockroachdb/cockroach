@@ -339,6 +339,7 @@ func (s *adminServer) TableDetails(
 			nullCol    = "is_nullable"
 			defaultCol = "column_default"
 			genCol     = "generation_expression"
+			hiddenCol  = "is_hidden"
 		)
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
@@ -350,6 +351,9 @@ func (s *adminServer) TableDetails(
 				return nil, err
 			}
 			if err := scanner.Scan(row, nullCol, &col.Nullable); err != nil {
+				return nil, err
+			}
+			if err := scanner.Scan(row, hiddenCol, &col.Hidden); err != nil {
 				return nil, err
 			}
 			isDefaultNull, err := scanner.IsNull(row, defaultCol)

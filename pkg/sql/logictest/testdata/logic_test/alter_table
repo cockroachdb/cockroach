@@ -18,13 +18,13 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","t_f_idx"}
-f            INT        true         NULL            ·                      {"t_f_idx"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                is_hidden
+a            INT        false        NULL            ·                      {"primary","t_f_idx"}  false
+f            INT        true         NULL            ·                      {"t_f_idx"}            false
+b            INT        true         NULL            ·                      {}                     false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -401,15 +401,15 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM tt
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}
-q            DECIMAL    false        NULL            ·                      {}
-r            DECIMAL    true         NULL            ·                      {}
-s            DECIMAL    false        NULL            ·                      {"tt_s_key"}
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                            is_hidden
+a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}  false
+q            DECIMAL    false        NULL            ·                      {}                                 false
+r            DECIMAL    true         NULL            ·                      {}                                 false
+s            DECIMAL    false        NULL            ·                      {"tt_s_key"}                       false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}                       false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -595,12 +595,12 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary"}
-b            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            INT        true         NULL            ·                      {}           false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -613,13 +613,13 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary","foo"}
-b            INT        true         NULL            ·                      {"foo"}
-c            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
+a            INT        false        NULL            ·                      {"primary","foo"}  false
+b            INT        true         NULL            ·                      {"foo"}            false
+c            INT        true         NULL            ·                      {}                 false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
