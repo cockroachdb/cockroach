@@ -911,13 +911,13 @@ CREATE TABLE tz (
   d TIMESTAMPTZ
 )
 
-query TTBTTT
+query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a  INT                       false  NULL  ·  {"primary"}
-b  TIMESTAMP                 true   NULL  ·  {}
-c  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
-d  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}
+a  INT                       false  NULL  ·  {"primary"}  false
+b  TIMESTAMP                 true   NULL  ·  {}           false
+c  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}           false
+d  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}           false
 
 statement ok
 INSERT INTO tz VALUES

@@ -13,14 +13,15 @@ INSERT INTO t VALUES ('some string', 'short', TIME '20:16:27', '2018-05-23 20:16
 statement ok
 ALTER TABLE t ALTER s TYPE BYTES, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTAMPTZ
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type                 is_nullable  column_default  generation_expression  indices
-s            BYTES                     true         NULL            ·                      {}
-sl           STRING(6)                 true         NULL            ·                      {}
-t            TIME                      true         NULL            ·                      {}
-ts           TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
+column_name  data_type                 is_nullable  column_default  generation_expression  indices      is_hidden
+s            BYTES                     true         NULL            ·                      {}           false
+sl           STRING(6)                 true         NULL            ·                      {}           false
+t            TIME                      true         NULL            ·                      {}           false
+ts           TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}           false
+rowid        INT                       false        unique_rowid()  ·                      {"primary"}  true
 
 query TTTT
 SELECT * FROM t
@@ -96,20 +97,22 @@ subtest ChangeVisibleColumnType
 statement ok
 CREATE TABLE t (a INT)
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        true         NULL            ·                      {}           false
+rowid        INT        false        unique_rowid()  ·                      {"primary"}  true
 
 statement ok
 ALTER TABLE t ALTER a TYPE INTEGER
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INTEGER    true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INTEGER    true         NULL            ·                      {}           false
+rowid        INT        false        unique_rowid()  ·                      {"primary"}  true
 
 statement ok
 DROP TABLE t

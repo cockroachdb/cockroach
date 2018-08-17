@@ -81,22 +81,22 @@ CREATE TABLE d (
   id    INT PRIMARY KEY NULL
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM d
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-id           INT        false        NULL            ·                      {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+id           INT        false        NULL            ·                      {"primary"}  false
 
 statement ok
 CREATE TABLE e (
   id    INT NULL PRIMARY KEY
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM e
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-id           INT        false        NULL            ·                      {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+id           INT        false        NULL            ·                      {"primary"}  false
 
 statement ok
 CREATE TABLE f (
@@ -106,13 +106,13 @@ CREATE TABLE f (
   PRIMARY KEY (a, b, c)
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM f
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-a            INT        false        NULL            ·                      {"primary"}
-b            INT        false        NULL            ·                      {"primary"}
-c            INT        false        NULL            ·                      {"primary"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            INT        false        NULL            ·                      {"primary"}  false
+c            INT        false        NULL            ·                      {"primary"}  false
 
 query T
 SHOW TABLES FROM test
@@ -156,16 +156,16 @@ CREATE TABLE test.users (
   FAMILY fam_3_username_email (username, email)
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM test.users
 ----
-column_name  data_type    is_nullable  column_default  generation_expression  indices
-id           INT          false        NULL            ·                      {"primary","foo","bar"}
-name         STRING       false        NULL            ·                      {"foo","bar"}
-title        STRING       true         NULL            ·                      {}
-nickname     STRING       true         NULL            ·                      {}
-username     STRING(10)   true         NULL            ·                      {}
-email        STRING(100)  true         NULL            ·                      {}
+column_name  data_type    is_nullable  column_default  generation_expression  indices                  is_hidden
+id           INT          false        NULL            ·                      {"primary","foo","bar"}  false
+name         STRING       false        NULL            ·                      {"foo","bar"}            false
+title        STRING       true         NULL            ·                      {}                       false
+nickname     STRING       true         NULL            ·                      {}                       false
+username     STRING(10)   true         NULL            ·                      {}                       false
+email        STRING(100)  true         NULL            ·                      {}                       false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM test.users
@@ -353,52 +353,53 @@ CREATE TABLE alltypes (
   cvarchar12 VARCHAR(12)
   )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM alltypes
 ----
-column_name       data_type                 is_nullable  column_default  generation_expression  indices
-cbigint           BIGINT                    true         NULL            ·                      {}
-cbigserial        INT                       false        unique_rowid()  ·                      {}
-cbit              BIT(1)                    true         NULL            ·                      {}
-cbit12            BIT(12)                   true         NULL            ·                      {}
-cblob             BYTES                     true         NULL            ·                      {}
-cbool             BOOL                      true         NULL            ·                      {}
-cbytea            BYTES                     true         NULL            ·                      {}
-cbytes            BYTES                     true         NULL            ·                      {}
-cchar             STRING                    true         NULL            ·                      {}
-cchar12           STRING(12)                true         NULL            ·                      {}
-cdate             DATE                      true         NULL            ·                      {}
-cdec              DECIMAL                   true         NULL            ·                      {}
-cdec1             DECIMAL(1)                true         NULL            ·                      {}
-cdec21            DECIMAL(2,1)              true         NULL            ·                      {}
-cdecimal          DECIMAL                   true         NULL            ·                      {}
-cdecimal1         DECIMAL(1)                true         NULL            ·                      {}
-cdecimal21        DECIMAL(2,1)              true         NULL            ·                      {}
-cdoubleprecision  DOUBLE PRECISION          true         NULL            ·                      {}
-cfloat            FLOAT                     true         NULL            ·                      {}
-cfloat4           REAL                      true         NULL            ·                      {}
-cfloat8           DOUBLE PRECISION          true         NULL            ·                      {}
-cint              INT                       true         NULL            ·                      {}
-cint2             SMALLINT                  true         NULL            ·                      {}
-cint4             INTEGER                   true         NULL            ·                      {}
-cint64            BIGINT                    true         NULL            ·                      {}
-cint8             BIGINT                    true         NULL            ·                      {}
-cinteger          INTEGER                   true         NULL            ·                      {}
-cinterval         INTERVAL                  true         NULL            ·                      {}
-cnumeric          DECIMAL                   true         NULL            ·                      {}
-cnumeric1         DECIMAL(1)                true         NULL            ·                      {}
-cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}
-creal             REAL                      true         NULL            ·                      {}
-cserial           INT                       false        unique_rowid()  ·                      {}
-csmallint         SMALLINT                  true         NULL            ·                      {}
-csmallserial      INT                       false        unique_rowid()  ·                      {}
-cstring           STRING                    true         NULL            ·                      {}
-cstring12         STRING(12)                true         NULL            ·                      {}
-ctext             STRING                    true         NULL            ·                      {}
-ctimestamp        TIMESTAMP                 true         NULL            ·                      {}
-ctimestampwtz     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-cvarchar          STRING                    true         NULL            ·                      {}
-cvarchar12        STRING(12)                true         NULL            ·                      {}
+column_name       data_type                 is_nullable  column_default  generation_expression  indices      is_hidden
+cbigint           BIGINT                    true         NULL            ·                      {}           false
+cbigserial        INT                       false        unique_rowid()  ·                      {}           false
+cbit              BIT(1)                    true         NULL            ·                      {}           false
+cbit12            BIT(12)                   true         NULL            ·                      {}           false
+cblob             BYTES                     true         NULL            ·                      {}           false
+cbool             BOOL                      true         NULL            ·                      {}           false
+cbytea            BYTES                     true         NULL            ·                      {}           false
+cbytes            BYTES                     true         NULL            ·                      {}           false
+cchar             STRING                    true         NULL            ·                      {}           false
+cchar12           STRING(12)                true         NULL            ·                      {}           false
+cdate             DATE                      true         NULL            ·                      {}           false
+cdec              DECIMAL                   true         NULL            ·                      {}           false
+cdec1             DECIMAL(1)                true         NULL            ·                      {}           false
+cdec21            DECIMAL(2,1)              true         NULL            ·                      {}           false
+cdecimal          DECIMAL                   true         NULL            ·                      {}           false
+cdecimal1         DECIMAL(1)                true         NULL            ·                      {}           false
+cdecimal21        DECIMAL(2,1)              true         NULL            ·                      {}           false
+cdoubleprecision  DOUBLE PRECISION          true         NULL            ·                      {}           false
+cfloat            FLOAT                     true         NULL            ·                      {}           false
+cfloat4           REAL                      true         NULL            ·                      {}           false
+cfloat8           DOUBLE PRECISION          true         NULL            ·                      {}           false
+cint              INT                       true         NULL            ·                      {}           false
+cint2             SMALLINT                  true         NULL            ·                      {}           false
+cint4             INTEGER                   true         NULL            ·                      {}           false
+cint64            BIGINT                    true         NULL            ·                      {}           false
+cint8             BIGINT                    true         NULL            ·                      {}           false
+cinteger          INTEGER                   true         NULL            ·                      {}           false
+cinterval         INTERVAL                  true         NULL            ·                      {}           false
+cnumeric          DECIMAL                   true         NULL            ·                      {}           false
+cnumeric1         DECIMAL(1)                true         NULL            ·                      {}           false
+cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}           false
+creal             REAL                      true         NULL            ·                      {}           false
+cserial           INT                       false        unique_rowid()  ·                      {}           false
+csmallint         SMALLINT                  true         NULL            ·                      {}           false
+csmallserial      INT                       false        unique_rowid()  ·                      {}           false
+cstring           STRING                    true         NULL            ·                      {}           false
+cstring12         STRING(12)                true         NULL            ·                      {}           false
+ctext             STRING                    true         NULL            ·                      {}           false
+ctimestamp        TIMESTAMP                 true         NULL            ·                      {}           false
+ctimestampwtz     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}           false
+cvarchar          STRING                    true         NULL            ·                      {}           false
+cvarchar12        STRING(12)                true         NULL            ·                      {}           false
+rowid             INT                       false        unique_rowid()  ·                      {"primary"}  true
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng
