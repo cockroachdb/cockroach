@@ -83,13 +83,13 @@ func testDescription(ctx context.Context, t *testing.T, c *cluster.DockerCluster
 	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=Description_`
 	var jobID int
 	sqlDB.QueryRow(t,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH timestamps, envelope=$2`, into, `row`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope=$2`, into, `row`,
 	).Scan(&jobID)
 	var description string
 	sqlDB.QueryRow(t,
 		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
 	).Scan(&description)
-	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + into + `' WITH envelope = 'row', timestamps`
+	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + into + `' WITH envelope = 'row', updated`
 	if description != expected {
 		t.Errorf(`got "%s" expected "%s"`, description, expected)
 	}
@@ -110,7 +110,7 @@ func testPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluste
 
 	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=PauseUnpause_`
 	var jobID int
-	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH timestamps`, into).Scan(&jobID)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH resolved`, into).Scan(&jobID)
 
 	tc, err := makeTopicsConsumer(k.consumer, `PauseUnpause_foo`)
 	if err != nil {
@@ -155,7 +155,7 @@ func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *do
 	}
 
 	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=Bank_`
-	sqlDB.Exec(t, `CREATE CHANGEFEED FOR bank INTO $1 WITH timestamps`, into)
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR bank INTO $1 WITH updated, resolved`, into)
 
 	var done int64
 	g := ctxgroup.WithContext(ctx)

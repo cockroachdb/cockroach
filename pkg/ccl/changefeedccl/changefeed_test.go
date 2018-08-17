@@ -178,7 +178,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		`BEGIN; INSERT INTO foo VALUES (0); SELECT cluster_logical_timestamp(); COMMIT`,
 	).Scan(&ts0)
 
-	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH timestamps`)
+	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 	defer closeFeedRowsHack(t, sqlDB, rows)
 
 	var ts1 string
@@ -509,7 +509,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 	// Not reading from fooTimestamps will backpressure the changefeed and the
 	// min_high_water will stagnate.
-	fooTimestamps := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH timestamps`)
+	fooTimestamps := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH resolved`)
 	defer closeFeedRowsCancelOnceHack(t, sqlDB, fooTimestamps)
 	stalled := s.MustGetSQLCounter(`changefeed.min_high_water`)
 	for i := 0; i < 100; {
