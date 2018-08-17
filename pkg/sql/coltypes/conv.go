@@ -73,7 +73,7 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 	case types.Int:
 		return Int, nil
 	case types.Float:
-		return Float, nil
+		return Float8, nil
 	case types.Decimal:
 		return Decimal, nil
 	case types.Timestamp:

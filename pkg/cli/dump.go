@@ -597,7 +597,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						// In addition, we can only observe ARRAY types by their [] suffix.
 						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
 							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
-							elemType, err := tree.StringToColType(typ)
+							elemType, err := tree.ArrayElementTypeStringToColType(typ)
 							if err != nil {
 								return err
 							}

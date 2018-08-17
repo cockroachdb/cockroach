@@ -139,7 +139,7 @@ select
       ├── (f + f) < (5.0 + 2.0) [type=bool, outer=(3)]
       ├── i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       ├── i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (f + i::FLOAT) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
+      └── (f + i::FLOAT8) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Plus overload is not defined.
 opt
@@ -182,7 +182,7 @@ select
       ├── (f + f) > (2.0 - 5.0) [type=bool, outer=(3)]
       ├── i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       ├── i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (f + i::FLOAT) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
+      └── (f + i::FLOAT8) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt

@@ -633,7 +633,7 @@ const (
 	city STRING(80) NULL,
 	temp_lo INTEGER NULL,
 	temp_hi INTEGER NULL,
-	prcp REAL NULL,
+	prcp FLOAT4 NULL,
 	date DATE NULL,
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities (city),
 	INDEX weather_auto_index_weather_city_fkey (city ASC),

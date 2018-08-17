@@ -366,10 +366,12 @@ func TestInternColType(t *testing.T) {
 	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
 	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)
 
-	test(coltypes.Float4, &coltypes.TFloat{Name: "FLOAT4", Width: 32}, true)
-	test(coltypes.Float8, &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}, false)
-	test(coltypes.Float, coltypes.NewFloat(64, true), false)
-	test(coltypes.NewFloat(0, true), coltypes.NewFloat(0, true), true)
+	test(coltypes.Float4, &coltypes.TFloat{Short: true}, true)
+	test(coltypes.Float4, &coltypes.TFloat{}, false)
+	nf30v1, _ := coltypes.NewFloat(16)
+	nf30v2, _ := coltypes.NewFloat(16)
+	test(coltypes.Float8, nf30v1, false)
+	test(nf30v1, nf30v2, true)
 
 	tdec := &coltypes.TDecimal{Prec: 19}
 	test(coltypes.Decimal, &coltypes.TDecimal{}, true)

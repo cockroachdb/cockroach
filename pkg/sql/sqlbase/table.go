@@ -50,11 +50,6 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.Integer.Name:  ColumnType_INTEGER,
 	coltypes.SmallInt.Name: ColumnType_SMALLINT,
 	coltypes.BigInt.Name:   ColumnType_BIGINT,
-
-	coltypes.Real.Name:   ColumnType_REAL,
-	coltypes.Float4.Name: ColumnType_REAL,
-	coltypes.Float8.Name: ColumnType_DOUBLE_PRECISION,
-	coltypes.Double.Name: ColumnType_DOUBLE_PRECISION,
 }
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
@@ -109,15 +104,13 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		if val, present := aliasToVisibleTypeMap[t.Name]; present {
 			base.VisibleType = val
 		}
+
 	case *coltypes.TFloat:
-		// If the precision for this float col was intentionally specified as 0, return an error.
-		if t.Prec == 0 && t.PrecSpecified {
-			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
+		base.VisibleType = ColumnType_NONE
+		if t.Short {
+			base.VisibleType = ColumnType_REAL
 		}
-		base.Precision = int32(t.Prec)
-		if val, present := aliasToVisibleTypeMap[t.Name]; present {
-			base.VisibleType = val
-		}
+
 	case *coltypes.TDecimal:
 		base.Width = int32(t.Scale)
 		base.Precision = int32(t.Prec)

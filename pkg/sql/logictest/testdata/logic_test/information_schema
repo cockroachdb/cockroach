@@ -833,7 +833,7 @@ WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
 table_name  column_name  data_type
 data_types  a            INT
-data_types  b            FLOAT
+data_types  b            FLOAT8
 data_types  c            DECIMAL
 data_types  d            STRING
 data_types  e            BYTES
@@ -875,7 +875,7 @@ WHERE table_schema = 'public' AND table_name = 'num_prec'
 table_name  column_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision
 num_prec    a            64                 2                        0              NULL
 num_prec    b            53                 2                        NULL           NULL
-num_prec    c            23                 2                        NULL           NULL
+num_prec    c            24                 2                        NULL           NULL
 num_prec    d            NULL               10                       NULL           NULL
 num_prec    e            12                 10                       0              NULL
 num_prec    f            12                 10                       6              NULL

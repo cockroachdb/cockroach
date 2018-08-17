@@ -70,23 +70,20 @@ func (node *TSerial) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.TypeName())
 }
 
-// TFloat represents a REAL, DOUBLE or FLOAT type.
-type TFloat struct {
-	Name          string
-	Prec          int
-	Width         int
-	PrecSpecified bool // true if the value of Prec is not the default
-}
+// TFloat represents a REAL or DOUBLE type.
+type TFloat struct{ Short bool }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TFloat) TypeName() string { return node.Name }
+func (node *TFloat) TypeName() string {
+	if node.Short {
+		return "FLOAT4"
+	}
+	return "FLOAT8"
+}
 
 // Format implements the ColTypeFormatter interface.
 func (node *TFloat) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
-	if node.Prec > 0 {
-		fmt.Fprintf(buf, "(%d)", node.Prec)
-	}
+	buf.WriteString(node.TypeName())
 }
 
 // TDecimal represents a DECIMAL or NUMERIC type.

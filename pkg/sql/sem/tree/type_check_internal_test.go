@@ -510,7 +510,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	intType := coltypes.Int
-	floatType := coltypes.Float
+	floatType := coltypes.Float8
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes

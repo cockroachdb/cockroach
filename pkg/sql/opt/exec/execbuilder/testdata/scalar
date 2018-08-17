@@ -383,7 +383,7 @@ EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
 render     ·         ·          (a, b)  ·
  │         render 0  a::STRING  ·       ·
- │         render 1  b::FLOAT   ·       ·
+ │         render 1  b::FLOAT8  ·       ·
  └── scan  ·         ·          (a, b)  ·
 ·          table     t@primary  ·       ·
 ·          spans     ALL        ·       ·
