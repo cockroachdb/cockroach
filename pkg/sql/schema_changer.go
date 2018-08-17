@@ -138,6 +138,7 @@ func isPermanentSchemaChangeError(err error) bool {
 		context.Canceled,
 		context.DeadlineExceeded,
 		errExistingSchemaChangeLease,
+		errExpiredSchemaChangeLease,
 		errNotHitGCTTLDeadline,
 		errSchemaChangeDuringDrain,
 		errSchemaChangeNotFirstInLine:
@@ -161,6 +162,7 @@ func isPermanentSchemaChangeError(err error) bool {
 
 var (
 	errExistingSchemaChangeLease  = errors.New("an outstanding schema change lease exists")
+	errExpiredSchemaChangeLease   = errors.New("the schema change lease has expired")
 	errSchemaChangeNotFirstInLine = errors.New("schema change not first in line")
 	errNotHitGCTTLDeadline        = errors.New("not hit gc ttl deadline")
 	errSchemaChangeDuringDrain    = errors.New("a schema change ran during the drain phase, re-increment")
@@ -241,7 +243,8 @@ func (sc *SchemaChanger) findTableWithLease(
 		return nil, errors.Errorf("no lease present for tableID: %d", sc.tableID)
 	}
 	if *tableDesc.Lease != lease {
-		return nil, errors.Errorf("table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
+		log.Errorf(ctx, "table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
+		return nil, errExpiredSchemaChangeLease
 	}
 	return tableDesc, nil
 }

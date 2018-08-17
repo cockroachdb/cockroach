@@ -121,7 +121,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Extending an old lease fails.
-	if err := changer.ExtendLease(ctx, &oldLease); !testutils.IsError(err, "table: .* has lease") {
+	if err := changer.ExtendLease(ctx, &oldLease); !testutils.IsError(
+		err, "the schema change lease has expired") {
 		t.Fatal(err)
 	}
 
