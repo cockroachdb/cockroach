@@ -44,13 +44,13 @@ var (
 	// BigInt is an immutable T instance.
 	BigInt = &TInt{Name: "BIGINT"}
 	// Serial is an immutable T instance.
-	Serial = &TInt{Name: "SERIAL"}
+	Serial = &TSerial{IntType: Int}
 	// Serial2 is an immutable T instance.
-	Serial2 = &TInt{Name: "SERIAL2"}
+	Serial2 = &TSerial{IntType: Int2}
 	// Serial4 is an immutable T instance.
-	Serial4 = &TInt{Name: "SERIAL4"}
+	Serial4 = &TSerial{IntType: Int4}
 	// Serial8 is an immutable T instance.
-	Serial8 = &TInt{Name: "SERIAL8"}
+	Serial8 = &TSerial{IntType: Int8}
 
 	// Real is an immutable T instance.
 	Real = &TFloat{Name: "REAL", Width: 32}
@@ -112,7 +112,7 @@ var (
 	UUID = &TUUID{}
 
 	// INet is an immutable T instance.
-	INet = &TIPAddr{Name: "INET"}
+	INet = &TIPAddr{}
 
 	// JSON is an immutable T instance.
 	JSON = &TJSON{Name: "JSON"}

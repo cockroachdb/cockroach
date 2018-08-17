@@ -52,18 +52,24 @@ func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	}
 }
 
-var serialIntTypes = map[string]struct{}{
-	Serial.Name:  {},
-	Serial2.Name: {},
-	Serial4.Name: {},
-	Serial8.Name: {},
+// TSerial represents a SERIAL type.
+type TSerial struct {
+	IntType *TInt
 }
 
-// IsSerial returns true when this column should be given a DEFAULT of a unique,
-// incrementing function.
-func (node *TInt) IsSerial() bool {
-	_, ok := serialIntTypes[node.Name]
-	return ok
+var serialNames = map[*TInt]string{
+	Int:  "SERIAL",
+	Int2: "SERIAL2",
+	Int4: "SERIAL4",
+	Int8: "SERIAL8",
+}
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TSerial) TypeName() string { return serialNames[node.IntType] }
+
+// Format implements the ColTypeFormatter interface.
+func (node *TSerial) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
+	buf.WriteString(node.TypeName())
 }
 
 // TFloat represents a REAL, DOUBLE or FLOAT type.

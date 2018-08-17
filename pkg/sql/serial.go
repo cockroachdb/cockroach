@@ -48,8 +48,8 @@ var virtualSequenceOpts = tree.SequenceOptions{
 func (p *planner) processSerialInColumnDef(
 	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
 ) (*tree.ColumnTableDef, *DatabaseDescriptor, *ObjectName, tree.SequenceOptions, error) {
-	t, ok := d.Type.(*coltypes.TInt)
-	if !ok || !t.IsSerial() {
+	t, ok := d.Type.(*coltypes.TSerial)
+	if !ok {
 		// Column is not SERIAL: nothing to do.
 		return d, nil, nil, nil, nil
 	}
@@ -79,16 +79,7 @@ func (p *planner) processSerialInColumnDef(
 
 	case sessiondata.SerialUsesSQLSequences:
 		// With real sequences we can use exactly the requested type.
-		switch t.Name {
-		case coltypes.Serial.Name:
-			newSpec.Type = coltypes.Integer
-		case coltypes.Serial2.Name:
-			newSpec.Type = coltypes.Int2
-		case coltypes.Serial4.Name:
-			newSpec.Type = coltypes.Int4
-		case coltypes.Serial8.Name:
-			newSpec.Type = coltypes.Int8
-		}
+		newSpec.Type = t.IntType
 	}
 
 	if serialNormalizationMode == sessiondata.SerialUsesRowID {
@@ -165,8 +156,7 @@ func (p *planner) processSerialInColumnDef(
 func SimplifySerialInColumnDefWithRowID(
 	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
 ) error {
-	t, ok := d.Type.(*coltypes.TInt)
-	if !ok || !t.IsSerial() {
+	if _, ok := d.Type.(*coltypes.TSerial); !ok {
 		// Column is not SERIAL: nothing to do.
 		return nil
 	}

@@ -149,6 +149,8 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 		return types.Bool
 	case *TInt:
 		return types.Int
+	case *TSerial:
+		return types.Int
 	case *TFloat:
 		return types.Float
 	case *TDecimal:

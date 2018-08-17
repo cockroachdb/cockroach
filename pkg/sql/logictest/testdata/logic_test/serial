@@ -201,9 +201,9 @@ query TT
 SHOW CREATE TABLE serial
 ----
 serial  CREATE TABLE serial (
-        a INTEGER NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
+        a INT NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
         b INT NULL DEFAULT 7:::INT,
-        c INTEGER NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
+        c INT NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
         CONSTRAINT "primary" PRIMARY KEY (a ASC),
         UNIQUE INDEX serial_c_key (c ASC),
         FAMILY "primary" (a, b, c)
