@@ -1853,7 +1853,7 @@ CREATE TABLE pg_catalog.pg_type (
 				if cat == typCategoryPseudo {
 					typType = typTypePseudo
 				}
-				typname := types.PGDisplayName(typ)
+				typname := strings.ToLower(oid.TypeName[o])
 
 				if err := addRow(
 					tree.NewDOid(tree.DInt(o)), // oid

@@ -5970,7 +5970,7 @@ const_typename:
     // Eventually this clause will be used to parse user-defined types as well,
     // since their names can be quoted.
     if $1 == "char" {
-      $$.val = coltypes.Char
+      $$.val = coltypes.QChar
     } else {
       var err error
       $$.val, err = coltypes.TypeForNonKeywordTypeName($1)
