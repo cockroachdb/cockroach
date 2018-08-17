@@ -103,19 +103,19 @@ var statsAnnID = opt.NewTableAnnID()
 //
 // In order to determine the row count, column statistics may be required for a
 // subset of the columns of the expression. Column statistics are calculated
-// recursively from the child expression(s) via calls to the colStatFromChild
-// function. colStatFromChild finds the child expression that might contain the
+// recursively from the child expression(s) via calls to the colStatFromInput
+// function. colStatFromInput finds the child expression that might contain the
 // requested stats, and calls colStat on the child. colStat checks if the
 // requested stats are already cached for the child expression, and if not,
 // calls colStatXXX (where the XXX corresponds to the operator of the child
 // expression). The child expression may need to calculate column statistics
 // from its children, and if so, it makes another recursive call to
-// colStatFromChild.
+// colStatFromInput.
 //
-// If the lowest level operator (usually a scan) does not have the requested
-// statistic, colStatFromChild retrieves the table statistics from the metadata
-// (the metadata may in turn need to fetch the stats from the database if they
-// are not already cached). If a particular table statistic is not available, a
+// The "base case" for colStatFromInput is a Scan, where the "input" is the raw
+// table itself; the table statistics are retrieved from the metadata (the
+// metadata may in turn need to fetch the stats from the database if they are
+// not already cached). If a particular table statistic is not available, a
 // best-effort guess is made (see colStatLeaf for details).
 //
 // To better understand how the statisticsBuilder works, let us consider this
@@ -174,58 +174,50 @@ func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, md *opt.Metadata, k
 	sb.keyBuf = keyBuf
 }
 
-// colStatFromChild retrieves a column statistic from a child of the given
-// expression. If the child expected to contain the column statistic for colSet
-// is already known, childIdx contains the index of that child. Otherwise,
-// childIdx is -1, and the child is chosen as the first child whose output
-// columns intersect colSet. If no such child is found, that indicates that all
-// the columns in colSet are outer columns, and therefore can be treated as
-// constant for the current expression.
-//
-// For the purposes of this function scans (including virtual scans) have the
-// "raw" table (without constraints, limits etc) as their "child".
+// colStatFromChild retrieves a column statistic from a specific child of the
+// given expression.
 func (sb *statisticsBuilder) colStatFromChild(
 	colSet opt.ColSet, ev ExprView, childIdx int,
 ) *props.ColumnStatistic {
-	switch t := ev.Operator(); t {
-	case opt.ScanOp, opt.VirtualScanOp:
-		var table opt.TableID
-		switch t {
-		case opt.ScanOp:
-			table = ev.Private().(*ScanOpDef).Table
-		case opt.VirtualScanOp:
-			table = ev.Private().(*VirtualScanOpDef).Table
-		}
-		return sb.colStatTable(table, colSet)
-	}
-
 	// Helper function to return the column statistic if the output columns of
 	// the child with the given index intersect colSet.
-	colStatFromChildIdx := func(childIdx int) *props.ColumnStatistic {
-		child := ev.Child(childIdx)
-		childProps := child.Logical().Relational
-		if childProps != nil && childProps.OutputCols.Intersects(colSet) {
-			return sb.colStat(childProps.OutputCols.Intersection(colSet), child)
+	child := ev.Child(childIdx)
+	childProps := child.Logical().Relational
+	if !colSet.SubsetOf(childProps.OutputCols) {
+		colSet = colSet.Intersection(childProps.OutputCols)
+		if colSet.Empty() {
+			// All the columns in colSet are outer columns; therefore, we can treat
+			// them as a constant.
+			return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
 		}
-		return nil
 	}
+	return sb.colStat(colSet, child)
+}
 
-	if childIdx != -1 {
-		// Child index already known.
-		if colStat := colStatFromChildIdx(childIdx); colStat != nil {
-			return colStat
-		}
-	} else {
-		for i := 0; i < ev.ChildCount(); i++ {
-			if colStat := colStatFromChildIdx(i); colStat != nil {
-				return colStat
+// colStatFromInput retrieves a column statistic from the input(s) of a Scan,
+// Select, or Join. The input to the Scan is the "raw" table.
+func (sb *statisticsBuilder) colStatFromInput(
+	colSet opt.ColSet, ev ExprView,
+) *props.ColumnStatistic {
+
+	switch ev.Operator() {
+	case opt.ScanOp:
+		return sb.colStatTable(ev.Private().(*ScanOpDef).Table, colSet)
+
+	case opt.SelectOp:
+		return sb.colStatFromChild(colSet, ev, 0)
+
+	default:
+		if ev.IsJoin() {
+			// TODO(radu): what if both sides have columns in colSet?
+			if ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet) {
+				return sb.colStatFromChild(colSet, ev, 0)
 			}
+			return sb.colStatFromChild(colSet, ev, 1)
 		}
-	}
 
-	// If we could not get the colStat from a child, that means all the columns
-	// in colSet are outer columns. Therefore, we can treat them as a constant.
-	return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
+		panic(fmt.Sprintf("unsupported operator %s", ev.Operator()))
+	}
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
@@ -491,7 +483,7 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, relProps)
+	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
 	return colStat
 }
@@ -703,7 +695,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 	switch ev.Operator() {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
-		colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, relProps)
+		colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 		sb.applySelectivityToColStat(colStat, s.Selectivity, leftStats.RowCount)
 		return colStat
 
@@ -730,13 +722,13 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		var colStat *props.ColumnStatistic
 		inputRowCount := leftStats.RowCount * rightStats.RowCount
 		if rightCols.Empty() {
-			colStat = sb.copyColStatFromChild(leftCols, ev, 0 /* childIdx */, relProps)
+			colStat = sb.copyColStatFromChild(leftCols, ev, 0 /* childIdx */, s)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
 				sb.applySelectivityToColStat(colStat, s.Selectivity, inputRowCount)
 			}
 		} else if leftCols.Empty() {
-			colStat = sb.copyColStatFromChild(rightCols, ev, 1 /* childIdx */, relProps)
+			colStat = sb.copyColStatFromChild(rightCols, ev, 1 /* childIdx */, s)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
 				sb.applySelectivityToColStat(colStat, s.Selectivity, inputRowCount)
@@ -802,7 +794,7 @@ func (sb *statisticsBuilder) buildGroupBy(ev ExprView, relProps *props.Relationa
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
 		// columns.
-		colStat := sb.copyColStatFromChild(groupingColSet, ev, 0 /* childIdx */, relProps)
+		colStat := sb.copyColStatFromChild(groupingColSet, ev, 0 /* childIdx */, s)
 		s.RowCount = colStat.DistinctCount
 	}
 
@@ -830,7 +822,7 @@ func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet, ev ExprView) *pro
 		return colStat
 	}
 
-	return sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, relProps)
+	return sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 }
 
 // +--------+
@@ -985,7 +977,7 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, relProps)
+	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 
 	// Scale distinct count based on the selectivity of the limit operation.
 	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
@@ -1027,7 +1019,7 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *prop
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, relProps)
+	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 
 	// Scale distinct count based on the selectivity of the offset operation.
 	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
@@ -1149,10 +1141,10 @@ func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, ev ExprView) *props.C
 // Otherwise, childIdx is -1. colStatFromChild may trigger recursive calls if
 // the requested statistic is not already cached in the child.
 func (sb *statisticsBuilder) copyColStatFromChild(
-	colSet opt.ColSet, ev ExprView, childIdx int, relProps *props.Relational,
+	colSet opt.ColSet, ev ExprView, childIdx int, s *props.Statistics,
 ) *props.ColumnStatistic {
 	childColStat := sb.colStatFromChild(colSet, ev, childIdx)
-	return sb.copyColStat(colSet, &relProps.Stats, childColStat)
+	return sb.copyColStat(colSet, s, childColStat)
 }
 
 // ensureColStat creates a column statistic for column "col" if it doesn't
@@ -1166,9 +1158,8 @@ func (sb *statisticsBuilder) ensureColStat(
 
 	colStat, ok := s.ColStats[col]
 	if !ok {
-		colStat = sb.copyColStatFromChild(
-			util.MakeFastIntSet(int(col)), ev, -1 /* childIdx */, relProps,
-		)
+		colSet := util.MakeFastIntSet(int(col))
+		colStat = sb.copyColStat(colSet, s, sb.colStatFromInput(colSet, ev))
 	}
 
 	colStat.DistinctCount = min(colStat.DistinctCount, maxDistinctCount)
@@ -1595,7 +1586,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
 		col := opt.ColumnID(i)
 		colStat, ok := s.ColStats[col]
 		if !ok {
-			colStat = sb.copyColStatFromChild(util.MakeFastIntSet(i), ev, -1 /* childIdx */, relProps)
+			colSet := util.MakeFastIntSet(i)
+			colStat = sb.copyColStat(colSet, s, sb.colStatFromInput(colSet, ev))
 		}
 		if colStat.DistinctCount < minDistinctCount {
 			minDistinctCount = colStat.DistinctCount
@@ -1669,7 +1661,7 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 func (sb *statisticsBuilder) selectivityFromDistinctCount(
 	colStat *props.ColumnStatistic, ev ExprView, relProps *props.Relational,
 ) float64 {
-	inputStat := sb.colStatFromChild(colStat.Cols, ev, -1 /* childIdx */)
+	inputStat := sb.colStatFromInput(colStat.Cols, ev)
 	if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
 		return colStat.DistinctCount / inputStat.DistinctCount
 	}
@@ -1694,9 +1686,9 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	// group.
 	maxDistinctCount := float64(0)
 	equivGroup.ForEach(func(i int) {
-		colStat := sb.colStatFromChild(util.MakeFastIntSet(i), ev, -1 /* childIdx */)
-		if colStat.DistinctCount > maxDistinctCount {
-			maxDistinctCount = colStat.DistinctCount
+		inputColStat := sb.colStatFromInput(util.MakeFastIntSet(i), ev)
+		if maxDistinctCount < inputColStat.DistinctCount {
+			maxDistinctCount = inputColStat.DistinctCount
 		}
 	})
 
