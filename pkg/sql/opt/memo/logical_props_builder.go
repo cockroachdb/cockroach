@@ -153,7 +153,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Initialize key FD's from the table schema, including constant columns from
 	// the constraint, minus any columns that are not projected by the Scan
 	// operator.
-	relational.FuncDeps.CopyFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.CopyFrom(makeTableFuncDep(md, def.Table))
 	if def.Constraint != nil {
 		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
 	}
@@ -557,7 +557,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.AddFrom(makeTableFuncDep(md, def.Table))
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -1129,9 +1129,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 // given base table. The set is derived lazily and is cached in the metadata,
 // since it may be accessed multiple times during query optimization. For more
 // details, see Relational.FuncDepSet.
-func (b *logicalPropsBuilder) makeTableFuncDep(
-	md *opt.Metadata, tabID opt.TableID,
-) *props.FuncDepSet {
+func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	fd, ok := md.TableAnnotation(tabID, fdAnnID).(*props.FuncDepSet)
 	if ok {
 		// Already made.
