@@ -74,7 +74,7 @@ project
  ├── columns: count:5(int)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) count:5(int)
+      ├── columns: x:1(int!null) y:2(int) count_rows:5(int)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── stats: [rows=2000, distinct(1,2)=2000]
       ├── key: (1)
