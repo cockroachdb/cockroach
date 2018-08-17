@@ -338,7 +338,7 @@ func annot(p *tree.Placeholder, typ coltypes.T) tree.Expr {
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
 	intType := coltypes.Int
-	boolType := coltypes.Boolean
+	boolType := coltypes.Bool
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
