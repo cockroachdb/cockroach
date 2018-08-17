@@ -6060,26 +6060,20 @@ numeric:
     $$.val = $2.colType()
     if $$.val == nil {
       $$.val = coltypes.Decimal
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "DECIMAL"
     }
   }
 | DEC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = coltypes.Dec
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "DEC"
+      $$.val = coltypes.Decimal
     }
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = coltypes.Numeric
-    } else {
-      $$.val.(*coltypes.TDecimal).Name = "NUMERIC"
+      $$.val = coltypes.Decimal
     }
   }
 | BOOLEAN

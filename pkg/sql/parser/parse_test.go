@@ -1116,6 +1116,8 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL)`,
 			`CREATE TABLE a (b SERIAL8, c SERIAL2)`},
+		{`CREATE TABLE a (b NUMERIC, c NUMERIC(10), d DEC)`,
+			`CREATE TABLE a (b DECIMAL, c DECIMAL(10), d DECIMAL)`},
 		{`CREATE TABLE a (b BOOLEAN)`,
 			`CREATE TABLE a (b BOOL)`},
 		{`CREATE TABLE a (b BYTES, c BYTEA, d BLOB)`,
@@ -1162,6 +1164,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT b <<= c`, `SELECT inet_contained_by_or_equals(b, c)`},
 		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
 		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
+
+		{`SELECT NUMERIC 'foo'`, `SELECT DECIMAL 'foo'`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to

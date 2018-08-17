@@ -61,12 +61,8 @@ var (
 	// Double is an immutable T instance.
 	Double = &TFloat{Name: "DOUBLE PRECISION", Width: 64}
 
-	// Dec is an immutable T instance.
-	Dec = &TDecimal{Name: "DEC"}
 	// Decimal is an immutable T instance.
-	Decimal = &TDecimal{Name: "DECIMAL"}
-	// Numeric is an immutable T instance.
-	Numeric = &TDecimal{Name: "NUMERIC"}
+	Decimal = &TDecimal{}
 
 	// Date is an immutable T instance.
 	Date = &TDate{}
