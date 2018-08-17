@@ -91,17 +91,16 @@ func (node *TFloat) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 
 // TDecimal represents a DECIMAL or NUMERIC type.
 type TDecimal struct {
-	Name  string
 	Prec  int
 	Scale int
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TDecimal) TypeName() string { return node.Name }
+func (node *TDecimal) TypeName() string { return "DECIMAL" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TDecimal) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d", node.Prec)
 		if node.Scale > 0 {
