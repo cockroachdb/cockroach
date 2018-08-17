@@ -98,12 +98,8 @@ var (
 	// Name is an immutable T instance.
 	Name = &TName{}
 
-	// Blob is an immutable T instance.
-	Blob = &TBytes{Name: "BLOB"}
 	// Bytes is an immutable T instance.
-	Bytes = &TBytes{Name: "BYTES"}
-	// Bytea is an immutable T instance.
-	Bytea = &TBytes{Name: "BYTEA"}
+	Bytes = &TBytes{}
 
 	// Int2vector is an immutable T instance.
 	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int}
