@@ -2914,6 +2914,7 @@ show_backup_stmt:
   }
 | SHOW BACKUP RANGES string_or_placeholder
   {
+    /* SKIP DOC */
     $$.val = &tree.ShowBackup{
       Details: tree.BackupRangeDetails,
       Path:    $4.expr(),
@@ -2921,6 +2922,7 @@ show_backup_stmt:
   }
 | SHOW BACKUP FILES string_or_placeholder
   {
+    /* SKIP DOC */
     $$.val = &tree.ShowBackup{
       Details: tree.BackupFileDetails,
       Path:    $4.expr(),

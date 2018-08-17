@@ -438,8 +438,6 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUP' string_or_placeholder
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name
