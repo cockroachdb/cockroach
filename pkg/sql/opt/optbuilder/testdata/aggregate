@@ -99,11 +99,11 @@ SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1),
   variance(1)::float, bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 project
- ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:7(float) sum:8(decimal) stddev:9(decimal) variance:11(float) bool_and:13(bool) bool_or:14(bool) to_hex:17(string)
+ ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:15(float) sum:7(decimal) stddev:8(decimal) variance:16(float) bool_and:11(bool) bool_or:12(bool) to_hex:17(string)
  ├── scalar-group-by
- │    ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) column6:6(decimal) sum:8(decimal) stddev:9(decimal) column10:10(decimal) bool_and:13(bool) bool_or:14(bool) column16:16(bytes)
+ │    ├── columns: min:2(int) count:3(int) max:4(int) sum_int:5(int) avg:6(decimal) sum:7(decimal) stddev:8(decimal) variance:9(decimal) bool_and:11(bool) bool_or:12(bool) xor_agg:14(bytes)
  │    ├── project
- │    │    ├── columns: column1:1(int!null) column12:12(bool!null) column15:15(bytes!null)
+ │    │    ├── columns: column1:1(int!null) column10:10(bool!null) column13:13(bytes!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
@@ -128,18 +128,18 @@ project
  │         ├── variance [type=decimal]
  │         │    └── variable: column1 [type=int]
  │         ├── bool-and [type=bool]
- │         │    └── variable: column12 [type=bool]
+ │         │    └── variable: column10 [type=bool]
  │         ├── bool-or [type=bool]
- │         │    └── variable: column12 [type=bool]
+ │         │    └── variable: column10 [type=bool]
  │         └── xor-agg [type=bytes]
- │              └── variable: column15 [type=bytes]
+ │              └── variable: column13 [type=bytes]
  └── projections
       ├── cast: FLOAT8 [type=float]
-      │    └── variable: column6 [type=decimal]
+      │    └── variable: avg [type=decimal]
       ├── cast: FLOAT8 [type=float]
-      │    └── variable: column10 [type=decimal]
+      │    └── variable: variance [type=decimal]
       └── function: to_hex [type=string]
-           └── variable: column16 [type=bytes]
+           └── variable: xor_agg [type=bytes]
 
 build
 SELECT array_agg(1) FROM kv
@@ -252,7 +252,7 @@ project
                 └── project
                      ├── columns: coalesce:7(int)
                      ├── scalar-group-by
-                     │    ├── columns: column6:6(int)
+                     │    ├── columns: max:6(int)
                      │    ├── project
                      │    │    ├── columns: column5:5(int!null)
                      │    │    ├── scan kv
@@ -264,7 +264,7 @@ project
                      │              └── variable: column5 [type=int]
                      └── projections
                           └── coalesce [type=int]
-                               ├── variable: column6 [type=int]
+                               ├── variable: max [type=int]
                                └── const: 0 [type=int]
 
 build
@@ -430,10 +430,10 @@ build
 SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: count:6(int) upper:5(string)
- ├── grouping columns: column5:5(string)
+ ├── columns: count:5(int) upper:6(string)
+ ├── grouping columns: column6:6(string)
  ├── project
- │    ├── columns: column5:5(string)
+ │    ├── columns: column6:6(string)
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -447,12 +447,12 @@ build
 SELECT count(*) FROM kv GROUP BY 1+2
 ----
 project
- ├── columns: count:6(int)
+ ├── columns: count:5(int)
  └── group-by
-      ├── columns: column5:5(int!null) count:6(int)
-      ├── grouping columns: column5:5(int!null)
+      ├── columns: count_rows:5(int) column6:6(int!null)
+      ├── grouping columns: column6:6(int!null)
       ├── project
-      │    ├── columns: column5:5(int!null)
+      │    ├── columns: column6:6(int!null)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │    └── projections
@@ -464,12 +464,12 @@ build
 SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 project
- ├── columns: count:6(int)
+ ├── columns: count:5(int)
  └── group-by
-      ├── columns: column5:5(int) count:6(int)
-      ├── grouping columns: column5:5(int)
+      ├── columns: count_rows:5(int) column6:6(int)
+      ├── grouping columns: column6:6(int)
       ├── project
-      │    ├── columns: column5:5(int)
+      │    ├── columns: column6:6(int)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │    └── projections
@@ -485,7 +485,7 @@ SELECT count(*), upper(s) FROM kv GROUP BY s
 project
  ├── columns: count:5(int) upper:6(string)
  ├── group-by
- │    ├── columns: s:4(string) count:5(int)
+ │    ├── columns: s:4(string) count_rows:5(int)
  │    ├── grouping columns: s:4(string)
  │    ├── project
  │    │    ├── columns: s:4(string)
@@ -508,10 +508,10 @@ build
 SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 group-by
- ├── columns: count:6(int) r:5(int)
- ├── grouping columns: column5:5(int)
+ ├── columns: count:5(int) r:6(int)
+ ├── grouping columns: column6:6(int)
  ├── project
- │    ├── columns: column5:5(int)
+ │    ├── columns: column6:6(int)
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -529,7 +529,7 @@ SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 project
  ├── columns: count:5(int) r:6(int)
  ├── group-by
- │    ├── columns: k:1(int!null) v:2(int) count:5(int)
+ │    ├── columns: k:1(int!null) v:2(int) count_rows:5(int)
  │    ├── grouping columns: k:1(int!null) v:2(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
@@ -565,17 +565,17 @@ error: avg(): aggregate functions are not allowed in WHERE
 build
 SELECT max(avg(k)) FROM kv
 ----
-error (42803): aggregate function calls cannot be nested
+error: max(): avg(): aggregate function calls cannot be nested
 
 # Test case from #2761.
 build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
 group-by
- ├── columns: count_1:6(int) lx:5(int)
- ├── grouping columns: column5:5(int)
+ ├── columns: count_1:5(int) lx:6(int)
+ ├── grouping columns: column6:6(int)
  ├── project
- │    ├── columns: column5:5(int) k:1(int!null)
+ │    ├── columns: column6:6(int) k:1(int!null)
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -725,7 +725,7 @@ sort
  ├── columns: v:2(int)
  ├── ordering: +5
  └── group-by
-      ├── columns: v:2(int) column5:5(decimal)
+      ├── columns: v:2(int) sum:5(decimal)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int)
@@ -808,10 +808,10 @@ build
 SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: upper:5(string) count:6(int) count:7(int) count:7(int)
- ├── grouping columns: column5:5(string)
+ ├── columns: upper:7(string) count:5(int) count:6(int) count:6(int)
+ ├── grouping columns: column7:7(string)
  ├── project
- │    ├── columns: column5:5(string) k:1(int!null) v:2(int)
+ │    ├── columns: column7:7(string) k:1(int!null) v:2(int)
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -940,7 +940,7 @@ SELECT count(k)+count(kv.v) AS r FROM kv
 project
  ├── columns: r:7(int)
  ├── scalar-group-by
- │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── columns: count:5(int) count:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
  │    │    └── scan kv
@@ -952,8 +952,8 @@ project
  │              └── variable: v [type=int]
  └── projections
       └── plus [type=int]
-           ├── variable: column5 [type=int]
-           └── variable: column6 [type=int]
+           ├── variable: count [type=int]
+           └── variable: count [type=int]
 
 build
 SELECT count(NULL::int), count((NULL, NULL))
@@ -1077,7 +1077,7 @@ SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY s)
 project
  ├── columns: "?column?":6(int[])
  ├── scalar-group-by
- │    ├── columns: column5:5(int[])
+ │    ├── columns: array_agg:5(int[])
  │    ├── internal-ordering: +4
  │    ├── sort
  │    │    ├── columns: k:1(int!null) s:4(string)
@@ -1091,7 +1091,7 @@ project
  │              └── variable: k [type=int]
  └── projections
       └── concat [type=int[]]
-           ├── variable: column5 [type=int[]]
+           ├── variable: array_agg [type=int[]]
            └── const: 1 [type=int]
 
 build
@@ -1185,7 +1185,7 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv
 project
  ├── columns: r:7(decimal)
  ├── scalar-group-by
- │    ├── columns: column5:5(decimal) column6:6(int)
+ │    ├── columns: avg:5(decimal) max:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
  │    │    └── scan kv
@@ -1198,10 +1198,10 @@ project
  └── projections
       └── plus [type=decimal]
            ├── mult [type=decimal]
-           │    ├── variable: column5 [type=decimal]
+           │    ├── variable: avg [type=decimal]
            │    └── const: 2.0 [type=decimal]
            └── cast: DECIMAL [type=decimal]
-                └── variable: column6 [type=int]
+                └── variable: max [type=int]
 
 build
 SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv WHERE w*2 = k
@@ -1209,7 +1209,7 @@ SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv WHERE w*2 = k
 project
  ├── columns: r:7(decimal)
  ├── scalar-group-by
- │    ├── columns: column5:5(decimal) column6:6(int)
+ │    ├── columns: avg:5(decimal) max:6(int)
  │    ├── project
  │    │    ├── columns: k:1(int!null) v:2(int)
  │    │    └── select
@@ -1230,10 +1230,10 @@ project
  └── projections
       └── plus [type=decimal]
            ├── mult [type=decimal]
-           │    ├── variable: column5 [type=decimal]
+           │    ├── variable: avg [type=decimal]
            │    └── const: 2.0 [type=decimal]
            └── cast: DECIMAL [type=decimal]
-                └── variable: column6 [type=int]
+                └── variable: max [type=int]
 
 exec-ddl
 CREATE TABLE abc (
@@ -1523,7 +1523,7 @@ SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
 project
  ├── columns: variance:4(decimal) variance:6(decimal) round:8(float)
  ├── scalar-group-by
- │    ├── columns: variance:4(decimal) variance:6(decimal) column7:7(float)
+ │    ├── columns: variance:4(decimal) variance:6(decimal) variance:7(float)
  │    ├── project
  │    │    ├── columns: column5:5(decimal) x:1(int!null) z:3(float)
  │    │    ├── scan xyz
@@ -1540,7 +1540,7 @@ project
  │              └── variable: z [type=float]
  └── projections
       └── function: round [type=float]
-           ├── variable: column7 [type=float]
+           ├── variable: variance [type=float]
            └── const: 14 [type=int]
 
 build
@@ -1568,7 +1568,7 @@ SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
 project
  ├── columns: stddev:4(decimal) stddev:6(decimal) round:8(float)
  ├── scalar-group-by
- │    ├── columns: stddev:4(decimal) stddev:6(decimal) column7:7(float)
+ │    ├── columns: stddev:4(decimal) stddev:6(decimal) stddev:7(float)
  │    ├── project
  │    │    ├── columns: column5:5(decimal) x:1(int!null) z:3(float)
  │    │    ├── scan xyz
@@ -1585,7 +1585,7 @@ project
  │              └── variable: z [type=float]
  └── projections
       └── function: round [type=float]
-           ├── variable: column7 [type=float]
+           ├── variable: stddev [type=float]
            └── const: 14 [type=int]
 
 build
@@ -1611,11 +1611,11 @@ build
 SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
 ----
 project
- ├── columns: avg:3(float) avg:6(float) avg:9(float)
+ ├── columns: avg:7(float) avg:8(float) avg:9(float)
  ├── scalar-group-by
- │    ├── columns: column2:2(decimal) column5:5(float) column8:8(decimal)
+ │    ├── columns: avg:2(decimal) avg:4(float) avg:6(decimal)
  │    ├── project
- │    │    ├── columns: column1:1(int) column4:4(float) column7:7(decimal)
+ │    │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
@@ -1629,16 +1629,16 @@ project
  │         ├── avg [type=decimal]
  │         │    └── variable: column1 [type=int]
  │         ├── avg [type=float]
- │         │    └── variable: column4 [type=float]
+ │         │    └── variable: column3 [type=float]
  │         └── avg [type=decimal]
- │              └── variable: column7 [type=decimal]
+ │              └── variable: column5 [type=decimal]
  └── projections
       ├── cast: FLOAT8 [type=float]
-      │    └── variable: column2 [type=decimal]
+      │    └── variable: avg [type=decimal]
       ├── cast: FLOAT8 [type=float]
-      │    └── variable: column5 [type=float]
+      │    └── variable: avg [type=float]
       └── cast: FLOAT8 [type=float]
-           └── variable: column8 [type=decimal]
+           └── variable: avg [type=decimal]
 
 build
 SELECT count(2::int), count(3::float), count(4::decimal)
@@ -1845,9 +1845,9 @@ build
 SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
 ----
 project
- ├── columns: to_hex:6(string) xor_agg:7(int)
+ ├── columns: to_hex:7(string) xor_agg:6(int)
  ├── scalar-group-by
- │    ├── columns: column5:5(bytes) xor_agg:7(int)
+ │    ├── columns: xor_agg:5(bytes) xor_agg:6(int)
  │    ├── project
  │    │    ├── columns: a:1(bytes) c:3(int)
  │    │    └── scan xor_bytes
@@ -1859,18 +1859,18 @@ project
  │              └── variable: c [type=int]
  └── projections
       └── function: to_hex [type=string]
-           └── variable: column5 [type=bytes]
+           └── variable: xor_agg [type=bytes]
 
 build
 SELECT to_hex(xor_agg(a)), b, xor_agg(c) FROM xor_bytes GROUP BY b ORDER BY b
 ----
 sort
- ├── columns: to_hex:6(string) b:2(int) xor_agg:7(int)
+ ├── columns: to_hex:7(string) b:2(int) xor_agg:6(int)
  ├── ordering: +2
  └── project
-      ├── columns: to_hex:6(string) b:2(int) xor_agg:7(int)
+      ├── columns: to_hex:7(string) b:2(int) xor_agg:6(int)
       ├── group-by
-      │    ├── columns: b:2(int) column5:5(bytes) xor_agg:7(int)
+      │    ├── columns: b:2(int) xor_agg:5(bytes) xor_agg:6(int)
       │    ├── grouping columns: b:2(int)
       │    ├── project
       │    │    ├── columns: a:1(bytes) b:2(int) c:3(int)
@@ -1883,7 +1883,7 @@ sort
       │              └── variable: c [type=int]
       └── projections
            └── function: to_hex [type=string]
-                └── variable: column5 [type=bytes]
+                └── variable: xor_agg [type=bytes]
 
 # At execution time, this query will cause the error:
 # "arguments to xor must all be the same length"
@@ -2057,7 +2057,7 @@ sort
  ├── columns: v:2(int) count:5(int)
  ├── ordering: +5
  └── group-by
-      ├── columns: v:2(int) count:5(int)
+      ├── columns: v:2(int) count_rows:5(int)
       ├── grouping columns: v:2(int)
       ├── project
       │    ├── columns: v:2(int)
@@ -2114,12 +2114,12 @@ build fully-qualify-names
 SELECT sum(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
 ----
 project
- ├── columns: sum:6(decimal) v:2(int)
+ ├── columns: sum:5(decimal) v:2(int)
  └── group-by
-      ├── columns: t.public.kv.v:2(int) column5:5(int) sum:6(decimal)
-      ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
+      ├── columns: t.public.kv.v:2(int) sum:5(decimal) column6:6(int)
+      ├── grouping columns: t.public.kv.v:2(int) column6:6(int)
       ├── project
-      │    ├── columns: column5:5(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
+      │    ├── columns: column6:6(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
       │    ├── scan kv
       │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
       │    └── projections
@@ -2134,12 +2134,12 @@ build fully-qualify-names
 SELECT sum(t.kv.w), lower(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP BY v, lower(kv.s), kv.k * w
 ----
 project
- ├── columns: sum:7(decimal) lower:5(string) r:8(int) v:2(int)
+ ├── columns: sum:5(decimal) lower:6(string) r:8(int) v:2(int)
  ├── group-by
- │    ├── columns: t.public.kv.v:2(int) column5:5(string) column6:6(int) sum:7(decimal)
- │    ├── grouping columns: t.public.kv.v:2(int) column5:5(string) column6:6(int)
+ │    ├── columns: t.public.kv.v:2(int) sum:5(decimal) column6:6(string) column7:7(int)
+ │    ├── grouping columns: t.public.kv.v:2(int) column6:6(string) column7:7(int)
  │    ├── project
- │    │    ├── columns: column5:5(string) column6:6(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
+ │    │    ├── columns: column6:6(string) column7:7(int) t.public.kv.v:2(int) t.public.kv.w:3(int)
  │    │    ├── scan kv
  │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
  │    │    └── projections
@@ -2154,7 +2154,7 @@ project
  └── projections
       └── plus [type=int]
            ├── variable: t.public.kv.v [type=int]
-           └── variable: column6 [type=int]
+           └── variable: column7 [type=int]
 
 # Check all the different types of scalar expressions as group by columns
 build
@@ -2523,26 +2523,26 @@ SELECT 1 + min(v*2) AS r FROM kv GROUP BY k+3
 project
  ├── columns: r:8(int)
  ├── group-by
- │    ├── columns: column5:5(int) column7:7(int)
- │    ├── grouping columns: column5:5(int)
+ │    ├── columns: min:6(int) column7:7(int)
+ │    ├── grouping columns: column7:7(int)
  │    ├── project
- │    │    ├── columns: column5:5(int) column6:6(int)
+ │    │    ├── columns: column5:5(int) column7:7(int)
  │    │    ├── scan kv
  │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    │    └── projections
- │    │         ├── plus [type=int]
- │    │         │    ├── variable: k [type=int]
- │    │         │    └── const: 3 [type=int]
- │    │         └── mult [type=int]
- │    │              ├── variable: v [type=int]
- │    │              └── const: 2 [type=int]
+ │    │         ├── mult [type=int]
+ │    │         │    ├── variable: v [type=int]
+ │    │         │    └── const: 2 [type=int]
+ │    │         └── plus [type=int]
+ │    │              ├── variable: k [type=int]
+ │    │              └── const: 3 [type=int]
  │    └── aggregations
  │         └── min [type=int]
- │              └── variable: column6 [type=int]
+ │              └── variable: column5 [type=int]
  └── projections
       └── plus [type=int]
            ├── const: 1 [type=int]
-           └── variable: column7 [type=int]
+           └── variable: min [type=int]
 
 build
 SELECT count(*) FROM kv GROUP BY k, k
@@ -2550,7 +2550,7 @@ SELECT count(*) FROM kv GROUP BY k, k
 project
  ├── columns: count:5(int)
  └── group-by
-      ├── columns: k:1(int!null) count:5(int)
+      ├── columns: k:1(int!null) count_rows:5(int)
       ├── grouping columns: k:1(int!null)
       ├── project
       │    ├── columns: k:1(int!null)
@@ -2629,9 +2629,9 @@ sort
  ├── columns: mk:5(int)
  ├── ordering: +5
  └── project
-      ├── columns: mk:5(int)
+      ├── columns: max:5(int)
       └── group-by
-           ├── columns: v:2(int) mk:5(int)
+           ├── columns: v:2(int) max:5(int)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2648,9 +2648,9 @@ sort
  ├── columns: mk:5(int)
  ├── ordering: +5
  └── project
-      ├── columns: mk:5(int)
+      ├── columns: max:5(int)
       └── group-by
-           ├── columns: v:2(int) mk:5(int)
+           ├── columns: v:2(int) max:5(int)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2667,9 +2667,9 @@ sort
  ├── columns: mk1:5(int) mk2:5(int)
  ├── ordering: +5
  └── project
-      ├── columns: mk1:5(int)
+      ├── columns: max:5(int)
       └── group-by
-           ├── columns: v:2(int) mk1:5(int)
+           ├── columns: v:2(int) max:5(int)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2686,9 +2686,9 @@ sort
  ├── columns: mk1:5(int) mk2:5(int)
  ├── ordering: +5
  └── project
-      ├── columns: mk1:5(int)
+      ├── columns: max:5(int)
       └── group-by
-           ├── columns: v:2(int) mk1:5(int)
+           ├── columns: v:2(int) max:5(int)
            ├── grouping columns: v:2(int)
            ├── project
            │    ├── columns: k:1(int!null) v:2(int)
@@ -2705,9 +2705,9 @@ sort
  ├── columns: mk1:5(int) mk2:6(decimal)
  ├── ordering: +6
  └── project
-      ├── columns: mk2:6(decimal) mk1:5(int)
+      ├── columns: mk2:6(decimal) max:5(int)
       ├── group-by
-      │    ├── columns: v:2(int) mk1:5(int)
+      │    ├── columns: v:2(int) max:5(int)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
@@ -2718,7 +2718,7 @@ sort
       │              └── variable: k [type=int]
       └── projections
            └── div [type=decimal]
-                ├── variable: mk1 [type=int]
+                ├── variable: max [type=int]
                 └── const: 5 [type=int]
 
 # Grouping columns cannot be reused inside an aggregate input expression
@@ -2728,52 +2728,49 @@ build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----
 project
- ├── columns: r:8(decimal) s:9(int)
+ ├── columns: r:6(decimal) s:9(int)
  ├── group-by
- │    ├── columns: column5:5(int) column6:6(int) r:8(decimal)
- │    ├── grouping columns: column5:5(int) column6:6(int)
+ │    ├── columns: max:6(decimal) column7:7(int) column8:8(int)
+ │    ├── grouping columns: column7:7(int) column8:8(int)
  │    ├── project
- │    │    ├── columns: column5:5(int) column6:6(int) column7:7(decimal)
+ │    │    ├── columns: column5:5(decimal) column7:7(int) column8:8(int)
  │    │    ├── scan kv
  │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) kv.s:4(string)
  │    │    └── projections
+ │    │         ├── div [type=decimal]
+ │    │         │    ├── plus [type=int]
+ │    │         │    │    ├── variable: k [type=int]
+ │    │         │    │    └── variable: v [type=int]
+ │    │         │    └── minus [type=int]
+ │    │         │         ├── variable: k [type=int]
+ │    │         │         └── variable: v [type=int]
  │    │         ├── plus [type=int]
  │    │         │    ├── variable: k [type=int]
  │    │         │    └── variable: v [type=int]
- │    │         ├── minus [type=int]
- │    │         │    ├── variable: k [type=int]
- │    │         │    └── variable: v [type=int]
- │    │         └── div [type=decimal]
- │    │              ├── plus [type=int]
- │    │              │    ├── variable: k [type=int]
- │    │              │    └── variable: v [type=int]
- │    │              └── minus [type=int]
- │    │                   ├── variable: k [type=int]
- │    │                   └── variable: v [type=int]
+ │    │         └── minus [type=int]
+ │    │              ├── variable: k [type=int]
+ │    │              └── variable: v [type=int]
  │    └── aggregations
  │         └── max [type=decimal]
- │              └── variable: column7 [type=decimal]
+ │              └── variable: column5 [type=decimal]
  └── projections
       └── mult [type=int]
-           ├── variable: column5 [type=int]
-           └── variable: column6 [type=int]
+           ├── variable: column7 [type=int]
+           └── variable: column8 [type=int]
 
 build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
- ├── columns: r:8(decimal) s:7(int)
+ ├── columns: r:6(decimal) s:8(int)
  └── group-by
-      ├── columns: column5:5(int) column6:6(decimal) column7:7(int) r:8(decimal)
-      ├── grouping columns: column5:5(int) column6:6(decimal) column7:7(int)
+      ├── columns: column5:5(decimal) max:6(decimal) column7:7(int) column8:8(int)
+      ├── grouping columns: column5:5(decimal) column7:7(int) column8:8(int)
       ├── project
-      │    ├── columns: column5:5(int) column6:6(decimal) column7:7(int)
+      │    ├── columns: column5:5(decimal) column7:7(int) column8:8(int)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │    └── projections
-      │         ├── plus [type=int]
-      │         │    ├── variable: k [type=int]
-      │         │    └── variable: v [type=int]
       │         ├── div [type=decimal]
       │         │    ├── plus [type=int]
       │         │    │    ├── variable: k [type=int]
@@ -2781,6 +2778,9 @@ project
       │         │    └── minus [type=int]
       │         │         ├── variable: k [type=int]
       │         │         └── variable: v [type=int]
+      │         ├── plus [type=int]
+      │         │    ├── variable: k [type=int]
+      │         │    └── variable: v [type=int]
       │         └── mult [type=int]
       │              ├── plus [type=int]
       │              │    ├── variable: k [type=int]
@@ -2790,19 +2790,19 @@ project
       │                   └── variable: v [type=int]
       └── aggregations
            └── max [type=decimal]
-                └── variable: column6 [type=decimal]
+                └── variable: column5 [type=decimal]
 
 # Regression test for #26419
 build
 SELECT 123 r FROM kv ORDER BY max(v)
 ----
 sort
- ├── columns: r:5(int!null)
- ├── ordering: +6
+ ├── columns: r:6(int!null)
+ ├── ordering: +5
  └── project
-      ├── columns: r:5(int!null) column6:6(int)
+      ├── columns: r:6(int!null) max:5(int)
       ├── scalar-group-by
-      │    ├── columns: column6:6(int)
+      │    ├── columns: max:5(int)
       │    ├── project
       │    │    ├── columns: v:2(int)
       │    │    └── scan kv
