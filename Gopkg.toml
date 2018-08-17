@@ -78,6 +78,12 @@ ignored = [
   name = "github.com/satori/go.uuid"
   version = "v1.2.0"
 
+# Use master until 0562badec5489e409f1b18596e3f77a309420a84 is in a
+# tagged release.
+[[constraint]]
+  name = "github.com/Azure/azure-storage-blob-go"
+  branch = "master"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
