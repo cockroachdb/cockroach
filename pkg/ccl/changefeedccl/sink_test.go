@@ -28,11 +28,12 @@ type asyncProducerMock struct {
 func (p asyncProducerMock) Input() chan<- *sarama.ProducerMessage     { return p.inputCh }
 func (p asyncProducerMock) Successes() <-chan *sarama.ProducerMessage { return p.successesCh }
 func (p asyncProducerMock) Errors() <-chan *sarama.ProducerError      { return p.errorsCh }
-func (p asyncProducerMock) Close() error                              { panic(`unimplemented`) }
-func (p asyncProducerMock) AsyncClose() {
+func (p asyncProducerMock) AsyncClose()                               { panic(`unimplemented`) }
+func (p asyncProducerMock) Close() error {
 	close(p.inputCh)
 	close(p.successesCh)
 	close(p.errorsCh)
+	return nil
 }
 
 func TestKafkaSink(t *testing.T) {
