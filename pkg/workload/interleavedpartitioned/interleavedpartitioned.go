@@ -380,7 +380,6 @@ func (w *interleavedPartitioned) Ops(
 		opRand := rng.Intn(100)
 
 		if w.deletes {
-			log.Info(context.TODO(), "deleting")
 			start := timeutil.Now()
 			var deleteStatement *gosql.Stmt
 
@@ -409,7 +408,6 @@ func (w *interleavedPartitioned) Ops(
 		}
 
 		if opRand < w.insertPercent {
-			log.Info(context.TODO(), "inserting")
 			start := timeutil.Now()
 
 			tx, err := db.Begin()
@@ -520,7 +518,6 @@ func (w *interleavedPartitioned) Ops(
 			hists.Get(`insert`).Record(timeutil.Since(start))
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent { // retrieve
-			log.Info(context.TODO(), "querying")
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.retrieveLocalPercent))
 			args := []interface{}{
 				sessionID,
@@ -539,7 +536,6 @@ func (w *interleavedPartitioned) Ops(
 			hists.Get(`retrieve`).Record(timeutil.Since(start))
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // update
-			log.Info(context.TODO(), "updating")
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.updateLocalPercent))
 			retrieveArgs := []interface{}{
 				sessionID,
