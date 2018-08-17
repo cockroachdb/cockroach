@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -152,38 +151,9 @@ func (s *kafkaSink) Close() error {
 	close(s.stopWorkerCh)
 	s.worker.Wait()
 
-	s.producer.AsyncClose()
-
-	// Empty out the success and errors channels as required by AsyncClose.
-	//
-	// TODO(dan): Sometimes this deadlocks for reasons I don't understand, so
-	// add an overall timeout to it. Note that this may leak the producer
-	// goroutines, but hopefully closing the client below will eventually clean
-	// that up? /shrug
-	const emptyTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), emptyTimeout)
-	defer cancel()
-	for done := false; !done; {
-		select {
-		case <-ctx.Done():
-			done = true
-		case _, ok := <-s.producer.Errors():
-			if !ok {
-				done = true
-			}
-		}
-	}
-	for done := false; !done; {
-		select {
-		case <-ctx.Done():
-			done = true
-		case _, ok := <-s.producer.Successes():
-			if !ok {
-				done = true
-			}
-		}
-	}
-
+	// If we're shutting down, we don't care what happens to the outstanding
+	// messages, so ignore this error.
+	_ = s.producer.Close()
 	// s.client is only nil in tests.
 	if s.client != nil {
 		return s.client.Close()
