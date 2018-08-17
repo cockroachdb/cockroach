@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -373,8 +372,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	var catalog optCatalog
 	catalog.init(p.execCfg.TableStatsCache, p)
 
-	o := xform.NewOptimizer(p.EvalContext())
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
+	p.optimizer.Init(p.EvalContext())
+	f := p.optimizer.Factory()
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
 	root, props, err := bld.Build()
 
 	// Remember whether the plan was correlated before processing the
@@ -389,7 +389,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// If in the PREPARE phase, construct a dummy plan that has correct output
 	// columns. Only output columns and placeholder types are needed.
 	if p.extendedEvalCtx.PrepareOnly {
-		md := o.Memo().Metadata()
+		md := p.optimizer.Memo().Metadata()
 		resultCols := make(sqlbase.ResultColumns, len(props.Presentation))
 		for i, col := range props.Presentation {
 			resultCols[i].Name = col.Label
@@ -399,7 +399,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return nil
 	}
 
-	ev := o.Optimize(root, props)
+	ev := p.optimizer.Optimize(root, props)
 
 	factory := makeExecFactory(p)
 	plan, err := execbuilder.New(&factory, ev).Build()

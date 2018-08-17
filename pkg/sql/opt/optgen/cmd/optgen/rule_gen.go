@@ -615,21 +615,21 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 
 	// If the DetectCycle tag is specified on the rule, then generate a bit
 	// of additional code that detects cyclical rule invocations. Add the
-	// current expression's fingerprint into the ruleCycles map. If the
+	// current expression's fingerprint into the ruleCycles stack. If the
 	// replacement pattern recursively invokes the same rule, then this code
-	// will see that the fingerprint is already in the map, and will skip the
+	// will see that the fingerprint is already in the stack, and will skip the
 	// rule.
 	detectCycle := rule.Tags.Contains("DetectCycle")
 	if detectCycle {
 		// Perform the cycle check before calling onRuleMatch, so that it
 		// isn't notified of a rule that will just be skipped.
-		g.w.nest("if !_f.ruleCycles[%s.Fingerprint()] {\n", exprName)
+		g.w.nest("if !_f.ruleCycles.detectCycle(%s.Fingerprint()) {\n", exprName)
 	}
 
 	g.w.nestIndent("if _f.matchedRule == nil || _f.matchedRule(opt.%s) {\n", rule.Name)
 
 	if detectCycle {
-		g.w.writeIndent("_f.ruleCycles[%s.Fingerprint()] = true\n", exprName)
+		g.w.writeIndent("_f.ruleCycles.push(%s.Fingerprint())\n", exprName)
 	}
 
 	g.genBoundStatements(rule.Replace)
@@ -640,7 +640,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 	if detectCycle {
 		// Once any recursive calls are complete, the fingerprint is no longer
 		// needed to prevent cycles, so free up memory.
-		g.w.writeIndent("delete(_f.ruleCycles, %s.Fingerprint())\n", exprName)
+		g.w.writeIndent("_f.ruleCycles.pop()\n")
 
 		// Cyclical rules + onRuleMatch can interact as follows:
 		//   1. Rule A recursively invokes itself.

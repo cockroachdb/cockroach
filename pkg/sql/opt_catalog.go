@@ -50,6 +50,7 @@ var _ opt.Catalog = &optCatalog{}
 func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
 	oc.resolver = resolver
 	oc.statsCache = statsCache
+	oc.dataSources = nil
 }
 
 // ResolveDataSource is part of the opt.Catalog interface.
@@ -111,7 +112,7 @@ func (oc *optCatalog) newDataSource(
 	var ds opt.DataSource
 	switch {
 	case desc.IsTable():
-		ds = newOptTable(oc, desc, name, oc.statsCache)
+		ds = newOptTable(oc, desc, name)
 	case desc.IsView():
 		ds = newOptView(oc, desc, name)
 	case desc.IsSequence():
@@ -222,8 +223,6 @@ type optTable struct {
 	// primary is the inlined wrapper for the table's primary index.
 	primary optIndex
 
-	statsCache *stats.TableStatisticsCache
-
 	// stats is nil until StatisticCount is called. After that it will not be nil,
 	// even when there are no statistics.
 	stats []optTableStat
@@ -239,20 +238,14 @@ type optTable struct {
 
 var _ opt.Table = &optTable{}
 
-func newOptTable(
-	cat *optCatalog,
-	desc *sqlbase.TableDescriptor,
-	name *tree.TableName,
-	statsCache *stats.TableStatisticsCache,
-) *optTable {
-	ot := &optTable{cat: cat, desc: desc, name: *name, statsCache: statsCache}
+func newOptTable(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.TableName) *optTable {
+	ot := &optTable{cat: cat, desc: desc, name: *name}
 
 	// The opt.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
 	ot.primary.init(ot, &desc.PrimaryIndex)
-	ot.statsCache = statsCache
 
 	return ot
 }
@@ -318,7 +311,7 @@ func (ot *optTable) StatisticCount() int {
 	if ot.stats != nil {
 		return len(ot.stats)
 	}
-	stats, err := ot.statsCache.GetTableStats(context.TODO(), ot.desc.ID)
+	stats, err := ot.cat.statsCache.GetTableStats(context.TODO(), ot.desc.ID)
 	if err != nil {
 		// Ignore any error. We still want to be able to run queries even if we lose
 		// access to the statistics table.
