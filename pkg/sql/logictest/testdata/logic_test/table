@@ -374,10 +374,10 @@ cdec21            DECIMAL(2,1)              true         NULL            ·     
 cdecimal          DECIMAL                   true         NULL            ·                      {}
 cdecimal1         DECIMAL(1)                true         NULL            ·                      {}
 cdecimal21        DECIMAL(2,1)              true         NULL            ·                      {}
-cdoubleprecision  DOUBLE PRECISION          true         NULL            ·                      {}
-cfloat            FLOAT                     true         NULL            ·                      {}
-cfloat4           REAL                      true         NULL            ·                      {}
-cfloat8           DOUBLE PRECISION          true         NULL            ·                      {}
+cdoubleprecision  FLOAT8                    true         NULL            ·                      {}
+cfloat            FLOAT8                    true         NULL            ·                      {}
+cfloat4           FLOAT4                    true         NULL            ·                      {}
+cfloat8           FLOAT8                    true         NULL            ·                      {}
 cint              INT                       true         NULL            ·                      {}
 cint2             SMALLINT                  true         NULL            ·                      {}
 cint4             INTEGER                   true         NULL            ·                      {}
@@ -388,7 +388,7 @@ cinterval         INTERVAL                  true         NULL            ·     
 cnumeric          DECIMAL                   true         NULL            ·                      {}
 cnumeric1         DECIMAL(1)                true         NULL            ·                      {}
 cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}
-creal             REAL                      true         NULL            ·                      {}
+creal             FLOAT4                    true         NULL            ·                      {}
 cserial           INT                       false        unique_rowid()  ·                      {}
 csmallint         SMALLINT                  true         NULL            ·                      {}
 csmallserial      INT                       false        unique_rowid()  ·                      {}
