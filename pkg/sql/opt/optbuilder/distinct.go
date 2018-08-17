@@ -167,26 +167,41 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	return outScope
 }
 
-// buildDistinctOnArgs builds the DISTINCT ON columns, adding to
-// projectionsScope.extraCols as necessary.
-// The set of DISTINCT ON columns is stored in projectionsScope.distinctOnCols.
-func (b *Builder) buildDistinctOnArgs(
+// analyzeDistinctOnArgs analyzes the DISTINCT ON columns and adds the
+// resulting typed expressions to distinctOnScope.
+func (b *Builder) analyzeDistinctOnArgs(
 	distinctOn tree.DistinctOn, inScope, projectionsScope *scope,
-) {
+) (distinctOnScope *scope) {
 	if len(distinctOn) == 0 {
-		return
+		return nil
 	}
+
+	distinctOnScope = inScope.push()
+	distinctOnScope.cols = make([]scopeColumn, 0, len(distinctOn))
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require("DISTINCT ON", tree.RejectGenerators)
-
-	distinctOnScope := inScope.push()
+	inScope.context = "DISTINCT ON"
 
 	for i := range distinctOn {
-		b.buildExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope, "DISTINCT ON")
+		b.analyzeExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope)
+	}
+	return distinctOnScope
+}
+
+// buildDistinctOnArgs builds the DISTINCT ON columns, adding to
+// projectionsScope.extraCols as necessary.
+// The set of DISTINCT ON columns is stored in projectionsScope.distinctOnCols.
+func (b *Builder) buildDistinctOnArgs(inScope, projectionsScope, distinctOnScope *scope) {
+	if distinctOnScope == nil {
+		return
+	}
+
+	for i := range distinctOnScope.cols {
+		b.addExtraColumn(inScope, projectionsScope, distinctOnScope, &distinctOnScope.cols[i])
 	}
 	projectionsScope.addExtraColumns(distinctOnScope.cols)
 	projectionsScope.distinctOnCols = distinctOnScope.colSet()

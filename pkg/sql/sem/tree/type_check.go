@@ -119,6 +119,11 @@ const (
 	// RejectAggregates rejects min(), max(), etc.
 	RejectAggregates SemaRejectFlags = 1 << iota
 
+	// RejectNestedAggregates rejects any use of aggregates inside the
+	// argument list of another function call, which can itself be an aggregate
+	// (RejectAggregates notwithstanding).
+	RejectNestedAggregates
+
 	// RejectWindowApplications rejects "x() over y", etc.
 	RejectWindowApplications
 
@@ -645,6 +650,12 @@ var (
 	errInsufficientPriv     = pgerror.NewError(pgerror.CodeInsufficientPrivilegeError, "insufficient privilege")
 )
 
+// NewAggInAggError creates an error for the case when an aggregate function is
+// contained within another aggregate function.
+func NewAggInAggError() error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+}
+
 // NewInvalidNestedSRFError creates a rejection for a nested SRF.
 func NewInvalidNestedSRFError(context string) error {
 	return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
@@ -695,6 +706,10 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		// If it is an aggregate function *not used OVER a window*, then
 		// we have an aggregation.
 		if def.Class == AggregateClass {
+			if sc.Properties.Derived.inFuncExpr &&
+				sc.Properties.required.rejectFlags&RejectNestedAggregates != 0 {
+				return NewAggInAggError()
+			}
 			if sc.Properties.required.rejectFlags&RejectAggregates != 0 {
 				return NewInvalidFunctionUsageError(AggregateClass, sc.Properties.required.context)
 			}
