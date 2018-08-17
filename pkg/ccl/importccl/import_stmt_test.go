@@ -1938,11 +1938,22 @@ func TestImportMysql(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, everything`)
+			sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS simple_auto_inc`)
 			sqlDB.Exec(t, c.query, c.args...)
 
 			if c.expected&expectSimple != 0 {
+				if c.name != "read data only" {
+					sqlDB.Exec(t, "INSERT INTO simple (s) VALUES ('auto-inc')")
+				}
+
 				for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM simple ORDER BY i") {
 					{
+						if idx == len(simpleTestRows) {
+							if expected, actual := "auto-inc", row[1]; expected != actual {
+								t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
+							}
+							continue
+						}
 						expected, actual := simpleTestRows[idx].s, row[1]
 						if expected == injectNull {
 							expected = "NULL"
