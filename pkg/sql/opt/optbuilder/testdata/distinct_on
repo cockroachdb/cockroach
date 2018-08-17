@@ -234,9 +234,9 @@ SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
 distinct-on
  ├── columns: max:6(int)
- ├── grouping columns: column7:7(int)
+ ├── grouping columns: max:7(int)
  ├── scalar-group-by
- │    ├── columns: max:6(int) column7:7(int)
+ │    ├── columns: max:6(int) max:7(int)
  │    ├── project
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    └── scan xyz
@@ -255,9 +255,9 @@ SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
 distinct-on
  ├── columns: max:4(string)
- ├── grouping columns: column5:5(string) column6:6(string) column7:7(string)
+ ├── grouping columns: min:5(string) max:6(string) min:7(string)
  ├── scalar-group-by
- │    ├── columns: max:4(string) column5:5(string) column6:6(string) column7:7(string)
+ │    ├── columns: max:4(string) min:5(string) max:6(string) min:7(string)
  │    ├── scan abc
  │    │    └── columns: a:1(string!null) b:2(string!null) c:3(string!null)
  │    └── aggregations
@@ -302,13 +302,13 @@ SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 distinct-on
  ├── columns: min:6(int!null)
- ├── grouping columns: column6:6(int!null)
+ ├── grouping columns: min:6(int!null)
  └── project
-      ├── columns: column6:6(int!null)
+      ├── columns: min:6(int!null)
       └── select
-           ├── columns: y:2(int) column6:6(int!null)
+           ├── columns: y:2(int) min:6(int!null)
            ├── group-by
-           │    ├── columns: y:2(int) column6:6(int)
+           │    ├── columns: y:2(int) min:6(int)
            │    ├── grouping columns: y:2(int)
            │    ├── project
            │    │    ├── columns: x:1(int) y:2(int)
@@ -319,7 +319,7 @@ distinct-on
            │              └── variable: x [type=int]
            └── filters [type=bool]
                 └── eq [type=bool]
-                     ├── variable: column6 [type=int]
+                     ├── variable: min [type=int]
                      └── const: 1 [type=int]
 
 #########################

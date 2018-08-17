@@ -243,11 +243,11 @@ project
  ├── columns: max:7(int!null)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null)
+      ├── columns: k:1(int!null) max:7(int!null)
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int)
+      │    ├── columns: k:1(int!null) max:7(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7)
@@ -265,7 +265,7 @@ project
       │         └── max [type=int, outer=(5)]
       │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Single max aggregate function without grouping columns.
 opt
@@ -281,7 +281,7 @@ select
  ├── key: ()
  ├── fd: ()-->(7)
  ├── scalar-group-by
- │    ├── columns: column7:7(int)
+ │    ├── columns: max:7(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(7)
@@ -296,7 +296,7 @@ select
  │         └── max [type=int, outer=(5)]
  │              └── variable: x [type=int, outer=(5)]
  └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-      └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Multiple aggregate functions on same column.
 opt
@@ -311,11 +311,11 @@ project
  ├── columns: min:7(int!null) max:8(int)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── columns: k:1(int!null) min:7(int!null) max:8(int)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── columns: k:1(int!null) min:7(int) max:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)
@@ -335,7 +335,7 @@ project
       │         └── max [type=int, outer=(5)]
       │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Ignore ConstAgg aggregates on other columns.
 opt
@@ -397,11 +397,11 @@ project
  ├── columns: min:7(int!null) max:8(int)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── columns: k:1(int!null) min:7(int!null) max:8(int)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── columns: k:1(int!null) min:7(int) max:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)
@@ -423,7 +423,7 @@ project
       │         └── max [type=int, outer=(6)]
       │              └── variable: y [type=int, outer=(6)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
@@ -439,11 +439,11 @@ project
  ├── columns: count:7(int!null)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null)
+      ├── columns: k:1(int!null) count:7(int!null)
       ├── key: (1)
       ├── fd: ()-->(7)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int)
+      │    ├── columns: k:1(int!null) count:7(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7)
@@ -461,7 +461,7 @@ project
       │         └── count [type=int, outer=(5)]
       │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # ConstNotNullAgg rejects nulls (regression test for #28810).
 norm

@@ -124,10 +124,10 @@ WHERE
     t.typnamespace = n.oid AND n.nspname != 'pg_catalog';
 ----
 project
- ├── columns: type_cat:38(unknown) type_schem:34(name!null) type_name:2(name!null) class_name:38(unknown) data_type:39(string) remarks:40(string) base_type:74(string)
- ├── fd: ()-->(38)
+ ├── columns: type_cat:71(unknown) type_schem:34(name!null) type_name:2(name!null) class_name:71(unknown) data_type:72(string) remarks:73(string) base_type:74(string)
+ ├── fd: ()-->(71)
  ├── left-join-apply
- │    ├── columns: pg_type.oid:1(oid) pg_type.typname:2(name!null) pg_type.typnamespace:3(oid!null) pg_type.typtype:7(string) pg_type.typbasetype:25(oid) pg_namespace.oid:33(oid!null) nspname:34(name!null) case:73(string)
+ │    ├── columns: pg_type.oid:1(oid) pg_type.typname:2(name!null) pg_type.typnamespace:3(oid!null) pg_type.typtype:7(string) pg_type.typbasetype:25(oid) pg_namespace.oid:33(oid!null) nspname:34(name!null) case:70(string)
  │    ├── fd: (3)==(33), (33)==(3)
  │    ├── inner-join
  │    │    ├── columns: pg_type.oid:1(oid) pg_type.typname:2(name!null) pg_type.typnamespace:3(oid!null) pg_type.typtype:7(string) pg_type.typbasetype:25(oid) pg_namespace.oid:33(oid!null) nspname:34(name!null)
@@ -143,27 +143,27 @@ project
  │    │    └── filters [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
  │    │         └── pg_type.typnamespace = pg_namespace.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ])]
  │    ├── max1-row
- │    │    ├── columns: case:73(string)
+ │    │    ├── columns: case:70(string)
  │    │    ├── outer: (25)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(73)
+ │    │    ├── fd: ()-->(70)
  │    │    └── project
- │    │         ├── columns: case:73(string)
+ │    │         ├── columns: case:70(string)
  │    │         ├── outer: (25)
  │    │         ├── select
- │    │         │    ├── columns: pg_type.oid:41(oid!null) pg_type.typname:42(name!null)
+ │    │         │    ├── columns: pg_type.oid:38(oid!null) pg_type.typname:39(name!null)
  │    │         │    ├── outer: (25)
- │    │         │    ├── fd: ()-->(41)
+ │    │         │    ├── fd: ()-->(38)
  │    │         │    ├── scan pg_type
- │    │         │    │    └── columns: pg_type.oid:41(oid) pg_type.typname:42(name!null)
- │    │         │    └── filters [type=bool, outer=(25,41), constraints=(/25: (/NULL - ]; /41: (/NULL - ]), fd=(25)==(41), (41)==(25)]
- │    │         │         └── pg_type.oid = pg_type.typbasetype [type=bool, outer=(25,41), constraints=(/25: (/NULL - ]; /41: (/NULL - ])]
- │    │         └── projections [outer=(42)]
- │    │              └── CASE WHEN pg_type.typname = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [type=string, outer=(42)]
+ │    │         │    │    └── columns: pg_type.oid:38(oid) pg_type.typname:39(name!null)
+ │    │         │    └── filters [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
+ │    │         │         └── pg_type.oid = pg_type.typbasetype [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ])]
+ │    │         └── projections [outer=(39)]
+ │    │              └── CASE WHEN pg_type.typname = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [type=string, outer=(39)]
  │    └── true [type=bool]
- └── projections [outer=(1,2,7,34,73)]
+ └── projections [outer=(1,2,7,34,70)]
       ├── null [type=unknown]
       ├── CASE WHEN pg_type.typtype = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [type=string, outer=(7)]
       ├── obj_description(pg_type.oid, 'pg_type') [type=string, outer=(1)]
-      └── CASE WHEN pg_type.typtype = 'd' THEN case END [type=string, outer=(7,73)]
+      └── CASE WHEN pg_type.typtype = 'd' THEN case END [type=string, outer=(7,70)]

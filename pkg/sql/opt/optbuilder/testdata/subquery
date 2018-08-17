@@ -1355,7 +1355,7 @@ build
 SELECT (SELECT 1 a), (SELECT 2 b)
 ----
 project
- ├── columns: a:2(int) b:4(int)
+ ├── columns: a:3(int) b:4(int)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -1370,9 +1370,9 @@ project
       │                   └── const: 1 [type=int]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: b:3(int!null)
+                ├── columns: b:2(int!null)
                 └── project
-                     ├── columns: b:3(int!null)
+                     ├── columns: b:2(int!null)
                      ├── values
                      │    └── tuple [type=tuple]
                      └── projections
@@ -1383,7 +1383,7 @@ build
 SELECT (SELECT 1 a), (SELECT a FROM abc), (SELECT 1 a), (SELECT a FROM abc)
 ----
 project
- ├── columns: a:2(int) a:6(int) a:2(int) a:6(int)
+ ├── columns: a:9(int) a:10(int) a:9(int) a:10(int)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -1398,18 +1398,18 @@ project
       │                   └── const: 1 [type=int]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: abc.a:3(int!null)
+                ├── columns: abc.a:2(int!null)
                 └── project
-                     ├── columns: abc.a:3(int!null)
+                     ├── columns: abc.a:2(int!null)
                      └── scan abc
-                          └── columns: abc.a:3(int!null) abc.b:4(int) abc.c:5(int)
+                          └── columns: abc.a:2(int!null) abc.b:3(int) abc.c:4(int)
 
 # Multiple nested subqueries in same column list.
 build
 SELECT (SELECT (SELECT 1 AS x) AS  a) AS r, (SELECT (SELECT 1 AS x) AS a) AS s, (SELECT 1 AS x) AS t
 ----
 project
- ├── columns: r:3(int) s:3(int) t:7(int)
+ ├── columns: r:6(int) s:6(int) t:7(int)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -1432,9 +1432,9 @@ project
       │                                       └── const: 1 [type=int]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: x:6(int!null)
+                ├── columns: x:5(int!null)
                 └── project
-                     ├── columns: x:6(int!null)
+                     ├── columns: x:5(int!null)
                      ├── values
                      │    └── tuple [type=tuple]
                      └── projections
@@ -1590,28 +1590,31 @@ project
                           └── columns: kv.k:1(int!null) v:2(string)
 
 exec-ddl
-CREATE TABLE t1 (a INT)
+CREATE TABLE t1 (a INT, b INT)
 ----
 TABLE t1
  ├── a int
+ ├── b int
  ├── rowid int not null (hidden)
  └── INDEX primary
       └── rowid int not null (hidden)
 
 exec-ddl
-CREATE TABLE t2 (a INT)
+CREATE TABLE t2 (a INT, b INT)
 ----
 TABLE t2
  ├── a int
+ ├── b int
  ├── rowid int not null (hidden)
  └── INDEX primary
       └── rowid int not null (hidden)
 
 exec-ddl
-CREATE TABLE t3 (a INT)
+CREATE TABLE t3 (a INT, b INT)
 ----
 TABLE t3
  ├── a int
+ ├── b int
  ├── rowid int not null (hidden)
  └── INDEX primary
       └── rowid int not null (hidden)
@@ -1620,28 +1623,28 @@ build
 SELECT (SELECT (SELECT DISTINCT t3.a FROM t1) FROM t2) FROM t3
 ----
 project
- ├── columns: a:9(int)
+ ├── columns: a:12(int)
  ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
+ │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: a:8(int)
+                ├── columns: a:11(int)
                 └── project
-                     ├── columns: a:8(int)
+                     ├── columns: a:11(int)
                      ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: a:7(int)
+                                    ├── columns: a:10(int)
                                     └── distinct-on
-                                         ├── columns: a:7(int)
-                                         ├── grouping columns: a:7(int)
+                                         ├── columns: a:10(int)
+                                         ├── grouping columns: a:10(int)
                                          └── project
-                                              ├── columns: a:7(int)
+                                              ├── columns: a:10(int)
                                               ├── scan t1
-                                              │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
+                                              │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
                                               └── projections
                                                    └── variable: t3.a [type=int]
 
@@ -1649,30 +1652,30 @@ build
 SELECT (SELECT (SELECT count(*) FROM t1 GROUP BY t3.a) FROM t2) FROM t3
 ----
 project
- ├── columns: count:10(int)
+ ├── columns: count:13(int)
  ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
+ │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: count:9(int)
+                ├── columns: count:12(int)
                 └── project
-                     ├── columns: count:9(int)
+                     ├── columns: count:12(int)
                      ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: count:8(int)
+                                    ├── columns: count_rows:10(int)
                                     └── project
-                                         ├── columns: count:8(int)
+                                         ├── columns: count_rows:10(int)
                                          └── group-by
-                                              ├── columns: a:7(int) count:8(int)
-                                              ├── grouping columns: a:7(int)
+                                              ├── columns: count_rows:10(int) a:11(int)
+                                              ├── grouping columns: a:11(int)
                                               ├── project
-                                              │    ├── columns: a:7(int)
+                                              │    ├── columns: a:11(int)
                                               │    ├── scan t1
-                                              │    │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
+                                              │    │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
                                               │    └── projections
                                               │         └── variable: t3.a [type=int]
                                               └── aggregations
@@ -1682,28 +1685,28 @@ build
 SELECT (SELECT (SELECT t2.a + t3.a AS x FROM t1 GROUP BY t2.a + t3.a) AS y FROM t2) AS z FROM t3
 ----
 project
- ├── columns: z:9(int)
+ ├── columns: z:12(int)
  ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
+ │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: y:8(int)
+                ├── columns: y:11(int)
                 └── project
-                     ├── columns: y:8(int)
+                     ├── columns: y:11(int)
                      ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: column7:7(int)
+                                    ├── columns: column10:10(int)
                                     └── group-by
-                                         ├── columns: column7:7(int)
-                                         ├── grouping columns: column7:7(int)
+                                         ├── columns: column10:10(int)
+                                         ├── grouping columns: column10:10(int)
                                          └── project
-                                              ├── columns: column7:7(int)
+                                              ├── columns: column10:10(int)
                                               ├── scan t1
-                                              │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
+                                              │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
                                               └── projections
                                                    └── plus [type=int]
                                                         ├── variable: t2.a [type=int]
@@ -1713,32 +1716,32 @@ build
 SELECT (SELECT (SELECT t2.a + t3.a AS r FROM t1 GROUP BY t2.a, t3.a HAVING t2.a > t3.a) FROM t2) FROM t3
 ----
 project
- ├── columns: r:11(int)
+ ├── columns: r:14(int)
  ├── scan t3
- │    └── columns: t3.a:1(int) t3.rowid:2(int!null)
+ │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: r:10(int)
+                ├── columns: r:13(int)
                 └── project
-                     ├── columns: r:10(int)
+                     ├── columns: r:13(int)
                      ├── scan t2
-                     │    └── columns: t2.a:3(int) t2.rowid:4(int!null)
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: r:9(int)
+                                    ├── columns: r:12(int)
                                     └── project
-                                         ├── columns: r:9(int)
+                                         ├── columns: r:12(int)
                                          ├── select
-                                         │    ├── columns: a:7(int!null) a:8(int!null)
+                                         │    ├── columns: a:10(int!null) a:11(int!null)
                                          │    ├── group-by
-                                         │    │    ├── columns: a:7(int) a:8(int)
-                                         │    │    ├── grouping columns: a:7(int) a:8(int)
+                                         │    │    ├── columns: a:10(int) a:11(int)
+                                         │    │    ├── grouping columns: a:10(int) a:11(int)
                                          │    │    └── project
-                                         │    │         ├── columns: a:7(int) a:8(int)
+                                         │    │         ├── columns: a:10(int) a:11(int)
                                          │    │         ├── scan t1
-                                         │    │         │    └── columns: t1.a:5(int) t1.rowid:6(int!null)
+                                         │    │         │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
                                          │    │         └── projections
                                          │    │              ├── variable: t2.a [type=int]
                                          │    │              └── variable: t3.a [type=int]
@@ -1755,24 +1758,24 @@ build
 SELECT (SELECT ARRAY[count(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
 ----
 project
- ├── columns: array:8(int[])
+ ├── columns: array:10(int[])
  ├── scan t2
- │    └── columns: t2.a:1(int) t2.rowid:2(int!null)
+ │    └── columns: t2.a:1(int) t2.b:2(int) t2.rowid:3(int!null)
  └── projections
       └── subquery [type=int[]]
            └── max1-row
-                ├── columns: array:7(int[])
+                ├── columns: array:9(int[])
                 └── project
-                     ├── columns: array:7(int[])
+                     ├── columns: array:9(int[])
                      ├── select
-                     │    ├── columns: t1.a:3(int) a:5(int!null) column6:6(int)
+                     │    ├── columns: t1.a:4(int) count_rows:7(int) a:8(int!null)
                      │    ├── group-by
-                     │    │    ├── columns: t1.a:3(int) a:5(int) column6:6(int)
-                     │    │    ├── grouping columns: t1.a:3(int) a:5(int)
+                     │    │    ├── columns: t1.a:4(int) count_rows:7(int) a:8(int)
+                     │    │    ├── grouping columns: t1.a:4(int) a:8(int)
                      │    │    ├── project
-                     │    │    │    ├── columns: a:5(int) t1.a:3(int)
+                     │    │    │    ├── columns: a:8(int) t1.a:4(int)
                      │    │    │    ├── scan t1
-                     │    │    │    │    └── columns: t1.a:3(int) t1.rowid:4(int!null)
+                     │    │    │    │    └── columns: t1.a:4(int) t1.b:5(int) t1.rowid:6(int!null)
                      │    │    │    └── projections
                      │    │    │         └── variable: t2.a [type=int]
                      │    │    └── aggregations
@@ -1783,7 +1786,7 @@ project
                      │              └── const: 5 [type=int]
                      └── projections
                           └── array: [type=int[]]
-                               ├── variable: column6 [type=int]
+                               ├── variable: count_rows [type=int]
                                ├── variable: t1.a [type=int]
                                └── variable: a [type=int]
 
@@ -1793,7 +1796,7 @@ SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2
 project
  ├── columns: r:17(decimal)
  ├── scalar-group-by
- │    ├── columns: column11:11(int) column13:13(int)
+ │    ├── columns: max:11(int) min:13(int)
  │    ├── project
  │    │    ├── columns: a:10(int) a:12(int)
  │    │    ├── scan t3
@@ -1831,8 +1834,8 @@ project
                                          │              └── variable: t2.a [type=int]
                                          └── projections
                                               └── div [type=decimal]
-                                                   ├── variable: column11 [type=int]
-                                                   └── variable: column13 [type=int]
+                                                   ├── variable: max [type=int]
+                                                   └── variable: min [type=int]
 
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
@@ -1907,9 +1910,9 @@ build
 SELECT max(a) FROM t HAVING max(a) < ANY(SELECT b FROM u)
 ----
 select
- ├── columns: max:5(string)
+ ├── columns: max:3(string)
  ├── scalar-group-by
- │    ├── columns: column5:5(string)
+ │    ├── columns: max:3(string)
  │    ├── project
  │    │    ├── columns: a:1(string)
  │    │    └── scan t
@@ -1920,10 +1923,10 @@ select
  └── filters [type=bool]
       └── any: lt [type=bool]
            ├── project
-           │    ├── columns: b:3(string)
+           │    ├── columns: b:4(string)
            │    └── scan u
-           │         └── columns: b:3(string) u.rowid:4(int!null)
-           └── variable: column5 [type=string]
+           │         └── columns: b:4(string) u.rowid:5(int!null)
+           └── variable: max [type=string]
 
 build
 SELECT min(a) IN (SELECT b FROM u) FROM t
@@ -1931,7 +1934,7 @@ SELECT min(a) IN (SELECT b FROM u) FROM t
 project
  ├── columns: "?column?":6(bool)
  ├── scalar-group-by
- │    ├── columns: column5:5(string)
+ │    ├── columns: min:5(string)
  │    ├── project
  │    │    ├── columns: a:1(string)
  │    │    └── scan t
@@ -1945,7 +1948,7 @@ project
            │    ├── columns: b:3(string)
            │    └── scan u
            │         └── columns: b:3(string) u.rowid:4(int!null)
-           └── variable: column5 [type=string]
+           └── variable: min [type=string]
 
 # Regression test for #28240. Make sure that the tuple labels are stripped from
 # the subquery.
@@ -1985,7 +1988,7 @@ SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
 project
  ├── columns: max:14(int)
  ├── scalar-group-by
- │    ├── columns: column11:11(int)
+ │    ├── columns: max:11(int)
  │    ├── project
  │    │    ├── columns: a:10(int)
  │    │    ├── scan t3
@@ -2012,7 +2015,7 @@ project
                                          ├── scan t1
                                          │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
                                          └── projections
-                                              └── variable: column11 [type=int]
+                                              └── variable: max [type=int]
 
 build
 SELECT (
@@ -2032,7 +2035,7 @@ project
                 └── project
                      ├── columns: row:16(tuple{int, int, int})
                      ├── scalar-group-by
-                     │    ├── columns: column12:12(int)
+                     │    ├── columns: max:12(int)
                      │    ├── project
                      │    │    ├── columns: a:11(int)
                      │    │    ├── scan t2
@@ -2049,7 +2052,7 @@ project
                                     └── project
                                          ├── columns: row:15(tuple{int, int, int})
                                          ├── scalar-group-by
-                                         │    ├── columns: column10:10(int) column14:14(int)
+                                         │    ├── columns: max:10(int) max:14(int)
                                          │    ├── project
                                          │    │    ├── columns: column13:13(int) t1.a:7(int)
                                          │    │    ├── scan t1
@@ -2065,9 +2068,9 @@ project
                                          │              └── variable: column13 [type=int]
                                          └── projections
                                               └── tuple [type=tuple{int, int, int}]
-                                                   ├── variable: column10 [type=int]
-                                                   ├── variable: column12 [type=int]
-                                                   └── variable: column14 [type=int]
+                                                   ├── variable: max [type=int]
+                                                   ├── variable: max [type=int]
+                                                   └── variable: max [type=int]
 
 build
 SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2;
@@ -2080,7 +2083,7 @@ SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2 GROU
 project
  ├── columns: row:13(tuple{int, int, int})
  ├── group-by
- │    ├── columns: t2.a:1(int) column9:9(int)
+ │    ├── columns: t2.a:1(int) max:9(int)
  │    ├── grouping columns: t2.a:1(int)
  │    ├── project
  │    │    ├── columns: a:8(int) t2.a:1(int)
@@ -2098,7 +2101,7 @@ project
                 └── project
                      ├── columns: row:12(tuple{int, int, int})
                      ├── scalar-group-by
-                     │    ├── columns: column7:7(int) column11:11(int)
+                     │    ├── columns: max:7(int) max:11(int)
                      │    ├── project
                      │    │    ├── columns: column10:10(int) t1.a:4(int)
                      │    │    ├── scan t1
@@ -2114,9 +2117,9 @@ project
                      │              └── variable: column10 [type=int]
                      └── projections
                           └── tuple [type=tuple{int, int, int}]
-                               ├── variable: column7 [type=int]
-                               ├── variable: column9 [type=int]
-                               └── variable: column11 [type=int]
+                               ├── variable: max [type=int]
+                               ├── variable: max [type=int]
+                               └── variable: max [type=int]
 
 build
 SELECT
@@ -2155,7 +2158,7 @@ FROM
 project
  ├── columns: max:14(int) max:15(int)
  ├── scalar-group-by
- │    ├── columns: column12:12(int)
+ │    ├── columns: max:12(int)
  │    ├── project
  │    │    ├── columns: a:11(int)
  │    │    ├── scan t2
@@ -2168,11 +2171,11 @@ project
  └── projections
       ├── subquery [type=int]
       │    └── max1-row
-      │         ├── columns: column7:7(int)
+      │         ├── columns: max:7(int)
       │         └── project
-      │              ├── columns: column7:7(int)
+      │              ├── columns: max:7(int)
       │              └── group-by
-      │                   ├── columns: t1.b:5(int) column7:7(int)
+      │                   ├── columns: t1.b:5(int) max:7(int)
       │                   ├── grouping columns: t1.b:5(int)
       │                   ├── project
       │                   │    ├── columns: t1.a:4(int) t1.b:5(int)
@@ -2194,7 +2197,7 @@ project
                      │         └── scan t1
                      │              └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
                      └── projections
-                          └── variable: column12 [type=int]
+                          └── variable: max [type=int]
 
 build
 SELECT
@@ -2207,7 +2210,7 @@ GROUP BY t2.b;
 project
  ├── columns: array:15(tuple{int}[]) array:17(tuple{int}[])
  ├── group-by
- │    ├── columns: t2.b:2(int) column12:12(int)
+ │    ├── columns: t2.b:2(int) max:12(int)
  │    ├── grouping columns: t2.b:2(int)
  │    ├── project
  │    │    ├── columns: a:11(int) t2.b:2(int)
@@ -2224,7 +2227,7 @@ project
       │    │    └── scalar-group-by
       │    │         ├── columns: array_agg:14(int[])
       │    │         ├── scalar-group-by
-      │    │         │    ├── columns: column7:7(int)
+      │    │         │    ├── columns: max:7(int)
       │    │         │    ├── project
       │    │         │    │    ├── columns: t1.a:4(int)
       │    │         │    │    └── scan t1
@@ -2234,7 +2237,7 @@ project
       │    │         │              └── variable: t1.a [type=int]
       │    │         └── aggregations
       │    │              └── array-agg [type=int[]]
-      │    │                   └── variable: column7 [type=int]
+      │    │                   └── variable: max [type=int]
       │    └── array: [type=int[]]
       └── coalesce [type=int[]]
            ├── subquery [type=int[]]
@@ -2245,7 +2248,7 @@ project
            │         │    ├── scan t1
            │         │    │    └── columns: t1.a:8(int) t1.b:9(int) t1.rowid:10(int!null)
            │         │    └── projections
-           │         │         └── variable: column12 [type=int]
+           │         │         └── variable: max [type=int]
            │         └── aggregations
            │              └── array-agg [type=int[]]
            │                   └── variable: max [type=int]
@@ -2263,7 +2266,7 @@ GROUP BY t2.a, t2.b;
 project
  ├── columns: array:23(tuple{int}[]) array:25(tuple{int}[]) array:27(tuple{int}[])
  ├── group-by
- │    ├── columns: t2.a:1(int) t2.b:2(int) column13:13(int)
+ │    ├── columns: t2.a:1(int) t2.b:2(int) max:13(int)
  │    ├── grouping columns: t2.a:1(int) t2.b:2(int)
  │    ├── project
  │    │    ├── columns: a:12(int) t2.a:1(int) t2.b:2(int)
@@ -2280,9 +2283,9 @@ project
       │    │    └── scalar-group-by
       │    │         ├── columns: array_agg:22(int[])
       │    │         ├── project
-      │    │         │    ├── columns: column7:7(int)
+      │    │         │    ├── columns: max:7(int)
       │    │         │    └── group-by
-      │    │         │         ├── columns: column7:7(int) b:8(int)
+      │    │         │         ├── columns: max:7(int) b:8(int)
       │    │         │         ├── grouping columns: b:8(int)
       │    │         │         ├── project
       │    │         │         │    ├── columns: b:8(int) t1.a:4(int)
@@ -2295,7 +2298,7 @@ project
       │    │         │                   └── variable: t1.a [type=int]
       │    │         └── aggregations
       │    │              └── array-agg [type=int[]]
-      │    │                   └── variable: column7 [type=int]
+      │    │                   └── variable: max [type=int]
       │    └── array: [type=int[]]
       ├── coalesce [type=int[]]
       │    ├── subquery [type=int[]]
@@ -2313,7 +2316,7 @@ project
       │    │         │    │         └── projections
       │    │         │    │              └── variable: t2.b [type=int]
       │    │         │    └── projections
-      │    │         │         └── variable: column13 [type=int]
+      │    │         │         └── variable: max [type=int]
       │    │         └── aggregations
       │    │              └── array-agg [type=int[]]
       │    │                   └── variable: max [type=int]
@@ -2323,9 +2326,9 @@ project
            │    └── scalar-group-by
            │         ├── columns: array_agg:26(int[])
            │         ├── project
-           │         │    ├── columns: column20:20(int)
+           │         │    ├── columns: max:20(int)
            │         │    └── group-by
-           │         │         ├── columns: column20:20(int) b:21(int)
+           │         │         ├── columns: max:20(int) b:21(int)
            │         │         ├── grouping columns: b:21(int)
            │         │         ├── project
            │         │         │    ├── columns: column19:19(int) b:21(int)
@@ -2341,5 +2344,5 @@ project
            │         │                   └── variable: column19 [type=int]
            │         └── aggregations
            │              └── array-agg [type=int[]]
-           │                   └── variable: column20 [type=int]
+           │                   └── variable: max [type=int]
            └── array: [type=int[]]

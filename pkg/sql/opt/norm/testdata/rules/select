@@ -243,11 +243,11 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) 
 project
  ├── columns: f:3(float) r:7(float)
  ├── select
- │    ├── columns: i:2(int) f:3(float) column6:6(float!null)
+ │    ├── columns: i:2(int) f:3(float) sum:6(float!null)
  │    ├── key: (2,3)
  │    ├── fd: ()-->(6)
  │    ├── group-by
- │    │    ├── columns: i:2(int) f:3(float) column6:6(float)
+ │    │    ├── columns: i:2(int) f:3(float) sum:6(float)
  │    │    ├── grouping columns: i:2(int) f:3(float)
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(6)
@@ -257,7 +257,7 @@ project
  │    │         └── sum [type=float, outer=(3)]
  │    │              └── variable: f [type=float, outer=(3)]
  │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
- │         └── column6 = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
+ │         └── sum = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
  └── projections [outer=(3)]
       └── f + 1.1 [type=float, outer=(3)]
 
@@ -947,7 +947,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(6), (1)==(2), (2)==(1), (1)-->(2)
  ├── group-by
- │    ├── columns: k:1(int!null) i:2(int) m:6(string)
+ │    ├── columns: k:1(int!null) i:2(int) max:6(string)
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,6)
@@ -967,7 +967,7 @@ select
  │         └── const-agg [type=int, outer=(2)]
  │              └── variable: i [type=int, outer=(2)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-      └── m = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+      └── max = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
 
 # DistinctOn case.
 opt
@@ -1035,7 +1035,7 @@ select
  ├── key: ()
  ├── fd: ()-->(6)
  ├── scalar-group-by
- │    ├── columns: c:6(int)
+ │    ├── columns: count_rows:6(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6)
@@ -1044,7 +1044,7 @@ select
  │         └── count-rows [type=int]
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0]), fd=()-->(6)]
       ├── $1 < '2000-01-01T10:00:00' [type=bool]
-      └── c = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+      └── count_rows = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
 
 # --------------------------------------------------
 # RemoveNotNullCondition
