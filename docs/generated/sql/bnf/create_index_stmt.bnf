@@ -35,3 +35,15 @@ create_index_stmt ::=
 	| 'CREATE'  'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name  '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'CREATE'  'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name  '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'CREATE'  'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name  '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'  opt_interleave opt_partition_by
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
+	| 'CREATE'  'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
