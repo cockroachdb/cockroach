@@ -18,128 +18,142 @@ package main
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"sync"
 )
 
 func registerInterleaved(r *registry) {
+	type config struct {
+		eastName             string
+		westName             string
+		centralName          string
+		sessions             int
+		customersPerSession  int
+		devicesPerSession    int
+		variantsPerSession   int
+		parametersPerSession int
+		queriesPerSession    int
+		insertPercent        int
+		insertLocalPercent   int
+		retrievePercent      int
+		retrieveLocalPercent int
+		updatePercent        int
+		updateLocalPercent   int
+		rowsPerDelete        int
+	}
+
 	runInterleaved := func(
 		ctx context.Context,
 		t *test,
 		c *cluster,
-		eastName string,
-		westName string,
-		centralName string,
-		sessions int,
-		customersPerSession int,
-		devicesPerSession int,
-		variantsPerSession int,
-		parametersPerSession int,
-		queriesPerSession int,
-		insertPercent int,
-		insertLocalPercent int,
-		retrievePercent int,
-		retrieveLocalPercent int,
-		updatePercent int,
-		updateLocalPercent int,
-		rowsPerDelete int,
+		config config,
 	) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes))
 
-		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			duration := " --duration " + ifLocal("10s", "10m")
-			histograms := " --histograms ./histograms"
-			zones := fmt.Sprintf(" --east-zone-name %s --west-zone-name %s --central-zone-name %s ", eastName, westName, centralName)
+		zones := fmt.Sprintf(" --east-zone-name %s --west-zone-name %s --central-zone-name %s ",
+			config.eastName, config.westName, config.centralName)
+		cmdInit := "./workload init interleavedpartitioned" + zones +
+			"--local=false --drop --locality east --sessions 0"
 
-			// Just to initialize the database
-			cmdInit := "./workload init interleavedpartitioned" + zones + "--local=false --drop --locality east --sessions 0"
-			cmdEast := fmt.Sprintf(
-				"./workload run interleavedpartitioned"+zones+"--local=false --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d"+duration+histograms+" {pgurl:4-6}",
-				customersPerSession,
-				devicesPerSession,
-				variantsPerSession,
-				parametersPerSession,
-				queriesPerSession,
-				insertPercent,
-				insertLocalPercent,
-				retrievePercent,
-				retrieveLocalPercent,
-				updatePercent,
-				updateLocalPercent,
-			)
+		t.Status("initializing workload")
+		c.Run(ctx, c.Node(1), cmdInit)
 
-			cmdWest := fmt.Sprintf(
-				"./workload run interleavedpartitioned"+zones+"--local=false --customers-per-session %d --devices-per-session %d --variants-per-session %d --parameters-per-session %d --queries-per-session %d --insert-percent %d --insert-local-percent %d --retrieve-percent %d --retrieve-local-percent %d --update-percent %d --update-local-percent %d"+duration+histograms+" {pgurl:1-3}",
-				customersPerSession,
-				devicesPerSession,
-				variantsPerSession,
-				parametersPerSession,
-				queriesPerSession,
-				insertPercent,
-				insertLocalPercent,
-				retrievePercent,
-				retrieveLocalPercent,
-				updatePercent,
-				updateLocalPercent,
-			)
+		duration := " --duration " + ifLocal("10s", "10m")
+		histograms := " --histograms logs/stats.json"
 
-			cmdCentral := fmt.Sprintf(
-				"./workload run interleavedpartitioned"+zones+"--local=false --deletes --rows-per-delete %d"+duration+histograms+" {pgurl:8}",
-				rowsPerDelete,
-			)
+		cmdEast := fmt.Sprintf(
+			"./workload run interleavedpartitioned"+zones+
+				"--local=false --customers-per-session %d --devices-per-session %d "+
+				"--variants-per-session %d --parameters-per-session %d --queries-per-session %d "+
+				"--insert-percent %d --insert-local-percent %d --retrieve-percent %d "+
+				"--retrieve-local-percent %d --update-percent %d --update-local-percent %d"+
+				duration+histograms+" {pgurl:4-6}",
+			config.customersPerSession,
+			config.devicesPerSession,
+			config.variantsPerSession,
+			config.parametersPerSession,
+			config.queriesPerSession,
+			config.insertPercent,
+			config.insertLocalPercent,
+			config.retrievePercent,
+			config.retrieveLocalPercent,
+			config.updatePercent,
+			config.updateLocalPercent,
+		)
 
-			t.Status("initializing database")
-			c.Run(ctx, c.Node(1), cmdInit)
-			var wg sync.WaitGroup
-			wg.Add(3)
-			t.Status("running workload jobs")
-			go func() {
-				c.Run(ctx, c.Node(1), cmdWest)
-				wg.Done()
-			}()
-			go func() {
-				c.Run(ctx, c.Node(4), cmdEast)
-				wg.Done()
-			}()
-			go func() {
-				c.Run(ctx, c.Node(7), cmdCentral)
-				wg.Done()
-			}()
+		cmdWest := fmt.Sprintf(
+			"./workload run interleavedpartitioned"+zones+
+				"--local=false --customers-per-session %d --devices-per-session %d "+
+				"--variants-per-session %d --parameters-per-session %d --queries-per-session %d "+
+				"--insert-percent %d --insert-local-percent %d --retrieve-percent %d "+
+				"--retrieve-local-percent %d --update-percent %d --update-local-percent %d"+
+				duration+histograms+" {pgurl:1-3}",
+			config.customersPerSession,
+			config.devicesPerSession,
+			config.variantsPerSession,
+			config.parametersPerSession,
+			config.queriesPerSession,
+			config.insertPercent,
+			config.insertLocalPercent,
+			config.retrievePercent,
+			config.retrieveLocalPercent,
+			config.updatePercent,
+			config.updateLocalPercent,
+		)
 
-			// This will only finish when all the workload jobs have finished.
-			wg.Wait()
-			err := execCmd(ctx, c.l, roachprod, "get", c.name, "histograms:1,4,7", filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "histograms"))
-			return err
-		})
+		cmdCentral := fmt.Sprintf(
+			"./workload run interleavedpartitioned"+zones+
+				"--local=false --deletes --rows-per-delete %d"+
+				duration+histograms+" {pgurl:8}",
+			config.rowsPerDelete,
+		)
+
+		t.Status("running workload")
+		m := newMonitor(ctx, c)
+
+		runLocality := func(name string, node nodeListOption, cmd string) {
+			m.Go(func(ctx context.Context) error {
+				l, err := c.l.childLogger(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer l.close()
+				return c.RunL(ctx, l, node, cmd)
+			})
+		}
+
+		runLocality("west", c.Node(1), cmdWest)
+		runLocality("east", c.Node(4), cmdEast)
+		runLocality("central", c.Node(7), cmdCentral)
+
 		m.Wait()
 	}
 
 	r.Add(testSpec{
 		Name:   "interleavedpartitioned",
 		Nodes:  nodes(9, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
-		Stable: true,
+		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runInterleaved(ctx, t, c,
-				`us-east4-b`,    /* eastName */
-				`us-west1-b`,    /* westName */
-				`us-central1-a`, /* centralName */
-				10000,           /*sessions*/
-				2,               /*customersPerSession*/
-				2,               /*devicesPerSession*/
-				5,               /*variantsPerSession*/
-				1,               /*parametersPerSession*/
-				1,               /*queriesPerSession*/
-				80,              /*insertPercent*/
-				100,             /*insertLocalPercent*/
-				10,              /*retrievePercent*/
-				100,             /*retrieveLocalPercent*/
-				10,              /*updatePercent*/
-				100,             /*updateLocalPercent*/
-				20,              /*rowsPerDelete*/
+				config{
+					eastName:             `us-east4-b`,
+					westName:             `us-west1-b`,
+					centralName:          `us-central1-a`,
+					sessions:             10000,
+					customersPerSession:  2,
+					devicesPerSession:    2,
+					variantsPerSession:   5,
+					parametersPerSession: 1,
+					queriesPerSession:    1,
+					insertPercent:        80,
+					insertLocalPercent:   100,
+					retrievePercent:      10,
+					retrieveLocalPercent: 100,
+					updatePercent:        10,
+					updateLocalPercent:   100,
+					rowsPerDelete:        20,
+				},
 			)
 		},
 	})
