@@ -311,11 +311,11 @@ project
  ├── columns: min:7(int!null) max:8(int)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── columns: k:1(int!null) column7:7(int!null) column8:8(int)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── columns: k:1(int!null) column7:7(int) column8:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)
@@ -346,11 +346,11 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) sum:7(decimal!null)
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) column7:7(decimal!null)
       ├── key: (1)
       ├── fd: (1)-->(2-4,7)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) sum:7(decimal)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) column7:7(decimal)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4,7)
@@ -382,7 +382,7 @@ project
       │         └── const-agg [type=string, outer=(4)]
       │              └── variable: s [type=string, outer=(4)]
       └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-           └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           └── i < column7 [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't reject nulls when multiple columns are used.
 opt
@@ -397,11 +397,11 @@ project
  ├── columns: min:7(int!null) max:8(int)
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1(int!null) column7:7(int!null) max:8(int)
+      ├── columns: k:1(int!null) column7:7(int!null) column8:8(int)
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1(int!null) column7:7(int) max:8(int)
+      │    ├── columns: k:1(int!null) column7:7(int) column8:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(7,8)

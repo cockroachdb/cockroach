@@ -1384,7 +1384,7 @@ group-by
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── group-by
- │    ├── columns: i:2(int) s:4(string) sm:5(decimal)
+ │    ├── columns: i:2(int) s:4(string) column5:5(decimal)
  │    ├── grouping columns: i:2(int) s:4(string)
  │    ├── key: (2,4)
  │    ├── fd: (2,4)-->(5)
@@ -1397,7 +1397,7 @@ group-by
  │              └── variable: k [type=int, outer=(1)]
  └── aggregations [outer=(5)]
       └── min [type=decimal, outer=(5)]
-           └── variable: sm [type=decimal, outer=(5)]
+           └── variable: column5 [type=decimal, outer=(5)]
 
 # Distinct (GroupBy operator with no aggregates).
 opt
@@ -1504,14 +1504,14 @@ project
  ├── columns: k:1(int!null)
  ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) column5:5(decimal!null)
+      ├── columns: k:1(int!null) column6:6(decimal!null)
       ├── key: (1)
-      ├── fd: (1)-->(5)
+      ├── fd: (1)-->(6)
       ├── group-by
-      │    ├── columns: k:1(int!null) column5:5(decimal)
+      │    ├── columns: k:1(int!null) column6:6(decimal)
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(5)
+      │    ├── fd: (1)-->(6)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    ├── key: (1)
@@ -1519,8 +1519,8 @@ project
       │    └── aggregations [outer=(2)]
       │         └── sum [type=decimal, outer=(2)]
       │              └── variable: i [type=int, outer=(2)]
-      └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
-           └── column5 > 5 [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+      └── filters [type=bool, outer=(6), constraints=(/6: (/5 - ]; tight)]
+           └── column6 > 5 [type=bool, outer=(6), constraints=(/6: (/5 - ]; tight)]
 
 # --------------------------------------------------
 # PruneRowNumberCols

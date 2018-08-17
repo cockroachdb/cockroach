@@ -344,7 +344,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (group-by G4 G5 cols=(2))
  │         └── cost: 1067.00
- ├── G3: (projections array_agg)
+ ├── G3: (projections column3)
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)

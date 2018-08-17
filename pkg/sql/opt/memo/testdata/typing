@@ -382,9 +382,9 @@ SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE 
 project
  ├── columns: x:1(int!null) x:3(string) y:2(int)
  ├── select
- │    ├── columns: a.x:1(int!null) y:2(int) max:6(string!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) column6:6(string!null)
  │    ├── group-by
- │    │    ├── columns: a.x:1(int!null) y:2(int) max:6(string)
+ │    │    ├── columns: a.x:1(int!null) y:2(int) column6:6(string)
  │    │    ├── grouping columns: a.x:1(int!null)
  │    │    ├── inner-join
  │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) z:5(decimal!null)
@@ -400,7 +400,7 @@ project
  │    │         └── const-agg [type=int]
  │    │              └── variable: y [type=int]
  │    └── filters [type=bool]
- │         └── max > 'foo' [type=bool]
+ │         └── column6 > 'foo' [type=bool]
  └── projections
       └── a.x::STRING [type=string]
 
