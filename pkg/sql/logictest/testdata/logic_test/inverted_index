@@ -21,7 +21,7 @@ CREATE INVERTED INDEX foo_inv ON t(b)
 statement error pq: column b is of type INT and thus is not indexable with an inverted index
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
-statement error pq: syntax error at or near "inverted"
+statement error pq: inverted indexes can't be unique
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
 
 statement ok
