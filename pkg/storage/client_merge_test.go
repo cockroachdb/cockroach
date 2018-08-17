@@ -115,6 +115,19 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 }
 
+func getEngineKeySet(t *testing.T, e engine.Engine) map[string]struct{} {
+	t.Helper()
+	kvs, err := engine.Scan(e, engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]struct{}{}
+	for _, kv := range kvs {
+		out[string(kv.Key.Key)] = struct{}{}
+	}
+	return out
+}
+
 // TestStoreRangeMergeMetadataCleanup tests that all metadata of a
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
@@ -126,19 +139,6 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer mtc.Stop()
 	store := mtc.Store(0)
 
-	scan := func() map[string]struct{} {
-		t.Helper()
-		kvs, err := engine.Scan(store.Engine(), engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := map[string]struct{}{}
-		for _, kv := range kvs {
-			out[string(kv.Key.Key)] = struct{}{}
-		}
-		return out
-	}
-
 	content := roachpb.Key("testing!")
 
 	// Write some values left of the proposed split key.
@@ -148,7 +148,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys.
-	preKeys := scan()
+	preKeys := getEngineKeySet(t, store.Engine())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
@@ -171,7 +171,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys again.
-	postKeys := scan()
+	postKeys := getEngineKeySet(t, store.Engine())
 
 	// Compute the new keys.
 	for k := range preKeys {
@@ -1607,6 +1607,129 @@ func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
 	// Give store2 the lease to force all commands to be applied, including the
 	// ChangeReplicas.
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+}
+
+// unreliableRaftHandler drops all Raft messages that are addressed to the
+// specified rangeID, but lets all other messages through.
+type unreliableRaftHandler struct {
+	rangeID roachpb.RangeID
+	storage.RaftMessageHandler
+}
+
+func (h *unreliableRaftHandler) HandleRaftRequest(
+	ctx context.Context,
+	req *storage.RaftMessageRequest,
+	respStream storage.RaftMessageResponseStream,
+) *roachpb.Error {
+	if req.RangeID == h.rangeID {
+		return nil
+	}
+	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+	distSender := mtc.distSenders[0]
+
+	// Create three fully-caught-up, adjacent ranges on all three stores.
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
+	for _, key := range splitKeys {
+		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(key, []int64{1, 1, 1})
+	}
+
+	lhsRepl0 := store0.LookupReplica(roachpb.RKey("a"))
+
+	// Start dropping all Raft traffic to the first range on store1.
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsRepl0.RangeID,
+		RaftMessageHandler: store2,
+	})
+
+	// Merge [a, b) into [b, c), then [a, c) into [c, /Max).
+	for i := 0; i < 2; i++ {
+		if _, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Truncate the logs of the LHS.
+	{
+		repl := store0.LookupReplica(roachpb.RKey("a"))
+		index, err := repl.GetLastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Truncate the log at index+1 (log entries < N are removed, so this
+		// includes the merge).
+		truncArgs := &roachpb.TruncateLogRequest{
+			RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
+			Index:         index,
+			RangeID:       repl.RangeID,
+		}
+		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+
+	// Restore Raft traffic to the LHS on store2.
+	mtc.transport.Listen(store2.Ident.StoreID, store2)
+
+	// Wait for all replicas to catch up to the same point. Because we truncated
+	// the log while store2 was unavailable, this will require a Raft snapshot.
+	for _, key := range splitKeys {
+		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(key, []int64{2, 2, 2})
+	}
+
+	afterRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+	if afterRaftSnaps == beforeRaftSnaps {
+		t.Fatal("expected store2 to apply at least 1 additional raft snapshot")
+	}
+
+	// Verify that the sets of keys in store0 and store2 are identical.
+	storeKeys0 := getEngineKeySet(t, store0.Engine())
+	storeKeys2 := getEngineKeySet(t, store2.Engine())
+	ignoreKey := func(k string) bool {
+		// Unreplicated keys for the two remaining ranges are allowed to differ.
+		return strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(roachpb.RangeID(1)))) ||
+			strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(lhsRepl0.RangeID)))
+	}
+	for k := range storeKeys0 {
+		if ignoreKey(k) {
+			continue
+		}
+		if _, ok := storeKeys2[k]; !ok {
+			t.Errorf("store2 missing key %s", roachpb.Key(k))
+		}
+	}
+	for k := range storeKeys2 {
+		if ignoreKey(k) {
+			continue
+		}
+		if _, ok := storeKeys0[k]; !ok {
+			t.Errorf("store2 has extra key %s", roachpb.Key(k))
+		}
+	}
 }
 
 // TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store

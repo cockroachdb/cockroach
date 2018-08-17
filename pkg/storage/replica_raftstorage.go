@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -708,11 +709,18 @@ func clearRangeData(
 
 // applySnapshot updates the replica based on the given snapshot and associated
 // HardState. All snapshots must pass through Raft for correctness, i.e. the
-// parameters to this method must be taken from a raft.Ready. It is the caller's
-// responsibility to call r.store.processRangeDescriptorUpdate(r) after a
-// successful applySnapshot. This method requires that r.raftMu is held.
+// parameters to this method must be taken from a raft.Ready. Any replicas
+// specified in subsumedRepls will be destroyed atomically with the application
+// of the snapshot. It is the caller's responsibility to call
+// r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
+// This method requires that r.raftMu is held, as well as the raftMus of any
+// replicas in subsumedRepls.
 func (r *Replica) applySnapshot(
-	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
+	ctx context.Context,
+	inSnap IncomingSnapshot,
+	snap raftpb.Snapshot,
+	hs raftpb.HardState,
+	subsumedRepls []*Replica,
 ) (err error) {
 	s := *inSnap.State
 	if s.Desc.RangeID != r.RangeID {
@@ -780,6 +788,26 @@ func (r *Replica) applySnapshot(
 	// reads from the batch.
 	batch := r.store.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+
+	// If we're subsuming a replica below, we don't have its last NextReplicaID,
+	// nor can we obtain it. That's OK: we can just be conservative and use the
+	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
+	// tombstone using this maximum possible replica ID, which would normally be
+	// problematic, as it would prevent this store from ever having a new replica
+	// of the removed range. In this case, however, it's copacetic, as subsumed
+	// ranges _can't_ have new replicas.
+	const subsumedNextReplicaID = math.MaxInt32
+
+	// As part of applying the snapshot, we may need to subsume replicas that have
+	// been merged into this range. Destroy their data in the same batch in which
+	// we apply the snapshot.
+	for _, sr := range subsumedRepls {
+		if err := sr.preDestroyRaftMuLocked(
+			ctx, r.store.Engine(), batch, subsumedNextReplicaID, true, /* destroyData */
+		); err != nil {
+			return err
+		}
+	}
 
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
@@ -868,6 +896,26 @@ func (r *Replica) applySnapshot(
 		return err
 	}
 	stats.commit = timeutil.Now()
+
+	for _, sr := range subsumedRepls {
+		// We removed sr's data when we committed the batch. Finish subsumption by
+		// updating the in-memory bookkeping.
+		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
+			return err
+		}
+		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
+		// Note that it's safe to update the store's metadata for sr's removal
+		// separately from updating the store's metadata for r's new descriptor
+		// (i.e., under a different store.mu acquisition). Each store.mu acquisition
+		// leaves the store in a consistent state, and access to the replicas
+		// themselves is protected by their raftMus, which are held from start to
+		// finish.
+		if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
+			DestroyData: false, // data is already destroyed
+		}); err != nil {
+			return err
+		}
+	}
 
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
