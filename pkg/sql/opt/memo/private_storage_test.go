@@ -401,8 +401,7 @@ func TestInternColType(t *testing.T) {
 	test(tstr3, tstr4, false)
 
 	test(coltypes.Name, &coltypes.TName{}, true)
-	test(coltypes.Bytes, &coltypes.TBytes{Name: "BYTES"}, true)
-	test(coltypes.Bytes, coltypes.Blob, false)
+	test(coltypes.Bytes, &coltypes.TBytes{}, true)
 
 	// Time/date types.
 	test(coltypes.Date, &coltypes.TDate{}, true)
