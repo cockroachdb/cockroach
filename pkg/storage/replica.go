@@ -5714,22 +5714,26 @@ func (r *Replica) applyRaftCommand(
 			// TruncatedState index is always consistent with the state of the
 			// Raft log itself. We can use the distinct writer because we know
 			// all writes will be to distinct keys.
-			start := engine.MakeMVCCMetadataKey(
-				keys.RaftLogKey(r.RangeID, oldTruncatedState.Index+1),
-			)
-			end := engine.MakeMVCCMetadataKey(
-				keys.RaftLogKey(r.RangeID, newTruncatedState.Index).PrefixEnd(),
-			)
-			// Clear the log entries. Intentionally don't use range deletion
-			// tombstones (ClearRange()) due to performance concerns connected
-			// to having many range deletion tombstones. There is a chance that
-			// ClearRange will perform well here because the tombstones could be
-			// "collapsed", but it is hardly worth the risk at this point.
-			iter := r.store.Engine().NewIterator(engine.IterOptions{UpperBound: end.Key})
-			if err := writer.ClearIterRange(iter, start, end); err != nil {
-				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", rResult.State.TruncatedState, err)
+			//
+			// Intentionally don't use range deletion tombstones (ClearRange())
+			// due to performance concerns connected to having many range
+			// deletion tombstones. There is a chance that ClearRange will
+			// perform well here because the tombstones could be "collapsed",
+			// but it is hardly worth the risk at this point.
+			const extraCap = 8
+			keyPrefix := r.raftMu.stateLoader.RaftLogPrefix()
+			keyPrefixBuf := keyPrefix
+			if cap(keyPrefixBuf) < len(keyPrefixBuf)+extraCap {
+				keyPrefixBuf = make([]byte, len(keyPrefix), len(keyPrefix)+extraCap)
+				copy(keyPrefixBuf, keyPrefix)
 			}
-			iter.Close()
+			for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
+				unsafeKey := keys.AppendRaftLogIndexToRaftLogPrefix(keyPrefixBuf, idx)
+				if err := writer.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+					err = errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
+					return enginepb.MVCCStats{}, err
+				}
+			}
 		}
 	}
 
