@@ -167,40 +167,34 @@ distinct   ·            ·           (v)  weak-key(v)
 ·          spans        ALL         ·    ·
 
 # Verify we don't incorrectly elide the distinct node when we only have a weak key (#19343).
-# TODO(radu) re-enable once we support index hints
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
-#----
-#Tree            Field      Description       Columns          Ordering
-#distinct        ·          ·                 (v)              weak-key(v); +v
-# │              order key  v                 ·                ·
-# └── render     ·          ·                 (v)              weak-key(v); +v
-#      │         render 0   test.public.kv.v  ·                ·
-#      └── scan  ·          ·                 (k[omitted], v)  weak-key(v); +v
-#·               table      kv@idx            ·                ·
-#·               spans      ALL               ·                ·
-#
-## Here we can infer that v is not-NULL so eliding the node is correct.
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
-#----
-#Tree       Field     Description       Columns          Ordering
-#render     ·         ·                 (v)              v!=NULL; key(v)
-# │         render 0  test.public.kv.v  ·                ·
-# └── scan  ·         ·                 (k[omitted], v)  v!=NULL; key(v)
-#·          table     kv@idx            ·                ·
-#·          spans     /1-               ·                ·
-#
-#statement ok
-#CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
-#
-## In this case it is correct to elide the distinct node.
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
-#----
-#Tree       Field     Description        Columns          Ordering
-#render     ·         ·                  (v)              v!=NULL; key(v)
-# │         render 0  test.public.kv2.v  ·                ·
-# └── scan  ·         ·                  (k[omitted], v)  v!=NULL; key(v)
-#·          table     kv2@idx            ·                ·
-#·          spans     ALL                ·                ·
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
+----
+distinct   ·            ·       (v)  weak-key(v)
+ │         distinct on  v       ·    ·
+ └── scan  ·            ·       (v)  ·
+·          table        kv@idx  ·    ·
+·          spans        ALL     ·    ·
+
+# Here we can infer that v is not-NULL so eliding the node is correct.
+# TODO(radu,andyk): we can't represent that v is a weak key (at the level of
+# the scan) when it is the only column.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
+----
+distinct   ·            ·       (v)  weak-key(v)
+ │         distinct on  v       ·    ·
+ └── scan  ·            ·       (v)  ·
+·          table        kv@idx  ·    ·
+·          spans        /1-     ·    ·
+
+statement ok
+CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
+
+# In this case it is correct to elide the distinct node.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
+----
+scan  ·      ·        (v)  ·
+·     table  kv2@idx  ·    ·
+·     spans  ALL      ·    ·

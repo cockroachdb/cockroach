@@ -554,22 +554,21 @@ sort                 ·            ·               (v int, count int)    +count
 ·                    table        kv@primary      ·                     ·
 ·                    spans        ALL             ·                     ·
 
-# TODO(radu): we don't propagate filters yet.
-## Check that filters propagate through no-op aggregation.
-#exec nodist
-#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
-#----
-#group           ·            ·
-# │              aggregate 0  v
-# │              aggregate 1  count(1)
-# │              group by     @1
-# └── render     ·            ·
-#      │         render 0     v
-#      │         render 1     1
-#      └── scan  ·            ·
-#·               table        kv@primary
-#·               spans        ALL
-#·               filter       v > 10
+# Check that filters propagate through no-op aggregation.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
+----
+group           ·            ·               (v, count)    ·
+ │              aggregate 0  v               ·             ·
+ │              aggregate 1  count(column5)  ·             ·
+ │              group by     @2              ·             ·
+ └── render     ·            ·               (column5, v)  ·
+      │         render 0     1               ·             ·
+      │         render 1     v               ·             ·
+      └── scan  ·            ·               (v)           ·
+·               table        kv@primary      ·             ·
+·               spans        ALL             ·             ·
+·               filter       v > 10          ·             ·
 
 # TODO(radu): FILTER not yet supported.
 ## Verify that FILTER works.
@@ -639,63 +638,62 @@ render               ·            ·                                 (sum decim
 ·                    table        abc@primary                       ·                      ·
 ·                    spans        ALL                               ·                      ·
 
-# TODO(radu): single-row optimization not yet supported.
-## opt_test is used for tests around the single-row optimization for MIN/MAX.
-#exec-raw
-#CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
-#----
-#
-## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-#exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT min(v) FROM opt_test
-#----
-#group           0  group   ·            ·                       (min)            ·
-# │              0  ·       aggregate 0  min(v)                  ·                ·
-# └── render     1  render  ·            ·                       (v)              v!=NULL; +v
-#      │         1  ·       render 0     test.public.opt_test.v  ·                ·
-#      └── scan  2  scan    ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
-#·               2  ·       table        opt_test@v              ·                ·
-#·               2  ·       spans        /!NULL-                 ·                ·
-#·               2  ·       limit        1                       ·                ·
-#
-## Repeat test when there is an existing filter.
-#exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
-#----
-#group           0  group   ·            ·                       (min)   ·
-# │              0  ·       aggregate 0  min(v)                  ·       ·
-# └── render     1  render  ·            ·                       (v)     v!=NULL; +v
-#      │         1  ·       render 0     test.public.opt_test.v  ·       ·
-#      └── scan  2  scan    ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
-#·               2  ·       table        opt_test@v              ·       ·
-#·               2  ·       spans        /!NULL-                 ·       ·
-#·               2  ·       filter       k != 4                  ·       ·
-#
-## Check the optimization when the argument is non-trivial. The renderNode can't
-## present an ordering on v+1 so the optimization is not applied, but the IS NOT
-## NULL filter should be added.
-#exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test WHERE k <> 4
-#----
-#group           0  group   ·            ·                           (min)            ·
-# │              0  ·       aggregate 0  min(v + 1)                  ·                ·
-# └── render     1  render  ·            ·                           ("v + 1")        ·
-#      │         1  ·       render 0     test.public.opt_test.v + 1  ·                ·
-#      └── scan  2  scan    ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
-#·               2  ·       table        opt_test@primary            ·                ·
-#·               2  ·       spans        -/3/# /5-                   ·                ·
-#·               2  ·       filter       (v + 1) IS NOT NULL         ·                ·
-#
-## Verify that we don't use the optimization if there is a GROUP BY.
-#exec hide-colnames nodist
-#EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
-#----
-#group      0  group  ·            ·                 (min)   ·
-# │         0  ·      aggregate 0  min(v)            ·       ·
-# │         0  ·      group by     @1                ·       ·
-# └── scan  1  scan   ·            ·                 (k, v)  k!=NULL; key(k)
-#·          1  ·      table        opt_test@primary  ·       ·
-#·          1  ·      spans        ALL               ·       ·
+# opt_test is used for tests around the single-row optimization for MIN/MAX.
+statement ok
+CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
+
+# Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
+query TTTTT
+EXPLAIN (TYPES) SELECT min(v) FROM opt_test
+----
+group      ·            ·                (min int)  ·
+ │         aggregate 0  any_not_null(v)  ·          ·
+ │         scalar       ·                ·          ·
+ └── scan  ·            ·                (v int)    ·
+·          table        opt_test@v       ·          ·
+·          spans        /!NULL-          ·          ·
+·          limit        1                ·          ·
+
+# Repeat test when there is an existing filter.
+# TODO(radu): the best plan for this would be to use index v; in this case the scan
+# will end early but that is not reflected by the cost.
+query TTTTT
+EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
+----
+group      ·            ·                 (min int)       ·
+ │         aggregate 0  min(v)            ·               ·
+ │         scalar       ·                 ·               ·
+ └── scan  ·            ·                 (k int, v int)  ·
+·          table        opt_test@primary  ·               ·
+·          spans        -/3/# /5-         ·               ·
+
+# Check that the optimization doesn't work when the argument is non-trivial (we
+# can't in general guarantee an ordering on a synthesized column).
+query TTTTT
+EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test
+----
+group           ·            ·                           (min int)      ·
+ │              aggregate 0  min(column3)                ·              ·
+ │              scalar       ·                           ·              ·
+ └── render     ·            ·                           (column3 int)  ·
+      │         render 0     ((v)[int] + (1)[int])[int]  ·              ·
+      └── scan  ·            ·                           (v int)        ·
+·               table        opt_test@primary            ·              ·
+·               spans        ALL                         ·              ·
+
+# Verify that we don't use the optimization if there is a GROUP BY.
+query TTTTT
+EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
+----
+render          ·            ·                 (min int)          ·
+ │              render 0     (agg0)[int]       ·                  ·
+ └── group      ·            ·                 (k int, agg0 int)  ·
+      │         aggregate 0  k                 ·                  ·
+      │         aggregate 1  min(v)            ·                  ·
+      │         group by     @1                ·                  ·
+      └── scan  ·            ·                 (k int, v int)     ·
+·               table        opt_test@primary  ·                  ·
+·               spans        ALL               ·                  ·
 
 statement ok
 CREATE TABLE xy(x STRING, y STRING);
