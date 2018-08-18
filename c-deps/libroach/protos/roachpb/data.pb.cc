@@ -24,7 +24,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_MergeTrigger;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
@@ -209,10 +209,11 @@ static void InitDefaultsMergeTrigger() {
   ::cockroach::roachpb::MergeTrigger::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_MergeTrigger =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsMergeTrigger}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsMergeTrigger}, {
       &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,
-      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsChangeReplicasTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1607,6 +1608,8 @@ void MergeTrigger::InitAsDefaultInstance() {
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
   ::cockroach::roachpb::_MergeTrigger_default_instance_._instance.get_mutable()->right_mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
       ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
+  ::cockroach::roachpb::_MergeTrigger_default_instance_._instance.get_mutable()->freeze_start_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void MergeTrigger::clear_left_desc() {
   if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) {
@@ -1626,10 +1629,17 @@ void MergeTrigger::clear_right_mvcc_stats() {
   }
   right_mvcc_stats_ = NULL;
 }
+void MergeTrigger::clear_freeze_start() {
+  if (GetArenaNoVirtual() == NULL && freeze_start_ != NULL) {
+    delete freeze_start_;
+  }
+  freeze_start_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeTrigger::kLeftDescFieldNumber;
 const int MergeTrigger::kRightDescFieldNumber;
 const int MergeTrigger::kRightMvccStatsFieldNumber;
+const int MergeTrigger::kFreezeStartFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeTrigger::MergeTrigger()
@@ -1658,13 +1668,18 @@ MergeTrigger::MergeTrigger(const MergeTrigger& from)
   } else {
     right_mvcc_stats_ = NULL;
   }
+  if (from.has_freeze_start()) {
+    freeze_start_ = new ::cockroach::util::hlc::Timestamp(*from.freeze_start_);
+  } else {
+    freeze_start_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.MergeTrigger)
 }
 
 void MergeTrigger::SharedCtor() {
   ::memset(&left_desc_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&right_mvcc_stats_) -
-      reinterpret_cast<char*>(&left_desc_)) + sizeof(right_mvcc_stats_));
+      reinterpret_cast<char*>(&freeze_start_) -
+      reinterpret_cast<char*>(&left_desc_)) + sizeof(freeze_start_));
 }
 
 MergeTrigger::~MergeTrigger() {
@@ -1676,6 +1691,7 @@ void MergeTrigger::SharedDtor() {
   if (this != internal_default_instance()) delete left_desc_;
   if (this != internal_default_instance()) delete right_desc_;
   if (this != internal_default_instance()) delete right_mvcc_stats_;
+  if (this != internal_default_instance()) delete freeze_start_;
 }
 
 void MergeTrigger::SetCachedSize(int size) const {
@@ -1705,6 +1721,10 @@ void MergeTrigger::Clear() {
     delete right_mvcc_stats_;
   }
   right_mvcc_stats_ = NULL;
+  if (GetArenaNoVirtual() == NULL && freeze_start_ != NULL) {
+    delete freeze_start_;
+  }
+  freeze_start_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -1757,6 +1777,17 @@ bool MergeTrigger::MergePartialFromCodedStream(
         break;
       }
 
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_freeze_start()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1798,6 +1829,11 @@ void MergeTrigger::SerializeWithCachedSizes(
       4, this->_internal_right_mvcc_stats(), output);
   }
 
+  if (this->has_freeze_start()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_freeze_start(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.MergeTrigger)
@@ -1827,6 +1863,12 @@ size_t MergeTrigger::ByteSizeLong() const {
         *right_mvcc_stats_);
   }
 
+  if (this->has_freeze_start()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *freeze_start_);
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -1853,6 +1895,9 @@ void MergeTrigger::MergeFrom(const MergeTrigger& from) {
   if (from.has_right_mvcc_stats()) {
     mutable_right_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.right_mvcc_stats());
   }
+  if (from.has_freeze_start()) {
+    mutable_freeze_start()->::cockroach::util::hlc::Timestamp::MergeFrom(from.freeze_start());
+  }
 }
 
 void MergeTrigger::CopyFrom(const MergeTrigger& from) {
@@ -1875,6 +1920,7 @@ void MergeTrigger::InternalSwap(MergeTrigger* other) {
   swap(left_desc_, other->left_desc_);
   swap(right_desc_, other->right_desc_);
   swap(right_mvcc_stats_, other->right_mvcc_stats_);
+  swap(freeze_start_, other->freeze_start_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
