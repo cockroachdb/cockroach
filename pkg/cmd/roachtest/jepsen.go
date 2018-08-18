@@ -272,25 +272,33 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
-	spec := testSpec{
-		Name:  "jepsen",
-		Nodes: nodes(6),
+	groups := [][]string{
+		jepsenTests[0:2],
+		jepsenTests[2:4],
+		jepsenTests[4:],
 	}
 
-	for _, testName := range jepsenTests {
-		testName := testName
-		sub := testSpec{Name: testName}
-		for _, nemesis := range jepsenNemeses {
-			nemesis := nemesis
-			sub.SubTests = append(sub.SubTests, testSpec{
-				Name: nemesis.name,
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runJepsen(ctx, t, c, testName, nemesis.config)
-				},
-			})
+	for i := range groups {
+		spec := testSpec{
+			Name:  fmt.Sprintf("jepsen/%d", i+1),
+			Nodes: nodes(6),
 		}
-		spec.SubTests = append(spec.SubTests, sub)
-	}
 
-	r.Add(spec)
+		for _, testName := range groups[i] {
+			testName := testName
+			sub := testSpec{Name: testName}
+			for _, nemesis := range jepsenNemeses {
+				nemesis := nemesis
+				sub.SubTests = append(sub.SubTests, testSpec{
+					Name: nemesis.name,
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runJepsen(ctx, t, c, testName, nemesis.config)
+					},
+				})
+			}
+			spec.SubTests = append(spec.SubTests, sub)
+		}
+
+		r.Add(spec)
+	}
 }
