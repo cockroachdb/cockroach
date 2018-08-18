@@ -21,6 +21,87 @@ import "util/hlc/timestamp.proto";
 import "sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
+
+// Protobuf encoding for scalar values
+// ===================================
+//
+// Simple (unary) scalars types
+// ----------------------------
+//
+// | SQL type                       | Semantic Type  | Visible Type     | Precision | Width | Notes             |
+// |--------------------------------|----------------|------------------|-----------|-------|-------------------|
+// | NULL (unknown)                 | NULL           | NONE             | 0         | 0     |                   |
+// | BOOL                           | BOOL           | NONE             | 0         | 0     |                   |
+// | DATE                           | DATE           | NONE             | 0         | 0     |                   |
+// | TIMESTAMP                      | TIMESTAMP      | NONE             | 0         | 0     |                   |
+// | TIMESTAMPTZ                    | TIMESTAMPTZ    | NONE             | 0         | 0     |                   |
+// | INTERVAL                       | INTERVAL       | NONE             | 0         | 0     |                   |
+// | NAME                           | NAME           | NONE             | 0         | 0     |                   |
+// | OID                            | OID            | NONE             | 0         | 0     |                   |
+// | UUID                           | UUID           | NONE             | 0         | 0     |                   |
+// | INET                           | INET           | NONE             | 0         | 0     |                   |
+// | TIME                           | TIME           | NONE             | 0         | 0     |                   |
+// | JSON                           | JSON           | NONE             | 0         | 0     |                   |
+// |                                |                |                  |           |       |                   |
+// | BYTES                          | BYTES          | NONE             | 0         | 0     |                   |
+// |                                |                |                  |           |       |                   |
+// | STRING                         | STRING         | NONE             | 0         | 0     |                   |
+// | STRING(N)                      | STRING         | NONE             | 0         | N     |                   |
+// |                                |                |                  |           |       |                   |
+// | COLLATEDSTRING                 | COLLATEDSTRING | NONE             | 0         | 0     | also uses Locale  |
+// | COLLATEDSTRING(N)              | COLLATEDSTRING | NONE             | 0         | N     | also uses Locale  |
+// |                                |                |                  |           |       |                   |
+// | DECIMAL                        | DECIMAL        | NONE             | 0         | 0     |                   |
+// | DECIMAL(N)                     | DECIMAL        | NONE             | N         | 0     |                   |
+// | DECIMAL(N,M)                   | DECIMAL        | NONE             | N         | M     |                   |
+// |                                |                |                  |           |       |                   |
+// | BIT                            | INT            | BIT              | 0         | 1     | Incorrect, #20991 |
+// | BIT(N)                         | INT            | BIT              | 0         | N     | Incorrect, #20991 |
+// |                                |                |                  |           |       |                   |
+// | FLOAT                          | FLOAT          | NONE             | 0         | 0     |                   |
+// | REAL,FLOAT4                    | FLOAT          | REAL             | 0         | 0     |                   |
+// | FLOAT(N)                       | FLOAT          | NONE             | N         | 0     | Incorrect, #28776 |
+// | DOUBLE PRECISION,DOUBLE,FLOAT8 | FLOAT          | DOUBLE PRECISION | 0         | 0     | Incorrect, #28776 |
+// |                                |                |                  |           |       |                   |
+// | INT                            | INT            | NONE             | 0         | 0     | See #28690        |
+// | INTEGER                        | INT            | INTEGER          | 0         | 0     | See #28690        |
+// | INT2,SMALLINT                  | INT            | SMALLINT         | 0         | 16    | See #28690        |
+// | INT4                           | INT            | INTEGER          | 0         | 32    | See #28690        |
+// | INT8,INT64,BIGINT              | INT            | BIGINT           | 0         | 64    | See #28690        |
+//
+// Tuple columns
+// -------------
+//
+// These cannot (yet) be used in tables but are used in DistSQL flow
+// processors for queries that have tuple-typed intermediate results.
+//
+// - SemanticType is set to TUPLE.
+// - TupleContents contains the tuple element types. These can be recursively defined.
+// - TupleLabels contains the tuple labels, if any.
+//
+// Array values
+// ------------
+//
+// | Field           | Description                                                         |
+// |-----------------|---------------------------------------------------------------------|
+// | SemanticType    | ARRAY (with 2 exceptions, see below)                                |
+// | ArrayDimensions | array sizes in each dimension.                                      |
+// | ArrayContents   | semantic type of the array elements, as per the two sections above. |
+// | VisibleType     | describes the element type like above.                              |
+// | Width           | describes the element type like above.                              |
+// | Precision       | describes the element type like above.                              |
+// | TupleContents   | describes the element type like above. (Arrays of tuples)           |
+// | TupleLabels     | describes the element type like above. (Arrays of tuples)           |
+//
+// If the original type was INT2VECTOR or OIDVECTOR, the semantic type is set to that. The
+// other fields are set as per regular arrays:
+//
+// - INT2VECTOR: SemanticType=INT2VECTOR, ArrayContents=INT,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+// - OIDVECTOR: SemanticType=OIDVECTOR, ArrayContents=OID,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+//
+
 message ColumnType {
   option (gogoproto.equal) = true;
 
