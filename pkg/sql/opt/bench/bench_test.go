@@ -16,9 +16,15 @@ package bench
 
 import (
 	"context"
+	gosql "database/sql"
+	"flag"
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -29,31 +35,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-type benchmarkType int
+type BenchmarkType int
 
 const (
-	// Create the AST.
-	parse benchmarkType = iota
+	// Parse creates the AST.
+	Parse BenchmarkType = iota
 
-	// parse + build the memo with no normalizations enabled.
-	optbuild
+	// OptBuild constructs the Memo from the AST. It runs no normalization or
+	// exploration rules. OptBuild does not include the time to Parse.
+	OptBuild
 
-	// optbuild + normalizations enabled, but with no exploration patterns,
-	// enforcers, or costing.
-	normalize
+	// Normalize constructs the Memo from the AST, but enables all normalization
+	// rules, unlike OptBuild. No Explore rules are enabled. Normalize includes
+	// the time to OptBuild.
+	Normalize
 
-	// normalize + exploration patterns, enforcers, and costing.
-	explore
+	// Explore constructs the Memo from the AST and enables all normalization
+	// and exploration rules. The Memo is fully optimized. Explore includes the
+	// time to OptBuild and Normalize.
+	Explore
+
+	// ExecPlan executes the query end-to-end using the heuristic planner.
+	ExecPlan
+
+	// ExecOpt executes the query end-to-end using the cost-based optimizer.
+	ExecOpt
 )
 
 var benchmarkTypeStrings = [...]string{
-	parse:     "Parse",
-	optbuild:  "OptBuild",
-	normalize: "Normalize",
-	explore:   "Explore",
+	Parse:     "Parse",
+	OptBuild:  "OptBuild",
+	Normalize: "Normalize",
+	Explore:   "Explore",
+	ExecPlan:  "ExecPlan",
+	ExecOpt:   "ExecOpt",
 }
 
 type benchQuery struct {
@@ -61,8 +81,13 @@ type benchQuery struct {
 	query string
 }
 
+var schemas = [...]string{
+	`CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`,
+	`CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`,
+}
+
 var queries = [...]benchQuery{
-	{"kv-read", `SELECT k, v FROM kv WHERE k IN ($1)`},
+	{"kv-read", `SELECT k, v FROM kv WHERE k IN (5)`},
 	{"planning1", `SELECT * FROM abc`},
 	{"planning2", `SELECT * FROM abc WHERE a > 5 ORDER BY a`},
 	{"planning3", `SELECT * FROM abc WHERE b = 5`},
@@ -77,93 +102,228 @@ func init() {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 }
 
+var profileTime = flag.Duration("profile-time", 10*time.Second, "duration of profiling run")
+var profileType = flag.String("profile-type", "ExecOpt", "Parse, OptBuild, Normalize, Explore, ExecPlan, ExecOpt")
+var profileQuery = flag.String("profile-query", "kv-test", "name of query to run")
+
+// TestCPUProfile executes the configured profileQuery in a loop in order to
+// profile its CPU usage. Rather than allow the Go testing infrastructure to
+// start profiling, TestCPUProfile triggers startup, so that it has control over
+// when profiling starts. In particular, profiling is only started once the
+// server or API has been initialized, so that the profiles don't include
+// startup activities.
+//
+// TestCPUProfile writes the output profile to a cpu.out file in the current
+// directory. See the profile flags for ways to configure what is profiled.
+func TestCPUProfile(t *testing.T) {
+	t.Skip("Remove this when profiling.")
+
+	h := newHarness()
+	defer h.close()
+
+	var query benchQuery
+	for _, query = range queries {
+		if query.name == *profileQuery {
+			break
+		}
+	}
+
+	var bmType BenchmarkType
+	for i, s := range benchmarkTypeStrings {
+		if s == *profileType {
+			bmType = BenchmarkType(i)
+		}
+	}
+
+	h.runForProfiling(t, bmType, query, *profileTime)
+}
+
 // BenchmarkPhases measures the time that each of the optimization phases takes
-// to run, *inclusive* of the previous phases. For example, the "Prepare" phase
-// benchmark will measure the time it takes to parse the SQL, build the opt
-// expression tree, and run normalization rules over it. The "Search" phase
-// will measure all of that *plus* the time to run exploration rules, cost, and
-// add enforcers.
-// NOTE: The v20 and v21 phases are mostly there to easily see the performance
-//       of queries over empty tables, which is usually not that interesting.
-//       To see performance over non-empty tables, run the main SQL
-//       bench_test.go benchmarks (and set enableCockroachOpt = true at the top
-//       of foreachdb.go).
+// to run. See the comments for the BenchmarkType enumeration for more details
+// on what each phase includes.
 func BenchmarkPhases(b *testing.B) {
-	bm := newBenchmark(b)
+	bm := newHarness()
 	defer bm.close()
 
 	for _, query := range queries {
-		bm.run(b, parse, query)
-		bm.run(b, optbuild, query)
-		bm.run(b, normalize, query)
-		bm.run(b, explore, query)
+		bm.runForBenchmark(b, Parse, query)
+		bm.runForBenchmark(b, OptBuild, query)
+		bm.runForBenchmark(b, Normalize, query)
+		bm.runForBenchmark(b, Explore, query)
 	}
 }
 
-type benchmark struct {
+// BenchmarkExec measures the time to execute a query end-to-end using both the
+// heuristic planner and the cost-based optimizer.
+func BenchmarkExec(b *testing.B) {
+	h := newHarness()
+	defer h.close()
+
+	for _, query := range queries {
+		h.runForBenchmark(b, ExecPlan, query)
+		h.runForBenchmark(b, ExecOpt, query)
+	}
 }
 
-func newBenchmark(_ *testing.B) *benchmark {
-	return &benchmark{}
+type harness struct {
+	ctx       context.Context
+	semaCtx   tree.SemaContext
+	evalCtx   tree.EvalContext
+	stmt      tree.Statement
+	cat       *testcat.Catalog
+	optimizer xform.Optimizer
+
+	s  serverutils.TestServerInterface
+	db *gosql.DB
+	sr *sqlutils.SQLRunner
+
+	ready bool
 }
 
-func (bm *benchmark) close() {
+func newHarness() *harness {
+	return &harness{}
 }
 
-func (bm *benchmark) run(b *testing.B, bmType benchmarkType, query benchQuery) {
+func (h *harness) close() {
+	if h.s != nil {
+		h.s.Stopper().Stop(context.TODO())
+	}
+}
+
+func (h *harness) runForProfiling(
+	t *testing.T, bmType BenchmarkType, query benchQuery, duration time.Duration,
+) {
+	sql := query.query
+	h.prepare(t, bmType, sql)
+
+	f, err := os.Create("cpu.out")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	defer f.Close()
+
+	err = pprof.StartCPUProfile(f)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	defer pprof.StopCPUProfile()
+
+	start := timeutil.Now()
+	for {
+		now := timeutil.Now()
+		if now.Sub(start) > duration {
+			break
+		}
+
+		// Minimize overhead of getting timings by iterating 1000 times before
+		// checking if done.
+		for i := 0; i < 1000; i++ {
+			switch bmType {
+			case ExecPlan, ExecOpt:
+				h.runUsingServer(t, sql)
+
+			default:
+				h.runUsingAPI(t, bmType, sql)
+			}
+		}
+	}
+}
+
+func (h *harness) runForBenchmark(b *testing.B, bmType BenchmarkType, query benchQuery) {
+	sql := query.query
+	h.prepare(b, bmType, sql)
+
 	b.Run(fmt.Sprintf("%s/%s", query.name, benchmarkTypeStrings[bmType]), func(b *testing.B) {
-		bm.runUsingAPI(b, bmType, query.query)
+		switch bmType {
+		case ExecPlan, ExecOpt:
+			for i := 0; i < b.N; i++ {
+				h.runUsingServer(b, sql)
+			}
+
+		default:
+			for i := 0; i < b.N; i++ {
+				h.runUsingAPI(b, bmType, sql)
+			}
+		}
 	})
 }
 
-func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query string) {
-	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext(false /* privileged */)
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+func (h *harness) prepare(tb testing.TB, bmType BenchmarkType, query string) {
+	switch bmType {
+	case ExecPlan, ExecOpt:
+		h.prepareUsingServer(tb, bmType)
 
-	cat := testcat.New()
-	bm.executeDDL(b, cat, `CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`)
-	bm.executeDDL(b, cat, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
-
-	stmt, err := parser.ParseOne(query)
-	if err != nil {
-		b.Fatalf("%v", err)
-	}
-
-	var opt xform.Optimizer
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if bmType == parse {
-			stmt, _ = parser.ParseOne(query)
-			continue
-		}
-
-		opt.Init(&evalCtx)
-		if bmType == optbuild {
-			opt.DisableOptimizations()
-		}
-		bld := optbuilder.New(ctx, &semaCtx, &evalCtx, cat, opt.Factory(), stmt)
-		root, props, err := bld.Build()
-		if err != nil {
-			b.Fatalf("%v", err)
-		}
-
-		if bmType == optbuild || bmType == normalize {
-			continue
-		}
-
-		opt.Optimize(root, props)
-
-		if bmType == explore {
-			continue
-		}
+	default:
+		h.prepareUsingAPI(tb, query)
 	}
 }
 
-func (bm *benchmark) executeDDL(b *testing.B, cat *testcat.Catalog, sql string) {
-	_, err := cat.ExecuteDDL(sql)
-	if err != nil {
-		b.Fatalf("%v", err)
+func (h *harness) prepareUsingServer(tb testing.TB, bmType BenchmarkType) {
+	if !h.ready {
+		// Set up database.
+		h.s, h.db, _ = serverutils.StartServer(tb, base.TestServerArgs{UseDatabase: "bench"})
+		h.sr = sqlutils.MakeSQLRunner(h.db)
+		h.sr.Exec(tb, `CREATE DATABASE bench`)
+		for _, schema := range schemas {
+			h.sr.Exec(tb, schema)
+		}
+		h.ready = true
 	}
+
+	// Set session state.
+	if bmType == ExecPlan {
+		h.sr.Exec(tb, `SET EXPERIMENTAL_OPT=OFF`)
+	} else {
+		h.sr.Exec(tb, `SET EXPERIMENTAL_OPT=ON`)
+	}
+}
+
+func (h *harness) runUsingServer(tb testing.TB, query string) {
+	h.sr.Exec(tb, query)
+}
+
+func (h *harness) prepareUsingAPI(tb testing.TB, query string) {
+	h.ctx = context.Background()
+	h.semaCtx = tree.MakeSemaContext(false /* privileged */)
+	h.evalCtx = tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	h.cat = testcat.New()
+	for _, schema := range schemas {
+		_, err := h.cat.ExecuteDDL(schema)
+		if err != nil {
+			tb.Fatalf("%v", err)
+		}
+	}
+
+	stmt, err := parser.ParseOne(query)
+	if err != nil {
+		tb.Fatalf("%v", err)
+	}
+	h.stmt = stmt
+}
+
+func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, query string) {
+	if bmType == Parse {
+		_, err := parser.ParseOne(query)
+		if err != nil {
+			tb.Fatalf("%v", err)
+		}
+		return
+	}
+
+	h.optimizer.Init(&h.evalCtx)
+	if bmType == OptBuild {
+		h.optimizer.DisableOptimizations()
+	}
+	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.cat, h.optimizer.Factory(), h.stmt)
+	root, props, err := bld.Build()
+	if err != nil {
+		tb.Fatalf("%v", err)
+	}
+
+	if bmType == OptBuild || bmType == Normalize {
+		return
+	}
+
+	h.optimizer.Optimize(root, props)
 }
