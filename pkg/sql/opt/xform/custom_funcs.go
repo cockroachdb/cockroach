@@ -485,7 +485,7 @@ func (c *CustomFuncs) ConstructMergeJoins(
 			// should augment it with the other columns (in arbitrary order) in the
 			// hope that we can get the full ordering cheaply using a "streaming"
 			// sort. This would not useful now since we don't support streaming sorts.
-			break
+			continue
 		}
 		def := memo.MergeOnDef{JoinType: originalOp}
 		def.LeftEq = make(opt.Ordering, n)
