@@ -2,7 +2,8 @@
 
 subtest scrub
 
-# TODO(radu): enable these tests when we plan merge joins.
+# TODO(radu): rework or remove these tests (the inner ORDER BY is ignored by
+# the optimizer).
 #
 # # Verify the index check execution plan uses a merge join.
 # 

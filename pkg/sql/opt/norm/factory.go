@@ -164,7 +164,6 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
-	// TODO(radu): replace this with a flag that is true for all tests.
 	if util.RaceEnabled {
 		f.checkExpr(memo.MakeNormExprView(f.mem, group))
 	}
