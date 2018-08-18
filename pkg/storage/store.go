@@ -2454,7 +2454,23 @@ func (s *Store) MergeRange(
 	// left-hand replica, if necessary.
 	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
-	// TODO(benesch): bump the timestamp cache of the LHS.
+	leftLease, _ := leftRepl.GetLease()
+	rightLease, _ := rightRepl.GetLease()
+	if leftLease.OwnedBy(s.Ident.StoreID) && !rightLease.OwnedBy(s.Ident.StoreID) {
+		// We hold the lease for the LHS, but do not hold the lease for the RHS.
+		// That means we don't have up-to-date timestamp cache entries for the
+		// keyspace previously owned by the RHS. Bump the low water mark for the RHS
+		// keyspace to the current time. (Our current time is guaranteed to be later
+		// than any timestamp cache entries on the RHS thanks to the chain of
+		// causality established by the GetSnapshotForMerge request we sent to the
+		// RHS during the merge transaction.)
+		//
+		// TODO(benesch): perhaps it would be less disruptive to bump to the time
+		// that the RHS executed the GetSnapshotForMerge request instead of the
+		// current time? Plumbing that timestamp into the merge trigger would not be
+		// difficult.
+		s.tsCache.SetLowWater(rightDesc.StartKey.AsRawKey(), rightDesc.EndKey.AsRawKey(), s.Clock().Now())
+	}
 
 	// Update the end key of the subsuming range.
 	copy := *leftDesc

@@ -376,6 +376,93 @@ func mergeWithData(t *testing.T, retries int64) {
 	}
 }
 
+// TestStoreRangeMergeTimestampCaches verifies that the timestamp cache on the
+// LHS is properly updated after a merge.
+func TestStoreRangeMergeTimestampCaches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", mergeCheckingTimestampCaches)
+}
+
+func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
+	ctx := context.Background()
+	var mtc multiTestContext
+	var lhsStore, rhsStore *storage.Store
+	if disjointLeaseholders {
+		mtc.Start(t, 2)
+		lhsStore, rhsStore = mtc.Store(0), mtc.Store(1)
+	} else {
+		mtc.Start(t, 1)
+		lhsStore, rhsStore = mtc.Store(0), mtc.Store(0)
+	}
+	defer mtc.Stop()
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, lhsStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if disjointLeaseholders {
+		mtc.replicateRange(lhsDesc.RangeID, 1)
+		mtc.replicateRange(rhsDesc.RangeID, 1)
+		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
+		testutils.SucceedsSoon(t, func() error {
+			rhsRepl, err := rhsStore.GetReplica(rhsDesc.RangeID)
+			if err != nil {
+				return err
+			}
+			if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+				return errors.New("rhs store does not own valid lease for rhs range")
+			}
+			return nil
+		})
+	}
+
+	// Write a key to the RHS.
+	rhsKey := roachpb.Key("c")
+	if _, pErr := client.SendWrappedWith(ctx, rhsStore, roachpb.Header{
+		RangeID: rhsDesc.RangeID,
+	}, incrementArgs(rhsKey, 1)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	ts0 := mtc.clock.Now()
+	ts1 := ts0.Next()
+
+	// Simulate a read on the RHS from a node with a newer clock.
+	var ba roachpb.BatchRequest
+	ba.Timestamp = ts1
+	ba.RangeID = rhsDesc.RangeID
+	ba.Add(getArgs(rhsKey))
+	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if v, err := br.Responses[0].GetGet().Value.GetInt(); err != nil {
+		t.Fatal(err)
+	} else if v != 1 {
+		t.Fatalf("expected 1, but got %d", v)
+	} else if br.Timestamp != ts1 {
+		t.Fatalf("expected read to execute at %v, but executed at %v", ts1, br.Timestamp)
+	}
+
+	// Merge the RHS back into the LHS.
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	if _, pErr := client.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// After the merge, attempt to write under the read. The batch should get
+	// forwarded to the timestamp after the read.
+	ba = roachpb.BatchRequest{}
+	ba.Timestamp = ts0
+	ba.RangeID = lhsDesc.RangeID
+	ba.Add(incrementArgs(rhsKey, 1))
+	if br, pErr := lhsStore.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if !ts1.Less(br.Timestamp) {
+		t.Fatalf("expected write to execute after %v, but executed at %v", ts1, br.Timestamp)
+	}
+}
+
 // TestStoreRangeMergeLastRange verifies that merging the last range fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
