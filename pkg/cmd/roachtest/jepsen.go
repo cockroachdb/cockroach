@@ -28,18 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var jepsenTests = []string{
-	"bank",
-	"bank-multitable",
-	// The comments test is expected to fail because it requires linearizability.
-	// "comments",
-	"g2",
-	"monotonic",
-	"register",
-	"sequential",
-	"sets",
-}
-
 var jepsenNemeses = []struct {
 	name, config string
 }{
@@ -272,25 +260,35 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
-	spec := testSpec{
-		Name:  "jepsen",
-		Nodes: nodes(6),
+	// NB: the "comments" test is not included because it requires
+	// linearizability.
+	groups := [][]string{
+		{"bank", "bank-multitable"},
+		{"g2", "monotonic"},
+		{"register", "sequential", "sets"},
 	}
 
-	for _, testName := range jepsenTests {
-		testName := testName
-		sub := testSpec{Name: testName}
-		for _, nemesis := range jepsenNemeses {
-			nemesis := nemesis
-			sub.SubTests = append(sub.SubTests, testSpec{
-				Name: nemesis.name,
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runJepsen(ctx, t, c, testName, nemesis.config)
-				},
-			})
+	for i := range groups {
+		spec := testSpec{
+			Name:  fmt.Sprintf("jepsen/%d", i+1),
+			Nodes: nodes(6),
 		}
-		spec.SubTests = append(spec.SubTests, sub)
-	}
 
-	r.Add(spec)
+		for _, testName := range groups[i] {
+			testName := testName
+			sub := testSpec{Name: testName}
+			for _, nemesis := range jepsenNemeses {
+				nemesis := nemesis
+				sub.SubTests = append(sub.SubTests, testSpec{
+					Name: nemesis.name,
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runJepsen(ctx, t, c, testName, nemesis.config)
+					},
+				})
+			}
+			spec.SubTests = append(spec.SubTests, sub)
+		}
+
+		r.Add(spec)
+	}
 }
