@@ -234,6 +234,14 @@ func (ev ExprView) FormatString(flags ExprFmtFlags) string {
 	return tp.String()
 }
 
+// RequestColStat causes a column statistic to be calculated on the expression.
+// This is used for testing.
+func (ev ExprView) RequestColStat(evalCtx *tree.EvalContext, cols opt.ColSet) {
+	var sb statisticsBuilder
+	sb.init(evalCtx, &keyBuffer{})
+	sb.colStat(cols, ev)
+}
+
 // HasOnlyConstChildren returns true if all children of ev are constant values
 // (tuples of constant values are considered constant values).
 func HasOnlyConstChildren(ev ExprView) bool {
@@ -254,7 +262,3 @@ func HasOnlyConstChildren(ev ExprView) bool {
 func MatchesTupleOfConstants(ev ExprView) bool {
 	return ev.Operator() == opt.TupleOp && HasOnlyConstChildren(ev)
 }
-
-// ExprFmtInterceptor is a callback that can be set to a custom formatting
-// function. If the function returns true, the normal formatting code is bypassed.
-var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool

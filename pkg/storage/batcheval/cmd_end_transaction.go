@@ -59,7 +59,13 @@ func declareKeysEndTransaction(
 	}
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID)})
+		abortSpanAccess := spanset.SpanReadOnly
+		if !et.Commit && et.Poison {
+			abortSpanAccess = spanset.SpanReadWrite
+		}
+		spans.Add(abortSpanAccess, roachpb.Span{
+			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+		})
 	}
 
 	// All transactions depend on the range descriptor because they need
