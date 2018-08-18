@@ -84,10 +84,6 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
 	inScope.replaceSRFs = true
 
-	if outScope.cols == nil {
-		outScope.cols = make([]scopeColumn, 0, len(selects))
-	}
-
 	for _, e := range selects {
 		// Start with fast path, looking for simple column reference.
 		texpr := b.resolveColRef(e.Expr, inScope)
@@ -108,6 +104,9 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 					}
 
 					labels, exprs := b.expandStar(e.Expr, inScope)
+					if outScope.cols == nil {
+						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
+					}
 					for i, e := range exprs {
 						b.buildScalarProjection(e, labels[i], inScope, outScope)
 					}
@@ -121,6 +120,9 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
+		if outScope.cols == nil {
+			outScope.cols = make([]scopeColumn, 0, len(selects))
+		}
 		label := b.getColName(e)
 		b.buildScalarProjection(texpr, label, inScope, outScope)
 	}

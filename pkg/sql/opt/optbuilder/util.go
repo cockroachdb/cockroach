@@ -87,20 +87,24 @@ func (b *Builder) expandStar(
 		if err != nil {
 			panic(builderError{err})
 		}
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if col.table == *src && !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
 				labels = append(labels, string(col.name))
 			}
 		}
 
 	case tree.UnqualifiedStar:
 		checkFrom(expr, inScope)
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
 				labels = append(labels, string(col.name))
 			}
 		}
