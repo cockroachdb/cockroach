@@ -2030,6 +2030,14 @@ func (r *rocksDBIterator) UnsafeValue() []byte {
 	return cSliceToUnsafeGoBytes(r.value)
 }
 
+func (r *rocksDBIterator) clearState() {
+	r.valid = false
+	r.reseek = true
+	r.key = C.DBKey{}
+	r.value = C.DBSlice{}
+	r.err = nil
+}
+
 func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.valid = bool(state.valid)
 	r.reseek = false
@@ -2041,6 +2049,7 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
+	r.clearState()
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
 	if util.RaceEnabled {
@@ -2067,6 +2076,7 @@ func (r *rocksDBIterator) FindSplitKey(
 	start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool,
 ) (MVCCKey, error) {
 	var splitKey C.DBString
+	r.clearState()
 	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), goToCKey(minSplitKey),
 		C.int64_t(targetSize), C.bool(allowMeta2Splits), &splitKey)
 	if err := statusToError(status); err != nil {
@@ -2085,6 +2095,7 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, nil, emptyKeyError()
 	}
 
+	r.clearState()
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
 		goToCTxn(txn), C.bool(consistent), C.bool(tombstones),
@@ -2143,6 +2154,7 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, 0, nil, emptyKeyError()
 	}
 
+	r.clearState()
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
