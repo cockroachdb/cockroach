@@ -376,6 +376,233 @@ func mergeWithData(t *testing.T, retries int64) {
 	}
 }
 
+// TestStoreRangeMergeTimestampCache verifies that the timestamp cache on the
+// LHS is properly updated after a merge.
+func TestStoreRangeMergeTimestampCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", mergeCheckingTimestampCaches)
+}
+
+func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
+	ctx := context.Background()
+	var mtc multiTestContext
+	var lhsStore, rhsStore *storage.Store
+	if disjointLeaseholders {
+		mtc.Start(t, 2)
+		lhsStore, rhsStore = mtc.Store(0), mtc.Store(1)
+	} else {
+		mtc.Start(t, 1)
+		lhsStore, rhsStore = mtc.Store(0), mtc.Store(0)
+	}
+	defer mtc.Stop()
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, lhsStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if disjointLeaseholders {
+		mtc.replicateRange(lhsDesc.RangeID, 1)
+		mtc.replicateRange(rhsDesc.RangeID, 1)
+		mtc.transferLease(ctx, rhsDesc.RangeID, 0, 1)
+		testutils.SucceedsSoon(t, func() error {
+			rhsRepl, err := rhsStore.GetReplica(rhsDesc.RangeID)
+			if err != nil {
+				return err
+			}
+			if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+				return errors.New("rhs store does not own valid lease for rhs range")
+			}
+			return nil
+		})
+	}
+
+	// Write a key to the RHS.
+	rhsKey := roachpb.Key("c")
+	if _, pErr := client.SendWrappedWith(ctx, rhsStore, roachpb.Header{
+		RangeID: rhsDesc.RangeID,
+	}, incrementArgs(rhsKey, 1)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	readTS := mtc.clock.Now()
+
+	// Simulate a read on the RHS from a node with a newer clock.
+	var ba roachpb.BatchRequest
+	ba.Timestamp = readTS
+	ba.RangeID = rhsDesc.RangeID
+	ba.Add(getArgs(rhsKey))
+	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if v, err := br.Responses[0].GetGet().Value.GetInt(); err != nil {
+		t.Fatal(err)
+	} else if v != 1 {
+		t.Fatalf("expected 1, but got %d", v)
+	} else if br.Timestamp != readTS {
+		t.Fatalf("expected read to execute at %v, but executed at %v", readTS, br.Timestamp)
+	}
+
+	// Merge the RHS back into the LHS.
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	if _, pErr := client.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// After the merge, attempt to write under the read. The batch should get
+	// forwarded to a timestamp after the read.
+	ba = roachpb.BatchRequest{}
+	ba.Timestamp = readTS
+	ba.RangeID = lhsDesc.RangeID
+	ba.Add(incrementArgs(rhsKey, 1))
+	if br, pErr := lhsStore.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if !readTS.Less(br.Timestamp) {
+		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
+	}
+}
+
+// TestStoreRangeMergeTimestampCacheCausality verifies that range merges update
+// the clock on the subsuming store as necessary to preserve causality.
+//
+// The test simulates a particularly diabolical sequence of events in which
+// causality information is not communicated through the normal channels.
+// Suppose two adjacent ranges, A and B, are collocated on S2, S3, and S4. (S1
+// is omitted for consistency with the store numbering in the test itself.) S3
+// holds the lease on A, while S4 holds the lease on B. Every store's clock
+// starts at time T1.
+//
+// To merge A and B, S3 will launch a merge transaction that sends several RPCs
+// to S4. Suppose that, just before S4 begins executing the GetSnapshotForMerge
+// request, a read sneaks in for some key K at a large timestamp T3. S4 will
+// bump its clock from T1 to T3, so when the GetSnapshotForMerge goes to
+// determine the current time to use for the FreezeStart field in the
+// GetSnapshotForMerge response, it will use T3. When S3 completes the merge, it
+// will thus use T3 as the timestamp cache's low water mark for the keys that
+// previously belonged to B.
+//
+// Importantly, S3 must also update its clock from T1 to T3. Otherwise, as this
+// test demonstrates, it is possible for S3 to send a lease to another store, in
+// this case S2, that begins at T2. S2 will then assume it is free to accept a
+// write at T2, when in fact we already served a read at T3. This would be a
+// serializability violation!
+//
+// Note that there are several mechanisms that *almost* prevent this problem. If
+// the read of K at T3 occurs slightly earlier, the batch response for
+// GetSnapshotForMerge will set the Now field to T3, which S3 will use to bump
+// its clock. (BatchResponse.Now is computed when the batch is received, not
+// when it finishes executing.) If S3 receives a write for K at T2, it will a)
+// properly bump the write to T4, because its timestamp cache is up to date, and
+// then b) bump its clock to T4. Or if S4 were to send a single RPC to S3, S3
+// would bump its clock based on the BatchRequest.Timestamp.
+//
+// In short, this sequence of events is likely to be exceedingly unlikely in
+// practice, but is subtle enough to warrant a test.
+func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	readTSChan := make(chan hlc.Timestamp, 1)
+	rhsKey := roachpb.Key("c")
+	mtc.storeConfig.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.IsSingleGetSnapshotForMergeRequest() {
+			// Before we execute a GetSnapshotForMergeRequest, execute a read on the
+			// same store at a much higher timestamp.
+			gba := roachpb.BatchRequest{}
+			gba.RangeID = ba.RangeID
+			gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
+			gba.Add(getArgs(rhsKey))
+			store := mtc.Store(int(ba.Header.Replica.StoreID - 1))
+			gbr, pErr := store.Send(ctx, gba)
+			if pErr != nil {
+				t.Error(pErr) // different goroutine, so can't use t.Fatal
+			}
+			readTSChan <- gbr.Timestamp
+		}
+		return nil
+	}
+	for i := 0; i < 4; i++ {
+		clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Millisecond /* maxOffset */)
+		mtc.clocks = append(mtc.clocks, clock)
+	}
+	mtc.Start(t, 4)
+	defer mtc.Stop()
+	distSender := mtc.distSenders[0]
+
+	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
+		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	lhsRangeID := mtc.Store(0).LookupReplica(roachpb.RKey("a")).RangeID
+	rhsRangeID := mtc.Store(0).LookupReplica(roachpb.RKey("b")).RangeID
+
+	// Replicate [a, b) to s2, s3, and s4, and put the lease on s3.
+	mtc.replicateRange(lhsRangeID, 1, 2, 3)
+	mtc.transferLease(ctx, lhsRangeID, 0, 2)
+	mtc.unreplicateRange(lhsRangeID, 0)
+
+	// Replicate [b, Max) to s2, s3, and s4, and put the lease on s4.
+	mtc.replicateRange(rhsRangeID, 1, 2, 3)
+	mtc.transferLease(ctx, rhsRangeID, 0, 3)
+	mtc.unreplicateRange(rhsRangeID, 0)
+
+	// N.B. We isolate r1 on s1 so that node liveness heartbeats do not interfere
+	// with our precise clock management on s2, s3, and s4.
+
+	// Write a key to [b, Max).
+	if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(rhsKey, 1)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Wait for all relevant stores to have the same value. This indirectly
+	// ensures the lease transfers have applied on all relevant stores.
+	mtc.waitForValues(rhsKey, []int64{0, 1, 1, 1})
+
+	// Merge [a, b) and [b, Max). Our request filter above will intercept the
+	// merge and execute a read with a large timestamp immediately before the
+	// GetSnapshotForMerge request executes.
+	if _, pErr := client.SendWrappedWith(ctx, mtc.Store(2), roachpb.Header{
+		RangeID: lhsRangeID,
+	}, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Find out what time the request filter's read executed at.
+	readTS := <-readTSChan
+
+	// Immediately transfer the lease on the merged range [a, Max) from s3 to s2.
+	// To test that it is, in fact, the merge trigger that properly bumps s3's
+	// clock, s3 must not send or receive any requests before it transfers the
+	// lease, as those requests could bump s3's clock through other code paths.
+	mtc.transferLease(ctx, lhsRangeID, 2, 1)
+	testutils.SucceedsSoon(t, func() error {
+		lhsRepl1, err := mtc.Store(1).GetReplica(lhsRangeID)
+		if err != nil {
+			return err
+		}
+		if !lhsRepl1.OwnsValidLease(mtc.clocks[1].Now()) {
+			return errors.New("s2 does not own valid lease for lhs range")
+		}
+		return nil
+	})
+
+	// Attempt to write at the same time as the read. The write's timestamp
+	// should be forwarded to after the read.
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = readTS
+	ba.RangeID = lhsRangeID
+	ba.Add(incrementArgs(rhsKey, 1))
+	if br, pErr := mtc.Store(1).Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if !readTS.Less(br.Timestamp) {
+		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
+	}
+}
+
 // TestStoreRangeMergeLastRange verifies that merging the last range fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
