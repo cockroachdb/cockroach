@@ -129,13 +129,13 @@ func (c *client) startLocked(
 		log.Infof(ctx, "started gossip client to %s", c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
-				g.mu.Lock()
+				g.mu.RLock()
 				if c.peerID != 0 {
 					log.Infof(ctx, "closing client to node %d (%s): %s", c.peerID, c.addr, err)
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
-				g.mu.Unlock()
+				g.mu.RUnlock()
 			}
 		}
 	})
@@ -154,14 +154,14 @@ func (c *client) close() {
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
 func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
-	g.mu.Lock()
+	g.mu.RLock()
 	args := &Request{
 		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 		ClusterID:       g.clusterID.Get(),
 	}
-	g.mu.Unlock()
+	g.mu.RUnlock()
 
 	bytesSent := int64(args.Size())
 	c.clientMetrics.BytesSent.Inc(bytesSent)

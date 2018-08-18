@@ -357,7 +357,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		copy.Hops = maxHops + 1
 		copy.Value.Timestamp.WallTime++
 		return local.mu.is.addInfo(key, &copy)
-	})
+	}, true /* deleteExpired */)
 	local.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)

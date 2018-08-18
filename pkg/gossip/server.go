@@ -52,7 +52,7 @@ type server struct {
 	stopper *stop.Stopper
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		is       *infoStore                         // The backing infostore
 		incoming nodeSet                            // Incoming client node IDs
 		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
@@ -379,8 +379,8 @@ func (s *server) start(addr net.Addr) {
 }
 
 func (s *server) status() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
 		s.mu.incoming.gauge.Value(), s.mu.incoming.maxSize, s.serverMetrics)
@@ -400,7 +400,7 @@ func roundSecs(d time.Duration) time.Duration {
 
 // GetNodeAddr returns the node's address stored in the Infostore.
 func (s *server) GetNodeAddr() *util.UnresolvedAddr {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return &s.mu.is.NodeAddr
 }

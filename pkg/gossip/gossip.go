@@ -497,42 +497,42 @@ func (g *Gossip) setResolvers(resolvers []resolver.Resolver) {
 
 // GetResolvers returns a copy of the resolvers slice.
 func (g *Gossip) GetResolvers() []resolver.Resolver {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return append([]resolver.Resolver(nil), g.resolvers...)
 }
 
 // GetNodeIDAddress looks up the address of the node by ID.
 func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.getNodeIDAddressLocked(nodeID)
 }
 
 // GetNodeIDForStoreID looks up the NodeID by StoreID.
 func (g *Gossip) GetNodeIDForStoreID(storeID roachpb.StoreID) (roachpb.NodeID, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.getNodeIDForStoreIDLocked(storeID)
 }
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.getNodeDescriptorLocked(nodeID)
 }
 
 // LogStatus logs the current status of gossip such as the incoming and
 // outgoing connections.
 func (g *Gossip) LogStatus() {
-	g.mu.Lock()
+	g.mu.RLock()
 	n := len(g.nodeDescs)
 	status := "ok"
 	if g.mu.is.getInfo(KeySentinel) == nil {
 		status = "stalled"
 	}
-	g.mu.Unlock()
+	g.mu.RUnlock()
 
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(
@@ -544,8 +544,8 @@ func (g *Gossip) LogStatus() {
 func (g *Gossip) clientStatus() string {
 	var buf bytes.Buffer
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 
@@ -655,7 +655,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 			g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 		}
 		return nil
-	}); err != nil {
+	}, true /* deleteExpired */); err != nil {
 		log.Error(ctx, err)
 		return
 	}
@@ -919,9 +919,9 @@ func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Durati
 // GetInfo returns an info value by key or an KeyNotPresentError if specified
 // key does not exist or has expired.
 func (g *Gossip) GetInfo(key string) ([]byte, error) {
-	g.mu.Lock()
+	g.mu.RLock()
 	i := g.mu.is.getInfo(key)
-	g.mu.Unlock()
+	g.mu.RUnlock()
 
 	if i != nil {
 		if err := i.Value.Verify([]byte(key)); err != nil {
@@ -946,16 +946,16 @@ func (g *Gossip) GetInfoProto(key string, msg protoutil.Message) error {
 // originated on this node. This is useful for ensuring that the system config
 // is regossiped as soon as possible when its lease changes hands.
 func (g *Gossip) InfoOriginatedHere(key string) bool {
-	g.mu.Lock()
+	g.mu.RLock()
 	info := g.mu.is.getInfo(key)
-	g.mu.Unlock()
+	g.mu.RUnlock()
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
 
 // GetInfoStatus returns the a copy of the contents of the infostore.
 func (g *Gossip) GetInfoStatus() InfoStatus {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	is := InfoStatus{
 		Infos: make(map[string]Info),
 	}
@@ -967,8 +967,8 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 
 // IterateInfos visits all infos matching the given prefix.
 func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) error) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	for k, v := range g.mu.is.Infos {
 		if strings.HasPrefix(k, prefix+separator) {
 			if err := visit(k, *(protoutil.Clone(v).(*Info))); err != nil {
@@ -1064,8 +1064,8 @@ func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 // Incoming returns a slice of incoming gossip client connection
 // node IDs.
 func (g *Gossip) Incoming() []roachpb.NodeID {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.mu.incoming.asSlice()
 }
 
@@ -1075,8 +1075,8 @@ func (g *Gossip) Incoming() []roachpb.NodeID {
 // of trying, or may already have failed, but haven't yet been
 // processed by the gossip instance.
 func (g *Gossip) Outgoing() []roachpb.NodeID {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.outgoing.asSlice()
 }
 

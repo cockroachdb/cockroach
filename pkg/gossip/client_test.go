@@ -313,8 +313,8 @@ func TestClientNodeID(t *testing.T) {
 }
 
 func verifyServerMaps(g *Gossip, expCount int) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return len(g.mu.nodeMap) == expCount
 }
 
