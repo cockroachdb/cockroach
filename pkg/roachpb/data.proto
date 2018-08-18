@@ -140,6 +140,11 @@ message MergeTrigger {
     (gogoproto.customname) = "RightMVCCStats",
     (gogoproto.nullable) = false
   ];
+
+  // FreezeStart is the time at which the right-hand range promised to stop
+  // serving any traffic. It is suitable for use as the timestamp cache's low
+  // water mark for the keys previously owned by the right-hand range.
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.

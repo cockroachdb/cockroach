@@ -1290,6 +1290,11 @@ message GetSnapshotForMergeResponse {
   // LeaseAppliedIndex is the lease index of the last applied command at the
   // time that the GetSnapshotForMerge request executed.
   uint64 lease_applied_index = 4;
+
+  // FreezeStart is the time at which the receiving replica promised to stop
+  // serving any traffic. It is suitable for use as the timestamp cache's low
+  // water mark for the keys previously owned by the right-hand range.
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the

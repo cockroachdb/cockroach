@@ -533,6 +533,7 @@ func (r *Replica) AdminMerge(
 					LeftDesc:       updatedLeftDesc,
 					RightDesc:      rightDesc,
 					RightMVCCStats: rhsSnapshotRes.MVCCStats,
+					FreezeStart:    rhsSnapshotRes.FreezeStart,
 				},
 			},
 		})
