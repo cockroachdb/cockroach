@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 )
 
 var testEvalCtx = &tree.EvalContext{
@@ -56,7 +57,7 @@ func descForTable(
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
-			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil,
+			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil, /* settings */
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -68,9 +69,6 @@ func descForTable(
 	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
-	}
-	if table.PrimaryIndex.Name == "primary" {
-		table.PrimaryIndex.Name = "PRIMARY"
 	}
 	if err := fixDescriptorFKState(table); err != nil {
 		t.Fatal(err)
@@ -265,6 +263,6 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(expectedBytes, gotBytes) {
-		t.Fatalf("expected\n%+v\n, got\n%+v\n", expected, got)
+		t.Fatalf("expected\n%+v\n, got\n%+v\ndiff: %v", expected, got, pretty.Diff(expected, got))
 	}
 }
