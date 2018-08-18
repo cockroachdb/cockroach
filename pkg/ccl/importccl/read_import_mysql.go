@@ -98,7 +98,7 @@ func (m *mysqldumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *mysql.Insert:
-			name := i.Table.Name.String()
+			name := safeString(i.Table.Name)
 			conv, ok := m.tables[lex.NormalizeName(name)]
 			if !ok {
 				// not importing this table.
@@ -249,7 +249,7 @@ func readMysqlCreateTable(
 			return nil, errors.Wrap(err, "mysql parse error")
 		}
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
-			name := lex.NormalizeName(i.NewName.Name.String())
+			name := safeString(i.NewName.Name)
 			if match != "" && match != name {
 				names = append(names, name)
 				continue
@@ -277,6 +277,16 @@ func readMysqlCreateTable(
 		return nil, err
 	}
 	return ret, nil
+}
+
+type mysqlIdent interface{ CompliantName() string }
+
+func safeString(in mysqlIdent) string {
+	return lex.NormalizeName(in.CompliantName())
+}
+
+func safeName(in mysqlIdent) tree.Name {
+	return tree.Name(safeString(in))
 }
 
 // mysqlTableToCockroach creates a Cockroach TableDescriptor from a parsed mysql
@@ -322,14 +332,15 @@ func mysqlTableToCockroach(
 		}
 	}
 
+	tblName := tree.MakeUnqualifiedTableName(tree.Name(name))
 	stmt := &tree.CreateTable{
-		Table: tree.NormalizableTableName{TableNameReference: tree.NewTableName("", tree.Name(name))},
+		Table: tree.NormalizableTableName{TableNameReference: &tblName},
 	}
 
 	checks := make(map[string]*tree.CheckConstraintTableDef)
 
 	for _, raw := range in.Columns {
-		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type, checks)
+		def, err := mysqlColToCockroach(safeString(raw.Name), raw.Type, checks)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -349,10 +360,11 @@ func mysqlTableToCockroach(
 	for _, raw := range in.Indexes {
 		var elems tree.IndexElemList
 		for _, col := range raw.Columns {
-			elems = append(elems, tree.IndexElem{Column: tree.Name(col.Column.String())})
+			elems = append(elems, tree.IndexElem{Column: safeName(col.Column)})
 		}
 
-		idx := tree.IndexTableDef{Name: tree.Name(raw.Info.Name.String()), Columns: elems}
+		idxName := safeName(raw.Info.Name)
+		idx := tree.IndexTableDef{Name: idxName, Columns: elems}
 		if raw.Info.Primary || raw.Info.Unique {
 			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{IndexTableDef: idx, PrimaryKey: raw.Info.Primary})
 		} else {
@@ -381,11 +393,12 @@ func mysqlTableToCockroach(
 			}
 			fromCols := i.Source
 			toTable := tree.MakeTableName(
-				tree.Name(i.ReferencedTable.Qualifier.String()), tree.Name(i.ReferencedTable.Name.String()),
+				safeName(i.ReferencedTable.Qualifier),
+				safeName(i.ReferencedTable.Name),
 			)
 			toCols := i.ReferencedColumns
 			d := &tree.ForeignKeyConstraintTableDef{
-				Name:     tree.Name(raw.Name),
+				Name:     tree.Name(lex.NormalizeName(raw.Name)),
 				FromCols: toNameList(fromCols),
 				ToCols:   toNameList(toCols),
 			}
@@ -447,7 +460,7 @@ func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) e
 func toNameList(cols mysql.Columns) tree.NameList {
 	res := make([]tree.Name, len(cols))
 	for i := range cols {
-		res[i] = tree.Name(cols[i].String())
+		res[i] = safeName(cols[i])
 	}
 	return res
 }
