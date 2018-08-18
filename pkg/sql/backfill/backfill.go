@@ -145,13 +145,14 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		sqlbase.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
 	)
-	for _, fkTableDesc := range otherTables {
+	for i, fkTableDesc := range otherTables {
 		found, ok := fkTables[fkTableDesc.ID]
 		if !ok {
 			// We got passed an extra table for some reason - just ignore it.
 			continue
 		}
-		found.Table = &fkTableDesc
+
+		found.Table = &otherTables[i]
 		fkTables[fkTableDesc.ID] = found
 	}
 	for id, table := range fkTables {
