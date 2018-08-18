@@ -154,6 +154,7 @@ type planner struct {
 	subqueryVisitor       subqueryVisitor
 	nameResolutionVisitor sqlbase.NameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
+	tableName             tree.TableName
 
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
