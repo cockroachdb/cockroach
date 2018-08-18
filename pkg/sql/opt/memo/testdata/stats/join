@@ -80,6 +80,23 @@ inner-join
  │    └── stats: [rows=10000]
  └── true [type=bool]
 
+norm colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
+SELECT * FROM a JOIN b ON true
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
+ ├── stats: [rows=50000000, distinct(1)=5000, distinct(2)=400, distinct(3)=3500, distinct(4)=3500, distinct(5)=500, distinct(6)=100, distinct(2,5,6)=4000000]
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=5000, distinct(1)=5000, distinct(2)=400, distinct(3)=3500, distinct(4)=3500]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan b
+ │    ├── columns: b.x:5(int) z:6(int!null)
+ │    └── stats: [rows=10000, distinct(5)=500, distinct(6)=100, distinct(5,6)=10000]
+ └── true [type=bool]
+
 norm
 SELECT * FROM a JOIN b ON false
 ----

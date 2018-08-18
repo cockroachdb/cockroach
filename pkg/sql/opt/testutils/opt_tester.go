@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -89,6 +90,8 @@ type OptTesterFlags struct {
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
 	ExploreTraceRule string
+
+	ColStats []opt.ColSet
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -166,6 +169,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    specified, the exploretrace output is filtered to only show expression
 //    changes due to that specific rule.
 //
+//  - colstat: requests the calculation of a column statistic on the top-level
+//    expression. The value is a column or a list of columns. The flag can
+//    be used multiple times to request different statistics.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -198,7 +205,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		fillInLazyProps(ev)
+		ot.postProcess(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "norm":
@@ -211,7 +218,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		fillInLazyProps(ev)
+		ot.postProcess(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "opt":
@@ -219,7 +226,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		fillInLazyProps(ev)
+		ot.postProcess(ev)
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "rulestats":
@@ -253,6 +260,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
 		return ""
+	}
+}
+
+func (ot *OptTester) postProcess(ev memo.ExprView) {
+	fillInLazyProps(ev)
+	for _, cols := range ot.Flags.ColStats {
+		ev.RequestColStat(&ot.evalCtx, cols)
 	}
 }
 
@@ -317,6 +331,20 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("rule requires one argument")
 		}
 		f.ExploreTraceRule = arg.Vals[0]
+
+	case "colstat":
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("colstat requires arguments")
+		}
+		var cols opt.ColSet
+		for _, v := range arg.Vals {
+			col, err := strconv.Atoi(v)
+			if err != nil {
+				return fmt.Errorf("invalid colstat column %v", v)
+			}
+			cols.Add(col)
+		}
+		f.ColStats = append(f.ColStats, cols)
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

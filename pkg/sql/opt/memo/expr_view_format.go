@@ -25,6 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
+// ExprFmtInterceptor is a callback that can be set to a custom formatting
+// function. If the function returns true, the normal formatting code is bypassed.
+var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool
+
 // ExprFmtFlags controls which properties of the expression are shown in
 // formatted output.
 type ExprFmtFlags int
