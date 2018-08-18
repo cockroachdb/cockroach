@@ -395,6 +395,27 @@ message MergeInProgressError {
   option (gogoproto.equal) = true;
 }
 
+// A RangeFeedRetryError indicates that a rangefeed was disconnected, often
+// because of a range lifecycle event, and can be retried.
+message RangeFeedRetryError {
+  option (gogoproto.equal) = true;
+
+  // Reason specifies what caused the error.
+  enum Reason {
+    // The replica was removed from its store.
+    REASON_REPLICA_REMOVED = 0;
+    // The range was split in two.
+    REASON_RANGE_SPLIT = 1;
+    // The range was merged into another.
+    REASON_RANGE_MERGED = 2;
+    // A Raft snapshot applied on the replica.
+    REASON_RAFT_SNAPSHOT = 3;
+    // A Raft command was missing a logical operation log.
+    REASON_LOGICAL_OPS_MISSING = 4;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -435,6 +456,7 @@ message ErrorDetail {
     TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
     IntentMissingError intent_missing = 36;
     MergeInProgressError merge_in_progress = 37;
+    RangeFeedRetryError rangefeed_retry = 38;
   }
 }
 

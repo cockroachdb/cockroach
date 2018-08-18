@@ -690,3 +690,20 @@ func (e *MergeInProgressError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &MergeInProgressError{}
+
+// NewRangeFeedRetryError initializes a new RangeFeedRetryError.
+func NewRangeFeedRetryError(reason RangeFeedRetryError_Reason) *RangeFeedRetryError {
+	return &RangeFeedRetryError{
+		Reason: reason,
+	}
+}
+
+func (e *RangeFeedRetryError) Error() string {
+	return e.message(nil)
+}
+
+func (e *RangeFeedRetryError) message(pErr *Error) string {
+	return fmt.Sprintf("retry rangefeed (%s)", e.Reason)
+}
+
+var _ ErrorDetailInterface = &RangeFeedRetryError{}

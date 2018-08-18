@@ -236,6 +236,20 @@ func (r *Replica) disconnectRangefeedWithErrRaftMuLocked(pErr *roachpb.Error) {
 	r.raftMu.rangefeed = nil
 }
 
+// disconnectRangefeedWithReasonRaftMuLocked broadcasts the provided rangefeed
+// retry reason to all rangefeed registrations and tears down the active
+// rangefeed Processor. No-op if a rangefeed is not active. Requires raftMu to
+// be locked.
+func (r *Replica) disconnectRangefeedWithReasonRaftMuLocked(
+	reason roachpb.RangeFeedRetryError_Reason,
+) {
+	if r.raftMu.rangefeed == nil {
+		return
+	}
+	pErr := roachpb.NewError(roachpb.NewRangeFeedRetryError(reason))
+	r.disconnectRangefeedWithErrRaftMuLocked(pErr)
+}
+
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
 // rangefeed, if one is running. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
@@ -246,9 +260,17 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		return
 	}
 	if ops == nil {
-		r.disconnectRangefeedWithErrRaftMuLocked(roachpb.NewErrorf(
-			"unset LogicalOpLog provided to enabled rangefeed",
-		))
+		// Rangefeeds can't be turned on unless RangefeedEnabled is set to true,
+		// after which point new Raft proposals will include logical op logs.
+		// However, there's a race present where old Raft commands without a
+		// logical op log might be passed to a rangefeed. Since the effect of
+		// these commands was not included in the catch-up scan of current
+		// registrations, we're forced to throw an error. The rangefeed clients
+		// can reconnect at a later time, at which point all new Raft commands
+		// should have logical op logs.
+		r.disconnectRangefeedWithReasonRaftMuLocked(
+			roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
+		)
 		return
 	}
 	if len(ops.Ops) == 0 {
