@@ -37,7 +37,7 @@ func TestImpliedSearchPath(t *testing.T) {
 			searchPath := MakeSearchPath(tc.explicitSearchPath)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.Iter()
-			for p, ok := iter(); ok; p, ok = iter() {
+			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
 				actualSearchPath = append(actualSearchPath, p)
 			}
 			if !reflect.DeepEqual(tc.expectedSearchPath, actualSearchPath) {
@@ -49,7 +49,7 @@ func TestImpliedSearchPath(t *testing.T) {
 			searchPath := MakeSearchPath(tc.explicitSearchPath)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.IterWithoutImplicitPGCatalog()
-			for p, ok := iter(); ok; p, ok = iter() {
+			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
 				actualSearchPath = append(actualSearchPath, p)
 			}
 			if !reflect.DeepEqual(tc.expectedSearchPathWithoutImplicitPgCatalog, actualSearchPath) {

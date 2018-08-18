@@ -2641,7 +2641,7 @@ may increase either contention or retry errors, or both.`,
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
 				iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
-				for scName, ok := iter(); ok; scName, ok = iter() {
+				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {
 						if err != nil {
 							return nil, err
@@ -2676,13 +2676,13 @@ may increase either contention or retry errors, or both.`,
 				curDb := evalCtx.SessionData.Database
 				includePgCatalog := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
-				var iter func() (string, bool)
+				var iter sessiondata.SearchPathIter
 				if includePgCatalog {
 					iter = evalCtx.SessionData.SearchPath.Iter()
 				} else {
 					iter = evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 				}
-				for scName, ok := iter(); ok; scName, ok = iter() {
+				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {
 						if err != nil {
 							return nil, err
