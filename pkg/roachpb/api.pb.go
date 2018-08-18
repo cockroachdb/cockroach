@@ -160,6 +160,7 @@
 		BatchTimestampBeforeGCError
 		IntentMissingError
 		MergeInProgressError
+		RangeFeedRetryError
 		ErrorDetail
 		ErrPosition
 		Error
