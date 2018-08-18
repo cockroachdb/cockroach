@@ -210,10 +210,20 @@ func (sb *statisticsBuilder) colStatFromInput(
 	default:
 		if ev.IsJoin() {
 			// TODO(radu): what if both sides have columns in colSet?
-			if ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet) {
+			intersectsLeft := ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet)
+			intersectsRight := ev.Child(1).Logical().Relational.OutputCols.Intersects(colSet)
+			if intersectsLeft {
+				if intersectsRight {
+					panic(fmt.Sprintf("colSet %v contains both left and right columns", colSet))
+				}
 				return sb.colStatFromChild(colSet, ev, 0)
 			}
-			return sb.colStatFromChild(colSet, ev, 1)
+			if intersectsRight {
+				return sb.colStatFromChild(colSet, ev, 1)
+			}
+			// All columns in colSet are outer columns; therefore, we can treat them
+			// as a constant.
+			return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
 		}
 
 		panic(fmt.Sprintf("unsupported operator %s", ev.Operator()))
@@ -348,6 +358,80 @@ func (sb *statisticsBuilder) colStatLeaf(
 	return colStat
 }
 
+// +-------+
+// | Table |
+// +-------+
+
+// makeTableStatistics returns the available statistics for the given table.
+// Statistics are derived lazily and are cached in the metadata, since they may
+// be accessed multiple times during query optimization. For more details, see
+// props.Statistics.
+func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Statistics {
+	stats, ok := sb.md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
+	if ok {
+		// Already made.
+		return stats
+	}
+
+	// Make now and annotate the metadata table with it for next time.
+	tab := sb.md.Table(tabID)
+	stats = &props.Statistics{}
+	if tab.StatisticCount() == 0 {
+		// No statistics.
+		stats.RowCount = unknownRowCount
+	} else {
+		// Get the RowCount from the most recent statistic. Stats are ordered
+		// with most recent first.
+		stats.RowCount = float64(tab.Statistic(0).RowCount())
+
+		// Add all the column statistics, using the most recent statistic for each
+		// column set. Stats are ordered with most recent first.
+		stats.ColStats = make(map[opt.ColumnID]*props.ColumnStatistic)
+		stats.MultiColStats = make(map[string]*props.ColumnStatistic)
+		for i := 0; i < tab.StatisticCount(); i++ {
+			stat := tab.Statistic(i)
+			var cols opt.ColSet
+			for i := 0; i < stat.ColumnCount(); i++ {
+				cols.Add(int(tabID.ColumnID(stat.ColumnOrdinal(i))))
+			}
+
+			if cols.Len() == 1 {
+				col, _ := cols.Next(0)
+				key := opt.ColumnID(col)
+
+				if _, ok := stats.ColStats[key]; !ok {
+					stats.ColStats[key] = &props.ColumnStatistic{
+						Cols:          cols,
+						DistinctCount: float64(stat.DistinctCount()),
+					}
+				}
+			} else {
+				// Get a unique key for this column set.
+				sb.keyBuf.Reset()
+				sb.keyBuf.writeColSet(cols)
+				key := sb.keyBuf.String()
+
+				if _, ok := stats.MultiColStats[key]; !ok {
+					stats.MultiColStats[key] = &props.ColumnStatistic{
+						Cols:          cols,
+						DistinctCount: float64(stat.DistinctCount()),
+					}
+				}
+			}
+		}
+	}
+	sb.md.SetTableAnnotation(tabID, statsAnnID, stats)
+	return stats
+}
+
+func (sb *statisticsBuilder) colStatTable(
+	tabID opt.TableID, colSet opt.ColSet,
+) *props.ColumnStatistic {
+	tableStats := sb.makeTableStatistics(tabID)
+	tableFD := makeTableFuncDep(sb.md, tabID)
+	return sb.colStatLeaf(colSet, tableStats, tableFD)
+}
+
 // +------+
 // | Scan |
 // +------+
@@ -404,14 +488,6 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 	}
 
 	return colStat
-}
-
-func (sb *statisticsBuilder) colStatTable(
-	tabID opt.TableID, colSet opt.ColSet,
-) *props.ColumnStatistic {
-	tableStats := sb.makeTableStatistics(tabID)
-	tableFD := makeTableFuncDep(sb.md, tabID)
-	return sb.colStatLeaf(colSet, tableStats, tableFD)
 }
 
 // +-------------+
@@ -1195,68 +1271,6 @@ func (sb *statisticsBuilder) copyColStat(
 	colStat := sb.makeColStat(colSet, s)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	return colStat
-}
-
-// makeTableStatistics returns the available statistics for the given table.
-// Statistics are derived lazily and are cached in the metadata, since they may
-// be accessed multiple times during query optimization. For more details, see
-// props.Statistics.
-func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Statistics {
-	stats, ok := sb.md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
-	if ok {
-		// Already made.
-		return stats
-	}
-
-	// Make now and annotate the metadata table with it for next time.
-	tab := sb.md.Table(tabID)
-	stats = &props.Statistics{}
-	if tab.StatisticCount() == 0 {
-		// No statistics.
-		stats.RowCount = unknownRowCount
-	} else {
-		// Get the RowCount from the most recent statistic. Stats are ordered
-		// with most recent first.
-		stats.RowCount = float64(tab.Statistic(0).RowCount())
-
-		// Add all the column statistics, using the most recent statistic for each
-		// column set. Stats are ordered with most recent first.
-		stats.ColStats = make(map[opt.ColumnID]*props.ColumnStatistic)
-		stats.MultiColStats = make(map[string]*props.ColumnStatistic)
-		for i := 0; i < tab.StatisticCount(); i++ {
-			stat := tab.Statistic(i)
-			var cols opt.ColSet
-			for i := 0; i < stat.ColumnCount(); i++ {
-				cols.Add(int(tabID.ColumnID(stat.ColumnOrdinal(i))))
-			}
-
-			if cols.Len() == 1 {
-				col, _ := cols.Next(0)
-				key := opt.ColumnID(col)
-
-				if _, ok := stats.ColStats[key]; !ok {
-					stats.ColStats[key] = &props.ColumnStatistic{
-						Cols:          cols,
-						DistinctCount: float64(stat.DistinctCount()),
-					}
-				}
-			} else {
-				// Get a unique key for this column set.
-				sb.keyBuf.Reset()
-				sb.keyBuf.writeColSet(cols)
-				key := sb.keyBuf.String()
-
-				if _, ok := stats.MultiColStats[key]; !ok {
-					stats.MultiColStats[key] = &props.ColumnStatistic{
-						Cols:          cols,
-						DistinctCount: float64(stat.DistinctCount()),
-					}
-				}
-			}
-		}
-	}
-	sb.md.SetTableAnnotation(tabID, statsAnnID, stats)
-	return stats
 }
 
 // translateColSet is used to translate a ColSet from one set of column IDs
