@@ -602,10 +602,12 @@ func (c *CustomFuncs) CanUseLookupJoin(
 	return false
 }
 
-// ConstructLookupJoin creates a lookup join expression.
-func (c *CustomFuncs) ConstructLookupJoin(
+// lookupJoinHelper is used when converting a join to a lookup join. It creates
+// the appropriate LookupJoinDef and ON condition. Can only be called if
+// CanUseLookupJoin returned true.
+func (c *CustomFuncs) lookupJoinHelper(
 	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
-) []memo.Expr {
+) (lookupJoinDefID memo.PrivateID, lookupJoinOn memo.GroupID) {
 	md := c.e.mem.Metadata()
 	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
 	inputProps := c.e.mem.GroupProperties(input).Relational
@@ -613,7 +615,8 @@ func (c *CustomFuncs) ConstructLookupJoin(
 	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanDef.Cols, onExpr)
 	n := len(leftEq)
 	if n == 0 {
-		return nil
+		// CanUseLookupJoin ensures this is not possible.
+		panic("lookup join not possible")
 	}
 
 	idx := md.Table(scanDef.Table).Index(scanDef.Index)
@@ -645,13 +648,29 @@ func (c *CustomFuncs) ConstructLookupJoin(
 		// CanUseLookupJoin ensures this is not possible.
 		panic("lookup join not possible")
 	}
-
-	// Create a lookup join expression in the same group.
 	// TODO(radu): simplify the ON condition (we can remove the equalities on
 	// KeyCols).
-	lookupJoin := memo.MakeLookupJoinExpr(input, on, c.e.mem.InternLookupJoinDef(&lookupJoinDef))
+	return c.e.mem.InternLookupJoinDef(&lookupJoinDef), on
+}
+
+// GenerateLookupJoin creates a lookup join expression in the current group.
+func (c *CustomFuncs) GenerateLookupJoin(
+	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
+) []memo.Expr {
+	lookupJoinDef, lookupJoinOn := c.lookupJoinHelper(joinType, input, scanDefID, on)
+
+	// Create a lookup join expression in the same group.
+	lookupJoin := memo.MakeLookupJoinExpr(input, lookupJoinOn, lookupJoinDef)
 	c.e.exprs = append(c.e.exprs[:0], memo.Expr(lookupJoin))
 	return c.e.exprs
+}
+
+// ConstructLookupJoin constructs a lookup join expression.
+func (c *CustomFuncs) ConstructLookupJoin(
+	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
+) memo.GroupID {
+	lookupJoinDef, lookupJoinOn := c.lookupJoinHelper(joinType, input, scanDefID, on)
+	return c.e.f.ConstructLookupJoin(input, lookupJoinOn, lookupJoinDef)
 }
 
 // HoistIndexJoinDef creates a LookupJoinDef that implements an index join which

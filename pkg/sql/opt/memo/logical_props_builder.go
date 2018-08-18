@@ -80,6 +80,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.IndexJoinOp:
 		logical = b.buildIndexJoinProps(ev)
 
+	case opt.LookupJoinOp:
+		logical = b.buildLookupJoinProps(ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		logical = b.buildSetProps(ev)
@@ -153,7 +156,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Initialize key FD's from the table schema, including constant columns from
 	// the constraint, minus any columns that are not projected by the Scan
 	// operator.
-	relational.FuncDeps.CopyFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.CopyFrom(makeTableFuncDep(md, def.Table))
 	if def.Constraint != nil {
 		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
 	}
@@ -513,7 +516,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Cardinality
 	// -----------
-	// Calculate cardinality of each join type.
+	// Calculate cardinality, depending on join type.
 	relational.Cardinality = b.makeJoinCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
@@ -557,7 +560,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.AddFrom(makeTableFuncDep(md, def.Table))
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -570,6 +573,81 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	// ----------
 	b.sb.init(b.evalCtx, &b.kb)
 	b.sb.buildIndexJoin(ev, relational)
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+	relational := logical.Relational
+
+	inputProps := ev.childGroup(0).logical.Relational
+	onProps := ev.childGroup(1).logical.Scalar
+	md := ev.Metadata()
+	def := ev.Private().(*LookupJoinDef)
+
+	// Output Columns
+	// --------------
+	// Lookup join output columns are the union between the input columns and the
+	// retrieved columns.
+	logical.Relational.OutputCols = inputProps.OutputCols.Union(def.LookupCols)
+
+	// Not Null Columns
+	// ----------------
+	notNullCols := b.tableNotNullCols(md, def.Table)
+	notNullCols.IntersectionWith(relational.OutputCols)
+	notNullCols.UnionWith(inputProps.NotNullCols)
+	if def.JoinType == opt.LeftJoinOp {
+		// For left joins, the not-null cols are only those from the input (left).
+		relational.NotNullCols = inputProps.NotNullCols
+	} else {
+		// For inner joins, the not-NULL cols are those from the input and those
+		// from the table.
+		relational.NotNullCols = notNullCols
+	}
+
+	// Outer Columns
+	// -------------
+	// Any outer columns from the filter that are not bound by the input columns
+	// are outer columns for the lookup join expression, in addition to any outer
+	// columns inherited from the input.
+	inputCols := inputProps.OutputCols.Union(def.LookupCols)
+	if !onProps.OuterCols.SubsetOf(inputCols) {
+		relational.OuterCols = onProps.OuterCols.Difference(inputCols)
+	}
+	relational.OuterCols.UnionWith(inputProps.OuterCols)
+
+	// Functional Dependencies
+	// -----------------------
+	// Start with FDs from left side, and modify based on join type.
+	// See the general code for join for more details.
+	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	tableFD := makeTableFuncDep(md, def.Table)
+	relational.FuncDeps.MakeProduct(tableFD)
+	if def.JoinType == opt.LeftJoinOp {
+		relational.FuncDeps.MakeOuter(def.LookupCols, notNullCols)
+	} else {
+		relational.FuncDeps.AddFrom(&onProps.FuncDeps)
+		b.applyOuterColConstants(relational)
+	}
+
+	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
+
+	// Call ProjectCols to trigger simplification, since outer joins may have
+	// created new possibilities for simplifying removed columns.
+	relational.FuncDeps.ProjectCols(relational.OutputCols)
+
+	// Cardinality
+	// -----------
+	relational.Cardinality = props.AnyCardinality
+	if def.JoinType == opt.LeftJoinOp {
+		relational.Cardinality = relational.Cardinality.AtLeast(inputProps.Cardinality.Min)
+	}
+
+	// Statistics
+	// ----------
+	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.buildJoin(ev, relational)
 
 	return logical
 }
@@ -1129,9 +1207,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 // given base table. The set is derived lazily and is cached in the metadata,
 // since it may be accessed multiple times during query optimization. For more
 // details, see Relational.FuncDepSet.
-func (b *logicalPropsBuilder) makeTableFuncDep(
-	md *opt.Metadata, tabID opt.TableID,
-) *props.FuncDepSet {
+func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	fd, ok := md.TableAnnotation(tabID, fdAnnID).(*props.FuncDepSet)
 	if ok {
 		// Already made.
