@@ -363,6 +363,14 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 		rightRangeID := mtc.Store(0).LookupReplica(splitKey).RangeID
 
+		// Write to the RHS of the split and wait for all replicas to process it.
+		// This ensures that all replicas have seen the split before we move on.
+		incArgs := incrementArgs(roachpb.Key("n"), 9)
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(roachpb.Key("n"), []int64{9, 9, 9})
+
 		// Establish a rangefeed on the left replica.
 		streamLeft := newTestStream()
 		streamLeftErrC := make(chan *roachpb.Error, 1)
