@@ -39,6 +39,9 @@ func MockNameTypes(types map[string]types.T) func() {
 // when you just need one consistent example of a datum.
 func SampleDatum(t types.T) Datum {
 	switch t {
+	case types.BitArray:
+		a, _ := NewDBitArrayFromInt(123, 40)
+		return a
 	case types.Bool:
 		return MakeDBool(true)
 	case types.Int:

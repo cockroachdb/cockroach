@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -34,6 +35,7 @@ func TestPrettyPrint(t *testing.T) {
 	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
 	durationDesc, _ := encoding.EncodeDurationDescending(nil, duration)
+	bitArray := bitarray.MakeBitArrayFromInt64(8, 58, 7)
 	txnID := uuid.MakeV4()
 
 	// The following test cases encode keys with a mixture of ascending and descending direction,
@@ -149,6 +151,12 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(encoding.EncodeDecimalDescending(nil, apd.New(1234, -2)))),
 			"/Table/42/-12.34"},
 		{makeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeBitArrayAscending(nil, bitArray))),
+			"/Table/42/B00111010"},
+		{makeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeBitArrayDescending(nil, bitArray))),
+			"/Table/42/B00111010"},
+		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationAsc)),
 			"/Table/42/1mon1d1s"},
 		{makeKey(MakeTablePrefix(42),
@@ -168,29 +176,31 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x03})), `/Table/42/???`},
 	}
 	for i, test := range testCases {
-		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(nil /* valDirs */, test.key), nil)
-		exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
-		if exp != keyInfo {
-			t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)
-		}
-
-		if exp != MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
-			t.Errorf("%d: expected %s, got %s", i, exp, test.key.String())
-		}
-
-		parsed, err := UglyPrint(keyInfo)
-		if err != nil {
-			if _, ok := err.(*errUglifyUnsupported); !ok {
-				t.Errorf("%d: %s: %s", i, keyInfo, err)
-			} else {
-				t.Logf("%d: skipping parsing of %s; key is unsupported: %v", i, keyInfo, err)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(nil /* valDirs */, test.key), nil)
+			exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
+			if exp != keyInfo {
+				t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)
 			}
-		} else if exp, act := test.key, parsed; !bytes.Equal(exp, act) {
-			t.Errorf("%d: expected %q, got %q", i, exp, act)
-		}
-		if t.Failed() {
-			return
-		}
+
+			if exp != MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
+				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
+			}
+
+			parsed, err := UglyPrint(keyInfo)
+			if err != nil {
+				if _, ok := err.(*errUglifyUnsupported); !ok {
+					t.Errorf("%d: %s: %s", i, keyInfo, err)
+				} else {
+					t.Logf("%d: skipping parsing of %s; key is unsupported: %v", i, keyInfo, err)
+				}
+			} else if exp, act := test.key, parsed; !bytes.Equal(exp, act) {
+				t.Errorf("%d: ugly print expected %q, got %q", i, exp, act)
+			}
+			if t.Failed() {
+				return
+			}
+		})
 	}
 }
 

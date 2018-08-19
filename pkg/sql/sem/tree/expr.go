@@ -1427,14 +1427,16 @@ func (node *CastExpr) castType() types.T {
 }
 
 var (
-	boolCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
-	intCastTypes  = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid}
+	bitArrayCastTypes = []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString}
+	boolCastTypes     = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
+	intCastTypes      = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray}
 	floatCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.BitArray,
 		types.FamArray, types.FamTuple,
 		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON}
 	bytesCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
@@ -1453,6 +1455,8 @@ var (
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []types.T {
 	switch types.UnwrapType(t) {
+	case types.BitArray:
+		return bitArrayCastTypes
 	case types.Bool:
 		return boolCastTypes
 	case types.Int:
@@ -1637,6 +1641,7 @@ func (node *ColumnAccessExpr) String() string { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *Datums) String() string           { return AsString(node) }
+func (node *DBitArray) String() string        { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }

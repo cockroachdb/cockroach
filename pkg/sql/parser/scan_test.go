@@ -82,9 +82,8 @@ func TestScanner(t *testing.T) {
 		{`"a" "b"`, []int{IDENT, IDENT}},
 		{`'a'`, []int{SCONST}},
 		{`b'a'`, []int{BCONST}},
-		{`B'a'`, []int{BCONST}},
 		{`b'\xff'`, []int{BCONST}},
-		{`B'\xff'`, []int{BCONST}},
+		{`B'10101'`, []int{BITCONST}},
 		{`e'a'`, []int{SCONST}},
 		{`E'a'`, []int{SCONST}},
 		{`NOT`, []int{NOT}},
@@ -294,6 +293,7 @@ world`},
 		{`x'666f6f'`, `foo`},
 		{`X'626172'`, `bar`},
 		{`X'FF'`, "\xff"},
+		{`B'100101'`, "100101"},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)
@@ -325,6 +325,7 @@ func TestScanError(t *testing.T) {
 		{`X'beef\x41\x41'`, "invalid hexadecimal bytes literal"},
 		{`x'a'`, "invalid hexadecimal bytes literal"},
 		{`$9223372036854775809`, "integer value out of range"},
+		{`B'123'`, `"2" is not a valid binary digit`},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)

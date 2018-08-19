@@ -857,6 +857,10 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 1186  interval      2980797153    NULL      24      true      b
 1187  _interval     2980797153    NULL      -1      false     b
 1231  _numeric      2980797153    NULL      -1      false     b
+1560  bit           2980797153    NULL      -1      false     b
+1561  _bit          2980797153    NULL      -1      false     b
+1562  varbit        2980797153    NULL      -1      false     b
+1563  _varbit       2980797153    NULL      -1      false     b
 1700  numeric       2980797153    NULL      -1      false     b
 2202  regprocedure  2980797153    NULL      8       true      b
 2205  regclass      2980797153    NULL      8       true      b
@@ -917,6 +921,10 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 1186  interval      T            false           true          ,         0         0        1187
 1187  _interval     A            false           true          ,         0         1186     0
 1231  _numeric      A            false           true          ,         0         1700     0
+1560  bit           V            false           true          ,         0         0        1561
+1561  _bit          A            false           true          ,         0         1560     0
+1562  varbit        V            false           true          ,         0         0        1563
+1563  _varbit       A            false           true          ,         0         1562     0
 1700  numeric       N            false           true          ,         0         0        1231
 2202  regprocedure  N            false           true          ,         0         0        0
 2205  regclass      N            false           true          ,         0         0        0
@@ -977,6 +985,10 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 1186  interval      interval_in     interval_out     interval_recv     interval_send     0         0          0
 1187  _interval     array_in        array_out        array_recv        array_send        0         0          0
 1231  _numeric      array_in        array_out        array_recv        array_send        0         0          0
+1560  bit           bit_in          bit_out          bit_recv          bit_send          0         0          0
+1561  _bit          array_in        array_out        array_recv        array_send        0         0          0
+1562  varbit        varbit_in       varbit_out       varbit_recv       varbit_send       0         0          0
+1563  _varbit       array_in        array_out        array_recv        array_send        0         0          0
 1700  numeric       numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
 2202  regprocedure  regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
@@ -1037,6 +1049,10 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 1186  interval      NULL      NULL        false       0            -1
 1187  _interval     NULL      NULL        false       0            -1
 1231  _numeric      NULL      NULL        false       0            -1
+1560  bit           NULL      NULL        false       0            -1
+1561  _bit          NULL      NULL        false       0            -1
+1562  varbit        NULL      NULL        false       0            -1
+1563  _varbit       NULL      NULL        false       0            -1
 1700  numeric       NULL      NULL        false       0            -1
 2202  regprocedure  NULL      NULL        false       0            -1
 2205  regclass      NULL      NULL        false       0            -1
@@ -1097,6 +1113,10 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 1186  interval      0         0             NULL           NULL        NULL
 1187  _interval     0         0             NULL           NULL        NULL
 1231  _numeric      0         0             NULL           NULL        NULL
+1560  bit           0         0             NULL           NULL        NULL
+1561  _bit          0         0             NULL           NULL        NULL
+1562  varbit        0         0             NULL           NULL        NULL
+1563  _varbit       0         0             NULL           NULL        NULL
 1700  numeric       0         0             NULL           NULL        NULL
 2202  regprocedure  0         0             NULL           NULL        NULL
 2205  regclass      0         0             NULL           NULL        NULL

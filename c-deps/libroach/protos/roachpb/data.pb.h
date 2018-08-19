@@ -134,6 +134,7 @@ enum ValueType {
   DELIMITED_DECIMAL = 9,
   DURATION = 6,
   TUPLE = 10,
+  BITARRAY = 11,
   TIMESERIES = 100,
   ValueType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ValueType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max

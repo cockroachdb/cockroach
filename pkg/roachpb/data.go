@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -430,6 +431,15 @@ func (v *Value) SetDuration(t duration.Duration) error {
 	return nil
 }
 
+// SetBitArray encodes the specified bit array value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetBitArray(t bitarray.BitArray) {
+	words, _ := t.EncodingParts()
+	v.RawBytes = make([]byte, headerSize, headerSize+encoding.NonsortingUvarintMaxLen+8*len(words))
+	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes, t)
+	v.setTag(ValueType_BITARRAY)
+}
+
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *apd.Decimal) error {
@@ -541,6 +551,16 @@ func (v Value) GetDuration() (duration.Duration, error) {
 		return duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
 	}
 	_, t, err := encoding.DecodeDurationAscending(v.dataBytes())
+	return t, err
+}
+
+// GetBitArray decodes a bit array value from the bytes field of the receiver. If
+// the tag is not BITARRAY an error will be returned.
+func (v Value) GetBitArray() (bitarray.BitArray, error) {
+	if tag := v.GetTag(); tag != ValueType_BITARRAY {
+		return bitarray.BitArray{}, fmt.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
+	}
+	_, t, err := encoding.DecodeUntaggedBitArrayValue(v.dataBytes())
 	return t, err
 }
 
@@ -661,6 +681,11 @@ func (v Value) PrettyPrint() string {
 			buf.WriteString("0x")
 			buf.WriteString(hex.EncodeToString(data))
 		}
+	case ValueType_BITARRAY:
+		var data bitarray.BitArray
+		data, err = v.GetBitArray()
+		buf.WriteByte('B')
+		data.Format(&buf)
 	case ValueType_TIME:
 		var t time.Time
 		t, err = v.GetTime()
