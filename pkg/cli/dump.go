@@ -370,7 +370,7 @@ func extractArray(val interface{}) ([]string, error) {
 
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
-	rows, err := conn.Query(fmt.Sprintf(`
+	query := fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
 		FROM %s.information_schema.columns
 		AS OF SYSTEM TIME %s
@@ -378,10 +378,20 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 			AND TABLE_SCHEMA = $2
 			AND TABLE_NAME = $3
 			AND GENERATION_EXPRESSION = ''
-		`, &md.name.CatalogName, lex.EscapeSQLString(ts)),
+		`, &md.name.CatalogName, lex.EscapeSQLString(ts))
+	rows, err := conn.Query(query+` AND IS_HIDDEN = 'NO'`,
 		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {
-		return tableMetadata{}, err
+		if strings.Contains(err.Error(), "column \"is_hidden\" does not exist") {
+			// Pre-2.1 IS_HIDDEN did not exist in information_schema.columns.
+			// When it does not exist, information_schema.columns only returns
+			// non-hidden columns so we can still use that.
+			rows, err = conn.Query(query,
+				[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
+		}
+		if err != nil {
+			return tableMetadata{}, err
+		}
 	}
 	vals := make([]driver.Value, 2)
 	coltypes := make(map[string]string)
