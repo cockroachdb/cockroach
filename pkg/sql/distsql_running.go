@@ -236,6 +236,12 @@ func (dsp *DistSQLPlanner) Run(
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}
+	// We need to close the planNode tree we translated into a DistSQL plan before
+	// flow.Cleanup, which closes memory accounts that expect to be emptied.
+	if planCtx.planner != nil && !planCtx.ignoreClose {
+		planCtx.planner.curPlan.close(ctx)
+	}
+
 	flow.Wait()
 	flow.Cleanup(ctx)
 }
