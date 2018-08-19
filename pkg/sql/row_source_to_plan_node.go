@@ -31,6 +31,8 @@ type rowSourceToPlanNode struct {
 	source    distsqlrun.RowSource
 	forwarder metadataForwarder
 
+	originalPlanNode planNode
+
 	planCols sqlbase.ResultColumns
 
 	// Temporary variables
@@ -44,16 +46,23 @@ var _ planNode = &rowSourceToPlanNode{}
 // makeRowSourceToPlanNode creates a new planNode that wraps a RowSource. It
 // takes an optional metadataForwarder, which if non-nil is invoked for every
 // piece of metadata this wrapper receives from the wrapped RowSource.
+// It also takes an optional planNode, which is the planNode that the RowSource
+// that this rowSourceToPlanNode is wrapping originally replaced. That planNode
+// will be closed when this one is closed.
 func makeRowSourceToPlanNode(
-	s distsqlrun.RowSource, forwarder metadataForwarder, planCols sqlbase.ResultColumns,
+	s distsqlrun.RowSource,
+	forwarder metadataForwarder,
+	planCols sqlbase.ResultColumns,
+	originalPlanNode planNode,
 ) *rowSourceToPlanNode {
 	row := make(tree.Datums, len(s.OutputTypes()))
 
 	return &rowSourceToPlanNode{
-		source:    s,
-		datumRow:  row,
-		forwarder: forwarder,
-		planCols:  planCols,
+		source:           s,
+		datumRow:         row,
+		forwarder:        forwarder,
+		planCols:         planCols,
+		originalPlanNode: originalPlanNode,
 	}
 }
 
@@ -101,5 +110,8 @@ func (r *rowSourceToPlanNode) Values() tree.Datums {
 func (r *rowSourceToPlanNode) Close(ctx context.Context) {
 	if r.source != nil {
 		r.source.ConsumerClosed()
+	}
+	if r.originalPlanNode != nil {
+		r.originalPlanNode.Close(ctx)
 	}
 }
