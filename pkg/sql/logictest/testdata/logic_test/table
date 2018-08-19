@@ -311,8 +311,6 @@ statement ok
 CREATE TABLE alltypes (
   cbigint BIGINT,
   cbigserial BIGSERIAL,
-  cbit BIT,
-  cbit12 BIT(12),
   cblob BLOB,
   cbool BOOL,
   cbytea BYTEA,
@@ -359,8 +357,6 @@ SHOW COLUMNS FROM alltypes
 column_name       data_type                 is_nullable  column_default  generation_expression  indices      is_hidden
 cbigint           BIGINT                    true         NULL            ·                      {}           false
 cbigserial        INT                       false        unique_rowid()  ·                      {}           false
-cbit              BIT(1)                    true         NULL            ·                      {}           false
-cbit12            BIT(12)                   true         NULL            ·                      {}           false
 cblob             BYTES                     true         NULL            ·                      {}           false
 cbool             BOOL                      true         NULL            ·                      {}           false
 cbytea            BYTES                     true         NULL            ·                      {}           false
