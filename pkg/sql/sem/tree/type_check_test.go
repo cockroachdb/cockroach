@@ -228,7 +228,8 @@ func TestTypeCheckError(t *testing.T) {
 		{`ANNOTATE_TYPE('a', int)`, `could not parse "a" as type int`},
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
-
+		{`B'1001'::decimal`, `invalid cast: varbit -> DECIMAL`},
+		{`101.3::bit`, `invalid cast: decimal -> BIT`},
 		{
 			`((1,2) AS a)`,
 			`mismatch in tuple definition: 2 expressions, 1 labels`,

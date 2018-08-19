@@ -107,6 +107,7 @@ SELECT * FROM kv3
 statement ok
 CREATE TABLE kv4 (
   int INT PRIMARY KEY,
+  bit BIT,
   bool BOOLEAN,
   char CHAR,
   float FLOAT
@@ -117,6 +118,12 @@ INSERT INTO kv4 (int) VALUES ('a')
 
 statement ok
 INSERT INTO kv4 (int) VALUES (1)
+
+statement error could not parse string as bit array: "a" is not a valid binary digit
+INSERT INTO kv4 (int, bit) VALUES (2, 'a')
+
+statement ok
+INSERT INTO kv4 (int, bit) VALUES (2, B'1')
 
 statement error could not parse "a" as type bool
 INSERT INTO kv4 (int, bool) VALUES (3, 'a')
@@ -136,13 +143,14 @@ INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 statement ok
 INSERT INTO kv4 (int, float) VALUES (5, 2.3)
 
-query IBTR rowsort
+query ITBTR rowsort
 SELECT * from kv4
 ----
-1  NULL  NULL  NULL
-3  true  NULL  NULL
-4  NULL  a     NULL
-5  NULL  NULL  2.3
+1  NULL  NULL  NULL  NULL
+2  1     NULL  NULL  NULL
+3  NULL  true  NULL  NULL
+4  NULL  NULL  a     NULL
+5  NULL  NULL  NULL  2.3
 
 statement ok
 CREATE TABLE kv5 (

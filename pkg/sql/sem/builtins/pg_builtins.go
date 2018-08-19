@@ -57,7 +57,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 
 // typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
 // builtins with underscores in between their type name and the i/o builtin
-// name, like date_in vs int8int. There seems to be no other way to
+// name, like date_in vs int8in. There seems to be no other way to
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
@@ -69,6 +69,8 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Interval.Oid():    {},
 	types.JSON.Oid():        {},
 	types.UUID.Oid():        {},
+	oid.T_varbit:            {},
+	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
 	types.FamTuple.Oid():    {},

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -144,6 +145,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeBytesAscending(b, t.Key), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.Key), nil
+	case *tree.DBitArray:
+		if dir == encoding.Ascending {
+			return encoding.EncodeBitArrayAscending(b, t.BitArray), nil
+		}
+		return encoding.EncodeBitArrayDescending(b, t.BitArray), nil
 	case *tree.DArray:
 		for _, datum := range t.Array {
 			var err error
@@ -176,6 +182,14 @@ func DecodeTableKey(
 	var rkey []byte
 	var err error
 	switch valType {
+	case types.BitArray:
+		var r bitarray.BitArray
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeBitArrayAscending(key)
+		} else {
+			rkey, r, err = encoding.DecodeBitArrayDescending(key)
+		}
+		return a.NewDBitArray(tree.DBitArray{BitArray: r}), rkey, err
 	case types.Bool:
 		var i int64
 		if dir == encoding.Ascending {
@@ -342,6 +356,8 @@ func EncodeTableValue(
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
 	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DBitArray:
+		return encoding.EncodeBitArrayValue(appendTo, uint32(colID), t.BitArray), nil
 	case *tree.DBool:
 		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), nil
 	case *tree.DInt:
@@ -429,6 +445,9 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return a.NewDString(tree.DString(data)), b, nil
+	case types.BitArray:
+		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
+		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
 	case types.Bool:
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
@@ -567,6 +586,11 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 	}
 
 	switch col.Type.SemanticType {
+	case ColumnType_BIT:
+		if v, ok := val.(*tree.DBitArray); ok {
+			r.SetBitArray(v.BitArray)
+			return r, nil
+		}
 	case ColumnType_BOOL:
 		if v, ok := val.(*tree.DBool); ok {
 			r.SetBool(bool(*v))
@@ -701,6 +725,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 	}
 
 	switch typ.SemanticType {
+	case ColumnType_BIT:
+		d, err := value.GetBitArray()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDBitArray(tree.DBitArray{BitArray: d}), nil
 	case ColumnType_BOOL:
 		v, err := value.GetBool()
 		if err != nil {
@@ -1047,6 +1077,8 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Duration, nil
 	case types.Bool:
 		return encoding.True, nil
+	case types.BitArray:
+		return encoding.BitArray, nil
 	case types.UUID:
 		return encoding.UUID, nil
 	case types.INet:
@@ -1073,6 +1105,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
 		return b, nil
+	case *tree.DBitArray:
+		return encoding.EncodeUntaggedBitArrayValue(b, t.BitArray), nil
 	case *tree.DFloat:
 		return encoding.EncodeUntaggedFloatValue(b, float64(*t)), nil
 	case *tree.DBool:
