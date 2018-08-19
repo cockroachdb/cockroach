@@ -1,0 +1,37 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+# Regression tests for weird explain analyze cases.
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) CREATE INDEX ON a(a)
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
+
+# Make sure failures are okay.
+statement error duplicate
+EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) INSERT INTO a SELECT a+1 FROM a
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) UPDATE a SET a = a*3
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) UPDATE a SET a = a*3 RETURNING a
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(10)
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(11) RETURNING NOTHING
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) DELETE FROM a
+
+statement ok
+EXPLAIN ANALYZE (DISTSQL) DROP TABLE a

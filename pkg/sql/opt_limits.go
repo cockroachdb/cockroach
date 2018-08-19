@@ -174,7 +174,11 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.sourcePlan, numRows, soft)
 		}
 	case *explainDistSQLNode:
-		p.setUnlimited(n.plan)
+		// EXPLAIN ANALYZE is special: it handles its own limit propagation, since
+		// it fully executes during startExec.
+		if !n.analyze {
+			p.setUnlimited(n.plan)
+		}
 	case *showTraceReplicaNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
