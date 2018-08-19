@@ -746,6 +746,9 @@ func TestInternColType(t *testing.T) {
 	test(coltypes.INet, &coltypes.TIPAddr{}, true)
 	test(coltypes.JSON, &coltypes.TJSON{}, true)
 	test(coltypes.Oid, &coltypes.TOid{Name: "OID"}, true)
+	test(coltypes.Bit, &coltypes.TBitArray{Width: 1}, true)
+	test(coltypes.Bit, &coltypes.TBitArray{Width: 1, Variable: true}, false)
+	test(coltypes.VarBit, &coltypes.TBitArray{Variable: true}, true)
 
 	// String types.
 	test(coltypes.String, &coltypes.TString{Variant: coltypes.TStringVariantSTRING}, true)

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -151,6 +152,14 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^MustBeDInt(d)), nil
+			},
+		},
+		UnaryOp{
+			Typ:        types.BitArray,
+			ReturnType: types.BitArray,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				p := MustBeDBitArray(d)
+				return &DBitArray{BitArray: bitarray.Not(p.BitArray)}, nil
 			},
 		},
 		UnaryOp{
@@ -340,6 +349,11 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	return &DJSON{result}, nil
 }
 
+func newCannotMixBitArraySizesError(op string) error {
+	return pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
+		"cannot %s bit strings of different sizes", op)
+}
+
 // BinOps contains the binary operations indexed by operation type.
 var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
@@ -349,6 +363,21 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.BitArray,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, newCannotMixBitArraySizesError("AND")
+				}
+				return &DBitArray{
+					BitArray: bitarray.And(lhs.BitArray, rhs.BitArray),
+				}, nil
 			},
 		},
 		BinOp{
@@ -374,6 +403,21 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.BitArray,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, newCannotMixBitArraySizesError("OR")
+				}
+				return &DBitArray{
+					BitArray: bitarray.Or(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+		},
+		BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.INet,
@@ -393,6 +437,21 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) ^ MustBeDInt(right)), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.BitArray,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				if lhs.BitLen() != rhs.BitLen() {
+					return nil, newCannotMixBitArraySizesError("XOR")
+				}
+				return &DBitArray{
+					BitArray: bitarray.Xor(lhs.BitArray, rhs.BitArray),
+				}, nil
 			},
 		},
 	},
@@ -1226,6 +1285,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.BitArray,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDBitArray(right)
+				return &DBitArray{
+					BitArray: bitarray.Concat(lhs.BitArray, rhs.BitArray),
+				}, nil
+			},
+		},
+		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.JSON,
 			ReturnType: types.JSON,
@@ -1250,6 +1321,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.Int,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDInt(right)
+				return &DBitArray{
+					BitArray: lhs.BitArray.LeftShiftAny(int64(rhs)),
+				}, nil
+			},
+		},
+		BinOp{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			ReturnType: types.Bool,
@@ -1268,6 +1351,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) >> uint(MustBeDInt(right))), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.BitArray,
+			RightType:  types.Int,
+			ReturnType: types.BitArray,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				lhs := MustBeDBitArray(left)
+				rhs := MustBeDInt(right)
+				return &DBitArray{
+					BitArray: lhs.BitArray.LeftShiftAny(-int64(rhs)),
+				}, nil
 			},
 		},
 		BinOp{
@@ -1591,6 +1686,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Timestamp, types.Timestamp),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
 		makeEqFn(types.UUID, types.UUID),
+		makeEqFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
 		makeEqFn(types.Date, types.Timestamp),
@@ -1633,6 +1729,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Timestamp, types.Timestamp),
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
 		makeLtFn(types.UUID, types.UUID),
+		makeLtFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp),
@@ -1675,6 +1772,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Timestamp, types.Timestamp),
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
 		makeLeFn(types.UUID, types.UUID),
+		makeLeFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp),
@@ -1726,6 +1824,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Timestamp, types.Timestamp),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
 		makeIsFn(types.UUID, types.UUID),
+		makeIsFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
 		makeIsFn(types.Date, types.Timestamp),
@@ -1772,6 +1871,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
 		makeEvalTupleIn(types.UUID),
+		makeEvalTupleIn(types.BitArray),
 	},
 
 	Like: {
@@ -2733,6 +2833,31 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 // CastTargetType.
 func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
 	switch typ := t.(type) {
+	case *coltypes.TBitArray:
+		switch v := d.(type) {
+		case *DBitArray:
+			if typ.Width == 0 || v.BitLen() == typ.Width {
+				return d, nil
+			}
+			var a DBitArray
+			a.BitArray = v.BitArray.ToWidth(typ.Width)
+			return &a, nil
+		case *DInt:
+			return NewDBitArrayFromInt(int64(*v), typ.Width)
+		case *DString:
+			res, err := bitarray.Parse(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return &DBitArray{BitArray: res.ToWidth(typ.Width)}, nil
+		case *DCollatedString:
+			res, err := bitarray.Parse(v.Contents)
+			if err != nil {
+				return nil, err
+			}
+			return &DBitArray{BitArray: res.ToWidth(typ.Width)}, nil
+		}
+
 	case *coltypes.TBool:
 		switch v := d.(type) {
 		case *DBool:
@@ -2752,6 +2877,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TInt:
 		var res *DInt
 		switch v := d.(type) {
+		case *DBitArray:
+			res = v.AsDInt(uint(typ.Width))
 		case *DBool:
 			if *v {
 				res = NewDInt(1)
@@ -2759,6 +2886,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				res = DZero
 			}
 		case *DInt:
+			// TODO(knz): enforce the coltype width here.
 			res = v
 		case *DFloat:
 			f := float64(*v)
@@ -2903,6 +3031,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
 		var s string
 		switch t := d.(type) {
+		case *DBitArray:
+			s = t.BitArray.String()
 		case *DFloat:
 			s = strconv.FormatFloat(float64(*t), 'g',
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
@@ -3685,6 +3815,11 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	array.Array = tuple.D
 	return array, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DBitArray) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
 }
 
 // Eval implements the TypedExpr interface.

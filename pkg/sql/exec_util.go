@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -539,6 +540,8 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 			d = tree.MakeDTimestamp(t, time.Microsecond)
 		case time.Duration:
 			d = &tree.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
+		case bitarray.BitArray:
+			d = &tree.DBitArray{BitArray: t}
 		case *apd.Decimal:
 			dd := &tree.DDecimal{}
 			dd.Set(t)
@@ -581,6 +584,7 @@ func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
 	switch types.UnwrapType(typ) {
 	case types.Unknown:
+	case types.BitArray:
 	case types.Bool:
 	case types.Int:
 	case types.Float:

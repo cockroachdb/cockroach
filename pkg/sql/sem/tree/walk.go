@@ -608,6 +608,9 @@ func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 func (expr *Placeholder) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DBitArray) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DBool) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
