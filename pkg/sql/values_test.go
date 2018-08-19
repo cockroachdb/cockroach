@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -181,6 +182,9 @@ type stringAlias string
 
 func TestGolangQueryArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+
 	// Each test case pairs an arbitrary value and tree.Datum which has the same
 	// type
 	testCases := []struct {
@@ -232,6 +236,9 @@ func TestGolangQueryArgs(t *testing.T) {
 		// Byte slice aliases.
 		{roachpb.Key("key"), reflect.TypeOf(types.Bytes)},
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
+
+		// Bit array.
+		{ba, reflect.TypeOf(types.BitArray)},
 	}
 
 	for i, tcase := range testCases {

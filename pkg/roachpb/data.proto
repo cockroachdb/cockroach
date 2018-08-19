@@ -62,6 +62,8 @@ enum ValueType {
   // followed by a value encoded Datum.
   TUPLE = 10;
 
+  BITARRAY = 11;
+
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
 }

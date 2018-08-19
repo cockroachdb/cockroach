@@ -206,6 +206,7 @@ build
 SELECT array_agg(NULL)
 ----
 error (42725): ambiguous call: array_agg(unknown), candidates are:
+array_agg(varbit) -> varbit[]
 array_agg(int) -> int[]
 array_agg(float) -> float[]
 array_agg(decimal) -> decimal[]

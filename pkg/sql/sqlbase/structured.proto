@@ -55,6 +55,11 @@ import "gogoproto/gogo.proto";
 // | DECIMAL(N)                     | DECIMAL        | NONE             | N         | 0     |                   |
 // | DECIMAL(N,M)                   | DECIMAL        | NONE             | N         | M     |                   |
 // |                                |                |                  |           |       |                   |
+// | BIT                            | BIT            | NONE             | 0         | 1     |                   |
+// | BIT(N)                         | BIT            | NONE             | 0         | N     |                   |
+// | VARBIT                         | BIT            | VARBIT           | 0         | 0     |                   |
+// | VARBIT(N)                      | BIT            | VARBIT           | 0         | N     |                   |
+// |                                |                |                  |           |       |                   |
 // | FLOAT8                         | FLOAT          | NONE             | 0         | 0     |                   |
 // | FLOAT4                         | FLOAT          | REAL             | 0         | 0     |                   |
 // |                                |                |                  |           |       |                   |
@@ -134,6 +139,7 @@ message ColumnType {
     JSON = 18;
     reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
+	BIT = 21;
 
     INT2VECTOR = 200;
     OIDVECTOR = 201;
@@ -147,6 +153,7 @@ message ColumnType {
     reserved 4;
     REAL = 5;
     DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+	VARBIT = 7;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];

@@ -944,6 +944,13 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`true`).Results(`true`),
 			baseTest.SetArgs(`"hello"`).Results(`"hello"`),
 		}},
+		{"SELECT $1:::BIT(4)", []preparedQueryTest{
+			baseTest.SetArgs(`1101`).Results(`1101`),
+		}},
+		{"SELECT $1:::VARBIT", []preparedQueryTest{
+			baseTest.SetArgs(`1101`).Results(`1101`),
+			baseTest.SetArgs(`1101001`).Results(`1101001`),
+		}},
 
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
