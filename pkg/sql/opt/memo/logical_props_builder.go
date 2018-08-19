@@ -153,7 +153,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	// Initialize key FD's from the table schema, including constant columns from
 	// the constraint, minus any columns that are not projected by the Scan
 	// operator.
-	relational.FuncDeps.CopyFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.CopyFrom(makeTableFuncDep(md, def.Table))
 	if def.Constraint != nil {
 		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
 	}
@@ -174,7 +174,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, md, &b.kb)
 	b.sb.buildScan(ev, relational)
 
 	return logical
@@ -210,7 +210,7 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildVirtualScan(ev, relational)
 
 	return logical
@@ -272,7 +272,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildSelect(ev, relational)
 
 	return logical
@@ -362,7 +362,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildProject(ev, relational)
 
 	return logical
@@ -523,7 +523,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildJoin(ev, relational)
 
 	return logical
@@ -557,7 +557,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	relational.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	relational.FuncDeps.AddFrom(b.makeTableFuncDep(md, def.Table))
+	relational.FuncDeps.AddFrom(makeTableFuncDep(md, def.Table))
 	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
 	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
@@ -568,7 +568,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, md, &b.kb)
 	b.sb.buildIndexJoin(ev, relational)
 
 	return logical
@@ -631,7 +631,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildGroupBy(ev, relational)
 
 	return logical
@@ -689,7 +689,7 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildSetOp(ev, relational)
 
 	return logical
@@ -730,7 +730,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildValues(ev, relational)
 
 	return logical
@@ -861,7 +861,7 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildLimit(ev, relational)
 
 	return logical
@@ -916,7 +916,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildOffset(ev, relational)
 
 	return logical
@@ -955,7 +955,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildMax1Row(ev, relational)
 
 	return logical
@@ -1004,7 +1004,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildRowNumber(ev, relational)
 
 	return logical
@@ -1041,7 +1041,7 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
 	b.sb.buildZip(ev, relational)
 
 	return logical
@@ -1129,9 +1129,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 // given base table. The set is derived lazily and is cached in the metadata,
 // since it may be accessed multiple times during query optimization. For more
 // details, see Relational.FuncDepSet.
-func (b *logicalPropsBuilder) makeTableFuncDep(
-	md *opt.Metadata, tabID opt.TableID,
-) *props.FuncDepSet {
+func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	fd, ok := md.TableAnnotation(tabID, fdAnnID).(*props.FuncDepSet)
 	if ok {
 		// Already made.
