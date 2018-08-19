@@ -87,21 +87,8 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 		sqlbase.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
 	},
 	sqlbase.ColumnType_INT: {
-		// Right now, our behavior with respect to handling BIT(n) doesn't
-		// match pgsql behavior.  Converting between INT(n) and BIT(n),
-		// especially regarding negative values, is somewhat dodgy.
-		// The safest thing to do at the moment is to deny this change,
-		// unless the user provides a USING expression.  We can revisit
-		// this once the following issue is worked out:
-		// https://github.com/cockroachdb/cockroach/issues/20991
 		sqlbase.ColumnType_INT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
-			fromBit := from.VisibleType == sqlbase.ColumnType_BIT
-			toBit := to.VisibleType == sqlbase.ColumnType_BIT
-
-			if fromBit == toBit {
-				return classifierWidth(from, to)
-			}
-			return ColumnConversionDangerous
+			return classifierWidth(from, to)
 		},
 	},
 	sqlbase.ColumnType_STRING: {

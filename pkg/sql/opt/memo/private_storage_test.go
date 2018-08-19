@@ -364,7 +364,6 @@ func TestInternColType(t *testing.T) {
 	test(coltypes.Bool, &coltypes.TBool{}, true)
 
 	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
-	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)
 
 	test(coltypes.Float4, &coltypes.TFloat{Short: true}, true)
 	test(coltypes.Float4, &coltypes.TFloat{}, false)
