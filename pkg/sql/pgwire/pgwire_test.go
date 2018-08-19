@@ -714,9 +714,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
-				Results("username", "STRING", false, gosql.NullBool{}, "", "{\"primary\"}").
-				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}").
-				Results("isRole", "BOOL", false, false, "", "{}"),
+				Results("username", "STRING", false, gosql.NullBool{}, "", "{\"primary\"}", false).
+				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
+				Results("isRole", "BOOL", false, false, "", "{}", false),
 		}},
 		{"SHOW DATABASES", []preparedQueryTest{
 			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),

@@ -128,14 +128,14 @@ pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
                          nspacl STRING[] NULL
 )
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices
-oid          OID        true         NULL            ·                      {}
-nspname      NAME       false        NULL            ·                      {}
-nspowner     OID        true         NULL            ·                      {}
-nspacl       STRING[]   true         NULL            ·                      {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+oid          OID        true         NULL            ·                      {}       false
+nspname      NAME       false        NULL            ·                      {}       false
+nspowner     OID        true         NULL            ·                      {}       false
+nspacl       STRING[]   true         NULL            ·                      {}       false
 
 query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
@@ -359,10 +359,14 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 586319999   index_key     b        20        0              8       1       0         -1
 586319999   index_key     c        20        0              8       2       0         -1
 192646233   t2            t1_id    20        0              8       1       0         -1
+192646233   t2            rowid    20        0              8       2       0         -1
+2761941313  primary       rowid    20        0              8       1       0         -1
 2761941314  t2_t1_id_idx  t1_id    20        0              8       1       0         -1
 226054345   t3            a        20        0              8       1       0         -1
 226054345   t3            b        20        0              8       2       0         -1
 226054345   t3            c        25        0              -1      3       0         -1
+226054345   t3            rowid    20        0              8       4       0         -1
+4084598993  primary       rowid    20        0              8       1       0         -1
 4084598994  t3_a_b_idx    a        20        0              8       1       0         -1
 4084598994  t3_a_b_idx    b        20        0              8       2       0         -1
 4218730311  v1            p        701       0              8       1       0         -1
@@ -387,10 +391,14 @@ t1_a_key      a        -1         NULL      NULL        NULL      false       fa
 index_key     b        -1         NULL      NULL        NULL      false       false
 index_key     c        -1         NULL      NULL        NULL      false       true
 t2            t1_id    -1         NULL      NULL        NULL      false       false
+t2            rowid    -1         NULL      NULL        NULL      true        true
+primary       rowid    -1         NULL      NULL        NULL      true        true
 t2_t1_id_idx  t1_id    -1         NULL      NULL        NULL      false       false
 t3            a        -1         NULL      NULL        NULL      false       false
 t3            b        -1         NULL      NULL        NULL      false       false
 t3            c        -1         NULL      NULL        NULL      false       true
+t3            rowid    -1         NULL      NULL        NULL      true        true
+primary       rowid    -1         NULL      NULL        NULL      true        true
 t3_a_b_idx    a        -1         NULL      NULL        NULL      false       false
 t3_a_b_idx    b        -1         NULL      NULL        NULL      false       false
 v1            p        -1         NULL      NULL        NULL      true        false
@@ -415,10 +423,14 @@ t1_a_key      a        false         true        0            NULL    NULL      
 index_key     b        false         true        0            NULL    NULL        NULL
 index_key     c        false         true        0            NULL    NULL        NULL
 t2            t1_id    false         true        0            NULL    NULL        NULL
+t2            rowid    false         true        0            NULL    NULL        NULL
+primary       rowid    false         true        0            NULL    NULL        NULL
 t2_t1_id_idx  t1_id    false         true        0            NULL    NULL        NULL
 t3            a        false         true        0            NULL    NULL        NULL
 t3            b        false         true        0            NULL    NULL        NULL
 t3            c        false         true        0            NULL    NULL        NULL
+t3            rowid    false         true        0            NULL    NULL        NULL
+primary       rowid    false         true        0            NULL    NULL        NULL
 t3_a_b_idx    a        false         true        0            NULL    NULL        NULL
 t3_a_b_idx    b        false         true        0            NULL    NULL        NULL
 v1            p        false         true        0            NULL    NULL        NULL
@@ -498,7 +510,9 @@ WHERE n.nspname = 'public'
 ----
 oid         relname  adrelid     adnum  adbin           adsrc
 1371742922  t1       4183203597  4      12:::INT        12:::INT
+3294137148  t2       192646233   2      unique_rowid()  unique_rowid()
 1821466931  t3       226054345   3      'FOO':::STRING  'FOO':::STRING
+437430594   t3       226054345   4      unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -1260,29 +1274,29 @@ SELECT * FROM pg_catalog.pg_stat_activity
 ----
 datid  datname  pid  usesysid  username  application_name  client_addr  client_hostname  client_port  backend_start  xact_start  query_start  state_change  wait_event_type  wait_event  state  backend_xid  backend_xmin  query
 
-query TTBTTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 ----
-column_name       data_type                 is_nullable  column_default  generation_expression  indices
-datid             OID                       true         NULL            ·                      {}
-datname           NAME                      true         NULL            ·                      {}
-pid               INTEGER                   true         NULL            ·                      {}
-usesysid          OID                       true         NULL            ·                      {}
-username          NAME                      true         NULL            ·                      {}
-application_name  STRING                    true         NULL            ·                      {}
-client_addr       INET                      true         NULL            ·                      {}
-client_hostname   STRING                    true         NULL            ·                      {}
-client_port       INTEGER                   true         NULL            ·                      {}
-backend_start     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-xact_start        TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-query_start       TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-state_change      TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}
-wait_event_type   STRING                    true         NULL            ·                      {}
-wait_event        STRING                    true         NULL            ·                      {}
-state             STRING                    true         NULL            ·                      {}
-backend_xid       INTEGER                   true         NULL            ·                      {}
-backend_xmin      INTEGER                   true         NULL            ·                      {}
-query             STRING                    true         NULL            ·                      {}
+column_name       data_type                 is_nullable  column_default  generation_expression  indices  is_hidden
+datid             OID                       true         NULL            ·                      {}       false
+datname           NAME                      true         NULL            ·                      {}       false
+pid               INTEGER                   true         NULL            ·                      {}       false
+usesysid          OID                       true         NULL            ·                      {}       false
+username          NAME                      true         NULL            ·                      {}       false
+application_name  STRING                    true         NULL            ·                      {}       false
+client_addr       INET                      true         NULL            ·                      {}       false
+client_hostname   STRING                    true         NULL            ·                      {}       false
+client_port       INTEGER                   true         NULL            ·                      {}       false
+backend_start     TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
+xact_start        TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
+query_start       TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
+state_change      TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
+wait_event_type   STRING                    true         NULL            ·                      {}       false
+wait_event        STRING                    true         NULL            ·                      {}       false
+state             STRING                    true         NULL            ·                      {}       false
+backend_xid       INTEGER                   true         NULL            ·                      {}       false
+backend_xmin      INTEGER                   true         NULL            ·                      {}       false
+query             STRING                    true         NULL            ·                      {}       false
 
 
 ## pg_catalog.pg_settings
@@ -1465,7 +1479,9 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 1371742922  t1  12:::INT
+3294137148  t2  unique_rowid()
 1821466931  t3  'FOO':::STRING
+437430594   t3  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.

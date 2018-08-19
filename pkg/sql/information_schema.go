@@ -254,7 +254,8 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_SET_CATALOG    STRING,
 	CHARACTER_SET_SCHEMA     STRING,
 	CHARACTER_SET_NAME       STRING,
-	GENERATION_EXPRESSION    STRING
+	GENERATION_EXPRESSION    STRING,
+	IS_HIDDEN                STRING NOT NULL -- CockroachDB extension
 );
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -284,6 +285,7 @@ CREATE TABLE information_schema.columns (
 					tree.DNull,                               // character_set_schema
 					tree.DNull,                               // character_set_name
 					dStringPtrOrEmpty(column.ComputeExpr),    // generation_expression
+					yesOrNoDatum(column.Hidden),              // is_hidden
 				)
 			})
 		})
@@ -1386,10 +1388,8 @@ func forEachColumnInTable(
 ) error {
 	// Table descriptors already hold columns in-order.
 	for i := range table.Columns {
-		if !table.Columns[i].Hidden {
-			if err := fn(&table.Columns[i]); err != nil {
-				return err
-			}
+		if err := fn(&table.Columns[i]); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1405,10 +1405,9 @@ func forEachColumnInIndex(
 		colMap[column.ID] = &table.Columns[i]
 	}
 	for _, columnID := range index.ColumnIDs {
-		if column := colMap[columnID]; !column.Hidden {
-			if err := fn(column); err != nil {
-				return err
-			}
+		column := colMap[columnID]
+		if err := fn(column); err != nil {
+			return err
 		}
 	}
 	return nil

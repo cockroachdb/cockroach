@@ -17,8 +17,9 @@ SELECT a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.a
     AND a.attnum > 0 AND NOT a.attisdropped
     ORDER BY a.attnum
 ----
-id   bigint  NULL  false  20  -1
-name text    NULL  false  25  -1
+id     bigint  NULL            false  20  -1
+name   text    NULL            false  25  -1
+rowid  bigint  unique_rowid()  true   20  -1
 
 
 # #12115
@@ -82,6 +83,7 @@ JOIN   pg_attribute a ON a.attrelid = i.indrelid
                      AND    i.indisprimary
 ----
 attname  data_type
+rowid    bigint
 
 statement ok
 CREATE TABLE b (id INT, a_id INT, FOREIGN KEY (a_id) REFERENCES a (id))
