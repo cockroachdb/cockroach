@@ -54,7 +54,8 @@ func TruncateLog(
 	// After a merge, it's possible that this request was sent to the wrong
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
-	if cArgs.EvalCtx.GetRangeID() != args.RangeID {
+	rangeID := cArgs.EvalCtx.GetRangeID()
+	if rangeID != args.RangeID {
 		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return result.Result{}, nil
@@ -80,19 +81,14 @@ func TruncateLog(
 		return result.Result{}, err
 	}
 
-	// We start at index zero because it's always possible that a previous
-	// truncation did not clean up entries made obsolete by the previous
-	// truncation.
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.GetRangeID(), 0))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.GetRangeID(), args.Index))
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index).PrefixEnd())
 
 	var ms enginepb.MVCCStats
 	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 		// Compute the stats delta that were to occur should the log entries be
 		// purged. We do this as a side effect of seeing a new TruncatedState,
-		// downstream of Raft. A follower may not run the side effect in the event
-		// of an ill-timed crash, but that's OK since the next truncation will get
-		// everything.
+		// downstream of Raft.
 		//
 		// Note that any sideloaded payloads that may be removed by this truncation
 		// don't matter; they're not tracked in the raft log delta.
