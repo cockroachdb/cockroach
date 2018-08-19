@@ -57,69 +57,72 @@ type T interface {
 	columnType()
 }
 
+func (*TArray) columnType()          {}
+func (*TBitArray) columnType()       {}
 func (*TBool) columnType()           {}
-func (*TInt) columnType()            {}
-func (*TSerial) columnType()         {}
-func (*TFloat) columnType()          {}
-func (*TDecimal) columnType()        {}
+func (*TBytes) columnType()          {}
+func (*TCollatedString) columnType() {}
 func (*TDate) columnType()           {}
+func (*TDecimal) columnType()        {}
+func (*TFloat) columnType()          {}
+func (*TIPAddr) columnType()         {}
+func (*TInt) columnType()            {}
+func (*TInterval) columnType()       {}
+func (*TJSON) columnType()           {}
+func (*TName) columnType()           {}
+func (*TOid) columnType()            {}
+func (*TSerial) columnType()         {}
+func (*TString) columnType()         {}
 func (*TTime) columnType()           {}
 func (*TTimestamp) columnType()      {}
 func (*TTimestampTZ) columnType()    {}
-func (*TInterval) columnType()       {}
-func (*TJSON) columnType()           {}
 func (*TUUID) columnType()           {}
-func (*TIPAddr) columnType()         {}
-func (*TString) columnType()         {}
-func (*TName) columnType()           {}
-func (*TBytes) columnType()          {}
-func (*TCollatedString) columnType() {}
-func (*TArray) columnType()          {}
 func (*TVector) columnType()         {}
 func (TTuple) columnType()           {}
-func (*TOid) columnType()            {}
 
 // All Ts also implement CastTargetType.
+func (*TArray) castTargetType()          {}
+func (*TBitArray) castTargetType()       {}
 func (*TBool) castTargetType()           {}
-func (*TInt) castTargetType()            {}
-func (*TSerial) castTargetType()         {}
-func (*TFloat) castTargetType()          {}
-func (*TDecimal) castTargetType()        {}
+func (*TBytes) castTargetType()          {}
+func (*TCollatedString) castTargetType() {}
 func (*TDate) castTargetType()           {}
+func (*TDecimal) castTargetType()        {}
+func (*TFloat) castTargetType()          {}
+func (*TIPAddr) castTargetType()         {}
+func (*TInt) castTargetType()            {}
+func (*TInterval) castTargetType()       {}
+func (*TJSON) castTargetType()           {}
+func (*TName) castTargetType()           {}
+func (*TOid) castTargetType()            {}
+func (*TSerial) castTargetType()         {}
+func (*TString) castTargetType()         {}
 func (*TTime) castTargetType()           {}
 func (*TTimestamp) castTargetType()      {}
 func (*TTimestampTZ) castTargetType()    {}
-func (*TInterval) castTargetType()       {}
-func (*TJSON) castTargetType()           {}
 func (*TUUID) castTargetType()           {}
-func (*TIPAddr) castTargetType()         {}
-func (*TString) castTargetType()         {}
-func (*TName) castTargetType()           {}
-func (*TBytes) castTargetType()          {}
-func (*TCollatedString) castTargetType() {}
-func (*TArray) castTargetType()          {}
 func (*TVector) castTargetType()         {}
 func (TTuple) castTargetType()           {}
-func (*TOid) castTargetType()            {}
 
+func (node *TArray) String() string          { return ColTypeAsString(node) }
+func (node *TBitArray) String() string       { return ColTypeAsString(node) }
 func (node *TBool) String() string           { return ColTypeAsString(node) }
-func (node *TInt) String() string            { return ColTypeAsString(node) }
-func (node *TSerial) String() string         { return ColTypeAsString(node) }
-func (node *TFloat) String() string          { return ColTypeAsString(node) }
-func (node *TDecimal) String() string        { return ColTypeAsString(node) }
+func (node *TBytes) String() string          { return ColTypeAsString(node) }
+func (node *TCollatedString) String() string { return ColTypeAsString(node) }
 func (node *TDate) String() string           { return ColTypeAsString(node) }
+func (node *TDecimal) String() string        { return ColTypeAsString(node) }
+func (node *TFloat) String() string          { return ColTypeAsString(node) }
+func (node *TIPAddr) String() string         { return ColTypeAsString(node) }
+func (node *TInt) String() string            { return ColTypeAsString(node) }
+func (node *TInterval) String() string       { return ColTypeAsString(node) }
+func (node *TJSON) String() string           { return ColTypeAsString(node) }
+func (node *TName) String() string           { return ColTypeAsString(node) }
+func (node *TOid) String() string            { return ColTypeAsString(node) }
+func (node *TSerial) String() string         { return ColTypeAsString(node) }
+func (node *TString) String() string         { return ColTypeAsString(node) }
 func (node *TTime) String() string           { return ColTypeAsString(node) }
 func (node *TTimestamp) String() string      { return ColTypeAsString(node) }
 func (node *TTimestampTZ) String() string    { return ColTypeAsString(node) }
-func (node *TInterval) String() string       { return ColTypeAsString(node) }
-func (node *TJSON) String() string           { return ColTypeAsString(node) }
 func (node *TUUID) String() string           { return ColTypeAsString(node) }
-func (node *TIPAddr) String() string         { return ColTypeAsString(node) }
-func (node *TString) String() string         { return ColTypeAsString(node) }
-func (node *TName) String() string           { return ColTypeAsString(node) }
-func (node *TBytes) String() string          { return ColTypeAsString(node) }
-func (node *TCollatedString) String() string { return ColTypeAsString(node) }
-func (node *TArray) String() string          { return ColTypeAsString(node) }
 func (node *TVector) String() string         { return ColTypeAsString(node) }
 func (node TTuple) String() string           { return ColTypeAsString(node) }
-func (node *TOid) String() string            { return ColTypeAsString(node) }

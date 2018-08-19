@@ -408,6 +408,7 @@ bool ValueType_IsValid(int value) {
     case 8:
     case 9:
     case 10:
+    case 11:
     case 100:
       return true;
     default:

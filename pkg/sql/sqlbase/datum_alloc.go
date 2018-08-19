@@ -24,6 +24,7 @@ type DatumAlloc struct {
 	dfloatAlloc       []tree.DFloat
 	dstringAlloc      []tree.DString
 	dbytesAlloc       []tree.DBytes
+	dbitArrayAlloc    []tree.DBitArray
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
 	dtimeAlloc        []tree.DTime
@@ -103,6 +104,18 @@ func (a *DatumAlloc) NewDBytes(v tree.DBytes) *tree.DBytes {
 	buf := &a.dbytesAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DBytes, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDBitArray allocates a DBitArray.
+func (a *DatumAlloc) NewDBitArray(v tree.DBitArray) *tree.DBitArray {
+	buf := &a.dbitArrayAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DBitArray, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

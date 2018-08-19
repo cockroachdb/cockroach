@@ -201,6 +201,12 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, err
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
+		case oid.T_bit, oid.T_varbit:
+			t, err := tree.ParseDBitArray(string(b))
+			if err != nil {
+				return nil, err
+			}
+			return t, nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(string(b), 10, 64)
 			if err != nil {
