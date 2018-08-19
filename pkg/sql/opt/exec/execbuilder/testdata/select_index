@@ -133,11 +133,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
 output row: [2 'two' 22 'bar']
 
-# TODO(radu): Need to select "dc" index
-# The where-clause does not contain columns matching a prefix of any
-# index. Note that the index "dc" was chosen because it contains fewer
-# keys per row than the primary key index while still containing all
-# of the needed columns.
+# The where-clause does not contain columns matching a prefix of any index.
+# Note that the index "bc" is chosen because the condition is estimated to be
+# very selective and the main cost is the scan (this index contains fewer
+# columns and this is deemed to offset the cost of the index join).
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
 
@@ -182,29 +181,34 @@ fetched: /t/a_desc/2/'two' -> NULL
 output row: [2]
 
 # Index selection occurs in direct join operands too.
-# TODO(radu): except that it doesn't in this case with new optimizer
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
+EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-render          ·         ·          (b, a, c, d, a, c, d)     ·
- │              render 0  b          ·                         ·
- │              render 1  a          ·                         ·
- │              render 2  c          ·                         ·
- │              render 3  d          ·                         ·
- │              render 4  a          ·                         ·
- │              render 5  c          ·                         ·
- │              render 6  d          ·                         ·
- └── join       ·         ·          (a, b, c, d, a, b, c, d)  ·
-      │         type      inner      ·                         ·
-      │         equality  (b) = (b)  ·                         ·
-      ├── scan  ·         ·          (a, b, c, d)              ·
-      │         table     t@primary  ·                         ·
-      │         spans     ALL        ·                         ·
-      │         filter    b < '3'    ·                         ·
-      └── scan  ·         ·          (a, b, c, d)              ·
-·               table     t@primary  ·                         ·
-·               spans     ALL        ·                         ·
-·               filter    b < '3'    ·                         ·
+render                ·               ·                    (b, a, c, d, a, c, d)     ·
+ │                    render 0        b                    ·                         ·
+ │                    render 1        a                    ·                         ·
+ │                    render 2        c                    ·                         ·
+ │                    render 3        d                    ·                         ·
+ │                    render 4        a                    ·                         ·
+ │                    render 5        c                    ·                         ·
+ │                    render 6        d                    ·                         ·
+ └── join             ·               ·                    (a, b, c, d, a, b, c, d)  ·
+      │               type            inner                ·                         ·
+      │               equality        (b) = (b)            ·                         ·
+      │               mergeJoinOrder  +"(b=b)"             ·                         ·
+      │               pred            b = b                ·                         ·
+      ├── index-join  ·               ·                    (a, b, c, d)              ·
+      │    ├── scan   ·               ·                    (a, b, c)                 ·
+      │    │          table           t@bc                 ·                         ·
+      │    │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+      │    └── scan   ·               ·                    (a, b, c, d)              ·
+      │               table           t@primary            ·                         ·
+      └── index-join  ·               ·                    (a, b, c, d)              ·
+           ├── scan   ·               ·                    (a, b, c)                 ·
+           │          table           t@bc                 ·                         ·
+           │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+           └── scan   ·               ·                    (a, b, c, d)              ·
+·                     table           t@primary            ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -652,7 +656,6 @@ INSERT INTO test2(k)
 # Plan check:
 # The query is using an index-join and the limit is propagated to the scan.
 
-# TODO(radu): need revscan.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
