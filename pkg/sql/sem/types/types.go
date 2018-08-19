@@ -51,6 +51,8 @@ var (
 	Unknown T = tUnknown{}
 	// Bool is the type of a DBool. Can be compared with ==.
 	Bool T = tBool{}
+	// BitArray is the type of a DBitArray. Can be compared with ==.
+	BitArray T = tBitArray{}
 	// Int is the type of a DInt. Can be compared with ==.
 	Int T = tInt{}
 	// Float is the type of a DFloat. Can be compared with ==.
@@ -86,6 +88,7 @@ var (
 	// AnyNonArray contains all non-array types.
 	AnyNonArray = []T{
 		Bool,
+		BitArray,
 		Int,
 		Float,
 		Decimal,
@@ -142,6 +145,15 @@ func (tInt) FamilyEqual(other T) bool { return UnwrapType(other) == Int }
 func (tInt) Oid() oid.Oid             { return oid.T_int8 }
 func (tInt) SQLName() string          { return "bigint" }
 func (tInt) IsAmbiguous() bool        { return false }
+
+type tBitArray struct{}
+
+func (tBitArray) String() string           { return "varbit" }
+func (tBitArray) Equivalent(other T) bool  { return UnwrapType(other) == BitArray || other == Any }
+func (tBitArray) FamilyEqual(other T) bool { return UnwrapType(other) == BitArray }
+func (tBitArray) Oid() oid.Oid             { return oid.T_varbit }
+func (tBitArray) SQLName() string          { return "bit varying" }
+func (tBitArray) IsAmbiguous() bool        { return false }
 
 type tFloat struct{}
 

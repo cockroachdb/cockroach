@@ -183,6 +183,8 @@ func TestFormatExpr(t *testing.T) {
 			`('abc')[string]`},
 		{`b'abc'`, tree.FmtShowTypes,
 			`('\x616263')[bytes]`},
+		{`B'10010'`, tree.FmtShowTypes,
+			`(B'10010')[varbit]`},
 		{`interval '3s'`, tree.FmtShowTypes,
 			`('3s')[interval]`},
 		{`date '2003-01-01'`, tree.FmtShowTypes,
@@ -223,6 +225,8 @@ func TestFormatExpr(t *testing.T) {
 		{`-9223372036854775809`, tree.FmtParsable, "(-9223372036854775809):::DECIMAL"},
 		{`(-92233.1):::FLOAT`, tree.FmtParsable, "(-92233.1):::FLOAT8"},
 		{`92233.00:::DECIMAL`, tree.FmtParsable, "92233.00:::DECIMAL"},
+
+		{`B'00100'`, tree.FmtParsable, "B'00100'"},
 
 		{`unique_rowid() + 123`, tree.FmtParsable,
 			`unique_rowid() + 123:::INT`},

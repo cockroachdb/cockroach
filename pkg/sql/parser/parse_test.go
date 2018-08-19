@@ -587,6 +587,8 @@ func TestParse(t *testing.T) {
 
 		{`SELECT BOOL 'foo', 'foo'::BOOL`},
 		{`SELECT INT 'foo', 'foo'::INT`},
+		{`SELECT BIT '10', '10'::BIT`},
+		{`SELECT VARBIT '1', '1'::VARBIT`},
 		{`SELECT INT2 'foo', 'foo'::INT2`},
 		{`SELECT INT4 'foo', 'foo'::INT4`},
 		{`SELECT INT8 'foo', 'foo'::INT8`},
@@ -602,6 +604,14 @@ func TestParse(t *testing.T) {
 		{`SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ`},
 		{`SELECT JSONB 'foo', 'foo'::JSONB`},
 		{`SELECT SERIAL 'foo', 'foo'::SERIAL`},
+
+		{`SELECT 'foo'::DECIMAL(1)`},
+		{`SELECT 'foo'::DECIMAL(1,2)`},
+		{`SELECT 'foo'::BIT(3)`},
+		{`SELECT 'foo'::VARBIT(3)`},
+		{`SELECT 'foo'::CHAR(3)`},
+		{`SELECT 'foo'::VARCHAR(3)`},
+		{`SELECT 'foo'::STRING(3)`},
 
 		{`SELECT '192.168.0.1'::INET`},
 		{`SELECT '192.168.0.1':::INET`},
@@ -1130,6 +1140,8 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b CHAR, c CHAR, d CHAR(3))`},
 		{`CREATE TABLE a (b CHAR VARYING, c CHARACTER VARYING(3))`,
 			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
+		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
+			`CREATE TABLE a (b VARBIT(2), c BIT)`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
@@ -1772,6 +1784,13 @@ CREATE TABLE test (
                  ^
 HINT: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
+  foo BIT(0)
+)`, `length for type bit must be at least 1 at or near ")"
+CREATE TABLE test (
+  foo BIT(0)
+           ^
+`},
+		{`CREATE TABLE test (
   foo INT DEFAULT 1 DEFAULT 2
 )`, `multiple default values specified for column "foo" at or near ")"
 CREATE TABLE test (
@@ -2144,13 +2163,6 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
                                                          ^
 `,
-		},
-		{
-			`CREATE TABLE foo(a BIT)`,
-			`unimplemented at or near ")"
-CREATE TABLE foo(a BIT)
-                      ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/20991`,
 		},
 		{
 			`CREATE TABLE foo(a CHAR(0))`,

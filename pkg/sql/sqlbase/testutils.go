@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -121,6 +122,13 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 			tuple.D[i] = RandDatum(rng, internalType, true)
 		}
 		return &tuple
+	case ColumnType_BIT:
+		width := typ.Width
+		if width == 0 {
+			width = rng.Int31n(100)
+		}
+		r := bitarray.Rand(rng, uint(width))
+		return &tree.DBitArray{BitArray: r}
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
@@ -199,6 +207,9 @@ func RandCollationLocale(rng *rand.Rand) *string {
 // RandColumnType returns a random ColumnType value.
 func RandColumnType(rng *rand.Rand) ColumnType {
 	typ := ColumnType{SemanticType: columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]}
+	if typ.SemanticType == ColumnType_BIT {
+		typ.Width = int32(rng.Intn(50))
+	}
 	if typ.SemanticType == ColumnType_COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
 	}

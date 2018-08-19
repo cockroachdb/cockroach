@@ -654,7 +654,9 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSONB || semanticType == ColumnType_TUPLE
+	return semanticType == ColumnType_ARRAY ||
+		semanticType == ColumnType_JSONB ||
+		semanticType == ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1118,10 +1120,20 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		if !st.Version.IsMinSupported(cluster.Version2_0) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_JSONB {
-					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
+					return fmt.Errorf("cluster version does not support JSONB (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
 				}
 				if def.ComputeExpr != nil {
-					return errors.New("cluster version does not support computed columns (>= 2.0 required)")
+					return fmt.Errorf("cluster version does not support computed columns (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
+				}
+			}
+		}
+		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
+			for _, def := range desc.Columns {
+				if def.Type.SemanticType == ColumnType_BIT {
+					return fmt.Errorf("cluster version does not support BIT (required: %s)",
+						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
 			}
 		}

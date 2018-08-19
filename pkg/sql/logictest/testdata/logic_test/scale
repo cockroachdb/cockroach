@@ -31,6 +31,30 @@ statement error value too long
 UPDATE test SET t = 'cdefg' WHERE t = 'ab'
 
 statement ok
+CREATE TABLE tb (
+  b BIT(3),
+  UNIQUE INDEX a (b)
+)
+
+statement ok
+INSERT INTO tb VALUES (B'001')
+
+statement ok
+INSERT INTO tb VALUES (B'011')
+
+statement ok
+INSERT INTO tb VALUES (B'111')
+
+statement error bit string length 4 does not match type BIT\(3\)
+INSERT INTO tb VALUES (B'1111')
+
+statement ok
+UPDATE tb SET b = B'010' WHERE b = B'111'
+
+statement error bit string length 5 does not match type BIT\(3\)
+UPDATE tb SET b = B'10000' WHERE b = B'010'
+
+statement ok
 CREATE TABLE tc (
   b INT2,
   UNIQUE INDEX a (b)

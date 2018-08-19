@@ -312,14 +312,14 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			var decoded EncDatum
 			decoded, b, err = EncDatumFromBuffer(&types[i], enc[i], b)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%+v: encdatum from %+v: %+v (%+v)", ed[i].Datum, enc[i], err, &types[i])
 			}
 			err = decoded.EnsureDecoded(&types[i], &alloc)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%+v: ensuredecoded: %v (%+v)", ed[i], err, &types[i])
 			}
 			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
-				t.Errorf("decoded datum %s doesn't equal original %s", decoded.Datum, ed[i].Datum)
+				t.Errorf("decoded datum %+v doesn't equal original %+v", decoded.Datum, ed[i].Datum)
 			}
 		}
 		if len(b) != 0 {

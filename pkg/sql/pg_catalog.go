@@ -2052,6 +2052,7 @@ func typColl(typ types.T, h oidHasher) tree.Datum {
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*tree.DString{
 	reflect.TypeOf(types.Any):         typCategoryPseudo,
+	reflect.TypeOf(types.BitArray):    typCategoryBitString,
 	reflect.TypeOf(types.Bool):        typCategoryBoolean,
 	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
 	reflect.TypeOf(types.Date):        typCategoryDateTime,

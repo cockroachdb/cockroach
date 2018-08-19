@@ -75,6 +75,8 @@ var _ locationContext = &SemaContext{}
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
 	switch t {
+	case types.BitArray:
+		return ParseDBitArray(s)
 	case types.Bool:
 		return ParseDBool(s)
 	case types.Date:
