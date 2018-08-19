@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -271,17 +272,22 @@ func (e *NotBootstrappedError) Error() string {
 }
 
 // A storeReplicaVisitor calls a visitor function for each of a store's
-// initialized Replicas (in unspecified order).
+// initialized Replicas (in unspecified order). It provides an option
+// to visit replicas in increasing RangeID order.
 type storeReplicaVisitor struct {
 	store   *Store
-	repls   []*Replica // Replicas to be visited.
+	repls   []*Replica // Replicas to be visited
+	ordered bool       // Option to visit replicas in sorted order
 	visited int        // Number of visited ranges, -1 before first call to Visit()
 }
 
-// Len implements shuffle.Interface.
+// Len implements sort.Interface.
 func (rs storeReplicaVisitor) Len() int { return len(rs.repls) }
 
-// Swap implements shuffle.Interface.
+// Less implements sort.Interface.
+func (rs storeReplicaVisitor) Less(i, j int) bool { return rs.repls[i].RangeID < rs.repls[j].RangeID }
+
+// Swap implements sort.Interface.
 func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
 
 // newStoreReplicaVisitor constructs a storeReplicaVisitor.
@@ -290,6 +296,12 @@ func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 		store:   store,
 		visited: -1,
 	}
+}
+
+// InOrder tells the visitor to visit replicas in increasing RangeID order.
+func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
+	rs.ordered = true
+	return rs
 }
 
 // Visit calls the visitor with each Replica until false is returned.
@@ -303,15 +315,20 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		return true
 	})
 
-	// The Replicas are already in "unspecified order" due to map iteration,
-	// but we want to make sure it's completely random to prevent issues in
-	// tests where stores are scanning replicas in lock-step and one store is
-	// winning the race and getting a first crack at processing the replicas on
-	// its queues.
-	//
-	// TODO(peter): Re-evaluate whether this is necessary after we allow
-	// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
-	shuffle.Shuffle(rs)
+	if rs.ordered {
+		// If the replicas were requested in sorted order, perform the sort.
+		sort.Sort(rs)
+	} else {
+		// The Replicas are already in "unspecified order" due to map iteration,
+		// but we want to make sure it's completely random to prevent issues in
+		// tests where stores are scanning replicas in lock-step and one store is
+		// winning the race and getting a first crack at processing the replicas on
+		// its queues.
+		//
+		// TODO(peter): Re-evaluate whether this is necessary after we allow
+		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
+		shuffle.Shuffle(rs)
+	}
 
 	rs.visited = 0
 	for _, repl := range rs.repls {
@@ -1455,6 +1472,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	if err != nil {
 		return err
+	}
+
+	// Ensure that no Raft entries were abandoned by previous versions of Cockroach
+	// that did not delete Raft entries atomically with applying log truncation
+	// Raft commands. This will only be performed once, after which this call will
+	// see a migration marker and quickly no-op.
+	err = removeLeakedRaftEntries(ctx, s.Clock(), s.engine, newStoreReplicaVisitor(s))
+	if err != nil {
+		return errors.Wrapf(err, "checking for leaked raft entries for %v", s.engine)
 	}
 
 	// Start Raft processing goroutines.

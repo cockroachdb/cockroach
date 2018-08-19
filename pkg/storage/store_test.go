@@ -432,6 +432,33 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 	}
 
+	// Lay down a few fake Raft entries for Range 1 to jog `removeLeakedRaftEntries`.
+	{
+		ts, err := stateloader.Make(nil /* st */, 1).LoadTruncatedState(ctx, eng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		const entryCount = 4
+		for i := 0; i < entryCount; i++ {
+			if ts.Index < uint64(i) {
+				t.Fatal("index cannot be negative")
+			}
+			key := keys.RaftLogKey(1, ts.Index-uint64(i))
+
+			var ent raftpb.Entry
+			var value roachpb.Value
+			if err := value.SetProto(&ent); err != nil {
+				t.Fatal(err)
+			}
+			if err := engine.MVCCPut(
+				ctx, eng, nil, key, hlc.Timestamp{}, value, nil, /* txn */
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -472,6 +499,22 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			t.Fatalf("failure fetching 1st range: %s", err)
 		}
 		rs := r.GetMVCCStats()
+
+		// Check that `removeLeakedRaftEntries` did what it was supposed to.
+		ts, err := r.raftTruncatedState(ctx)
+		if err != nil {
+			t.Fatalf("failure fetching raft truncated state: %s", err)
+		}
+		for i := uint64(0); i <= ts.Index; i++ {
+			key := keys.RaftLogKey(1, i)
+			if found, err := engine.MVCCGetProto(
+				ctx, eng, key, hlc.Timestamp{}, false, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if found {
+				t.Fatalf("found unexpected raft entry for key %v", key)
+			}
+		}
 
 		// Stats should agree with a recomputation.
 		now := r.store.Clock().Now()

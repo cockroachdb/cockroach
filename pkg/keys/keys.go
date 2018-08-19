@@ -75,8 +75,8 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
-// StoreHLCUpperBoundKey returns the key for storing an upper bound to the
-// wall time used by HLC
+// StoreHLCUpperBoundKey returns the store-local key for storing an upper bound
+// to the wall time used by HLC.
 func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localHLCUpperBoundSuffix, nil)
 }
@@ -113,6 +113,13 @@ func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key,
 		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
 	}
 	return start, end, nil
+}
+
+// StoreRemovedLeakedRaftEntriesKey returns a store-local key that marks
+// when a store has completed its migration to remove all possibly-leaked
+// Raft entries on all replicas.
+func StoreRemovedLeakedRaftEntriesKey() roachpb.Key {
+	return MakeStoreKey(localRemovedLeakedRaftEntriesSuffix, nil)
 }
 
 // NodeLivenessKey returns the key for the node liveness record.

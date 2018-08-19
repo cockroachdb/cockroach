@@ -324,6 +324,15 @@ func (r *Replica) raftTruncatedStateLocked(
 	return ts, nil
 }
 
+// raftTruncatedState returns metadata about the log that preceded the first
+// current entry. This includes both entries that have been compacted away and
+// the dummy entries that make up the starting point of an empty log.
+func (r *Replica) raftTruncatedState(ctx context.Context) (roachpb.RaftTruncatedState, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.raftTruncatedStateLocked(ctx)
+}
+
 // FirstIndex implements the raft.Storage interface.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	ctx := r.AnnotateCtx(context.TODO())
