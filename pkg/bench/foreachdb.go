@@ -33,9 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 )
 
-// Disable benchmarking with the experimental optimizer for now.
-const enableCockroachOpt = false
-
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
@@ -45,22 +42,14 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		b.Fatal(err)
 	}
 
-	if enableCockroachOpt {
-		// If benchmarking against new optimizer, disable DistSQL, so that it's
-		// apples-to-apples, since the new optimizer uses local execution.
-		if _, err := db.Exec(`SET DISTSQL=OFF`); err != nil {
-			b.Fatal(err)
-		}
+	if _, err := db.Exec(`SET EXPERIMENTAL_OPT=OFF`); err != nil {
+		b.Fatal(err)
 	}
 
 	f(b, db)
 }
 
 func benchmarkCockroachOpt(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	if !enableCockroachOpt {
-		b.Skipf("Benchmark with experimental optimizer is disabled")
-	}
-
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{UseDatabase: "bench"})
 	defer s.Stopper().Stop(context.TODO())
