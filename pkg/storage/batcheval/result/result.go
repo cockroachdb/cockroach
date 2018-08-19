@@ -225,9 +225,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		q.Replicated.State = nil
 	}
 
-	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
-	q.Replicated.BlockReads = false
-
 	if p.Replicated.Split == nil {
 		p.Replicated.Split = q.Replicated.Split
 	} else if q.Replicated.Split != nil {

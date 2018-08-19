@@ -505,12 +505,6 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.PrevLeaseProposal = nil
 	}
 
-	if rResult.BlockReads {
-		r.readOnlyCmdMu.Lock()
-		defer r.readOnlyCmdMu.Unlock()
-		rResult.BlockReads = false
-	}
-
 	// Update MVCC stats and Raft portion of ReplicaState.
 	deltaStats := rResult.Delta.ToStats()
 	r.mu.Lock()

@@ -972,8 +972,6 @@ func splitTrigger(
 	rightDeltaMS := bothDeltaMS
 	rightDeltaMS.Subtract(leftDeltaMS)
 	var pd result.Result
-	// This makes sure that no reads are happening in parallel; see #3148.
-	pd.Replicated.BlockReads = true
 	pd.Replicated.Split = &storagebase.Split{
 		SplitTrigger: *split,
 		RHSDelta:     rightDeltaMS,
@@ -1029,7 +1027,6 @@ func mergeTrigger(
 	}
 
 	var pd result.Result
-	pd.Replicated.BlockReads = true
 	pd.Replicated.Merge = &storagebase.Merge{
 		MergeTrigger: *merge,
 	}

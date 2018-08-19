@@ -289,11 +289,6 @@ type Replica struct {
 	// via a raft message.
 	creatingReplica *roachpb.ReplicaDescriptor
 
-	// Held in read mode during read-only commands. Held in exclusive mode to
-	// prevent read-only commands from executing. Acquired before the embedded
-	// RWMutex.
-	readOnlyCmdMu syncutil.RWMutex
-
 	// rangeStr is a string representation of a RangeDescriptor that can be
 	// atomically read and updated without needing to acquire the replica.mu lock.
 	// All updates to state.Desc should be duplicated here.
@@ -2920,14 +2915,8 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	log.Event(ctx, "waiting for read lock")
-	r.readOnlyCmdMu.RLock()
-	defer r.readOnlyCmdMu.RUnlock()
-
-	// Guarantee we remove the commands from the command queue. It is
-	// important that this is inside the readOnlyCmdMu lock so that the
-	// timestamp cache update is synchronized. This is wrapped to delay
-	// pErr evaluation to its value when returning.
+	// Guarantee we remove the commands from the command queue. This is wrapped to
+	// delay pErr evaluation to its value when returning.
 	defer func() {
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
@@ -2945,9 +2934,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Evaluate read-only batch command. It checks for matching key range; note
-	// that holding readOnlyCmdMu throughout is important to avoid reads from the
-	// "wrong" key range being served after the range has been split.
+	// Evaluate read-only batch command. It checks for matching key range.
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
