@@ -41,22 +41,22 @@ func (c *CustomFuncs) HasNullRejectingFilter(filter memo.GroupID, nullRejectCols
 }
 
 // NullRejectAggVar scans through the list of aggregate functions and returns
-// the Variable input of the first aggregate that is not ConstAgg or
-// ConstNotNullAgg. Such an aggregate must exist, since this is only called if
-// at least one eligible null-rejection column was identified by the
-// deriveGroupByRejectNullCols method (see its comment for more details).
+// the Variable input of the first aggregate that is not ConstAgg. Such an
+// aggregate must exist, since this is only called if at least one eligible
+// null-rejection column was identified by the deriveGroupByRejectNullCols
+// method (see its comment for more details).
 func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
 	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
 
 	for i := len(aggsElems) - 1; i >= 0; i-- {
 		agg := c.f.mem.NormExpr(aggsElems[i])
-		if agg.Operator() != opt.ConstAggOp && agg.Operator() != opt.ConstNotNullAggOp {
+		if agg.Operator() != opt.ConstAggOp {
 			// Return the input Variable operator.
 			return agg.ChildGroup(c.f.mem, 0)
 		}
 	}
-	panic("couldn't find an aggregate that is not ConstAgg/ConstNotNullAgg")
+	panic("couldn't find an aggregate that is not ConstAgg")
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
