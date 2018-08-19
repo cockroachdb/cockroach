@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1327,6 +1328,10 @@ func TestValuePrettyPrint(t *testing.T) {
 	bytesValuePrintable.SetBytes([]byte("abc"))
 	bytesValueNonPrintable.SetBytes([]byte{0x89})
 
+	var bitArrayValue Value
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+	bitArrayValue.SetBitArray(ba)
+
 	var errValue Value
 	errValue.SetInt(7)
 	errValue.setTag(ValueType_FLOAT)
@@ -1350,6 +1355,7 @@ func TestValuePrettyPrint(t *testing.T) {
 		{tupleValue, "/TUPLE/1:1:Int/8/2:3:Bytes/foo"},
 		{bytesValuePrintable, "/BYTES/abc"},
 		{bytesValueNonPrintable, "/BYTES/0x89"},
+		{bitArrayValue, "/BITARRAY/B00111010"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
 	}

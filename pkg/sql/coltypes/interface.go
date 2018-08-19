@@ -57,6 +57,7 @@ type T interface {
 	columnType()
 }
 
+func (*TBitArray) columnType()       {}
 func (*TBool) columnType()           {}
 func (*TInt) columnType()            {}
 func (*TSerial) columnType()         {}
@@ -80,6 +81,7 @@ func (TTuple) columnType()           {}
 func (*TOid) columnType()            {}
 
 // All Ts also implement CastTargetType.
+func (*TBitArray) castTargetType()       {}
 func (*TBool) castTargetType()           {}
 func (*TInt) castTargetType()            {}
 func (*TSerial) castTargetType()         {}
@@ -102,6 +104,7 @@ func (*TVector) castTargetType()         {}
 func (TTuple) castTargetType()           {}
 func (*TOid) castTargetType()            {}
 
+func (node *TBitArray) String() string       { return ColTypeAsString(node) }
 func (node *TBool) String() string           { return ColTypeAsString(node) }
 func (node *TInt) String() string            { return ColTypeAsString(node) }
 func (node *TSerial) String() string         { return ColTypeAsString(node) }

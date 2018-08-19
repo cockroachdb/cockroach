@@ -57,6 +57,7 @@ var (
 	typeVarChar = WrapTypeWithOid(String, oid.T_varchar)
 	typeBpChar  = WrapTypeWithOid(String, oid.T_bpchar)
 	typeQChar   = WrapTypeWithOid(String, oid.T_char)
+	typeBit     = WrapTypeWithOid(BitArray, oid.T_bit)
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export
@@ -107,6 +108,10 @@ var OidToType = map[oid.Oid]T{
 	oid.T__bpchar:      TArray{typeBpChar},
 	oid.T_char:         typeQChar,
 	oid.T__char:        TArray{typeQChar},
+	oid.T_varbit:       BitArray,
+	oid.T__varbit:      TArray{BitArray},
+	oid.T_bit:          typeBit,
+	oid.T__bit:         TArray{typeBit},
 	oid.T_jsonb:        JSON,
 	oid.T_int2vector:   IntVector,
 	oid.T_oidvector:    OidVector,
@@ -142,6 +147,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_time:        oid.T__time,
 	oid.T_timestamp:   oid.T__timestamp,
 	oid.T_timestamptz: oid.T__timestamptz,
+	oid.T_varbit:      oid.T__varbit,
 	oid.T_varchar:     oid.T__varchar,
 	oid.T_uuid:        oid.T__uuid,
 }

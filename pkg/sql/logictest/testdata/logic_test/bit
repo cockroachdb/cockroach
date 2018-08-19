@@ -1,0 +1,290 @@
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+
+query TTT
+SELECT B'1000101'::BIT(4)::STRING,
+       B'1000101'::BIT(4),
+       B'1000101'
+----
+1000  1000  1000101
+
+
+statement ok
+CREATE TABLE bits(a BIT, b BIT(4), c VARBIT, d VARBIT(4))
+
+query TT colnames
+SHOW CREATE TABLE bits
+----
+table_name  create_statement
+bits        CREATE TABLE bits (
+            a BIT NULL,
+            b BIT(4) NULL,
+            c VARBIT NULL,
+            d VARBIT(4) NULL,
+            FAMILY "primary" (a, b, c, d, rowid)
+)
+
+subtest bit_fixed1
+
+statement ok
+INSERT INTO bits(a) VALUES (B'1'), (B'0');
+
+statement error bit string length 0 does not match type BIT
+INSERT INTO bits(a) VALUES (B'')
+
+statement error bit string length 4 does not match type BIT
+INSERT INTO bits(a) VALUES (B'1110')
+
+subtest bit_fixed4
+
+statement ok
+INSERT INTO bits(b) VALUES (B'0000'), (B'1001');
+
+statement error bit string length 0 does not match type BIT\(4\)
+INSERT INTO bits(b) VALUES (B'')
+
+statement error bit string length 3 does not match type BIT\(4\)
+INSERT INTO bits(b) VALUES (B'111')
+
+statement error bit string length 9 does not match type BIT\(4\)
+INSERT INTO bits(b) VALUES (B'111000111')
+
+subtest bit_varying_unlimited
+
+statement ok
+INSERT INTO bits(c) VALUES (B'1'), (B'0'), (B''), (B'1110'),
+(B'0101010101010101001101010101010101010101010101010101010101010101010010101') -- more than 64 bits
+
+subtest bit_varying_limited
+
+statement ok
+INSERT INTO bits(d) VALUES (B'1'), (B'0'), (B''), (B'1110')
+
+statement error bit string length 73 too large for type VARBIT\(4\)
+INSERT INTO bits(d) VALUES
+(B'0101010101010101001101010101010101010101010101010101010101010101010010101') -- more than 64 bits
+
+subtest results
+
+query TITITITI colnames
+SELECT a, length(a::STRING) an,
+       b, length(b::STRING) bn,
+       c, length(c::STRING) cn,
+       d, length(d::STRING) dn
+  FROM bits
+ORDER BY 1,2,3,4,5,6,7,8
+----
+a     an    b     bn    c                                                                          cn    d     dn
+NULL  NULL  NULL  NULL  NULL                                                                       NULL  ·     0
+NULL  NULL  NULL  NULL  NULL                                                                       NULL  0     1
+NULL  NULL  NULL  NULL  NULL                                                                       NULL  1     1
+NULL  NULL  NULL  NULL  NULL                                                                       NULL  1110  4
+NULL  NULL  NULL  NULL  ·                                                                          0     NULL  NULL
+NULL  NULL  NULL  NULL  0                                                                          1     NULL  NULL
+NULL  NULL  NULL  NULL  0101010101010101001101010101010101010101010101010101010101010101010010101  73    NULL  NULL
+NULL  NULL  NULL  NULL  1                                                                          1     NULL  NULL
+NULL  NULL  NULL  NULL  1110                                                                       4     NULL  NULL
+NULL  NULL  0000  4     NULL                                                                       NULL  NULL  NULL
+NULL  NULL  1001  4     NULL                                                                       NULL  NULL  NULL
+0     1     NULL  NULL  NULL                                                                       NULL  NULL  NULL
+1     1     NULL  NULL  NULL                                                                       NULL  NULL  NULL
+
+subtest bit_arith
+
+statement ok
+INSERT INTO bits(b) VALUES (B'0110'), (B'0011')
+
+statement ok
+INSERT INTO bits(c) VALUES (B'1010'), (B'11')
+
+# Shifts always truncate/pad to the bit array size.
+query TTTTTTT colnames
+SELECT x.b,
+       x.b << 0 AS l0,
+       x.b >> 0 AS r0,
+       x.b << -1 AS lm1,
+       x.b >> 1 AS r1,
+       x.b >> -1 AS rm11,
+       x.b << 1 AS l1
+  FROM bits x
+ WHERE x.b IS NOT NULL
+ORDER BY 1,2,3,4,5,6,7
+----
+b     l0    r0    lm1   r1    rm11  l1
+0000  0000  0000  0000  0000  0000  0000
+0011  0011  0011  0001  0001  0110  0110
+0110  0110  0110  0011  0011  1100  1100
+1001  1001  1001  0100  0100  0010  0010
+
+# Concat works on mixed bit arrays.
+query TTTT rowsort
+SELECT x.b, y.c, x.b || y.c, y.c || x.b FROM bits x, bits y WHERE x.b IS NOT NULL AND length(y.c::string) < 5
+----
+0000  1     00001     10000
+0000  0     00000     00000
+0000  ·     0000      0000
+0000  1110  00001110  11100000
+0000  1010  00001010  10100000
+0000  11    000011    110000
+1001  1     10011     11001
+1001  0     10010     01001
+1001  ·     1001      1001
+1001  1110  10011110  11101001
+1001  1010  10011010  10101001
+1001  11    100111    111001
+0110  1     01101     10110
+0110  0     01100     00110
+0110  ·     0110      0110
+0110  1110  01101110  11100110
+0110  1010  01101010  10100110
+0110  11    011011    110110
+0011  1     00111     10011
+0011  0     00110     00011
+0011  ·     0011      0011
+0011  1110  00111110  11100011
+0011  1010  00111010  10100011
+0011  11    001111    110011
+
+query TT rowsort
+SELECT x.b, ~x.b AS comp FROM bits x WHERE b IS NOT NULL
+----
+0000  1111
+1001  0110
+0110  1001
+0011  1100
+
+statement ok
+DELETE FROM bits; INSERT INTO bits(c) VALUES (B'0'), (B'1')
+
+query TT rowsort
+SELECT x.c, ~x.c AS comp FROM bits x
+----
+0  1
+1  0
+
+query TTTTT rowsort
+SELECT x.c AS v1, y.c AS v2,
+       x.c & y.c AS "and",
+       x.c | y.c AS "or",
+       x.c # y.c AS "xor"
+FROM bits x, bits y
+----
+0  0  0  0  0
+0  1  0  1  1
+1  0  0  1  1
+1  1  1  1  0
+
+subtest bit_ordering
+
+statement ok
+CREATE TABLE obits(x VARBIT);
+ INSERT INTO obits(x) VALUES
+ (B'0'),
+ (B'1'),
+ (B'0000'),
+ (B'0001'),
+ (B'010'),
+ (B'10'),
+ (B'11'),
+ (B''),
+ (B'00100'),
+ (B'00110'),
+ (B'00001'),
+ (B'1001001010101'),
+ (B'01001001010101'),
+ (B'11001001010101')
+
+# Check unindexed ordering.
+query T
+SELECT * FROM obits ORDER BY x
+----
+·
+0
+0000
+00001
+0001
+00100
+00110
+010
+01001001010101
+1
+10
+1001001010101
+11
+11001001010101
+
+# Check indexed ordering.
+statement ok
+CREATE INDEX obits_idx ON obits(x)
+
+query T
+SELECT * FROM obits@obits_idx ORDER BY x
+----
+·
+0
+0000
+00001
+0001
+00100
+00110
+010
+01001001010101
+1
+10
+1001001010101
+11
+11001001010101
+
+subtest bit_arrays
+
+query TT colnames
+SELECT ARRAY[B'101011'] AS a, '{111001}'::VARBIT[] AS b
+----
+a         b
+{101011}  {111001}
+
+statement ok
+CREATE TABLE obitsa(x VARBIT(20)[]);
+ INSERT INTO obitsa(x) VALUES
+ (ARRAY[B'01', B'']),
+ (ARRAY[B'01', B'0']),
+ (ARRAY[B'01', B'1']),
+ (ARRAY[B'01', B'0000']),
+ (ARRAY[B'01', B'0001']),
+ (ARRAY[B'01', B'010']),
+ (ARRAY[B'01', B'10']),
+ (ARRAY[B'01', B'11']),
+ (ARRAY[B'01', B'']),
+ (ARRAY[B'01', B'00100']),
+ (ARRAY[B'01', B'00110']),
+ (ARRAY[B'01', B'00001']),
+ (ARRAY[B'01', B'1001001010101']),
+ (ARRAY[B'01', B'01001001010101']),
+ (ARRAY[B'01', B'11001001010101'])
+
+query T
+SELECT create_statement FROM [SHOW CREATE obitsa]
+----
+CREATE TABLE obitsa (
+   x VARBIT(20)[] NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check unindexed ordering.
+query T rowsort
+SELECT * FROM obitsa
+----
+{01,}
+{01,0}
+{01,1}
+{01,0000}
+{01,0001}
+{01,010}
+{01,10}
+{01,11}
+{01,}
+{01,00100}
+{01,00110}
+{01,00001}
+{01,1001001010101}
+{01,01001001010101}
+{01,11001001010101}
