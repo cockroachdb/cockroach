@@ -17,6 +17,7 @@ package encoding
 import (
 	"bytes"
 	"math"
+	"math/big"
 	"math/rand"
 	"regexp"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -605,6 +607,35 @@ func TestEncodeDecodeUnsafeString(t *testing.T) {
 	}
 }
 
+func TestPrettyPrintValue(t *testing.T) {
+	ba := bitarray.BitArray{BitLen: 7}
+	ba.Bits.SetUint64(58)
+
+	testData := []struct {
+		dir Direction
+		key []byte
+		exp string
+	}{
+		{Ascending, EncodeFloatAscending(nil, float64(233.221112)), "/233.221112"},
+		{Descending, EncodeFloatDescending(nil, float64(233.221112)), "/233.221112"},
+		{Ascending, EncodeBitArrayAscending(nil, ba), "/B111010"},
+		{Descending, EncodeBitArrayDescending(nil, ba), "/B111010"},
+	}
+
+	for _, test := range testData {
+		dirStr := "Asc"
+		if test.dir != Ascending {
+			dirStr = "Desc"
+		}
+		t.Run(test.exp[1:]+"/"+dirStr, func(t *testing.T) {
+			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/")
+			if got != test.exp {
+				t.Errorf("expected %q, got %q", test.exp, got)
+			}
+		})
+	}
+}
+
 func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 	testCases := []struct {
 		value   string
@@ -887,6 +918,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
+		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},
+		{EncodeBitArrayDescending(nil, bitarray.BitArray{}), BitArrayDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)
@@ -910,6 +943,15 @@ func (rd randData) decimal() *apd.Decimal {
 
 func (rd randData) time() time.Time {
 	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+}
+
+func (rd randData) bitArray() bitarray.BitArray {
+	width := rd.Int31n(100)
+	r := bitarray.BitArray{BitLen: uint(width)}
+	max := big.NewInt(1)
+	max.Lsh(max, uint(width))
+	r.Bits.Rand(rd.Rand, max)
+	return r
 }
 
 func (rd randData) duration() duration.Duration {
@@ -1390,6 +1432,28 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeBitArray(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]bitarray.BitArray, 1000)
+	for i := range tests {
+		tests[i] = rd.bitArray()
+	}
+	for i, test := range tests {
+		buf := EncodeBitArrayValue(nil, NoColumnID, test)
+		remainder, x, err := DecodeBitArrayValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.Compare(&tests[i]) != 0 {
+			t.Errorf("seed %d: expected %v got %v (buf: %+v)", seed, &tests[i], &x, buf)
+		}
+		if len(remainder) > 0 {
+			t.Errorf("seed %d: decoding %v tailing bytes: %+v", seed, &tests[i], remainder)
+		}
+	}
+}
+
 func TestValueEncodeDecodeDuration(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
@@ -1605,6 +1669,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
+	case BitArray:
+		x := rd.bitArray()
+		return EncodeBitArrayValue(buf, colID, x), x, true
 	case IPAddr:
 		x := rd.ipAddr()
 		return EncodeIPAddrValue(buf, colID, x), x, true
@@ -1757,6 +1824,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeTimeValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
+		case BitArray:
+			buf, decoded, err = DecodeBitArrayValue(buf)
 		case IPAddr:
 			buf, decoded, err = DecodeIPAddrValue(buf)
 		default:
@@ -1781,6 +1850,12 @@ func TestValueEncodingRand(t *testing.T) {
 			d := decoded.(ipaddr.IPAddr)
 			val := value.(ipaddr.IPAddr)
 			if !d.Equal(&val) {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		case BitArray:
+			d := decoded.(bitarray.BitArray)
+			val := value.(bitarray.BitArray)
+			if d.Compare(&val) != 0 {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:
@@ -1810,6 +1885,9 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 		{colID: 0, typ: Duration, size: 28},
 		{colID: 0, typ: Bytes, size: -1},
 		{colID: 0, typ: Bytes, width: 100, size: 110},
+		{colID: 0, typ: BitArray, size: -1},
+		{colID: 0, typ: BitArray, width: 31, size: 31},
+		{colID: 0, typ: BitArray, width: 64, size: 36},
 
 		{colID: 8, typ: True, size: 2},
 	}
@@ -1842,6 +1920,8 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
 	}
+	ba := bitarray.BitArray{BitLen: 6}
+	_ = ba.Bits.SetUint64(9)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1861,6 +1941,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "0x89"}, // non-printable bytes
 		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
+		{EncodeBitArrayValue(nil, NoColumnID, ba), "B001001"},
 	}
 	for i, test := range tests {
 		remaining, str, err := PrettyPrintValueEncoded(test.buf)

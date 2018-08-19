@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -423,6 +424,178 @@ func (d *DBool) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DBool) Size() uintptr {
 	return unsafe.Sizeof(*d)
+}
+
+// DBitArray is the BIT/VARBIT Datum.
+type DBitArray struct {
+	bitarray.BitArray
+}
+
+// ParseDBitArray parses a string representation of binary digits.
+func ParseDBitArray(s string) (*DBitArray, error) {
+	var a DBitArray
+	if err := a.Parse(s); err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// NewDBitArray returns a DBitArray.
+func NewDBitArray(bitLen uint) *DBitArray {
+	a := MakeDBitArray(bitLen)
+	return &a
+}
+
+// MakeDBitArray returns a DBitArray.
+func MakeDBitArray(bitLen uint) DBitArray {
+	return DBitArray{bitarray.BitArray{BitLen: bitLen}}
+}
+
+// MustBeDBitArray attempts to retrieve a DBitArray from an Expr, panicking if the
+// assertion fails.
+func MustBeDBitArray(e Expr) *DBitArray {
+	b, ok := AsDBitArray(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBitArray, found %T", e))
+	}
+	return b
+}
+
+// AsDBitArray attempts to retrieve a *DBitArray from an Expr, returning a *DBitArray and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions.
+func AsDBitArray(e Expr) (*DBitArray, bool) {
+	switch t := e.(type) {
+	case *DBitArray:
+		return t, true
+	}
+	return nil, false
+}
+
+var errCannotCastNegativeIntToBitArray = pgerror.NewErrorf(pgerror.CodeCannotCoerceError,
+	"cannot cast negative integer to bit varying with unbounded width")
+
+// NewDBitArrayFromInt creates a bit array from the specified integer
+// at the specified width.
+// If the width is zero, only positive integers can be converted.
+// If the width is nonzero, the value is truncated to that width.
+// Negative values are encoded using two's complement.
+func NewDBitArrayFromInt(i int64, width uint) (*DBitArray, error) {
+	if width == 0 && i < 0 {
+		return nil, errCannotCastNegativeIntToBitArray
+	}
+	a := NewDBitArray(width)
+	a.Bits.SetUint64(uint64(i))
+	a.SetWidth(width)
+	return a, nil
+}
+
+// AsDInt computes the integer value of the given bit array.
+// The value is assumed to be encoded using two's complement.
+// The result is truncated to the given integer number of bits,
+// if specified.
+// The given width must be 64 or smaller. The results are undefined
+// if n is greater than 64.
+func (d *DBitArray) AsDInt(n uint) (*DInt, error) {
+	if n == 0 {
+		n = 64
+	}
+	if uint(d.Bits.BitLen()) > n {
+		return nil, errIntOutOfRange
+	}
+	ui := d.Bits.Uint64()
+	si := int64(ui<<(64-n)) >> (64 - n)
+	return NewDInt(DInt(si)), nil
+}
+
+// LeftShift sets d to the result of v << n if n is positive,
+// or v >> n if n is negative.
+// As per PostgreSQL arithmetic, the result is truncated
+// to the BitLen.
+func (d *DBitArray) LeftShift(v *DBitArray, n int64) {
+	d.BitArray.LeftShift(&v.BitArray, n)
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DBitArray) ResolvedType() types.T {
+	return types.BitArray
+}
+
+// Compare implements the Datum interface.
+func (d *DBitArray) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := UnwrapDatum(ctx, other).(*DBitArray)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	return d.BitArray.Compare(&v.BitArray)
+}
+
+// Prev implements the Datum interface.
+func (d *DBitArray) Prev(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DBitArray) Next(_ *EvalContext) (Datum, bool) {
+	a := *d
+	a.Inc()
+	return &a, true
+}
+
+// IsMax implements the Datum interface.
+func (d *DBitArray) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DBitArray) IsMin(_ *EvalContext) bool {
+	return d.BitLen == 0
+}
+
+var bitArrayZero = NewDBitArray(0)
+
+// Min implements the Datum interface.
+func (d *DBitArray) Min(_ *EvalContext) (Datum, bool) {
+	return bitArrayZero, true
+}
+
+// Max implements the Datum interface.
+func (d *DBitArray) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DBitArray) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DBitArray) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(fmtPgwireFormat) {
+		d.BitArray.Format(ctx.Buffer)
+	} else {
+		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		if withQuotes {
+			ctx.WriteString("B'")
+		}
+		d.BitArray.Format(ctx.Buffer)
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DBitArray) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(d.Bits.BitLen())/unsafe.Sizeof(big.Word(0)) + 1
+}
+
+// IsComposite implements the CompositeDatum interface.
+func (d *DBitArray) IsComposite() bool {
+	return true
 }
 
 // DInt is the int Datum.
@@ -2314,7 +2487,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
 		return builder.Build(), nil
-	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime:
+	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	default:
 		if d == DNull {
@@ -3405,6 +3578,7 @@ var baseDatumTypeSizes = map[types.T]struct {
 }{
 	types.Unknown:     {unsafe.Sizeof(dNull{}), fixedSize},
 	types.Bool:        {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.BitArray:    {unsafe.Sizeof(DBitArray{}), variableSize},
 	types.Int:         {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.Float:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
 	types.Decimal:     {unsafe.Sizeof(DDecimal{}), variableSize},

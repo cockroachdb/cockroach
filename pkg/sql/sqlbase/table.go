@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 	"unicode/utf8"
@@ -97,6 +98,14 @@ func SanitizeVarFreeExpr(
 // PopulateTypeAttrs set other attributes of col.Type and performs type-specific verification.
 func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
+	case *coltypes.TBitArray:
+		if t.Width > math.MaxInt32 {
+			return ColumnType{}, fmt.Errorf("bit width too large: %d", t.Width)
+		}
+		base.Width = int32(t.Width)
+		if t.Variable {
+			base.VisibleType = ColumnType_VARBIT
+		}
 	case *coltypes.TBool:
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
@@ -650,6 +659,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeBytesAscending(b, t.Key), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.Key), nil
+	case *tree.DBitArray:
+		if dir == encoding.Ascending {
+			return encoding.EncodeBitArrayAscending(b, t.BitArray), nil
+		}
+		return encoding.EncodeBitArrayDescending(b, t.BitArray), nil
 	case *tree.DArray:
 		for _, datum := range t.Array {
 			var err error
@@ -679,6 +693,8 @@ func EncodeTableValue(
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
 	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DBitArray:
+		return encoding.EncodeBitArrayValue(appendTo, uint32(colID), t.BitArray), nil
 	case *tree.DBool:
 		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), nil
 	case *tree.DInt:
@@ -1065,6 +1081,7 @@ type DatumAlloc struct {
 	dfloatAlloc       []tree.DFloat
 	dstringAlloc      []tree.DString
 	dbytesAlloc       []tree.DBytes
+	dbitArrayAlloc    []tree.DBitArray
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
 	dtimeAlloc        []tree.DTime
@@ -1141,6 +1158,18 @@ func (a *DatumAlloc) NewDBytes(v tree.DBytes) *tree.DBytes {
 	buf := &a.dbytesAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DBytes, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDBitArray allocates a DBitArray.
+func (a *DatumAlloc) NewDBitArray(v tree.DBitArray) *tree.DBitArray {
+	buf := &a.dbitArrayAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DBitArray, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1347,6 +1376,28 @@ func DecodeTableKey(
 		return a.NewDName(tree.DString(r)), rkey, err
 	case types.JSON:
 		return tree.DNull, []byte{}, nil
+	case types.BitArray:
+		var bitlen uint64
+		var data []byte
+		if dir == encoding.Ascending {
+			rkey, bitlen, err = encoding.DecodeUvarintAscending(key[1:])
+			if err != nil {
+				return nil, rkey, err
+			}
+			rkey, data, err = encoding.DecodeBytesAscending(rkey, nil)
+		} else {
+			rkey, bitlen, err = encoding.DecodeUvarintDescending(key[1:])
+			if err != nil {
+				return nil, rkey, err
+			}
+			rkey, data, err = encoding.DecodeBytesDescending(rkey, nil)
+		}
+		if err != nil {
+			return nil, rkey, err
+		}
+		ba := tree.MakeDBitArray(uint(bitlen))
+		ba.Bits.SetBytes(data)
+		return a.NewDBitArray(ba), rkey, nil
 	case types.Bytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -1632,6 +1683,9 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	case types.Interval:
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
 		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
+	case types.BitArray:
+		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
+		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
 	case types.UUID:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
@@ -1940,6 +1994,11 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetString(string(v))
 			return r, nil
 		}
+	case ColumnType_BIT:
+		if v, ok := val.(*tree.DBitArray); ok {
+			r.SetBitArray(v.BitArray)
+			return r, nil
+		}
 	case ColumnType_BYTES:
 		if v, ok := val.(*tree.DBytes); ok {
 			r.SetString(string(*v))
@@ -2114,6 +2173,8 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Int, nil
 	case types.Interval:
 		return encoding.Duration, nil
+	case types.BitArray:
+		return encoding.BitArray, nil
 	case types.Bool:
 		return encoding.True, nil
 	case types.UUID:
@@ -2140,6 +2201,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
 		return b, nil
+	case *tree.DBitArray:
+		return encoding.EncodeUntaggedBitArrayValue(b, t.BitArray), nil
 	case *tree.DFloat:
 		return encoding.EncodeUntaggedFloatValue(b, float64(*t)), nil
 	case *tree.DBool:
@@ -2214,6 +2277,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 			return nil, err
 		}
 		return a.NewDBytes(tree.DBytes(v)), nil
+	case ColumnType_BIT:
+		d, err := value.GetBitArray()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDBitArray(tree.DBitArray{BitArray: d}), nil
 	case ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
@@ -2310,6 +2379,21 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
+				}
+			}
+		}
+	case ColumnType_BIT:
+		if v, ok := tree.AsDBitArray(val); ok {
+			if typ.Width > 0 {
+				switch typ.VisibleType {
+				case ColumnType_VARBIT:
+					if v.BitLen > uint(typ.Width) {
+						return fmt.Errorf("bit string length %d too large for type %s", v.BitLen, typ.SQLString())
+					}
+				default:
+					if v.BitLen != uint(typ.Width) {
+						return fmt.Errorf("bit string length %d does not match type %s", v.BitLen, typ.SQLString())
+					}
 				}
 			}
 		}
@@ -2861,7 +2945,9 @@ func AdjustEndKeyForInterleave(
 		// inclusive initially.
 		if !inclusive {
 			lastType := encoding.PeekType(lastToken)
-			if lastType == encoding.Bytes || lastType == encoding.BytesDesc || lastType == encoding.Decimal {
+			if lastType == encoding.Bytes || lastType == encoding.BytesDesc ||
+				lastType == encoding.BitArray || lastType == encoding.BitArrayDesc ||
+				lastType == encoding.Decimal {
 				// If the last value is of type Decimals or
 				// Bytes then this is more difficult since the
 				// escape term is the last value.

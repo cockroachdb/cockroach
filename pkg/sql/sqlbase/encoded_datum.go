@@ -227,7 +227,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+		return errors.Errorf("%d trailing bytes in encoded value: %+v", len(rem), rem)
 	}
 	return nil
 }

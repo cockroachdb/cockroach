@@ -587,6 +587,7 @@ func TestParse(t *testing.T) {
 		{`SELECT INT 'foo'`},
 		{`SELECT FLOAT4 'foo'`},
 		{`SELECT DECIMAL 'foo'`},
+		{`SELECT BIT '1'`},
 		{`SELECT CHAR 'foo'`},
 		{`SELECT VARCHAR 'foo'`},
 		{`SELECT STRING 'foo'`},
@@ -1765,6 +1766,13 @@ CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
 HINT: try \h CREATE TABLE`},
+		{`CREATE TABLE test (
+  foo BIT(0)
+)`, `length for type bit must be at least 1 at or near ")"
+CREATE TABLE test (
+  foo BIT(0)
+           ^
+`},
 		{`CREATE TABLE test (
   foo INT DEFAULT 1 DEFAULT 2
 )`, `multiple default values specified for column "foo" at or near ")"

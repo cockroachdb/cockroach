@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -74,6 +75,9 @@ const (
 	jsonInvertedIndex = decimalNaNDesc + 1
 	jsonEmptyArray    = jsonInvertedIndex + 1
 	jsonEmptyObject   = jsonEmptyArray + 1
+
+	bitArrayMarker     = jsonEmptyObject + 1
+	bitArrayDescMarker = bitArrayMarker + 1
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -1032,6 +1036,25 @@ func DecodeDurationDescending(b []byte) ([]byte, duration.Duration, error) {
 	return b, d, nil
 }
 
+// EncodeBitArrayAscending encodes a bitarray.BitArray value, appends it to the
+// supplied buffer, and returns the final buffer. The encoding is guaranteed to
+// be ordered such that if t1.Compare(t2) < 0 (or = 0 or > 0) then bytes.Compare
+// will order them the same way after encoding.
+func EncodeBitArrayAscending(b []byte, d bitarray.BitArray) []byte {
+	// big.Int.Bytes() presents the data in big-endian order, which is
+	// exactly what we need for ordering.
+	b = append(b, bitArrayMarker)
+	b = EncodeUvarintAscending(b, uint64(d.Bits.BitLen()))
+	return EncodeBytesAscending(b, d.Bits.Bytes())
+}
+
+// EncodeBitArrayDescending is the descending version of EncodeBitArrayAscending.
+func EncodeBitArrayDescending(b []byte, d bitarray.BitArray) []byte {
+	b = append(b, bitArrayDescMarker)
+	b = EncodeUvarintDescending(b, uint64(d.Bits.BitLen()))
+	return EncodeBytesDescending(b, d.Bits.Bytes())
+}
+
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 //go:generate stringer -type=Type
@@ -1063,6 +1086,8 @@ const (
 	SentinelType      = 15
 	JSON         Type = 15
 	Tuple        Type = 16
+	BitArray     Type = 17
+	BitArrayDesc Type = 18 // BitArray encoded descendingly
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -1078,6 +1103,10 @@ func PeekType(b []byte) Type {
 			return Bytes
 		case m == bytesDescMarker:
 			return BytesDesc
+		case m == bitArrayMarker:
+			return BitArray
+		case m == bitArrayDescMarker:
+			return BitArrayDesc
 		case m == timeMarker:
 			return Time
 		case m == byte(Array):
@@ -1141,6 +1170,18 @@ func PeekLength(b []byte) (int, error) {
 		// contains the same byte value as encodedNotNullDesc, it
 		// cannot be included explicitly in the case statement.
 		return 1, nil
+	case bitArrayMarker, bitArrayDescMarker:
+		if len(b) < 2 {
+			return 0, errors.Errorf("slice too short for bit array (%d)", len(b))
+		}
+		n, err := getVarintLen(b[1:])
+		if err != nil {
+			return n, err
+		}
+		if len(b) < 1+n {
+			return 0, errors.Errorf("slice too short for bit array (%d)", len(b))
+		}
+		return PeekLength(b[1+n:])
 	case bytesMarker:
 		return getBytesLength(b, ascendingEscapes)
 	case jsonInvertedIndex:
@@ -1303,6 +1344,42 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, d.String(), nil
+	case BitArray:
+		if dir == Descending {
+			return b, "", errors.Errorf("descending bit column dir but ascending bytes encoding")
+		}
+		var bitlen uint64
+		var data []byte
+		b, bitlen, err = DecodeUvarintAscending(b[1:])
+		if err != nil {
+			return b, "", err
+		}
+		b, data, err = DecodeBytesAscending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		var d bitarray.BitArray
+		d.BitLen = uint(bitlen)
+		d.Bits.SetBytes(data)
+		return b, "B" + d.String(), nil
+	case BitArrayDesc:
+		if dir == Ascending {
+			return b, "", errors.Errorf("ascending bit column dir but descending bytes encoding")
+		}
+		var bitlen uint64
+		var data []byte
+		b, bitlen, err = DecodeUvarintDescending(b[1:])
+		if err != nil {
+			return b, "", err
+		}
+		b, data, err = DecodeBytesDescending(b, nil)
+		if err != nil {
+			return b, "", err
+		}
+		var d bitarray.BitArray
+		d.BitLen = uint(bitlen)
+		d.Bits.SetBytes(data)
+		return b, "B" + d.String(), nil
 	case Bytes:
 		if dir == Descending {
 			return b, "", errors.Errorf("descending bytes column dir but ascending bytes encoding")
@@ -1664,6 +1741,20 @@ func EncodeUntaggedDurationValue(appendTo []byte, d duration.Duration) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, d.Nanos)
 }
 
+// EncodeBitArrayValue encodes a bit array value with its value tag,
+// appends it to the supplied buffer, and returns the final buffer.
+func EncodeBitArrayValue(appendTo []byte, colID uint32, d bitarray.BitArray) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, BitArray)
+	return EncodeUntaggedBitArrayValue(appendTo, d)
+}
+
+// EncodeUntaggedBitArrayValue encodes a bit array value, appends it to the
+// supplied buffer, and returns the final buffer.
+func EncodeUntaggedBitArrayValue(appendTo []byte, d bitarray.BitArray) []byte {
+	appendTo = EncodeNonsortingUvarint(appendTo, uint64(d.BitLen))
+	return EncodeUntaggedBytesValue(appendTo, d.Bits.Bytes())
+}
+
 // EncodeUUIDValue encodes a uuid.UUID value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeUUIDValue(appendTo []byte, colID uint32, u uuid.UUID) []byte {
@@ -1885,6 +1976,31 @@ func DecodeUntaggedDurationValue(b []byte) (remaining []byte, d duration.Duratio
 	return b, duration.Duration{Months: months, Days: days, Nanos: nanos}, nil
 }
 
+// DecodeBitArrayValue decodes a value encoded by EncodeUntaggedBitArrayValue.
+func DecodeBitArrayValue(b []byte) (remaining []byte, d bitarray.BitArray, err error) {
+	b, err = decodeValueTypeAssert(b, BitArray)
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	return DecodeUntaggedBitArrayValue(b)
+}
+
+// DecodeUntaggedBitArrayValue decodes a value encoded by EncodeUntaggedBitArrayValue.
+func DecodeUntaggedBitArrayValue(b []byte) (remaining []byte, d bitarray.BitArray, err error) {
+	var bitlen uint64
+	b, _, bitlen, err = DecodeNonsortingUvarint(b)
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	b, data, err := DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	a := bitarray.BitArray{BitLen: uint(bitlen)}
+	a.Bits.SetBytes(data)
+	return b, a, nil
+}
+
 const uuidValueEncodedLength = 16
 
 var _ [uuidValueEncodedLength]byte = (uuid.UUID{}).UUID // Assert that "github.com/satori/go.uuid" is length 16.
@@ -1977,6 +2093,13 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 	case Bytes, Array, JSON:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
+	case BitArray:
+		_, n, _, err := DecodeNonsortingUvarint(b)
+		if err != nil {
+			return 0, err
+		}
+		_, m, i, err := DecodeNonsortingUvarint(b[n:])
+		return dataOffset + n + m + int(i), err
 	case Tuple:
 		rem, l, numTuples, err := DecodeNonsortingUvarint(b)
 		if err != nil {
@@ -2026,6 +2149,11 @@ func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
 		return len(encodedTag), true
 	case Int:
 		return len(encodedTag) + maxVarintSize, true
+	case BitArray:
+		if size > 0 {
+			return len(encodedTag) + maxVarintSize*2 + size/8 + 8, true
+		}
+		return 0, false
 	case Float:
 		return len(encodedTag) + uint64AscendingEncodedLength, true
 	case Bytes:
@@ -2124,6 +2252,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, d.String(), nil
+	case BitArray:
+		var d bitarray.BitArray
+		b, d, err = DecodeBitArrayValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, "B" + d.String(), nil
 	case UUID:
 		var u uuid.UUID
 		b, u, err = DecodeUUIDValue(b)

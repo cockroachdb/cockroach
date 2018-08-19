@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"unicode"
 
@@ -117,6 +118,19 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 			tuple.D[i] = RandDatum(rng, internalType, true)
 		}
 		return &tuple
+	case ColumnType_BIT:
+		width := typ.Width
+		if width == 0 {
+			width = rng.Int31n(100)
+		}
+		r := tree.NewDBitArray(uint(width))
+		max := big.NewInt(1)
+		max.Lsh(max, uint(width))
+		r.Bits.Rand(rng, max)
+		if uint(r.Bits.BitLen()) > r.BitLen {
+			panic(fmt.Sprintf("big.Int.Rand is broken: %d vs %d", r.Bits.BitLen(), r.BitLen))
+		}
+		return r
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
@@ -191,6 +205,9 @@ func RandCollationLocale(rng *rand.Rand) *string {
 // RandColumnType returns a random ColumnType value.
 func RandColumnType(rng *rand.Rand) ColumnType {
 	typ := ColumnType{SemanticType: columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]}
+	if typ.SemanticType == ColumnType_BIT {
+		typ.Width = int32(rng.Intn(50))
+	}
 	if typ.SemanticType == ColumnType_COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
 	}

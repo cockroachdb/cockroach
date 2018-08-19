@@ -78,6 +78,10 @@ func (b *writeBuffer) writeTextDatum(
 		return
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBitArray:
+		b.textFormatter.FormatNode(v)
+		b.writeLengthPrefixedVariablePutbuf()
+
 	case *tree.DBool:
 		b.textFormatter.FormatNode(v)
 		b.writeLengthPrefixedVariablePutbuf()
@@ -187,6 +191,16 @@ func (b *writeBuffer) writeBinaryDatum(
 		return
 	}
 	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBitArray:
+		b.putInt32(int32(v.BitLen))
+		bytes := v.Bits.Bytes()
+		b.write(bytes)
+		// If there were fewer bytes in the datum than announced in the
+		// BitLen, ensure they are padded.
+		for i := uint(len(bytes)); i*8 < v.BitLen; i++ {
+			b.writeByte(0)
+		}
+
 	case *tree.DBool:
 		b.putInt32(1)
 		if *v {

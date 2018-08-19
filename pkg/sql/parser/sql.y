@@ -447,7 +447,7 @@ func newNameFromStr(s string) *tree.Name {
 // file to work around a bug in goyacc. See #16369 for more details.
 
 // Non-keyword token types.
-%token <str> IDENT SCONST BCONST
+%token <str> IDENT SCONST BCONST BITCONST
 %token <*tree.NumVal> ICONST FCONST
 %token <str> PLACEHOLDER
 %token <str> TYPECAST TYPEANNOTATE DOT_DOT
@@ -543,7 +543,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str> UPDATE UPSERT USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -897,7 +897,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <coltypes.CastTargetType> postgres_oid
 %type <coltypes.CastTargetType> cast_target
 %type <str> extract_arg
-%type <empty> opt_varying
+%type <bool> opt_varying
 
 %type <*tree.NumVal> signed_iconst
 %type <int64> signed_iconst64
@@ -6127,13 +6127,29 @@ opt_float:
 bit_with_length:
   BIT opt_varying '(' iconst64 ')'
   {
-    return unimplementedWithIssue(sqllex, 20991)
+    bit, err := coltypes.NewBitArrayType(int($4.int64()), $2.bool())
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = bit
+  }
+| VARBIT '(' iconst64 ')'
+  {
+    bit, err := coltypes.NewBitArrayType(int($3.int64()), true)
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = bit
   }
 
 bit_without_length:
-  BIT opt_varying
+  BIT
   {
-    return unimplementedWithIssue(sqllex, 20991)
+    $$.val = coltypes.Bit
+  }
+| BIT VARYING
+  {
+    $$.val = coltypes.VarBit
+  }
+| VARBIT
+  {
+    $$.val = coltypes.VarBit
   }
 
 character_with_length:
@@ -6157,10 +6173,12 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
+    // TODO(knz): use the varying info to distinguish char/varchar.
     $$.val = coltypes.Char
   }
 | CHAR opt_varying
   {
+    // TODO(knz): use the varying info to distinguish char/varchar.
     $$.val = coltypes.Char
   }
 | VARCHAR
@@ -6173,8 +6191,8 @@ character_base:
   }
 
 opt_varying:
-  VARYING {}
-| /* EMPTY */ {}
+  VARYING     { $$.val = true }
+| /* EMPTY */ { $$.val = false }
 
 // SQL date/time types
 const_datetime:
@@ -6859,6 +6877,12 @@ d_expr:
 | BCONST
   {
     $$.val = tree.NewBytesStrVal($1)
+  }
+| BITCONST
+  {
+    d, err := tree.ParseDBitArray($1)
+    if err != nil { sqllex.Error(err.Error()); return 1 }
+    $$.val = d
   }
 | func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
 | const_typename SCONST
@@ -8407,6 +8431,7 @@ col_name_keyword:
 | TREAT
 | TRIM
 | VALUES
+| VARBIT
 | VARCHAR
 | VIRTUAL
 | WORK

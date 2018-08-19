@@ -639,6 +639,7 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 	switch semanticType {
 	case ColumnType_COLLATEDSTRING,
 		ColumnType_FLOAT,
+		ColumnType_BIT,
 		ColumnType_DECIMAL:
 		return true
 	}
@@ -655,7 +656,9 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON || semanticType == ColumnType_TUPLE
+	return semanticType == ColumnType_ARRAY ||
+		semanticType == ColumnType_JSON ||
+		semanticType == ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1119,10 +1122,20 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		if !st.Version.IsMinSupported(cluster.Version2_0) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_JSON {
-					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
+					return fmt.Errorf("cluster version does not support JSONB (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
 				}
 				if def.ComputeExpr != nil {
-					return errors.New("cluster version does not support computed columns (>= 2.0 required)")
+					return fmt.Errorf("cluster version does not support computed columns (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
+				}
+			}
+		}
+		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
+			for _, def := range desc.Columns {
+				if def.Type.SemanticType == ColumnType_BIT {
+					return fmt.Errorf("cluster version does not support BIT (required: %s)",
+						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
 			}
 		}
@@ -1530,6 +1543,8 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 		typ, size = encoding.Bytes, int(col.Type.Width)
 	case ColumnType_DECIMAL:
 		typ, size = encoding.Decimal, int(col.Type.Precision)
+	case ColumnType_BIT:
+		typ, size = encoding.BitArray, int(col.Type.Width)
 	default:
 		panic(errors.Errorf("unknown column type: %s", col.Type.SemanticType))
 	}
@@ -2176,6 +2191,21 @@ func (c *ColumnType) Equivalent(other ColumnType) bool {
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
+	case ColumnType_BIT:
+		switch c.VisibleType {
+		case ColumnType_VARBIT:
+			typName := "VARBIT"
+			if c.Width > 0 {
+				return fmt.Sprintf("%s(%d)", typName, c.Width)
+			}
+			return typName
+		default:
+			typName := "BIT"
+			if c.Width > 1 {
+				return fmt.Sprintf("%s(%d)", typName, c.Width)
+			}
+			return typName
+		}
 	case ColumnType_STRING:
 		if c.Width > 0 {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
@@ -2229,7 +2259,7 @@ func (c *ColumnType) SQLString() string {
 // type is not a character or bit string, or if the string's length is not bounded.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING, ColumnType_BIT:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -2314,6 +2344,8 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 	switch ptyp {
 	case types.Bool:
 		return ColumnType_BOOL, nil
+	case types.BitArray:
+		return ColumnType_BIT, nil
 	case types.Int:
 		return ColumnType_INT, nil
 	case types.Float:
@@ -2406,6 +2438,8 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
+	case ColumnType_BIT:
+		return types.BitArray
 	case ColumnType_BOOL:
 		return types.Bool
 	case ColumnType_INT:
