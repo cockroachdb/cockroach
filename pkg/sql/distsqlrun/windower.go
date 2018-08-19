@@ -335,6 +335,7 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 				var err error
 				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)
 				if err != nil {
+					w.MoveToDraining(err)
 					return windowerStateUnknown, nil, &ProducerMetadata{Err: err}
 				}
 			}
