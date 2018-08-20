@@ -1135,6 +1135,9 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("#28789")
+
 	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
 
@@ -1235,6 +1238,8 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("#28786")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
