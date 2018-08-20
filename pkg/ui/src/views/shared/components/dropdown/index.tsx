@@ -38,19 +38,22 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   titleRef: React.RefObject<HTMLDivElement> = React.createRef();
   selectRef: React.RefObject<ReactSelectClass> = React.createRef();
 
-  constructor(props: DropdownOwnProps) {
-    super(props);
+  triggerSelectClick = (e: any) => {
+    const dropdownNode = this.dropdownRef.current as Node;
+    const titleNode = this.titleRef.current as Node;
+    const selectNode = this.selectRef.current;
 
-    this.triggerSelectClick = this.triggerSelectClick.bind(this);
-  }
-
-  triggerSelectClick(e: any) {
-    const dropdownNode: any = this.dropdownRef.current as Node;
-    const titleNode: any = this.titleRef.current as Node;
-    const selectNode: any = this.selectRef.current;
-
-    if (e.target === dropdownNode || e.target === titleNode || e.target.className.indexOf("dropdown__select") > -1) {
-      selectNode.handleMouseDownOnMenu(e);
+    if (e.target.isSameNode(dropdownNode) || e.target.isSameNode(titleNode) || e.target.className.indexOf("dropdown__select") > -1) {
+      // This is a far-less-than-ideal solution to the need to trigger
+      // the react-select dropdown from the entirety of the dropdown area
+      // instead of just the nodes rendered by the component itself
+      // the approach borrows from:
+      // https://github.com/JedWatson/react-select/issues/305#issuecomment-172607534
+      //
+      // a broader discussion on the status of a possible feature addition that
+      // would render this hack moot can be found here:
+      // https://github.com/JedWatson/react-select/issues/1989
+      (selectNode as any).handleMouseDownOnMenu(e);
     }
   }
 
