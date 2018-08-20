@@ -1456,7 +1456,7 @@ func (s *adminServer) DataDistribution(
 
 		// Get zone config for table.
 		zoneConfigQuery := fmt.Sprintf(
-			`SELECT zone_id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+			`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 			(*tree.Name)(dbName), (*tree.Name)(tableName),
 		)
 		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
@@ -1528,7 +1528,7 @@ func (s *adminServer) DataDistribution(
 
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
-	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
+	zoneConfigsQuery := `SHOW ALL ZONE CONFIGURATIONS`
 	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigsQuery,
 	)

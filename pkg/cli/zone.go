@@ -17,51 +17,37 @@ package cli
 import (
 	"database/sql/driver"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func queryZoneSpecifiers(conn *sqlConn) ([]string, error) {
-	rows, err := makeQuery(
-		`SELECT cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATIONS] ORDER BY cli_specifier`,
-	)(conn)
-	if err != nil {
-		return nil, err
+type runQueryRawFn func(q string, parameters ...driver.Value) ([]string, [][]string, error)
+
+// runQueryRawMaybeExperimental tries to run the query without the
+// experimental keyword, and if that fails with a syntax error, with
+// it. The placement of the experimental keyword must be marked with %[1]s in
+// the string. This is intended for backward-compatibility.
+// TODO(knz): Remove this post-2.2.
+func runQueryRawMaybeExperimental(conn *sqlConn, txnFn func(runQuery runQueryRawFn) error) error {
+	withExecute := ""
+	runQueryFn := func(q string, parameters ...driver.Value) ([]string, [][]string, error) {
+		return runQueryRaw(conn, makeQuery(fmt.Sprintf(q, withExecute), parameters...))
 	}
-	defer func() { _ = rows.Close() }()
+	queryFn := func(_ *sqlConn) error { return txnFn(runQueryFn) }
 
-	vals := make([]driver.Value, len(rows.Columns()))
-	specifiers := []string{}
-
-	for {
-		if err := rows.Next(vals); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-
-		if vals[0] == nil {
-			// Zone configs for deleted tables and partitions are left around until
-			// their table descriptors are deleted, which happens after the
-			// configured GC TTL duration. Such zones have no cli_specifier and
-			// shouldn't be displayed.
-			continue
-		}
-
-		s, ok := vals[0].(string)
-		if !ok {
-			return nil, fmt.Errorf("unexpected value: %T", vals[0])
-		}
-		specifiers = append(specifiers, s)
+	err := conn.ExecTxn(queryFn)
+	if err != nil && strings.Contains(err.Error(), "syntax error") {
+		withExecute = "EXPERIMENTAL"
+		err = conn.ExecTxn(queryFn)
 	}
-	return specifiers, nil
+	return err
 }
 
 // A getZoneCmd command displays a zone config.
@@ -97,25 +83,36 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	vals, err := conn.QueryRow(fmt.Sprintf(
-		`SELECT cli_specifier, config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, &zs), nil)
-	if err != nil {
+	var vals [][]string
+	if err := runQueryRawMaybeExperimental(conn,
+		func(runQuery runQueryRawFn) (err error) {
+			vals, err = getCliSpecifierAndZoneConf(&zs, runQuery)
+			return
+		}); err != nil {
 		return err
 	}
 
-	cliSpecifier, ok := vals[0].(string)
-	if !ok {
-		return fmt.Errorf("unexpected result type: %T", vals[0])
-	}
+	return printCliSpecifierAndZoneConf(&zs, vals)
+}
 
-	configYAML, ok := vals[1].([]byte)
-	if !ok {
-		return fmt.Errorf("unexpected result type: %T", vals[0])
-	}
+func getCliSpecifierAndZoneConf(
+	zs *tree.ZoneSpecifier, runQuery runQueryRawFn,
+) ([][]string, error) {
+	_, vals, err := runQuery(fmt.Sprintf(
+		`SELECT cli_specifier, config_yaml FROM [%%[1]s SHOW ZONE CONFIGURATION FOR %s]`,
+		zs))
+	return vals, err
+}
 
-	fmt.Println(cliSpecifier)
-	fmt.Printf("%s", configYAML)
-	return nil
+func printCliSpecifierAndZoneConf(zs *tree.ZoneSpecifier, vals [][]string) error {
+	if len(vals) == 0 {
+		return fmt.Errorf("no zone configuration found for %s",
+			config.CLIZoneSpecifier(zs))
+	}
+	cliSpecifier := vals[0][0]
+	configYAML := vals[0][1]
+	return printQueryOutput(os.Stdout, []string{cliSpecifier},
+		newRowSliceIter([][]string{{configYAML}}, "l"))
 }
 
 // A lsZonesCmd command displays a list of zone configs.
@@ -143,18 +140,20 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	specifiers, err := queryZoneSpecifiers(conn)
-	if err != nil {
+	var cols []string
+	var vals [][]string
+	if err := runQueryRawMaybeExperimental(conn,
+		func(runQuery runQueryRawFn) (err error) {
+			cols, vals, err = runQuery(
+				`SELECT cli_specifier AS zone
+           FROM [%[1]s SHOW ZONE CONFIGURATIONS]
+          WHERE cli_specifier IS NOT NULL
+       ORDER BY cli_specifier`)
+			return
+		}); err != nil {
 		return err
 	}
-	if len(specifiers) == 0 {
-		fmt.Printf("No zones found\n")
-		return nil
-	}
-	for _, s := range specifiers {
-		fmt.Println(s)
-	}
-	return nil
+	return printQueryOutput(os.Stdout, cols, newRowSliceIter(vals, "l"))
 }
 
 // A rmZoneCmd command removes a zone config.
@@ -187,8 +186,12 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL`, &zs)))
+	return runQueryRawMaybeExperimental(conn,
+		func(runQuery runQueryRawFn) (err error) {
+			_, _, err = runQuery(fmt.Sprintf(
+				`ALTER %s %%[1]s CONFIGURE ZONE NULL`, &zs))
+			return
+		})
 }
 
 // A setZoneCmd command creates a new or updates an existing zone config.
@@ -266,29 +269,21 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = conn.ExecTxn(func(conn *sqlConn) error {
-		if err := conn.Exec(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE %s`, &zs,
-			lex.EscapeSQLString(string(configYAML))), nil); err != nil {
-			return err
-		}
-		vals, err := conn.QueryRow(fmt.Sprintf(
-			`SELECT config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, &zs), nil)
-		if err != nil {
-			return err
-		}
-		var ok bool
-		configYAML, ok = vals[0].([]byte)
-		if !ok {
-			return fmt.Errorf("unexpected result type: %T", vals[0])
-		}
-		return nil
-	})
-	if err != nil {
+	var vals [][]string
+	if err := runQueryRawMaybeExperimental(conn,
+		func(runQuery runQueryRawFn) (err error) {
+			if _, _, err := runQuery(fmt.Sprintf(
+				`ALTER %s %%[1]s CONFIGURE ZONE %s`,
+				&zs, lex.EscapeSQLString(string(configYAML)))); err != nil {
+				return err
+			}
+			vals, err = getCliSpecifierAndZoneConf(&zs, runQuery)
+			return
+		}); err != nil {
 		return err
 	}
 
-	fmt.Printf("%s", configYAML)
-	return nil
+	return printCliSpecifierAndZoneConf(&zs, vals)
 }
 
 var zoneCmds = []*cobra.Command{
