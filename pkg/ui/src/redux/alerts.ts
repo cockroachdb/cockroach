@@ -239,7 +239,7 @@ export const disconnectedAlertSelector = createSelector(
 
     return {
       level: AlertLevel.CRITICAL,
-      title: "Connection to CockroachDB node lost.",
+      title: "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
       dismiss: (dispatch) => {
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         return Promise.resolve();
