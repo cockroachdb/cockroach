@@ -69,7 +69,7 @@ func newValuesProcessor(
 func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 	ctx = v.StartInternal(ctx, valuesProcName)
 
-	// Add a bogus header to apease the StreamDecoder, which wants to receive a
+	// Add a bogus header to appease the StreamDecoder, which wants to receive a
 	// header before any data.
 	m := &ProducerMessage{
 		Typing: v.columns,
