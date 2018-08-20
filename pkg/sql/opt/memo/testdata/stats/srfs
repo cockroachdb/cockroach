@@ -15,26 +15,19 @@ inner-join
  │    │    ├── columns: upper:2(string) generate_series:3(int) upper:4(string)
  │    │    ├── side-effects
  │    │    ├── stats: [rows=1000]
- │    │    ├── function: upper [type=string]
- │    │    │    └── const: 'def' [type=string]
- │    │    ├── function: generate_series [type=int, side-effects]
- │    │    │    ├── const: 1 [type=int]
- │    │    │    └── const: 3 [type=int]
- │    │    └── function: upper [type=string]
- │    │         └── const: 'ghi' [type=string]
+ │    │    ├── upper('def') [type=string]
+ │    │    ├── generate_series(1, 3) [type=int, side-effects]
+ │    │    └── upper('ghi') [type=string]
  │    ├── zip
  │    │    ├── columns: upper:1(string)
  │    │    ├── stats: [rows=1]
- │    │    └── function: upper [type=string]
- │    │         └── const: 'abc' [type=string]
+ │    │    └── upper('abc') [type=string]
  │    └── true [type=bool]
  ├── zip
  │    ├── columns: generate_series:5(int)
  │    ├── side-effects
  │    ├── stats: [rows=1000]
- │    └── function: generate_series [type=int, side-effects]
- │         ├── const: 1 [type=int]
- │         └── const: 4 [type=int]
+ │    └── generate_series(1, 4) [type=int, side-effects]
  └── true [type=bool]
 
 opt
@@ -54,12 +47,9 @@ distinct-on
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
       │    ├── stats: [rows=1000, distinct(2)=700]
-      │    └── function: generate_series [type=int, side-effects]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │    └── generate_series(1, 2) [type=int, side-effects]
       ├── zip
       │    ├── columns: upper:1(string)
       │    ├── stats: [rows=1, distinct(1)=1]
-      │    └── function: upper [type=string]
-      │         └── const: 'abc' [type=string]
+      │    └── upper('abc') [type=string]
       └── true [type=bool]
