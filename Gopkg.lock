@@ -1265,10 +1265,11 @@
   revision = "8f06f82ca394b1ac837d4b0c0cfa07188b0e9dee"
 
 [[projects]]
-  branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "287cf08546ab5e7e37d55a84f7ed3fd1db036de5"
+  revision = "861d2482f24da83c9015a791a03639a87458a7fd"
+  source = "https://github.com/cockroachdb/yaml"
+  version = "v2.2.1-encoding-style"
 
 [[projects]]
   name = "honnef.co/go/tools"
@@ -1309,6 +1310,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4dadb1fb953c21dae254063fb479e52f07648b2bfa0954ea4bdec39b61ba770a"
+  inputs-digest = "42991ef27dc4c106425b51755946abb0d53a282cfb38b2e57a10c269a27cb47c"
   solver-name = "gps-cdcl"
   solver-version = 1

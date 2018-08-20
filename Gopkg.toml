@@ -70,6 +70,11 @@ ignored = [
   source = "https://github.com/cockroachdb/vitess"
   branch = "no-flag-on-delete"
 
+[[constraint]]
+  name = "gopkg.in/yaml.v2"
+  source = "https://github.com/cockroachdb/yaml"
+  branch = "v2-encoding-style"
+
 # The master version of go.uuid has an incompatible interface and (as
 # of 2018-06-06) a serious bug. Don't upgrade without making sure
 # that bug is fixed.
