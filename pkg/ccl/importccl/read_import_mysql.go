@@ -98,7 +98,7 @@ func (m *mysqldumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *mysql.Insert:
-			name := i.Table.Name.String()
+			name := safeString(i.Table.Name)
 			conv, ok := m.tables[lex.NormalizeName(name)]
 			if !ok {
 				// not importing this table.
@@ -226,6 +226,7 @@ func readMysqlCreateTable(
 	startingID, parentID sqlbase.ID,
 	match string,
 	fks fkHandler,
+	seqVals map[sqlbase.ID]int64,
 ) ([]*sqlbase.TableDescriptor, error) {
 	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
@@ -234,20 +235,12 @@ func readMysqlCreateTable(
 
 	var ret []*sqlbase.TableDescriptor
 	var fkDefs []delayedFK
-	var found []string
+	var found bool
+	var names []string
 	for {
 		stmt, err := mysql.ParseNextStrictDDL(tokens)
 		if err == io.EOF {
-			if match != "" {
-				return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(found, ", "))
-			}
-			if ret == nil {
-				return nil, errors.Errorf("no table definition found")
-			}
-			if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
-				return nil, err
-			}
-			return ret, nil
+			break
 		}
 		if err == mysql.ErrEmpty {
 			continue
@@ -256,26 +249,44 @@ func readMysqlCreateTable(
 			return nil, errors.Wrap(err, "mysql parse error")
 		}
 		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
-			name := lex.NormalizeName(i.NewName.Name.String())
+			name := safeString(i.NewName.Name)
 			if match != "" && match != name {
-				found = append(found, name)
+				names = append(names, name)
 				continue
 			}
 			id := sqlbase.ID(int(startingID) + len(ret))
-			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks)
+			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks, seqVals)
 			if err != nil {
 				return nil, err
 			}
 			fkDefs = append(fkDefs, moreFKs...)
+			ret = append(ret, tbl...)
 			if match == name {
-				return []*sqlbase.TableDescriptor{tbl}, nil
+				found = true
+				break
 			}
-			if fks.allowed {
-				fks.resolver[tbl.Name] = tbl
-			}
-			ret = append(ret, tbl)
 		}
 	}
+	if ret == nil {
+		return nil, errors.Errorf("no table definitions found")
+	}
+	if match != "" && !found {
+		return nil, errors.Errorf("table %q not found in file (found tables: %s)", match, strings.Join(names, ", "))
+	}
+	if err := addDelayedFKs(ctx, fkDefs, fks.resolver); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+type mysqlIdent interface{ CompliantName() string }
+
+func safeString(in mysqlIdent) string {
+	return lex.NormalizeName(in.CompliantName())
+}
+
+func safeName(in mysqlIdent) tree.Name {
+	return tree.Name(safeString(in))
 }
 
 // mysqlTableToCockroach creates a Cockroach TableDescriptor from a parsed mysql
@@ -288,61 +299,86 @@ func mysqlTableToCockroach(
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
-) (*sqlbase.TableDescriptor, []delayedFK, error) {
+	seqVals map[sqlbase.ID]int64,
+) ([]*sqlbase.TableDescriptor, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
 	}
 
 	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
-	priv := sqlbase.NewDefaultPrivilegeDescriptor()
-	desc := sql.InitTableDescriptor(id, parentID, name, time, priv)
 
-	colNames := make(map[string]string)
+	const seqOpt = "auto_increment="
+	var seqName string
+	var seqDesc *sqlbase.TableDescriptor
+	for _, opt := range strings.Fields(strings.ToLower(in.Options)) {
+		if strings.HasPrefix(opt, seqOpt) {
+			i, err := strconv.Atoi(strings.TrimPrefix(opt, seqOpt))
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "parsing AUTO_INCREMENT value")
+			}
+			i64 := int64(i)
+			seqVals[id] = i64
+			priv := sqlbase.NewDefaultPrivilegeDescriptor()
+			opts := tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &i64}}
+			seqName = name + "_auto_inc"
+			desc, err := sql.MakeSequenceTableDesc(seqName, opts, parentID, id, time, priv, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			seqDesc = &desc
+			fks.resolver[seqName] = seqDesc
+			id++
+			break
+		}
+	}
+
+	tblName := tree.MakeUnqualifiedTableName(tree.Name(name))
+	stmt := &tree.CreateTable{
+		Table: tree.NormalizableTableName{TableNameReference: &tblName},
+	}
+
 	checks := make(map[string]*tree.CheckConstraintTableDef)
 
 	for _, raw := range in.Columns {
-		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type, checks)
+		def, err := mysqlColToCockroach(safeString(raw.Name), raw.Type, checks)
 		if err != nil {
 			return nil, nil, err
 		}
-		// The new types in the table imported from MySQL do not (yet?)
-		// use SERIAL so we need not process SERIAL types here.
-		//
-		// If/when we extend this functionality to support MySQL'sAUTO
-		// INCREMENT, this will need to be extended -- see the comments on
-		// MakeColumnDefDescs().
-		col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, evalCtx)
-		if err != nil {
-			return nil, nil, err
+		if raw.Type.Autoincrement {
+			if seqName == "" {
+				return nil, nil, errors.Errorf("column %q specifies AUTO_INCREMENT but table options did not include it", def.Name)
+			}
+			expr, err := parser.ParseExpr(fmt.Sprintf("nextval('%s':::STRING)", seqName))
+			if err != nil {
+				return nil, nil, err
+			}
+			def.DefaultExpr.Expr = expr
 		}
-		desc.AddColumn(*col)
-		colNames[raw.Name.String()] = col.Name
+		stmt.Defs = append(stmt.Defs, def)
 	}
 
 	for _, raw := range in.Indexes {
 		var elems tree.IndexElemList
 		for _, col := range raw.Columns {
-			elems = append(elems, tree.IndexElem{Column: tree.Name(colNames[col.Column.String()])})
+			elems = append(elems, tree.IndexElem{Column: safeName(col.Column)})
 		}
-		idx := sqlbase.IndexDescriptor{Name: raw.Info.Name.String(), Unique: raw.Info.Unique}
-		if err := idx.FillColumns(elems); err != nil {
-			return nil, nil, err
-		}
-		if err := desc.AddIndex(idx, raw.Info.Primary); err != nil {
-			return nil, nil, err
+
+		idxName := safeName(raw.Info.Name)
+		idx := tree.IndexTableDef{Name: idxName, Columns: elems}
+		if raw.Info.Primary || raw.Info.Unique {
+			stmt.Defs = append(stmt.Defs, &tree.UniqueConstraintTableDef{IndexTableDef: idx, PrimaryKey: raw.Info.Primary})
+		} else {
+			stmt.Defs = append(stmt.Defs, &idx)
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	for _, c := range checks {
+		stmt.Defs = append(stmt.Defs, c)
+	}
+
+	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), nil, stmt, parentID, id, fks, time.WallTime)
+	if err != nil {
 		return nil, nil, err
-	}
-
-	for _, check := range checks {
-		ck, err := sql.MakeCheckConstraint(ctx, desc, check, nil, &tree.SemaContext{}, evalCtx, *tree.NewTableName("", tree.Name(name)))
-		if err != nil {
-			return nil, nil, err
-		}
-		desc.Checks = append(desc.Checks, ck)
 	}
 
 	var fkDefs []delayedFK
@@ -357,11 +393,12 @@ func mysqlTableToCockroach(
 			}
 			fromCols := i.Source
 			toTable := tree.MakeTableName(
-				tree.Name(i.ReferencedTable.Qualifier.String()), tree.Name(i.ReferencedTable.Name.String()),
+				safeName(i.ReferencedTable.Qualifier),
+				safeName(i.ReferencedTable.Name),
 			)
 			toCols := i.ReferencedColumns
 			d := &tree.ForeignKeyConstraintTableDef{
-				Name:     tree.Name(raw.Name),
+				Name:     tree.Name(lex.NormalizeName(raw.Name)),
 				FromCols: toNameList(fromCols),
 				ToCols:   toNameList(toCols),
 			}
@@ -374,10 +411,14 @@ func mysqlTableToCockroach(
 			}
 
 			d.Table.TableNameReference = &toTable
-			fkDefs = append(fkDefs, delayedFK{&desc, d})
+			fkDefs = append(fkDefs, delayedFK{desc, d})
 		}
 	}
-	return &desc, fkDefs, nil
+	fks.resolver[desc.Name] = desc
+	if seqDesc != nil {
+		return []*sqlbase.TableDescriptor{seqDesc, desc}, fkDefs, nil
+	}
+	return []*sqlbase.TableDescriptor{desc}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
@@ -419,7 +460,7 @@ func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) e
 func toNameList(cols mysql.Columns) tree.NameList {
 	res := make([]tree.Name, len(cols))
 	for i := range cols {
-		res[i] = tree.Name(cols[i].String())
+		res[i] = safeName(cols[i])
 	}
 	return res
 }
