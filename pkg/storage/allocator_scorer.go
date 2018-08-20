@@ -113,10 +113,7 @@ func (bd balanceDimensions) String() string {
 }
 
 func (bd balanceDimensions) compactString(options scorerOptions) string {
-	if !options.statsBasedRebalancingEnabled {
-		return fmt.Sprintf("%d", bd.ranges)
-	}
-	return bd.String()
+	return fmt.Sprintf("%d", bd.ranges)
 }
 
 // candidate store for allocation.
@@ -161,10 +158,6 @@ func (c candidate) compactString(options scorerOptions) string {
 	}
 	fmt.Fprintf(&buf, ", converges:%d, balance:%s, rangeCount:%d",
 		c.convergesScore, c.balanceScore.compactString(options), c.rangeCount)
-	if options.statsBasedRebalancingEnabled {
-		fmt.Fprintf(&buf, ", logicalBytes:%s, writesPerSecond:%.2f",
-			humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond)
-	}
 	if c.details != "" {
 		fmt.Fprintf(&buf, ", details:(%s)", c.details)
 	}
@@ -854,57 +847,7 @@ func shouldRebalance(
 	rangeInfo RangeInfo,
 	options scorerOptions,
 ) bool {
-	if !options.statsBasedRebalancingEnabled {
-		return shouldRebalanceNoStats(ctx, store, sl, options)
-	}
-
-	// Rebalance if this store is full enough that the range is a bad fit.
-	score := balanceScore(sl, store.Capacity, rangeInfo, options)
-	if rangeIsBadFit(score) {
-		log.VEventf(ctx, 2,
-			"s%d: should-rebalance(bad-fit): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-				"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-			store.StoreID, score, store.Capacity, rangeInfo,
-			sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
-			sl.candidateWritesPerSecond.mean)
-		return true
-	}
-
-	// Rebalance if there exists another store that is very in need of the
-	// range and this store is a somewhat bad match for it.
-	if rangeIsPoorFit(score) {
-		for _, desc := range sl.stores {
-			otherScore := balanceScore(sl, desc.Capacity, rangeInfo, options)
-			if !rangeIsGoodFit(otherScore) {
-				log.VEventf(ctx, 5,
-					"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-						"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-					desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
-					sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
-					sl.candidateWritesPerSecond.mean)
-				continue
-			}
-			if storeHasReplica(desc.StoreID, rangeInfo.Desc.Replicas) {
-				continue
-			}
-			log.VEventf(ctx, 2,
-				"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-					"otherScore=%s, otherCapacity=(%v), "+
-					"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-				store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
-				otherScore, desc.Capacity, sl.candidateRanges.mean,
-				humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
-			return true
-		}
-	}
-
-	// If we reached this point, we're happy with the range where it is.
-	log.VEventf(ctx, 3,
-		"s%d: should-not-rebalance: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-			"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-		store.StoreID, score, store.Capacity, rangeInfo, sl.candidateRanges.mean,
-		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
-	return false
+	return shouldRebalanceNoStats(ctx, store, sl, options)
 }
 
 // shouldRebalance implements the decision of whether to rebalance for the case
@@ -1327,22 +1270,6 @@ func balanceScore(
 	} else {
 		dimensions.ranges = balanced
 	}
-	if options.statsBasedRebalancingEnabled {
-		dimensions.bytes = balanceContribution(
-			options,
-			dimensions.ranges,
-			sl.candidateLogicalBytes.mean,
-			float64(sc.LogicalBytes),
-			sc.BytesPerReplica,
-			float64(rangeInfo.LogicalBytes))
-		dimensions.writes = balanceContribution(
-			options,
-			dimensions.ranges,
-			sl.candidateWritesPerSecond.mean,
-			sc.WritesPerSecond,
-			sc.WritesPerReplica,
-			rangeInfo.WritesPerSecond)
-	}
 	return dimensions
 }
 
@@ -1458,17 +1385,11 @@ func rangeIsPoorFit(bd balanceDimensions) bool {
 }
 
 func overfullRangeThreshold(options scorerOptions, mean float64) float64 {
-	if !options.statsBasedRebalancingEnabled {
-		return mean * (1 + options.rangeRebalanceThreshold)
-	}
-	return math.Max(mean*(1+options.rangeRebalanceThreshold), mean+5)
+	return mean * (1 + options.rangeRebalanceThreshold)
 }
 
 func underfullRangeThreshold(options scorerOptions, mean float64) float64 {
-	if !options.statsBasedRebalancingEnabled {
-		return mean * (1 - options.rangeRebalanceThreshold)
-	}
-	return math.Min(mean*(1-options.rangeRebalanceThreshold), mean-5)
+	return mean * (1 - options.rangeRebalanceThreshold)
 }
 
 func overfullStatThreshold(options scorerOptions, mean float64) float64 {
@@ -1511,30 +1432,7 @@ func rebalanceConvergesOnMean(
 	newWritesPerSecond float64,
 	options scorerOptions,
 ) bool {
-	if !options.statsBasedRebalancingEnabled {
-		return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
-	}
-
-	// Note that we check both converges and diverges. If we always decremented
-	// convergeCount when something didn't converge, ranges with stats equal to 0
-	// would almost never converge (and thus almost never get rebalanced).
-	var convergeCount int
-	if convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
-		convergeCount++
-	} else if divergesFromMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
-		convergeCount--
-	}
-	if convergesOnMean(float64(sc.LogicalBytes), float64(newLogicalBytes), sl.candidateLogicalBytes.mean) {
-		convergeCount++
-	} else if divergesFromMean(float64(sc.LogicalBytes), float64(newLogicalBytes), sl.candidateLogicalBytes.mean) {
-		convergeCount--
-	}
-	if convergesOnMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
-		convergeCount++
-	} else if divergesFromMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
-		convergeCount--
-	}
-	return convergeCount > 0
+	return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
 }
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
