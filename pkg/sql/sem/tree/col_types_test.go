@@ -29,8 +29,6 @@ func TestParseColumnType(t *testing.T) {
 		str          string
 		expectedType coltypes.T
 	}{
-		{"BIT", &coltypes.TInt{Name: "BIT", Width: 1, ImplicitWidth: true}},
-		{"BIT(2)", &coltypes.TInt{Name: "BIT", Width: 2}},
 		{"BOOL", &coltypes.TBool{}},
 		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
 		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},

@@ -1320,7 +1320,6 @@ case_expr ::=
 
 simple_typename ::=
 	const_typename
-	| bit_with_length
 	| character_with_length
 	| const_interval opt_interval
 
@@ -1581,7 +1580,6 @@ constraint_elem ::=
 
 const_typename ::=
 	numeric
-	| bit_without_length
 	| character_without_length
 	| const_datetime
 	| const_json
@@ -1645,9 +1643,6 @@ when_clause_list ::=
 case_default ::=
 	'ELSE' a_expr
 	| 
-
-bit_with_length ::=
-	'BIT' opt_varying '(' iconst64 ')'
 
 character_with_length ::=
 	character_base '(' iconst64 ')'
@@ -1816,9 +1811,6 @@ numeric ::=
 	| 'BOOLEAN'
 	| 'BOOL'
 
-bit_without_length ::=
-	'BIT' opt_varying
-
 character_without_length ::=
 	character_base
 
@@ -1893,10 +1885,6 @@ opt_slice_bound ::=
 
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
-
-opt_varying ::=
-	'VARYING'
-	| 
 
 character_base ::=
 	'CHARACTER' opt_varying
@@ -2051,6 +2039,10 @@ special_function ::=
 tuple1_unambiguous_values ::=
 	a_expr ','
 	| a_expr ',' expr_list
+
+opt_varying ::=
+	'VARYING'
+	| 
 
 window_definition ::=
 	window_name 'AS' window_specification

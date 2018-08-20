@@ -845,7 +845,7 @@ statement ok
 DROP TABLE data_types
 
 statement ok
-CREATE TABLE char_len (a INT, b BIT, c BIT(12), d STRING, e STRING(12), f FLOAT)
+CREATE TABLE char_len (a INT, b INT2, c INT4, d STRING, e STRING(12), f FLOAT)
 
 query TTII colnames
 SELECT table_name, column_name, character_maximum_length, character_octet_length
@@ -854,8 +854,8 @@ WHERE table_schema = 'public' AND table_name = 'char_len'
 ----
 table_name  column_name  character_maximum_length  character_octet_length
 char_len    a            NULL                      NULL
-char_len    b            1                         NULL
-char_len    c            12                        NULL
+char_len    b            16                        NULL
+char_len    c            32                        NULL
 char_len    d            NULL                      NULL
 char_len    e            12                        48
 char_len    f            NULL                      NULL

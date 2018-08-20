@@ -23,8 +23,6 @@ var (
 	// Bool is an immutable T instance.
 	Bool = &TBool{}
 
-	// Bit is an immutable T instance.
-	Bit = &TInt{Name: "BIT", Width: 1, ImplicitWidth: true}
 	// Int is an immutable T instance.
 	Int = &TInt{Name: "INT"}
 	// Int2 is an immutable T instance.
@@ -119,16 +117,6 @@ var (
 	// OidVector is an immutable T instance.
 	OidVector = &TVector{Name: "OIDVECTOR", ParamType: Oid}
 )
-
-var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
-
-// NewIntBitType creates a type alias for INT named BIT with the given bit width.
-func NewIntBitType(width int) (*TInt, error) {
-	if width < 1 {
-		return nil, errBitLengthNotPositive
-	}
-	return &TInt{Name: "BIT", Width: width}, nil
-}
 
 var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 	"precision for type float must be at least 1 bit")

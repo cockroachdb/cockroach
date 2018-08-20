@@ -6135,18 +6135,13 @@ opt_float:
 bit_with_length:
   BIT opt_varying '(' iconst64 ')'
   {
-    bit, err := coltypes.NewIntBitType(int($4.int64()))
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = bit
+    return unimplementedWithIssue(sqllex, 20991)
   }
 
 bit_without_length:
   BIT opt_varying
   {
-    $$.val = coltypes.Bit
+    return unimplementedWithIssue(sqllex, 20991)
   }
 
 character_with_length:

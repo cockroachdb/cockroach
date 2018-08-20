@@ -587,7 +587,6 @@ func TestParse(t *testing.T) {
 		{`SELECT INT 'foo'`},
 		{`SELECT FLOAT4 'foo'`},
 		{`SELECT DECIMAL 'foo'`},
-		{`SELECT BIT '1'`},
 		{`SELECT CHAR 'foo'`},
 		{`SELECT VARCHAR 'foo'`},
 		{`SELECT STRING 'foo'`},
@@ -1768,13 +1767,6 @@ CREATE TABLE test (
                  ^
 HINT: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
-  foo BIT(0)
-)`, `length for type bit must be at least 1 at or near ")"
-CREATE TABLE test (
-  foo BIT(0)
-           ^
-`},
-		{`CREATE TABLE test (
   foo INT DEFAULT 1 DEFAULT 2
 )`, `multiple default values specified for column "foo" at or near ")"
 CREATE TABLE test (
@@ -2147,6 +2139,13 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
                                                          ^
 `,
+		},
+		{
+			`CREATE TABLE foo(a BIT)`,
+			`unimplemented at or near ")"
+CREATE TABLE foo(a BIT)
+                      ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/20991`,
 		},
 	}
 	for _, d := range testData {

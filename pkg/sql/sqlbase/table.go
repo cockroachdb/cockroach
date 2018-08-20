@@ -42,7 +42,6 @@ import (
 // so that the alias is persisted. When adding new column type aliases or new
 // VisibleType variants, consider adding to this mapping as well.
 var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	coltypes.Bit.Name:      ColumnType_BIT,
 	coltypes.Int2.Name:     ColumnType_SMALLINT,
 	coltypes.Int4.Name:     ColumnType_INTEGER,
 	coltypes.Int8.Name:     ColumnType_BIGINT,
@@ -2303,21 +2302,9 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {
-			if typ.Width > 0 {
-
+			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width - 1)
-
-				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
-				// "bit type data must match the length n exactly; it is an error
-				// to attempt to store shorter or longer bit strings. bit varying
-				// data is of variable length up to the maximum length n; longer
-				// strings will be rejected." Bits are unsigned, so we need to
-				// increase the width for the type check below.
-				// TODO(nvanbenschoten): Because we do not propagate the "varying"
-				if typ.VisibleType == ColumnType_BIT {
-					width = uint(typ.Width)
-				}
 
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
