@@ -64,6 +64,8 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 		var filter memo.GroupID
 		if on, ok := cond.(*tree.OnJoinCond); ok {
+			// Do not allow special functions in the ON clause.
+			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
 			filter = b.buildScalar(outScope.resolveAndRequireType(on.Expr, types.Bool, "ON"), outScope)
 		} else {
 			filter = b.factory.ConstructTrue()

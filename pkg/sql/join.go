@@ -96,6 +96,9 @@ func (p *planner) makeJoinPredicate(
 		}
 		switch t := cond.(type) {
 		case *tree.OnJoinCond:
+			// Do not allow special functions in the ON clause.
+			p.semaCtx.Properties.Require("ON", tree.RejectSpecial)
+
 			// Determine the on condition expression. Note that the predicate can't
 			// already have onCond set (we haven't passed any usingColumns).
 			pred.onCond, err = p.analyzeExpr(
