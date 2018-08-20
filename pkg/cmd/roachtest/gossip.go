@@ -306,18 +306,27 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	run := func(stmt string) {
+	run := func(stmtStr string) {
+		stmt := fmt.Sprintf(stmtStr, "", "=")
 		c.l.Printf("%s\n", stmt)
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
+		_, err := db.ExecContext(ctx, stmt)
+		if err != nil && strings.Contains(err.Error(), "syntax error") {
+			// Pre-2.1 was EXPERIMENTAL.
+			// TODO(knz): Remove this in 2.2.
+			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
+			c.l.Printf("%s\n", stmt)
+			_, err = db.ExecContext(ctx, stmt)
+		}
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Evacuate all of the ranges off node 1 with zone config constraints. See
 	// the racks setting specified when the cluster was started.
-	run(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
-	run(`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
-	run(`ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE default %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 
 	var lastCount int
 	if err := retry.ForDuration(2*time.Minute, func() error {

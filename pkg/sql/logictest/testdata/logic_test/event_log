@@ -357,16 +357,16 @@ statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement ok
-ALTER TABLE a EXPERIMENTAL CONFIGURE ZONE 'range_max_bytes: 67108865'
+ALTER TABLE a CONFIGURE ZONE 'range_max_bytes: 67108865'
 
 statement ok
-ALTER TABLE a EXPERIMENTAL CONFIGURE ZONE NULL
+ALTER TABLE a CONFIGURE ZONE NULL
 
 statement ok
-ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE 'range_min_bytes: 1048577'
+ALTER RANGE liveness CONFIGURE ZONE 'range_min_bytes: 1048577'
 
 statement ok
-ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE NULL
+ALTER RANGE liveness CONFIGURE ZONE NULL
 
 # verify zone config changes are logged
 ##################
