@@ -286,7 +286,7 @@ func (rq *replicateQueue) processOneChange(
 		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone,
-			desc.Replicas,
+			liveReplicas, // only include liveReplicas, since deadReplicas should soon be removed
 			rangeInfo,
 			disableStatsBasedRebalancing,
 		)
@@ -310,7 +310,7 @@ func (rq *replicateQueue) processOneChange(
 		//
 		// NB: If willHave > need, then always allow up-replicating as that will be
 		// the case when up-replicating a range with a decommissioning replica.
-		if willHave < need && willHave%2 == 0 {
+		if willHave < need && willHave%2 == 0 && len(deadReplicas) == 0 {
 			// This means we are going to up-replicate to an even replica state.
 			// Check if it is possible to go to an odd replica state beyond it.
 			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)

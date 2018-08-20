@@ -52,6 +52,7 @@ const (
 
 	// priorities for various repair operations.
 	addMissingReplicaPriority             float64 = 10000
+	addDeadReplacementPriority            float64 = 9000
 	addDecommissioningReplacementPriority float64 = 5000
 	removeDeadReplicaPriority             float64 = 1000
 	removeDecommissioningReplicaPriority  float64 = 200
@@ -288,39 +289,29 @@ func (a *Allocator) ComputeAction(
 			liveReplicas, quorum)
 		return AllocatorNoop, 0
 	}
+
+	if have == need && len(deadReplicas) > 0 {
+		// Range has dead replica(s). We should up-replicate to add another before
+		// before removing the dead one. This can avoid permanent data loss in cases
+		// where the node is only temporarily dead, but we remove it from the range
+		// and lose a second node before we can up-replicate (#25392).
+		// The dead replica(s) will be down-replicated later.
+		priority := addDeadReplacementPriority // TODO: Change this?
+		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d dead replicas priority=%.2f",
+			len(deadReplicas), priority)
+		return AllocatorAdd, priority
+	}
+
 	// Removal actions follow.
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
-		removeDead := false
-		switch {
-		case have > need:
-			// Allow removal of a dead replica if we have more than we need.
-			// Reduce priority for this case?
-			removeDead = true
-		default: // have == need
-			// Only allow removal of a dead replica if we have a suitable allocation
-			// target that we can up-replicate to. This isn't necessarily the target
-			// we'll up-replicate to, just an indication that such a target exists.
-			if _, _, err := a.AllocateTarget(
-				ctx,
-				zone,
-				liveReplicas,
-				rangeInfo,
-				disableStatsBasedRebalancing,
-			); err == nil {
-				removeDead = true
-			}
-		}
-		if removeDead {
-			// Adjust the priority by the distance of live replicas from quorum.
-			priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
-			log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-				len(deadReplicas), len(liveReplicas), quorum, priority)
-			return AllocatorRemoveDead, priority
-		}
+		priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
+		log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+			len(deadReplicas), len(liveReplicas), quorum, priority)
+		return AllocatorRemoveDead, priority
 	}
 
-	if have > need && len(decommissioningReplicas) > 0 {
+	if len(decommissioningReplicas) > 0 {
 		// Range is over-replicated, and has a decommissioning replica which
 		// should be removed.
 		priority := removeDecommissioningReplicaPriority
@@ -365,7 +356,7 @@ func (a *Allocator) AllocateTarget(
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+		ctx, a.storePool.getStoreDescriptor, existing, zone)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
