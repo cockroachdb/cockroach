@@ -1145,7 +1145,7 @@ func TestEval(t *testing.T) {
 		{`10::int::timestamp`, `'1970-01-01 00:00:10+00:00'`},
 		{`10::int::timestamptz`, `'1970-01-01 00:00:10+00:00'`},
 		{`10123456::int::interval`, `'3mon27d4h4m16s'`},
-		{`ARRAY[NULL]::string[]`, `ARRAY['NULL']`},
+		{`ARRAY[NULL]::string[]`, `ARRAY[NULL]`},
 		{`ARRAY[1,2,3]::string[]`, `ARRAY['1','2','3']`},
 		{`ARRAY['1','2','3']::int[]`, `ARRAY[1,2,3]`},
 		{`ARRAY['1','2','3']::name[]`, `ARRAY['1','2','3']`},
@@ -1154,7 +1154,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY[19620326,19931223]::timestamp[]`, `ARRAY['1970-08-16 02:05:26+00:00','1970-08-19 16:27:03+00:00']`},
 		{`ARRAY[1.2,2.4,3.5]::decimal[]::float[]`, `ARRAY[1.2,2.4,3.5]`},
 		{`ARRAY['3h3us']::interval[]::decimal[]`, `ARRAY[10800.000003000]`},
-		{`ARRAY[1,NULL,3]::string[]`, `ARRAY['1','NULL','3']`},
+		{`ARRAY[1,NULL,3]::string[]`, `ARRAY['1',NULL,'3']`},
 		{`ARRAY['hello','world']::char(2)[]`, `ARRAY['he','wo']`},
 		// Type annotation expressions.
 		{`ANNOTATE_TYPE('s', string)`, `'s'`},
