@@ -282,7 +282,7 @@ WHERE
       CAST(
         CASE
         WHEN (
-          '12'::BYTES
+          '12'::STRING
           = ANY (
               SELECT ref_1.config_yaml AS c0
               FROM crdb_internal.zones AS ref_1
