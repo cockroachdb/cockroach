@@ -166,9 +166,6 @@ func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 
-func (*simpleTransportAdapter) Close() {
-}
-
 // TestSendRPCOrder verifies that sendRPC correctly takes into account the
 // lease holder, attributes and required consistency to determine where to send
 // remote requests.
@@ -2038,7 +2035,6 @@ func TestSenderTransport(t *testing.T) {
 	if !transport.IsExhausted() {
 		t.Fatalf("transport is not exhausted")
 	}
-	transport.Close()
 }
 
 func TestGatewayNodeID(t *testing.T) {
