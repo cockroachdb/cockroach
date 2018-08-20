@@ -61,6 +61,8 @@
 		InterleavedReaderJoinerSpec
 		ProjectSetSpec
 		WindowerSpec
+		ChangeAggregatorSpec
+		ChangeFrontierSpec
 		InputStats
 		TableReaderStats
 		HashJoinerStats

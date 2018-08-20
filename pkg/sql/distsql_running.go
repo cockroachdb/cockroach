@@ -101,6 +101,9 @@ func (dsp *DistSQLPlanner) initRunners() {
 // txn is the transaction in which the plan will run. If nil, the different
 // processors are expected to manage their own internal transactions.
 //
+// `finishedSetupFn`, if non-nil, is called synchronously after all the
+// processors have successfully started up.
+//
 // All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
@@ -112,6 +115,7 @@ func (dsp *DistSQLPlanner) Run(
 	plan *PhysicalPlan,
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
+	finishedSetupFn func(),
 ) {
 	ctx := planCtx.ctx
 
@@ -229,6 +233,10 @@ func (dsp *DistSQLPlanner) Run(
 	if err != nil {
 		recv.SetError(err)
 		return
+	}
+
+	if finishedSetupFn != nil {
+		finishedSetupFn()
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
@@ -580,5 +588,5 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		return
 	}
 	dsp.FinalizePlan(&planCtx, &physPlan)
-	dsp.Run(&planCtx, txn, &physPlan, recv, evalCtx)
+	dsp.Run(&planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }

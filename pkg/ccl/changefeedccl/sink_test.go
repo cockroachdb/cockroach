@@ -46,8 +46,8 @@ func TestKafkaSink(t *testing.T) {
 		errorsCh:    make(chan *sarama.ProducerError, 1),
 	}
 	sink := &kafkaSink{
-		producer:   p,
-		topicsSeen: make(map[string]struct{}),
+		producer: p,
+		topics:   map[string]struct{}{`t`: {}},
 	}
 	sink.start()
 	defer func() {
