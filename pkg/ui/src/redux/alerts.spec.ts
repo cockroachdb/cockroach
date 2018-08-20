@@ -308,7 +308,7 @@ describe("alerts", function() {
         const alert = disconnectedAlertSelector(state());
         assert.isObject(alert);
         assert.equal(alert.level, AlertLevel.CRITICAL);
-        assert.equal(alert.title, "Connection to CockroachDB node lost.");
+        assert.equal(alert.title, "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.");
       });
 
       it("does not display if dismissed locally", function () {
