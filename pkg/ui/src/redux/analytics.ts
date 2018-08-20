@@ -39,6 +39,11 @@ export const defaultRedactions = [
             return original.replace(localities, redactedLocalities);
         },
     },
+    // The statement details page, with a full SQL statement in the URL.
+    {
+        match: new RegExp("/statement/.*"),
+        replace: "/statement/[statement]",
+    },
 ];
 
 type PageTrackReplacementFunction = (match: string, ...args: any[]) => string;
