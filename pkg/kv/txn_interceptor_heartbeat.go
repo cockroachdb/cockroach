@@ -268,6 +268,9 @@ func (h *txnHeartbeat) SendLocked(
 		if br.Txn == nil {
 			txn := ba.Txn.Clone()
 			br.Txn = &txn
+		} else {
+			clone := br.Txn.Clone()
+			br.Txn = &clone
 		}
 		br.Txn.Status = status
 		// Synthesize an EndTransactionResponse.
@@ -282,6 +285,8 @@ func (h *txnHeartbeat) SendLocked(
 		//
 		// Note: if we sent an EndTransaction and got back a successful response, we
 		// expect br.Txn to be filled.
+		clone := br.Txn.Clone()
+		br.Txn = &clone
 		br.Txn.Status = roachpb.COMMITTED
 	}
 
