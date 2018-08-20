@@ -28,8 +28,14 @@ import (
 // subquery needs to be hoisted up into its parent query as part of query
 // decorrelation.
 func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
-	// Lazily calculate and store the HasHoistableSubquery value.
+	// Don't bother traversing the expression tree if there is no correlated
+	// subquery.
 	scalar := c.LookupScalar(group)
+	if !scalar.HasCorrelatedSubquery {
+		return false
+	}
+
+	// Lazily calculate and store the HasHoistableSubquery value.
 	if scalar.IsAvailable(props.HasHoistableSubquery) {
 		return scalar.Rule.HasHoistableSubquery
 	}
