@@ -191,7 +191,7 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", defaultRow)
 
 	// Verify we can use composite values.
-	sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE '' || %s || ''",
+	sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE t CONFIGURE ZONE '' || %s || ''",
 		lex.EscapeSQLString(yamlOverride)))
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", tableRow)
 
@@ -209,7 +209,7 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
 
 	sqlDB.Exec(t, "DROP TABLE d.t")
-	_, err = sqlDB.DB.Exec("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE d.t")
+	_, err = sqlDB.DB.Exec("SHOW ZONE CONFIGURATION FOR TABLE d.t")
 	if !testutils.IsError(err, `relation "d.t" does not exist`) {
 		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
 	}
@@ -228,47 +228,47 @@ func TestInvalidSetShowZones(t *testing.T) {
 		err   string
 	}{
 		{
-			"ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE NULL",
+			"ALTER RANGE default CONFIGURE ZONE NULL",
 			"cannot remove default zone",
 		},
 		{
-			"ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '&!@*@&'",
+			"ALTER RANGE default CONFIGURE ZONE '&!@*@&'",
 			"could not parse zone config",
 		},
 		{
-			"ALTER TABLE system.namespace EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER TABLE system.namespace CONFIGURE ZONE ''",
 			"cannot set zone configs for system config tables",
 		},
 		{
-			"ALTER RANGE foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER RANGE foo CONFIGURE ZONE ''",
 			`"foo" is not a built-in zone`,
 		},
 		{
-			"ALTER DATABASE foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER DATABASE foo CONFIGURE ZONE ''",
 			`database "foo" does not exist`,
 		},
 		{
-			"ALTER TABLE system.foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER TABLE system.foo CONFIGURE ZONE ''",
 			`relation "system.foo" does not exist`,
 		},
 		{
-			"ALTER TABLE foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER TABLE foo CONFIGURE ZONE ''",
 			`relation "foo" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE foo",
+			"SHOW ZONE CONFIGURATION FOR RANGE foo",
 			`"foo" is not a built-in zone`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE foo",
+			"SHOW ZONE CONFIGURATION FOR DATABASE foo",
 			`database "foo" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE foo",
+			"SHOW ZONE CONFIGURATION FOR TABLE foo",
 			`relation "foo" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.foo",
+			"SHOW ZONE CONFIGURATION FOR TABLE system.foo",
 			`relation "system.foo" does not exist`,
 		},
 	} {
