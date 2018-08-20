@@ -639,6 +639,9 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 	// If this is called as part of a window function, the delimiter is passed in
 	// via the first element in others.
 	if len(others) == 1 {
+		if others[0] == tree.DNull {
+			return nil
+		}
 		if a.forBytes {
 			delimiter = string(tree.MustBeDBytes(others[0]))
 		} else {
