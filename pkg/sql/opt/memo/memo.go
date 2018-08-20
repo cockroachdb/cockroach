@@ -148,7 +148,7 @@ func New() *Memo {
 	// for lists are all reserved.
 	m := &Memo{
 		exprMap: make(map[Fingerprint]GroupID),
-		groups:  make([]group, 1, 8),
+		groups:  make([]group, 1, 12),
 	}
 
 	m.privateStorage.init()

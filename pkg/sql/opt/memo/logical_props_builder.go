@@ -129,6 +129,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	md := ev.Metadata()
 	def := ev.Private().(*ScanOpDef)
+	hardLimit := def.HardLimit.RowCount()
 
 	// Output Columns
 	// --------------
@@ -150,26 +151,32 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Functional Dependencies
 	// -----------------------
-	// Initialize key FD's from the table schema, including constant columns from
-	// the constraint, minus any columns that are not projected by the Scan
-	// operator.
-	relational.FuncDeps.CopyFrom(makeTableFuncDep(md, def.Table))
-	if def.Constraint != nil {
-		relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
+	// Check the hard limit to determine whether there is at most one row. Note
+	// that def.HardLimit = 0 indicates there is no known limit.
+	if hardLimit == 1 {
+		relational.FuncDeps.MakeMax1Row(relational.OutputCols)
+	} else {
+		// Initialize key FD's from the table schema, including constant columns from
+		// the constraint, minus any columns that are not projected by the Scan
+		// operator.
+		relational.FuncDeps.CopyFrom(makeTableFuncDep(md, def.Table))
+		if def.Constraint != nil {
+			relational.FuncDeps.AddConstants(def.Constraint.ExtractConstCols(b.evalCtx))
+		}
+		relational.FuncDeps.MakeNotNull(relational.NotNullCols)
+		relational.FuncDeps.ProjectCols(relational.OutputCols)
 	}
-	relational.FuncDeps.MakeNotNull(relational.NotNullCols)
-	relational.FuncDeps.ProjectCols(relational.OutputCols)
 
 	// Cardinality
 	// -----------
-	// Don't bother setting cardinality from scan's HardLimit, since that is
-	// created by exploration patterns and won't ever be the basis for the
-	// logical props on a newly created memo group.
+	// Restrict cardinality based on constraint, FDs, and hard limit.
 	relational.Cardinality = props.AnyCardinality
 	if def.Constraint != nil && def.Constraint.IsContradiction() {
 		relational.Cardinality = props.ZeroCardinality
 	} else if relational.FuncDeps.HasMax1Row() {
 		relational.Cardinality = relational.Cardinality.AtMost(1)
+	} else if hardLimit > 0 && hardLimit < math.MaxUint32 {
+		relational.Cardinality = relational.Cardinality.AtMost(uint32(hardLimit))
 	}
 
 	// Statistics

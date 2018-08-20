@@ -755,7 +755,7 @@ project
            ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
            ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
            ├── limit: 1(rev)
-           ├── stats: [rows=6.80272109e-07]
+           ├── stats: [rows=6.80272109e-07, distinct(2)=6.80272109e-07, distinct(3)=6.80272109e-07, distinct(4)=6.80272109e-07]
            ├── cost: 7.34693878e-07
            ├── key: ()
            ├── fd: ()-->(1-4)

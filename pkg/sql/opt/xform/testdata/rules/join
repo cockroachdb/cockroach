@@ -1211,45 +1211,11 @@ TABLE uvw
       ├── v int
       └── u int not null
 
+# TODO(radu): index-join fixup needed
 exploretrace rule=PushJoinThroughIndexJoin
 SELECT * FROM abc JOIN uvw ON a=u
 ----
-----
-================================================================================
-PushJoinThroughIndexJoin
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
-   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
-   ├── scan abc
-   │    └── columns: a:1(int) b:2(int) c:3(int)
-   ├── scan uvw
-   │    ├── columns: u:5(int!null) v:6(int) w:7(int)
-   │    ├── key: (5)
-   │    └── fd: (5)-->(6,7)
-   └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-        └── a = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
-New expression 1 of 1:
-  inner-join (lookup uvw)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int) w:7(int)
-   ├── key columns: [5] = [5]
-   ├── fd: (5)-->(6,7), (1)==(5), (5)==(1)
-   ├── inner-join
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int)
-   │    ├── fd: (5)-->(6), (1)==(5), (5)==(1)
-   │    ├── scan abc
-   │    │    └── columns: a:1(int) b:2(int) c:3(int)
-   │    ├── scan uvw@v
-   │    │    ├── columns: u:5(int!null) v:6(int)
-   │    │    ├── key: (5)
-   │    │    └── fd: (5)-->(6)
-   │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-   │         └── a = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-   └── true [type=bool]
-----
-----
 
 exec-ddl
 ALTER TABLE abc INJECT STATISTICS '[
@@ -1273,55 +1239,52 @@ ALTER TABLE uvw INJECT STATISTICS '[
 ]'
 ----
 
+# TODO(radu): index-join fixup needed
 opt
 SELECT * FROM abc JOIN uvw ON a=v
 ----
-inner-join (lookup uvw)
+inner-join
  ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── key columns: [5] = [5]
  ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── inner-join (lookup uvw@v)
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
- │    ├── key columns: [1] = [6]
- │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
- │    ├── scan abc
- │    │    └── columns: a:1(int) b:2(int) c:3(int)
- │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── true [type=bool]
+ ├── scan uvw
+ │    ├── columns: u:5(int!null) v:6(int) w:7(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6,7)
+ ├── scan abc
+ │    └── columns: a:1(int) b:2(int) c:3(int)
+ └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
+# TODO(radu): index-join fixup needed
 opt
 SELECT * FROM abc JOIN uvw ON a=v AND b+u>1
 ----
-inner-join (lookup uvw)
+inner-join
  ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── key columns: [5] = [5]
  ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── inner-join (lookup uvw@v)
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
- │    ├── key columns: [1] = [6]
- │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
- │    ├── scan abc
- │    │    └── columns: a:1(int) b:2(int) c:3(int)
- │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         ├── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │         └── (b + u) > 1 [type=bool, outer=(2,5)]
- └── true [type=bool]
+ ├── scan uvw
+ │    ├── columns: u:5(int!null) v:6(int) w:7(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6,7)
+ ├── scan abc
+ │    └── columns: a:1(int) b:2(int) c:3(int)
+ └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── (b + u) > 1 [type=bool, outer=(2,5)]
 
+# TODO(radu): index-join fixup needed
 opt
 SELECT * FROM abc JOIN uvw ON a=v WHERE b+w>1
 ----
-inner-join (lookup uvw)
+inner-join
  ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── key columns: [5] = [5]
  ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── inner-join (lookup uvw@v)
- │    ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null)
- │    ├── key columns: [1] = [6]
- │    ├── fd: (5)-->(6), (1)==(6), (6)==(1)
- │    ├── scan abc
- │    │    └── columns: a:1(int) b:2(int) c:3(int)
- │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2,7)]
+ ├── scan uvw
+ │    ├── columns: u:5(int!null) v:6(int) w:7(int)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6,7)
+ ├── scan abc
+ │    └── columns: a:1(int) b:2(int) c:3(int)
+ └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       └── (b + w) > 1 [type=bool, outer=(2,7)]

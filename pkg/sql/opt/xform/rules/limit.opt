@@ -3,34 +3,50 @@
 # =============================================================================
 
 
-# PushLimitIntoScan constructs a new Scan operator that limits the number of
-# returned rows. This can substantially reduce the cost of execution, as rows
+# GenerateLimitedScans generates a set of limited Scan operators, one for each
+# matching index on the scanned table. If the secondary index cannot provide all
+# the output columns, an IndexJoin is introduced to supply them. Pushing a limit
+# into Scan operators can substantially reduce the cost of execution, as rows
 # are never fetched to begin with, rather than fetched only to be discarded by
 # a Limit operator.
-[PushLimitIntoScan, Explore]
+[GenerateLimitedScans, Explore]
 (Limit
-    (Scan $def:*)
-    (Const $limit:*)
-    $ordering:* & (CanLimitScan $def $limit $ordering)
+    (Scan $def:* & (IsCanonicalScan $def))
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:*
 )
 =>
-(Scan
-    (LimitScanDef $def $limit $ordering)
-)
+(GenerateLimitedScans $def $limit $ordering)
 
-# PushLimitIntoIndexJoin pushes a limit through an index join.
+# PushLimitIntoConstrainedScan constructs a new Scan operator that adds a hard
+# row limit to an existing Scan operator that already has a constraint
+# associated with it (added by the ConstrainScans rule). The Scan operator
+# always applies the limit after any constraint.
+[PushLimitIntoConstrainedScan, Explore]
+(Limit
+    (Scan $def:*)
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:* & (CanLimitConstrainedScan $def $ordering)
+)
+=>
+(Scan (LimitScanDef $def $limit $ordering))
+
+# PushLimitIntoIndexJoin pushes a limit through an index join and constructs a
+# new Scan operator that incorporates it. Since index lookup can be expensive,
+# it's always better to discard rows beforehand.
+#
 # TODO(radu): we can similarly push Offset too.
 [PushLimitIntoIndexJoin, Explore]
 (Limit
     (IndexJoin
-      $input:*
-      $def:*
+      (Scan $scanDef:*)
+      $indexJoinDef:*
     )
-    $limit:*
-    $ordering:* & (HasColsInOrdering $input $ordering)
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $ordering:* & (CanLimitConstrainedScan $scanDef $ordering)
 )
 =>
 (IndexJoin
-  (Limit $input $limit $ordering)
-  $def
+  (Scan (LimitScanDef $scanDef $limit $ordering))
+  $indexJoinDef
 )

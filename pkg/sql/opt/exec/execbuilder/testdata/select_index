@@ -133,10 +133,6 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
 output row: [2 'two' 22 'bar']
 
-# The where-clause does not contain columns matching a prefix of any index.
-# Note that the index "bc" is chosen because the condition is estimated to be
-# very selective and the main cost is the scan (this index contains fewer
-# columns and this is deemed to offset the cost of the index join).
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
 
@@ -144,13 +140,16 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/bc/'one'/11/1 -> NULL
-fetched: /t/bc/'three'/33/3 -> NULL
-fetched: /t/bc/'two'/22/2 -> NULL
+fetched: /t/primary/1/'one' -> NULL
+fetched: /t/primary/1/'one'/c -> 11
+fetched: /t/primary/1/'one'/d -> 'foo'
 fetched: /t/primary/2/'two' -> NULL
 fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
+fetched: /t/primary/3/'three' -> NULL
+fetched: /t/primary/3/'three'/c -> 33
+fetched: /t/primary/3/'three'/d -> 'blah'
 
 # Use the descending index
 statement ok
