@@ -107,20 +107,30 @@ func registerRebalanceLoad(r *registry) {
 		}
 	}
 
-	minutes := 2 * time.Minute
-	numNodes := 4 // the last node is just used to generate load
 	concurrency := 128
 
 	r.Add(testSpec{
 		Name:   `rebalance-leases-by-load`,
-		Nodes:  nodes(numNodes),
-		Stable: false, // TODO(a-robinson): Promote to stable
+		Nodes:  nodes(4), // the last node is just used to generate load
+		Stable: false,    // TODO(a-robinson): Promote to stable
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
-			rebalanceLoadRun(ctx, t, c, minutes, concurrency)
+			rebalanceLoadRun(ctx, t, c, 2*time.Minute, concurrency)
+		},
+	})
+	r.Add(testSpec{
+		Name:   `rebalance-replicas-by-load`,
+		Nodes:  nodes(7), // the last node is just used to generate load
+		Stable: false,    // TODO(a-robinson): Promote to stable
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if local {
+				concurrency = 32
+				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+			}
+			rebalanceLoadRun(ctx, t, c, 5*time.Minute, concurrency)
 		},
 	})
 }
