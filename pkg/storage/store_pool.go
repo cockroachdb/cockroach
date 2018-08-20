@@ -397,6 +397,12 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 	return detail
 }
 
+// GetStoreDescriptor returns the latest store descriptor for the given
+// storeID.
+func (sp *StorePool) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+	return sp.getStoreDescriptor(storeID)
+}
+
 // getStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
