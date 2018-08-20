@@ -1439,3 +1439,10 @@ company_id  string_agg
 
 statement OK
 DROP TABLE string_agg_test
+
+# Regression test for #28836.
+
+query T
+SELECT string_agg('foo', CAST ((SELECT NULL) AS BYTES)) OVER ();
+----
+foo
