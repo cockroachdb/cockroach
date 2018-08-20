@@ -41,7 +41,6 @@ type SendOptions struct {
 }
 
 type batchClient struct {
-	nodeID    roachpb.NodeID
 	replica   roachpb.ReplicaDescriptor
 	healthy   bool
 	retryable bool
@@ -103,7 +102,6 @@ func grpcTransportFactoryImpl(
 	for _, replica := range replicas {
 		healthy := nodeDialer.ConnHealth(replica.NodeID) == nil
 		clients = append(clients, batchClient{
-			nodeID:  replica.NodeID,
 			replica: replica.ReplicaDescriptor,
 			healthy: healthy,
 		})
@@ -189,7 +187,7 @@ func (gt *grpcTransport) send(
 		gt.opts.metrics.SentCount.Inc(1)
 		var iface roachpb.InternalClient
 		var err error
-		ctx, iface, err = gt.nodeDialer.DialInternalClient(ctx, client.nodeID)
+		ctx, iface, err = gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID)
 		if err != nil {
 			return nil, err
 		}
