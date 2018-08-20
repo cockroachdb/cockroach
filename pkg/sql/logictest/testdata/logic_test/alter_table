@@ -753,3 +753,62 @@ ALTER TABLE audit ADD COLUMN y INT
 # But not the audit settings.
 statement error change auditing settings on a table
 ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;
+
+user root
+
+# Check column backfill in the presence of fks
+subtest 27402
+
+statement ok
+CREATE TABLE users (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    name STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
+)
+
+statement ok
+CREATE TABLE vehicles (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    type STRING NULL,
+    owner_id INT NULL,
+    mycol STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
+)
+
+statement ok
+CREATE TABLE rides (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    vehicle_city STRING NULL,
+    rider_id INT NULL,
+    vehicle_id INT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+
+statement ok
+ALTER TABLE vehicles ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, owner_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, rider_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_vehicle_city_ref_vehicles FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)
+
+
+statement ok
+INSERT INTO users VALUES (10, 'lagos', 'chimamanda')
+
+statement ok
+INSERT INTO vehicles VALUES (100, 'lagos', 'toyota', 10, 'mycol')
+
+statement ok
+INSERT INTO rides VALUES (567, 'lagos', 'lagos', 10, 100)
+
+statement ok
+ALTER TABLE vehicles DROP COLUMN mycol;
