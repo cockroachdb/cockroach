@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -293,7 +294,7 @@ func (e *explainer) populateEntries(ctx context.Context, plan planNode, subquery
 		_, _ = e.enterNode(ctx, "subquery", plan)
 		e.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
 		e.attr("subquery", "sql", subqueryPlans[i].subquery.String())
-		e.attr("subquery", "exec mode", execModeNames[subqueryPlans[i].execMode])
+		e.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			_ = walkPlan(ctx, subqueryPlans[i].plan, observer)
 		} else if subqueryPlans[i].started {
