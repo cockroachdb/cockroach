@@ -557,8 +557,6 @@ func (t *multiTestContextKVTransport) setPending(repID roachpb.ReplicaID, pendin
 	}
 }
 
-func (*multiTestContextKVTransport) Close() {}
-
 // rangeDescByAge implements sort.Interface for RangeDescriptor, sorting by the
 // age of the RangeDescriptor. This is intended to find the most recent version
 // of the same RangeDescriptor, when multiple versions of it are available.
