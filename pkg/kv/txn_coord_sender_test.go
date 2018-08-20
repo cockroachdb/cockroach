@@ -1011,21 +1011,15 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
 func checkTxnMetrics(
-	t *testing.T,
-	metrics TxnMetrics,
-	name string,
-	commits, commits1PC, abandons, aborts, restarts int64,
+	t *testing.T, metrics TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, abandons, aborts, restarts)
+		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, aborts, restarts)
 	})
 }
 
 func checkTxnMetricsOnce(
-	t *testing.T,
-	metrics TxnMetrics,
-	name string,
-	commits, commits1PC, abandons, aborts, restarts int64,
+	t *testing.T, metrics TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
 ) error {
 	testcases := []struct {
 		name string
@@ -1034,8 +1028,7 @@ func checkTxnMetricsOnce(
 		{"commits", metrics.Commits.Count(), commits},
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 		{"aborts", metrics.Aborts.Count(), aborts},
-		{"durations", metrics.Durations.TotalCount(),
-			commits + abandons + aborts},
+		{"durations", metrics.Durations.TotalCount(), commits + aborts},
 	}
 
 	for _, tc := range testcases {
@@ -1100,7 +1093,7 @@ func TestTxnCommit(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	checkTxnMetrics(t, metrics, "commit txn", 1, 0 /* not 1PC */, 0, 0, 0)
+	checkTxnMetrics(t, metrics, "commit txn", 1, 0 /* not 1PC */, 0, 0)
 }
 
 // TestTxnOnePhaseCommit verifies that 1PC metric tracking works.
@@ -1133,7 +1126,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	if !bytes.Equal(val, value) {
 		t.Fatalf("expected: %s, got: %s", value, val)
 	}
-	checkTxnMetrics(t, metrics, "commit 1PC txn", 1 /* commits */, 1 /* 1PC */, 0, 0, 0)
+	checkTxnMetrics(t, metrics, "commit 1PC txn", 1 /* commits */, 1 /* 1PC */, 0, 0)
 }
 
 func TestTxnAbortCount(t *testing.T) {
@@ -1160,7 +1153,7 @@ func TestTxnAbortCount(t *testing.T) {
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 0, 1 /* aborts */, 0)
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 1 /* aborts */, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -1222,7 +1215,7 @@ func TestTxnRestartCount(t *testing.T) {
 			err := txn.CommitOrCleanup(ctx)
 			if expRestart {
 				assertTransactionRetryError(t, err)
-				checkTxnMetrics(t, metrics, "restart txn", 0, 0, 0, 1, 1)
+				checkTxnMetrics(t, metrics, "restart txn", 0, 0, 1, 1)
 			} else if err != nil {
 				t.Fatalf("expected no restart; got %s", err)
 			}
@@ -1254,7 +1247,7 @@ func TestTxnDurations(t *testing.T) {
 		}
 	}
 
-	checkTxnMetrics(t, metrics, "txn durations", puts, 0, 0, 0, 0)
+	checkTxnMetrics(t, metrics, "txn durations", puts, 0, 0, 0)
 
 	hist := metrics.Durations
 	// The clock is a bit odd in these tests, so I can't test the mean without
