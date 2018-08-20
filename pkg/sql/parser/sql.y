@@ -889,7 +889,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <coltypes.T> typename simple_typename const_typename
 %type <coltypes.T> numeric opt_numeric_modifiers
-%type <*tree.NumVal> opt_float
+%type <coltypes.T> opt_float
 %type <coltypes.T> character_with_length character_without_length
 %type <coltypes.T> const_datetime const_interval const_json
 %type <coltypes.T> bit_with_length bit_without_length
@@ -6032,7 +6032,7 @@ numeric:
   }
 | REAL
   {
-    $$.val = coltypes.Real
+    $$.val = coltypes.Float4
   }
 | FLOAT4
     {
@@ -6044,17 +6044,11 @@ numeric:
     }
 | FLOAT opt_float
   {
-    nv := $2.numVal()
-    prec, err := nv.AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = coltypes.NewFloat(int(prec), len(nv.OrigString) > 0)
+    $$.val = $2.colType()
   }
 | DOUBLE PRECISION
   {
-    $$.val = coltypes.Double
+    $$.val = coltypes.Float8
   }
 | DECIMAL opt_numeric_modifiers
   {
@@ -6112,11 +6106,22 @@ postgres_oid:
 opt_float:
   '(' ICONST ')'
   {
-    $$.val = $2.numVal()
+    nv := $2.numVal()
+    prec, err := nv.AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    typ, err := coltypes.NewFloat(prec)
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = typ
   }
 | /* EMPTY */
   {
-    $$.val = &tree.NumVal{Value: constant.MakeInt64(0)}
+    $$.val = coltypes.Float8
   }
 
 bit_with_length:

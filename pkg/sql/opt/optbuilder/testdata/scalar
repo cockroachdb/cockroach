@@ -272,7 +272,7 @@ cast: DECIMAL [type=decimal]
 build-scalar
 1::float
 ----
-cast: FLOAT [type=float]
+cast: FLOAT8 [type=float]
  └── const: 1.0 [type=float]
 
 build-scalar

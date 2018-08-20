@@ -515,9 +515,10 @@ func (TableDescriptor_AuditMode) EnumDescriptor() ([]byte, []int) {
 
 type ColumnType struct {
 	SemanticType ColumnType_SemanticType `protobuf:"varint,1,opt,name=semantic_type,json=semanticType,enum=cockroach.sql.sqlbase.ColumnType_SemanticType" json:"semantic_type"`
-	// BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+	// BIT, INT, DECIMAL, CHAR and BINARY
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
-	// FLOAT and DECIMAL.
+	// DECIMAL
+	// Also FLOAT pre-2.1 (this was incorrect.)
 	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
 	// The length of each dimension in the array. A dimension of -1 means that
 	// no bound was specified for that dimension.
