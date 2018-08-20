@@ -130,13 +130,6 @@ func (o *Optimizer) DisableOptimizations() {
 	o.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
-// DisableExplorations disables all explore rules. The normalized expression
-// tree becomes the output expression tree (because no explore transforms are
-// applied).
-func (o *Optimizer) DisableExplorations() {
-	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool { return ruleName.IsNormalize() })
-}
-
 // NotifyOnMatchedRule sets a callback function which is invoked each time an
 // optimization rule (Normalize or Explore) has been matched by the optimizer.
 // If matchedRule is nil, then no notifications are sent, and all rules are
