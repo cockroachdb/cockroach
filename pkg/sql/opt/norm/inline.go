@@ -25,13 +25,20 @@ import (
 //
 //   SELECT x+1, x+2, y FROM a
 //
-// hasDuplicateRefs would be true for the Projections expression, since the x
+// HasDuplicateRefs would be true for the Projections expression, since the x
 // column is referenced twice.
 //
 // Correlated subqueries are disallowed since it introduces additional
 // complexity for a case that's not important for inlining (correlated
 // subqueries are hoisted to a higher context anyway).
 func (c *CustomFuncs) HasDuplicateRefs(target memo.GroupID) bool {
+	// Don't bother traversing the expression tree if there is a correlated
+	// subquery.
+	scalar := c.LookupScalar(target)
+	if scalar.HasCorrelatedSubquery {
+		return true
+	}
+
 	var refs opt.ColSet
 
 	// When a column reference is found, add it to the refs set. If the set
@@ -116,7 +123,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 		expr := c.f.mem.NormExpr(child)
 		if !expr.IsScalar() {
 			if !c.OuterCols(child).Empty() {
-				// Should have prevented this in hasDuplicateRefs/canInline.
+				// Should have prevented this in HasDuplicateRefs/HasCorrelatedSubquery.
 				panic("cannot inline references within correlated subqueries")
 			}
 			return child

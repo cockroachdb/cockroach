@@ -35,6 +35,13 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 	}
 	scalar.SetAvailable(props.HasHoistableSubquery)
 
+	// Don't bother traversing the expression tree if there is no correlated
+	// subquery.
+	if !scalar.HasCorrelatedSubquery {
+		scalar.Rule.HasHoistableSubquery = false
+		return scalar.Rule.HasHoistableSubquery
+	}
+
 	ev := memo.MakeNormExprView(c.f.mem, group)
 	switch ev.Operator() {
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
