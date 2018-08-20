@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -121,13 +120,12 @@ func grpcTransportFactoryImpl(
 }
 
 type grpcTransport struct {
-	opts            SendOptions
-	nodeDialer      *nodedialer.Dialer
-	clientIndex     int
-	orderedClients  []batchClient
-	clientPendingMu syncutil.Mutex // protects access to all batchClient pending flags
-	closeWG         sync.WaitGroup // waits until all SendNext goroutines are done
-	cancels         []func()       // called on Close()
+	opts           SendOptions
+	nodeDialer     *nodedialer.Dialer
+	clientIndex    int
+	orderedClients []batchClient
+	closeWG        sync.WaitGroup // waits until all SendNext goroutines are done
+	cancels        []func()       // called on Close()
 }
 
 // IsExhausted returns false if there are any untried replicas remaining. If
@@ -135,8 +133,6 @@ type grpcTransport struct {
 // failed with a retryable error. If any where resurrected, returns false;
 // true otherwise.
 func (gt *grpcTransport) IsExhausted() bool {
-	gt.clientPendingMu.Lock()
-	defer gt.clientPendingMu.Unlock()
 	if gt.clientIndex < len(gt.orderedClients) {
 		return false
 	}
@@ -246,8 +242,6 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.clientPendingMu.Lock()
-	defer gt.clientPendingMu.Unlock()
 	gt.moveToFrontLocked(replica)
 }
 
@@ -283,8 +277,6 @@ func (gt *grpcTransport) Close() {
 // MoveToFront, making it unsafe to mutate the client through a reference to
 // the slice.
 func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, retryable bool) {
-	gt.clientPendingMu.Lock()
-	defer gt.clientPendingMu.Unlock()
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].replica == replica {
 			gt.orderedClients[i].retryable = retryable
