@@ -129,13 +129,11 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 		opts SendOptions,
 		nodeDialer *nodedialer.Dialer,
 		replicas ReplicaSlice,
-		args roachpb.BatchRequest,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
 			fn:       fn,
 			opts:     opts,
-			replicas: replicas,
-			args:     args}, nil
+			replicas: replicas}, nil
 	}
 }
 
@@ -143,7 +141,6 @@ type simpleTransportAdapter struct {
 	fn          simpleSendFn
 	opts        SendOptions
 	replicas    ReplicaSlice
-	args        roachpb.BatchRequest
 	nextReplica int
 }
 
@@ -155,10 +152,12 @@ func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (l *simpleTransportAdapter) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
-	l.args.Replica = l.replicas[l.nextReplica].ReplicaDescriptor
+func (l *simpleTransportAdapter) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	ba.Replica = l.replicas[l.nextReplica].ReplicaDescriptor
 	l.nextReplica++
-	return l.fn(ctx, l.opts, l.replicas, l.args)
+	return l.fn(ctx, l.opts, l.replicas, ba)
 }
 
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
@@ -2035,11 +2034,11 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
+		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = transport.SendNext(context.Background())
+	_, err = transport.SendNext(context.Background(), roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
