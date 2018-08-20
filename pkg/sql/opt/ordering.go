@@ -162,6 +162,9 @@ func (os OrderingSet) Copy() OrderingSet {
 // Add an ordering to the list, checking whether it is a prefix of another
 // ordering (or vice-versa).
 func (os *OrderingSet) Add(o Ordering) {
+	if len(o) == 0 {
+		panic("empty ordering")
+	}
 	for i := range *os {
 		prefix := (*os)[i].CommonPrefix(o)
 		if len(prefix) == len(o) {

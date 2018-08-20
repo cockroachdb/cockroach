@@ -96,8 +96,7 @@ SELECT d FROM a
 scan a@secondary
  ├── columns: d:4(decimal!null)
  ├── stats: [rows=1000]
- ├── prune: (4)
- └── interesting orderings: ()
+ └── prune: (4)
 
 exec-ddl
 CREATE TABLE t (

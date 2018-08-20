@@ -71,16 +71,21 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 			continue
 		}
 		numIndexCols := index.KeyColumnCount()
-		o := make(opt.Ordering, 0, numIndexCols)
+		var o opt.Ordering
 		for j := 0; j < numIndexCols; j++ {
 			indexCol := index.Column(j)
 			colID := def.Table.ColumnID(indexCol.Ordinal)
 			if !def.Cols.Contains(int(colID)) {
 				break
 			}
+			if o == nil {
+				o = make(opt.Ordering, 0, numIndexCols)
+			}
 			o = append(o, opt.MakeOrderingColumn(colID, indexCol.Descending))
 		}
-		ord.Add(o)
+		if o != nil {
+			ord.Add(o)
+		}
 	}
 	return ord
 }
