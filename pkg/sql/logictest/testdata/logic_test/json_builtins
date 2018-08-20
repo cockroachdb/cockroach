@@ -452,6 +452,11 @@ SELECT json_extract_path('{"a": 1}', 'a')
 1
 
 query T
+SELECT json_extract_path('{"a": 1}', 'a', NULL)
+----
+NULL
+
+query T
 SELECT json_extract_path('{"a": 1}')
 ----
 {"a": 1}
@@ -729,6 +734,17 @@ query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2')
 ----
 {"a": 1, "b": 2}
+
+statement error path element at position 1 is null
+SELECT jsonb_set('{"a":1}', ARRAY[null, 'foo']::STRING[], '2')
+
+statement error path element at position 1 is null
+SELECT jsonb_set('{"a":1}', '{null,foo}'::STRING[], '2', true)
+
+query T
+SELECT jsonb_set('{"a":1}', '{foo,null}'::STRING[], '2', true)
+----
+{"a": 1}
 
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', true)
