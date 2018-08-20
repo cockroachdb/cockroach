@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"strings"
 	"sync"
@@ -385,19 +386,23 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 }
 
 func (s *metricsSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+	start := timeutil.Now()
 	err := s.wrapped.EmitRow(ctx, topic, key, value)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
+		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}
 	return err
 }
 
 func (s *metricsSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+	start := timeutil.Now()
 	err := s.wrapped.EmitResolvedTimestamp(ctx, payload)
 	if err == nil {
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(payload)))
+		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}
 	return err
 }
@@ -406,6 +411,7 @@ func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
 	err := s.wrapped.Flush(ctx)
 	if err == nil {
+		s.metrics.Flushes.Inc(1)
 		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}
 	return err
@@ -428,9 +434,21 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaChangefeedEmitNanos = metric.Metadata{
+		Name:        "changefeed.emit_nanos",
+		Help:        "Total time spent emitting all feeds",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	// This is more naturally a histogram but that creates a lot of timeseries
 	// and it's not clear that the additional fidelity is worth it. Revisit if
 	// evidence suggests otherwise.
+	metaChangefeedFlushes = metric.Metadata{
+		Name:        "changefeed.flushes",
+		Help:        "Total flushes across all feeds",
+		Measurement: "Flushes",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedFlushNanos = metric.Metadata{
 		Name:        "changefeed.flush_nanos",
 		Help:        "Total time spent flushing all feeds",
@@ -450,12 +468,14 @@ var (
 	}
 )
 
-const noMinHighWaterSentinel = int64(-1)
+const noMinHighWaterSentinel = int64(math.MaxInt64)
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
 	EmittedMessages *metric.Counter
 	EmittedBytes    *metric.Counter
+	EmitNanos       *metric.Counter
+	Flushes         *metric.Counter
 	FlushNanos      *metric.Counter
 
 	mu struct {
@@ -474,6 +494,8 @@ func MakeMetrics() metric.Struct {
 	m := &Metrics{
 		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
 		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
+		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
+		Flushes:         metric.NewCounter(metaChangefeedFlushes),
 		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
