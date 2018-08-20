@@ -138,6 +138,22 @@ query T
 SELECT bar FROM foo WHERE bar ?& ARRAY['a','b']
 ----
 
+# ?| and ?& ignore NULLs.
+query T
+SELECT bar FROM foo WHERE bar ?| ARRAY['a', null]
+----
+{"a": "b"}
+
+# TODO(justin): #29355
+# query T
+# SELECT bar FROM foo WHERE bar ?| ARRAY[null, null]::STRING[]
+# ----
+
+query T
+SELECT bar FROM foo WHERE bar ?& ARRAY['a', null]
+----
+{"a": "b"}
+
 query T
 SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
@@ -334,6 +350,11 @@ SELECT '{"a": ["b"]}'::JSONB#>'{a,0}'::STRING[]
 "b"
 
 query T
+SELECT '{"a": 1}'::JSONB#>>ARRAY['foo', null]
+----
+NULL
+
+query T
 SELECT '{"a": 1}'::JSONB#>>'{a}'::STRING[]
 ----
 1
@@ -500,6 +521,12 @@ query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 ----
 {"foo": {}}
+
+statement error path element at position 1 is null
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY[null, 'foo']
+
+statement error path element at position 2 is null
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', null]
 
 query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo']
