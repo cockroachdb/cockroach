@@ -217,7 +217,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         20 columns, 913 rows
+                     │                     size         20 columns, 914 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
