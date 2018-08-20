@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -46,6 +47,17 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	if err != nil {
 		return nil, err
 	}
+
+	typ := yamlConfig.ResolvedType()
+	switch typ {
+	case types.Unknown:
+		// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
+	case types.String:
+	case types.Bytes:
+	default:
+		return nil, fmt.Errorf("zone config must be of type string or bytes, not %s", typ)
+	}
+
 	return &setZoneConfigNode{
 		zoneSpecifier: n.ZoneSpecifier,
 		yamlConfig:    yamlConfig,
@@ -58,21 +70,23 @@ type setZoneConfigRun struct {
 }
 
 func (n *setZoneConfigNode) startExec(params runParams) error {
-	var yamlConfig *string
 	datum, err := n.yamlConfig.Eval(params.EvalContext())
 	if err != nil {
 		return err
 	}
+	var yamlConfig string
+	deleteZone := false
 	switch val := datum.(type) {
 	case *tree.DString:
-		yamlConfig = (*string)(val)
+		yamlConfig = string(*val)
 	case *tree.DBytes:
-		yamlConfig = (*string)(val)
+		yamlConfig = string(*val)
 	default:
-		if datum != tree.DNull {
-			return fmt.Errorf("zone config must be of type string or bytes, not %T", val)
-		}
+		deleteZone = true
 	}
+	// Trim spaces, to detect empty zonfigurations.
+	// We'll add back the missing newline below.
+	yamlConfig = strings.TrimSpace(yamlConfig)
 
 	var table *TableDescriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
@@ -93,7 +107,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 			`cannot set zone configs for system config tables; `+
 				`try setting your config on the entire "system" database instead`)
-	} else if targetID == keys.RootNamespaceID && yamlConfig == nil {
+	} else if targetID == keys.RootNamespaceID && deleteZone {
 		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 			"cannot remove default zone")
 	}
@@ -115,7 +129,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
-	if yamlConfig == nil {
+	if deleteZone {
 		if index != nil {
 			didDelete := zone.DeleteSubzone(uint32(index.ID), partition)
 			if !didDelete {
@@ -127,14 +141,33 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			zone.DeleteTableConfig()
 		}
 	} else {
+		// Validate the user input.
+		if len(yamlConfig) == 0 || yamlConfig[len(yamlConfig)-1] != '\n' {
+			// YAML values must always end with a newline character. If there is none,
+			// for UX convenience add one.
+			yamlConfig += "\n"
+		}
+
+		// Transform the YAML spec into a zone configuration.
 		newZone := zone
 		if subzone != nil {
 			newZone = subzone.Config
 		}
-		if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &newZone); err != nil {
-			return fmt.Errorf("could not parse zone config: %s", err)
+		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
+			return fmt.Errorf("could not parse zone config: %v", err)
 		}
+		// Validate that the result makes sense.
+		if err := validateZoneAttrsAndLocalities(
+			params.ctx,
+			params.extendedEvalCtx.StatusServer.Nodes,
+			&newZone,
+		); err != nil {
+			return err
+		}
+
+		// Are we operating on an index?
 		if index == nil {
+			// No: the final zone config is the one we just processed.
 			zone = newZone
 		} else {
 			// If the zone config for targetID was a subzone placeholder, it'll have
@@ -150,25 +183,22 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				Config:        newZone,
 			})
 		}
+
+		// Finally revalidate everything.
 		if err := zone.Validate(); err != nil {
 			return fmt.Errorf("could not validate zone config: %s", err)
 		}
-		if err := validateZoneAttrsAndLocalities(
-			params.ctx,
-			params.extendedEvalCtx.StatusServer.Nodes,
-			*yamlConfig,
-		); err != nil {
-			return err
-		}
 	}
 
-	hasNewSubzones := yamlConfig != nil && index != nil
+	// Write the new zone configuration.
+	hasNewSubzones := !deleteZone && index != nil
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zone, params.extendedEvalCtx.ExecCfg, hasNewSubzones)
 	if err != nil {
 		return err
 	}
 
+	// Record that the change has occurred for auditing.
 	var eventLogType EventLogType
 	info := struct {
 		Target string
@@ -176,13 +206,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		User   string
 	}{
 		Target: config.CLIZoneSpecifier(&n.zoneSpecifier),
+		Config: yamlConfig,
 		User:   params.SessionData().User,
 	}
-	if yamlConfig == nil {
+	if deleteZone {
 		eventLogType = EventLogRemoveZoneConfig
 	} else {
 		eventLogType = EventLogSetZoneConfig
-		info.Config = *yamlConfig
 	}
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
@@ -214,16 +244,8 @@ type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesRe
 // the cluster. If you had to first add one of the nodes before creating the
 // constraints, data could be replicated there that shouldn't be.
 func validateZoneAttrsAndLocalities(
-	ctx context.Context, getNodes nodeGetter, yamlConfig string,
+	ctx context.Context, getNodes nodeGetter, zone *config.ZoneConfig,
 ) error {
-	// The caller should have already parsed the yaml once into a pre-populated
-	// zone config, so this shouldn't ever fail, but we want to re-parse it so
-	// that we only verify newly-set fields, not existing ones.
-	var zone config.ZoneConfig
-	if err := yaml.UnmarshalStrict([]byte(yamlConfig), &zone); err != nil {
-		return fmt.Errorf("could not parse zone config: %s", err)
-	}
-
 	if len(zone.Constraints) == 0 && len(zone.LeasePreferences) == 0 {
 		return nil
 	}

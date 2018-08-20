@@ -193,10 +193,10 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTT colnames
+query ITTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  cli_specifier  config_yaml  config_protobuf
+zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
@@ -216,6 +216,22 @@ SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 22  .liveness
 53  testdb
 54  testdb.foo
+
+query T
+SELECT quote_literal(config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
+----
+e'range_min_bytes: 1048576\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\n'
+
+query T
+SELECT config_sql FROM crdb_internal.zones WHERE zone_id = 0
+----
+ALTER RANGE default CONFIGURE ZONE SET
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[]'
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')
