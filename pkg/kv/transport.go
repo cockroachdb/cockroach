@@ -45,7 +45,6 @@ type batchClient struct {
 	nodeID    roachpb.NodeID
 	replica   roachpb.ReplicaDescriptor
 	healthy   bool
-	pending   bool
 	retryable bool
 	deadline  time.Time
 }
@@ -69,9 +68,6 @@ type TransportFactory func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Trans
 type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
-
-	// GetPending returns the replica(s) to which requests are still pending.
-	GetPending() []roachpb.ReplicaDescriptor
 
 	// SendNext synchronously sends the BatchRequest rpc to the next replica.
 	// May panic if the transport is exhausted.
@@ -147,19 +143,6 @@ func (gt *grpcTransport) IsExhausted() bool {
 	return !gt.maybeResurrectRetryablesLocked()
 }
 
-// GetPending returns the replica(s) to which requests are still pending.
-func (gt *grpcTransport) GetPending() []roachpb.ReplicaDescriptor {
-	gt.clientPendingMu.Lock()
-	defer gt.clientPendingMu.Unlock()
-	var pending []roachpb.ReplicaDescriptor
-	for i := range gt.orderedClients {
-		if gt.orderedClients[i].pending {
-			pending = append(pending, gt.orderedClients[i].replica)
-		}
-	}
-	return pending
-}
-
 // maybeResurrectRetryablesLocked moves already-tried replicas which
 // experienced a retryable error (currently this means a
 // NotLeaseHolderError) into a newly-active state so that they can be
@@ -167,7 +150,7 @@ func (gt *grpcTransport) GetPending() []roachpb.ReplicaDescriptor {
 func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 	var resurrect []batchClient
 	for i := 0; i < gt.clientIndex; i++ {
-		if c := gt.orderedClients[i]; !c.pending && c.retryable && timeutil.Since(c.deadline) >= 0 {
+		if c := gt.orderedClients[i]; c.retryable && timeutil.Since(c.deadline) >= 0 {
 			resurrect = append(resurrect, c)
 		}
 	}
@@ -186,14 +169,13 @@ func (gt *grpcTransport) SendNext(
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
 
-	ba.Replica = client.replica
-	gt.setState(ba.Replica, true /* pending */, false /* retryable */)
-
 	{
 		var cancel func()
 		ctx, cancel = context.WithCancel(ctx)
 		gt.cancels = append(gt.cancels, cancel)
 	}
+
+	ba.Replica = client.replica
 	return gt.send(ctx, client, ba)
 }
 
@@ -251,7 +233,7 @@ func (gt *grpcTransport) send(
 			retryable = true
 		}
 	}
-	gt.setState(client.replica, false /* pending */, retryable)
+	gt.setState(client.replica, retryable)
 
 	return reply, err
 }
@@ -272,10 +254,6 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].replica == replica {
-			// If a call to this replica is active, don't move it.
-			if gt.orderedClients[i].pending {
-				return
-			}
 			// Clear the retryable bit as this replica is being made
 			// available.
 			gt.orderedClients[i].retryable = false
@@ -304,12 +282,11 @@ func (gt *grpcTransport) Close() {
 // mutate, but the clients reside in a slice which is shuffled via
 // MoveToFront, making it unsafe to mutate the client through a reference to
 // the slice.
-func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, pending, retryable bool) {
+func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, retryable bool) {
 	gt.clientPendingMu.Lock()
 	defer gt.clientPendingMu.Unlock()
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].replica == replica {
-			gt.orderedClients[i].pending = pending
 			gt.orderedClients[i].retryable = retryable
 			if retryable {
 				gt.orderedClients[i].deadline = timeutil.Now().Add(time.Second)
