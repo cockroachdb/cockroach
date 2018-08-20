@@ -826,6 +826,9 @@ func (r *Replica) changeReplicas(
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				// TODO(benesch): this trigger should just specify the updated
+				// descriptor, like the split and merge triggers, so that the receiver
+				// doesn't need to reconstruct the range descriptor update.
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
@@ -961,9 +964,6 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
-// TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
-// and load it automatically instead of reconstructing individual
-// changes.
 func updateRangeDescriptor(
 	b *client.Batch,
 	descKey roachpb.Key,
