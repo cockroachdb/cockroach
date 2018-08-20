@@ -89,7 +89,6 @@ func TestSendToOneClient(t *testing.T) {
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
 	replicas  ReplicaSlice
-	args      roachpb.BatchRequest
 	numErrors int
 	numSent   int
 }
@@ -102,7 +101,9 @@ func (f *firstNErrorTransport) GetPending() []roachpb.ReplicaDescriptor {
 	return nil
 }
 
-func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchResponse, error) {
+func (f *firstNErrorTransport) SendNext(
+	_ context.Context, _ roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
 		err = roachpb.NewSendError("test")
@@ -171,11 +172,9 @@ func TestComplexScenarios(t *testing.T) {
 				_ SendOptions,
 				_ *nodedialer.Dialer,
 				replicas ReplicaSlice,
-				args roachpb.BatchRequest,
 			) (Transport, error) {
 				return &firstNErrorTransport{
 					replicas:  replicas,
-					args:      args,
 					numErrors: test.numErrors,
 				}, nil
 			},

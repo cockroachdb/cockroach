@@ -425,7 +425,6 @@ type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	idx      int
 	replicas kv.ReplicaSlice
-	args     roachpb.BatchRequest
 	mu       struct {
 		syncutil.Mutex
 		pending map[roachpb.ReplicaID]struct{}
@@ -433,12 +432,11 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kv.SendOptions, _ *nodedialer.Dialer, replicas kv.ReplicaSlice, args roachpb.BatchRequest,
+	_ kv.SendOptions, _ *nodedialer.Dialer, replicas kv.ReplicaSlice,
 ) (kv.Transport, error) {
 	t := &multiTestContextKVTransport{
 		mtc:      m,
 		replicas: replicas,
-		args:     args,
 	}
 	t.mu.pending = map[roachpb.ReplicaID]struct{}{}
 	return t, nil
@@ -457,7 +455,7 @@ func (t *multiTestContextKVTransport) GetPending() []roachpb.ReplicaDescriptor {
 }
 
 func (t *multiTestContextKVTransport) SendNext(
-	ctx context.Context,
+	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if ctx.Err() != nil {
 		return nil, errors.Wrap(ctx.Err(), "send context is canceled")
@@ -489,14 +487,13 @@ func (t *multiTestContextKVTransport) SendNext(
 	t.mtc.mu.RLock()
 	sender := t.mtc.senders[nodeIndex]
 	t.mtc.mu.RUnlock()
-	// Make a copy and clone txn of batch args for sending.
-	baCopy := t.args
-	baCopy.Replica = rep.ReplicaDescriptor
-	if txn := baCopy.Txn; txn != nil {
-		txnClone := baCopy.Txn.Clone()
-		baCopy.Txn = &txnClone
+	// Clone txn of ba args for sending.
+	ba.Replica = rep.ReplicaDescriptor
+	if txn := ba.Txn; txn != nil {
+		txnClone := ba.Txn.Clone()
+		ba.Txn = &txnClone
 	}
-	br, pErr := sender.Send(ctx, baCopy)
+	br, pErr := sender.Send(ctx, ba)
 	if br == nil {
 		br = &roachpb.BatchResponse{}
 	}
