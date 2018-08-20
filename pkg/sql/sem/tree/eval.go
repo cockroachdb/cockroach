@@ -2906,7 +2906,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DFloat:
 			s = strconv.FormatFloat(float64(*t), 'g',
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
-		case *DBool, *DInt, *DDecimal, dNull:
+		case *DBool, *DInt, *DDecimal:
 			s = d.String()
 		case *DTimestamp, *DTimestampTZ, *DDate, *DTime:
 			s = AsStringWithFlags(d, FmtBareStrings)
@@ -3104,11 +3104,16 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			paramType := coltypes.CastTargetToDatumType(typ.ParamType)
 			dcast := NewDArray(paramType)
 			for _, e := range v.Array {
-				ecast, err := PerformCast(ctx, e, typ.ParamType)
-				if err != nil {
-					return nil, err
+				ecast := DNull
+				if e != DNull {
+					var err error
+					ecast, err = PerformCast(ctx, e, typ.ParamType)
+					if err != nil {
+						return nil, err
+					}
 				}
-				if err = dcast.Append(ecast); err != nil {
+
+				if err := dcast.Append(ecast); err != nil {
 					return nil, err
 				}
 			}
