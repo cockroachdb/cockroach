@@ -1101,7 +1101,7 @@ alter_ddl_stmt:
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
 | alter_sequence_stmt // EXTEND WITH HELP: ALTER SEQUENCE
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
-| alter_range_stmt
+| alter_range_stmt    // EXTEND WITH HELP: ALTER RANGE
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1122,6 +1122,11 @@ alter_ddl_stmt:
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
 //   ALTER TABLE ... SPLIT AT <selectclause>
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
+//   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
+//   ALTER TABLE ... PARTITION BY NOTHING
+//   ALTER TABLE ... CONFIGURE ZONE <expr>
+//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <expr>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1140,7 +1145,8 @@ alter_table_stmt:
 | alter_rename_table_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
-| ALTER TABLE error // SHOW HELP: ALTER TABLE
+| ALTER TABLE error     // SHOW HELP: ALTER TABLE
+| ALTER PARTITION error // SHOW HELP: ALTER TABLE
 
 // %Help: ALTER VIEW - change the definition of a view
 // %Category: DDL
@@ -1199,8 +1205,18 @@ alter_database_stmt:
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
 
+// %Help: ALTER RANGE - change the parameters of a range
+// %Category: DDL
+// %Text:
+// ALTER RANGE <zonename> <command>
+//
+// Commands:
+//   ALTER RANGE ... CONFIGURE ZONE <expr>
+//
+// %SeeAlso: ALTER TABLE
 alter_range_stmt:
   alter_zone_range_stmt
+| ALTER RANGE error // SHOW HELP: ALTER RANGE
 
 // %Help: ALTER INDEX - change the definition of an index
 // %Category: DDL
@@ -1290,57 +1306,52 @@ alter_relocate_index_lease_stmt:
   }
 
 alter_zone_range_stmt:
-  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER RANGE zone_name CONFIGURE ZONE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)},
-      YAMLConfig: $7.expr(),
+      YAMLConfig: $6.expr(),
     }
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER DATABASE database_name CONFIGURE ZONE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($3)},
-      YAMLConfig: $7.expr(),
+      YAMLConfig: $6.expr(),
     }
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER TABLE table_name CONFIGURE ZONE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
       },
-      YAMLConfig: $7.expr(),
+      YAMLConfig: $6.expr(),
     }
   }
-| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
+| ALTER PARTITION partition_name OF TABLE table_name CONFIGURE ZONE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
         Partition: tree.Name($3),
       },
-      YAMLConfig: $10.expr(),
+      YAMLConfig: $9.expr(),
     }
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER INDEX table_name_with_index CONFIGURE ZONE a_expr
   {
-    /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: $3.tableWithIdx(),
       },
-      YAMLConfig: $7.expr(),
+      YAMLConfig: $6.expr(),
     }
   }
 
@@ -3229,46 +3240,39 @@ show_roles_stmt:
 | SHOW ROLES error // SHOW HELP: SHOW ROLES
 
 show_zone_stmt:
-  EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE zone_name
+  SHOW ZONE CONFIGURATION FOR RANGE zone_name
   {
-    /* SKIP DOC */
-    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($7)}}
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($6)}}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE database_name
+| SHOW ZONE CONFIGURATION FOR DATABASE database_name
   {
-    /* SKIP DOC */
-    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($7)}}
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($6)}}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
+| SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $7.normalizableTableNameFromUnresolvedName() },
+        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
+| SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $10.normalizableTableNameFromUnresolvedName() },
-      Partition: tree.Name($7),
+      TableOrIndex: tree.TableNameWithIndex{Table: $9.normalizableTableNameFromUnresolvedName()},
+        Partition: tree.Name($6),
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
+| SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: $7.tableWithIdx(),
+      TableOrIndex: $6.tableWithIdx(),
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATIONS
+| SHOW ZONE CONFIGURATIONS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{}
   }
-| EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS
+| SHOW ALL ZONE CONFIGURATIONS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{}
   }
 

@@ -440,6 +440,7 @@ func init() {
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
+	tableOutputCommands = append(tableOutputCommands, zoneCmds...)
 
 	// By default, these commands print their output as pretty-formatted
 	// tables on terminals, and TSV when redirected to a file. The user
