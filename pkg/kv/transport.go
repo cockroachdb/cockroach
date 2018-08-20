@@ -18,7 +18,6 @@ package kv
 import (
 	"context"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
@@ -84,10 +83,6 @@ type Transport interface {
 	// already been tried, it will be retried. If the specified replica
 	// can't be found, this is a noop.
 	MoveToFront(roachpb.ReplicaDescriptor)
-
-	// Close is called when the transport is no longer needed. It may
-	// cancel any pending RPCs without writing any response to the channel.
-	Close()
 }
 
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
@@ -122,8 +117,6 @@ type grpcTransport struct {
 	nodeDialer     *nodedialer.Dialer
 	clientIndex    int
 	orderedClients []batchClient
-	closeWG        sync.WaitGroup // waits until all SendNext goroutines are done
-	cancels        []func()       // called on Close()
 }
 
 // IsExhausted returns false if there are any untried replicas remaining. If
@@ -162,12 +155,6 @@ func (gt *grpcTransport) SendNext(
 ) (*roachpb.BatchResponse, error) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
-
-	{
-		var cancel func()
-		ctx, cancel = context.WithCancel(ctx)
-		gt.cancels = append(gt.cancels, cancel)
-	}
 
 	ba.Replica = client.replica
 	return gt.send(ctx, client, ba)
@@ -261,13 +248,6 @@ func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
 			return
 		}
 	}
-}
-
-func (gt *grpcTransport) Close() {
-	for _, cancel := range gt.cancels {
-		cancel()
-	}
-	gt.closeWG.Wait()
 }
 
 // NB: this method's callers may have a reference to the client they wish to
@@ -385,7 +365,4 @@ func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
 }
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-}
-
-func (s *senderTransport) Close() {
 }
