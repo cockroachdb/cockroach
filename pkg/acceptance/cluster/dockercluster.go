@@ -200,6 +200,11 @@ func CreateDocker(
 	}
 }
 
+// Client returns the underlying docker client.
+func (l *DockerCluster) Client() client.APIClient {
+	return l.client
+}
+
 func (l *DockerCluster) expectEvent(c *Container, msgs ...string) {
 	for index, ctr := range l.Nodes {
 		if c.id != ctr.id {
