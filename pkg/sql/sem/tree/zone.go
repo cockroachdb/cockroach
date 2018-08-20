@@ -61,7 +61,7 @@ func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
 
 func (node *ZoneSpecifier) String() string { return AsString(node) }
 
-// ShowZoneConfig represents an EXPERIMENTAL SHOW ZONE CONFIGURATION...
+// ShowZoneConfig represents a SHOW ZONE CONFIGURATION
 // statement.
 type ShowZoneConfig struct {
 	ZoneSpecifier
@@ -70,15 +70,15 @@ type ShowZoneConfig struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 	if node.ZoneSpecifier == (ZoneSpecifier{}) {
-		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATIONS")
+		ctx.WriteString("SHOW ZONE CONFIGURATIONS")
 	} else {
-		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR ")
+		ctx.WriteString("SHOW ZONE CONFIGURATION FOR ")
 		ctx.FormatNode(&node.ZoneSpecifier)
 	}
 }
 
-// SetZoneConfig represents an ALTER DATABASE/TABLE... EXPERIMENTAL CONFIGURE
-// ZONE statement.
+// SetZoneConfig represents an ALTER DATABASE/TABLE... CONFIGURE ZONE
+// statement.
 type SetZoneConfig struct {
 	ZoneSpecifier
 	YAMLConfig Expr
@@ -88,6 +88,6 @@ type SetZoneConfig struct {
 func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	ctx.FormatNode(&node.ZoneSpecifier)
-	ctx.WriteString(" EXPERIMENTAL CONFIGURE ZONE ")
+	ctx.WriteString(" CONFIGURE ZONE ")
 	ctx.FormatNode(node.YAMLConfig)
 }

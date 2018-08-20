@@ -525,6 +525,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	//
 	// zone ls
 	// .default
 	// .liveness
@@ -570,6 +571,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	//
 	// zone get system
 	// system
 	// range_min_bytes: 1048576
@@ -579,7 +581,6 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
 	// zone rm system
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .liveness
@@ -594,6 +595,7 @@ func Example_zone() {
 	//   ttlseconds: 600
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -601,6 +603,7 @@ func Example_zone() {
 	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -608,6 +611,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -615,6 +619,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone get .system
 	// .system
 	// range_min_bytes: 1048576
@@ -637,6 +642,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone get system
 	// .default
 	// range_min_bytes: 1048576
@@ -652,6 +658,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	//
 	// zone get system
 	// .default
 	// range_min_bytes: 1048576
@@ -661,28 +668,20 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: []
 	// zone rm .liveness
-	// CONFIGURE ZONE 1
 	// zone rm .meta
-	// CONFIGURE ZONE 1
 	// zone rm .system
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .timeseries
 	// system.jobs
 	// zone rm .timeseries
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// system.jobs
 	// zone rm .liveness
-	// CONFIGURE ZONE 0
 	// zone rm .meta
-	// CONFIGURE ZONE 0
 	// zone rm .system
-	// CONFIGURE ZONE 0
 	// zone rm .timeseries
-	// CONFIGURE ZONE 0
 	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
 	// pq: setting zone configs on indexes or partitions requires a CCL binary
 	// zone set system --file=./testdata/zone_attrs_advanced.yaml
@@ -693,6 +692,7 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
 	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
+	//
 	// zone set system --file=./testdata/zone_attrs_experimental.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -701,6 +701,7 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
 	// lease_preferences: [[+zone=us-east-1a]]
+	//
 	// sql -e create database t; create table t.f (x int, y int)
 	// CREATE TABLE
 	// zone set t --file=./testdata/zone_range_max_bytes.yaml
@@ -710,6 +711,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone ls
 	// .default
 	// system
@@ -722,6 +724,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	//
 	// zone ls
 	// .default
 	// system
