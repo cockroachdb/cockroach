@@ -271,7 +271,7 @@ project
       │    └── projections [outer=(2,3), side-effects]
       │         └── a.f / 2.0 [type=float, outer=(3), side-effects]
       └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
-           └── f = i::FLOAT [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
+           └── f = i::FLOAT8 [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 opt

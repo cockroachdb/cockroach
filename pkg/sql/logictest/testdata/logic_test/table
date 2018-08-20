@@ -374,10 +374,10 @@ cdec21            DECIMAL(2,1)              true         NULL            ·     
 cdecimal          DECIMAL                   true         NULL            ·                      {}           false
 cdecimal1         DECIMAL(1)                true         NULL            ·                      {}           false
 cdecimal21        DECIMAL(2,1)              true         NULL            ·                      {}           false
-cdoubleprecision  DOUBLE PRECISION          true         NULL            ·                      {}           false
-cfloat            FLOAT                     true         NULL            ·                      {}           false
-cfloat4           REAL                      true         NULL            ·                      {}           false
-cfloat8           DOUBLE PRECISION          true         NULL            ·                      {}           false
+cdoubleprecision  FLOAT8                    true         NULL            ·                      {}           false
+cfloat            FLOAT8                    true         NULL            ·                      {}           false
+cfloat4           FLOAT4                    true         NULL            ·                      {}           false
+cfloat8           FLOAT8                    true         NULL            ·                      {}           false
 cint              INT                       true         NULL            ·                      {}           false
 cint2             SMALLINT                  true         NULL            ·                      {}           false
 cint4             INTEGER                   true         NULL            ·                      {}           false
@@ -388,7 +388,7 @@ cinterval         INTERVAL                  true         NULL            ·     
 cnumeric          DECIMAL                   true         NULL            ·                      {}           false
 cnumeric1         DECIMAL(1)                true         NULL            ·                      {}           false
 cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}           false
-creal             REAL                      true         NULL            ·                      {}           false
+creal             FLOAT4                    true         NULL            ·                      {}           false
 cserial           INT                       false        unique_rowid()  ·                      {}           false
 csmallint         SMALLINT                  true         NULL            ·                      {}           false
 csmallserial      INT                       false        unique_rowid()  ·                      {}           false

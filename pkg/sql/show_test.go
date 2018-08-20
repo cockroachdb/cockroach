@@ -81,7 +81,7 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
+	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
@@ -100,7 +100,7 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
+	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
@@ -143,7 +143,7 @@ func TestShowCreateTable(t *testing.T) {
 			`,
 			expect: `CREATE TABLE %s (
 	i INT NULL,
-	f FLOAT NULL,
+	f FLOAT8 NULL,
 	s STRING NULL,
 	d DATE NULL,
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
@@ -506,7 +506,7 @@ func TestShowQueries(t *testing.T) {
 	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
 		if stmt == selectStmt {
 			found = true
-			const showQuery = "SELECT node_id, (now() - start)::FLOAT, query FROM [SHOW CLUSTER QUERIES]"
+			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
 			const showVersionQuery = "SHOW CLUSTER SETTING VERSION"
 
 			rows, err := conn1.Query(showQuery)

@@ -162,7 +162,7 @@ select
            ├── variable: x [type=int, outer=(1)]
            └── cast: INT [type=int, outer=(1)]
                 └── function: sin [type=float, outer=(1)]
-                     └── cast: FLOAT [type=float, outer=(1)]
+                     └── cast: FLOAT8 [type=float, outer=(1)]
                           └── variable: x [type=int, outer=(1)]
 
 # Test that we get a not-NULL constraint on x and y.

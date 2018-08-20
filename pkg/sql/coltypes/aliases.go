@@ -50,16 +50,10 @@ var (
 	// Serial8 is an immutable T instance.
 	Serial8 = &TSerial{IntType: Int8}
 
-	// Real is an immutable T instance.
-	Real = &TFloat{Name: "REAL", Width: 32}
-	// Float is an immutable T instance.
-	Float = &TFloat{Name: "FLOAT", Width: 64}
 	// Float4 is an immutable T instance.
-	Float4 = &TFloat{Name: "FLOAT4", Width: 32}
+	Float4 = &TFloat{Short: true}
 	// Float8 is an immutable T instance.
-	Float8 = &TFloat{Name: "FLOAT8", Width: 64}
-	// Double is an immutable T instance.
-	Double = &TFloat{Name: "DOUBLE PRECISION", Width: 64}
+	Float8 = &TFloat{}
 
 	// Decimal is an immutable T instance.
 	Decimal = &TDecimal{}
@@ -136,12 +130,23 @@ func NewIntBitType(width int) (*TInt, error) {
 	return &TInt{Name: "BIT", Width: width}, nil
 }
 
+var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be at least 1 bit")
+var errFloatPrecMax54 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be less than 54 bits")
+
 // NewFloat creates a type alias for FLOAT with the given precision.
-func NewFloat(prec int, precSpecified bool) *TFloat {
-	if prec == 0 && !precSpecified {
-		return Float
+func NewFloat(prec int64) (*TFloat, error) {
+	if prec < 1 {
+		return nil, errFloatPrecAtLeast1
 	}
-	return &TFloat{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
+	if prec <= 24 {
+		return Float4, nil
+	}
+	if prec <= 54 {
+		return Float8, nil
+	}
+	return nil, errFloatPrecMax54
 }
 
 // ArrayOf creates a type alias for an array of the given element type and fixed bounds.

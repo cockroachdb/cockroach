@@ -145,16 +145,19 @@ func (p *parseState) parseElement() error {
 	return p.result.Append(d)
 }
 
-// StringToColType returns a column type given a string representation of the
-// type. Used by dump.
-func StringToColType(s string) (coltypes.T, error) {
+// ArrayElementTypeStringToColType returns a column type given a
+// string representation of the type. Used by dump. It only
+// supports those type names that can appear immediately before `[]`.
+func ArrayElementTypeStringToColType(s string) (coltypes.T, error) {
 	switch s {
 	case "BOOL":
 		return coltypes.Bool, nil
 	case "INT":
 		return coltypes.Int, nil
-	case "FLOAT":
-		return coltypes.Float, nil
+	case "FLOAT", "FLOAT8", "DOUBLE PRECISION":
+		return coltypes.Float8, nil
+	case "REAL", "FLOAT4":
+		return coltypes.Float4, nil
 	case "DECIMAL":
 		return coltypes.Decimal, nil
 	case "TIMESTAMP":

@@ -219,7 +219,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			if sum.ResolvedType().Equivalent(types.Float) {
 				expr.Right = &tree.CastExpr{
 					Expr: count,
-					Type: coltypes.NewFloat(0 /* prec */, false /* precSpecified */),
+					Type: coltypes.Float8,
 				}
 			}
 			ctx := &tree.SemaContext{IVarContainer: h.Container()}

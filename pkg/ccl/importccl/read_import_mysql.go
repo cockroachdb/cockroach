@@ -534,7 +534,7 @@ func mysqlColToCockroach(
 	case mysqltypes.Float32:
 		def.Type = coltypes.Float4
 	case mysqltypes.Float64:
-		def.Type = coltypes.Double
+		def.Type = coltypes.Float8
 
 	case mysqltypes.Decimal:
 		def.Type = decOpt(coltypes.Decimal, length, scale)

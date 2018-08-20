@@ -178,7 +178,7 @@ project
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
  └── projections [outer=(2,4,6)]
-      ├── a.i::FLOAT [type=float, outer=(2)]
+      ├── a.i::FLOAT8 [type=float, outer=(2)]
       ├── a.arr::DECIMAL[] [type=decimal[], outer=(6)]
       ├── a.s::JSON [type=jsonb, outer=(4)]
       ├── a.s::VARCHAR(2) [type=string, outer=(4)]
@@ -264,7 +264,7 @@ project
       ├── arr::DECIMAL[] || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(6)]
       ├── CAST(NULL AS STRING[]) || arr::STRING[] [type=string[], outer=(6)]
       ├── i::DECIMAL || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(2)]
-      └── CAST(NULL AS FLOAT[]) || i::FLOAT [type=float[], outer=(2)]
+      └── CAST(NULL AS FLOAT8[]) || i::FLOAT8 [type=float[], outer=(2)]
 
 opt
 SELECT
