@@ -331,6 +331,7 @@ func TestSendRPCOrder(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g)
@@ -494,6 +495,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g)
@@ -557,6 +559,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
@@ -638,6 +641,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 					},
 				},
 			}),
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g)
@@ -693,6 +697,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 			errs = errs[1:]
 			return []roachpb.RangeDescriptor{testUserRangeDescriptor}, nil, err
 		}),
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
@@ -780,6 +785,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 			),
 		},
 		RangeDescriptorDB: rDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 
 	ds := NewDistSender(cfg, g).withMetaRecursion()
@@ -893,6 +899,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				TransportFactory: adaptSimpleTransport(testFn),
 			},
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
+			NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 		}
 		ds := NewDistSender(cfg, g)
 		ds.leaseHolderCache.Update(context.TODO(), 1, leaseHolder.StoreID)
@@ -961,6 +968,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	key := roachpb.Key("a")
@@ -1057,6 +1065,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
@@ -1148,6 +1157,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptSimpleTransport(testFn),
 		},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
@@ -1169,6 +1179,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	n.Start()
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		NodeDialer: nodedialer.New(nil, gossip.AddressResolver(n.Nodes[0].Gossip)),
 	}, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
@@ -1527,6 +1538,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:             clock,
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(nil, gossip.AddressResolver(g)),
 	}
 	ds := NewDistSender(cfg, g)
 

@@ -77,7 +77,7 @@ func NewDistSenderForLocalTestCluster(
 	latency time.Duration,
 	stores client.Sender,
 	stopper *stop.Stopper,
-	gossip *gossip.Gossip,
+	g *gossip.Gossip,
 ) *DistSender {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
@@ -88,6 +88,7 @@ func NewDistSenderForLocalTestCluster(
 		Clock:           clock,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,
+		NodeDialer:      nodedialer.New(nil, gossip.AddressResolver(g)),
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,
@@ -102,5 +103,5 @@ func NewDistSenderForLocalTestCluster(
 				return &localTestClusterTransport{transport, latency}, nil
 			},
 		},
-	}, gossip)
+	}, g)
 }
