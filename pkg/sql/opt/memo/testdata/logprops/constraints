@@ -25,12 +25,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -43,12 +41,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
       └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -61,12 +57,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -79,12 +73,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
       └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -98,12 +90,10 @@ select
  ├── stats: [rows=1.42857143, distinct(1)=1]
  ├── fd: ()-->(1)
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -116,12 +106,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=4.28571429, distinct(1)=3]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -137,12 +125,10 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=0.00204081633, distinct(1)=0.00204081633, distinct(2)=0.00204081633]
  ├── fd: ()-->(1,2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight), fd=()-->(1,2)]
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -157,12 +143,10 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=0.0183673469, distinct(1)=0.0183673469, distinct(2)=0.0183673469]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -184,12 +168,10 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=37.037037]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -209,12 +191,10 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=37.037037]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - ])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -238,12 +218,10 @@ select
  ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1)]
       └── gt [type=bool, outer=(1)]
            ├── variable: x [type=int, outer=(1)]
@@ -304,12 +282,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=4.28571429, distinct(1)=3]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
            ├── variable: x [type=int, outer=(1)]
@@ -348,12 +324,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=2.85714286, distinct(1)=2]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -374,12 +348,10 @@ SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=0.952380952, distinct(1)=0.952380952]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=700]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1] [/3 - /3]; /2: [/5 - ]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
       │    ├── variable: x [type=int, outer=(1)]
@@ -397,12 +369,10 @@ SELECT * FROM a WHERE (x, y) > (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
       └── gt [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -418,12 +388,10 @@ SELECT * FROM a WHERE (x, y) >= (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
       └── ge [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -439,12 +407,10 @@ SELECT * FROM a WHERE (x, y) < (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
       └── lt [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -460,12 +426,10 @@ SELECT * FROM a WHERE (x, y) <= (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
       └── le [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -482,12 +446,10 @@ SELECT * FROM a WHERE (x, y) >= (1, 2.5)
 select
  ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2)]
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -504,12 +466,10 @@ SELECT * FROM a WHERE (x, y) >= (1, NULL)
 select
  ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=333.333333]
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2)]
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
@@ -528,12 +488,10 @@ select
  ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=333.333333]
  ├── prune: (2)
- ├── interesting orderings: ()
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1,2)
- │    └── interesting orderings: ()
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1)]
       └── ge [type=bool, outer=(1)]
            ├── tuple [type=tuple{int, int}, outer=(1)]
@@ -561,12 +519,10 @@ select
  ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (2,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
       └── ne [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
            ├── variable: a [type=int, outer=(1)]
@@ -579,12 +535,10 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (2,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
            ├── variable: a [type=int, outer=(1)]
@@ -597,12 +551,10 @@ select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
            ├── variable: b [type=bool, outer=(2)]
@@ -615,12 +567,10 @@ select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
            ├── variable: b [type=bool, outer=(2)]
@@ -633,12 +583,10 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
            ├── variable: b [type=bool, outer=(2)]
@@ -651,12 +599,10 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
            ├── variable: b [type=bool, outer=(2)]
@@ -670,12 +616,10 @@ select
  ├── stats: [rows=500, distinct(2)=1]
  ├── fd: ()-->(2)
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000, distinct(2)=2]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
@@ -687,12 +631,10 @@ select
  ├── stats: [rows=500, distinct(2)=1]
  ├── fd: ()-->(2)
  ├── prune: (1,3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000, distinct(2)=2]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
            └── variable: b [type=bool, outer=(2)]
@@ -705,12 +647,10 @@ select
  ├── stats: [rows=166.666667, distinct(2)=1]
  ├── fd: ()-->(2)
  ├── prune: (3)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000, distinct(2)=2]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight), fd=()-->(2)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
       │    ├── variable: a [type=int, outer=(1)]
@@ -724,12 +664,10 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string!null)
  ├── stats: [rows=333.333333]
  ├── prune: (1,2)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
       └── ne [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
            ├── variable: c [type=string, outer=(3)]
@@ -742,12 +680,10 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=333.333333]
  ├── prune: (1,2)
- ├── interesting orderings: ()
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    ├── stats: [rows=1000]
- │    ├── prune: (1-3)
- │    └── interesting orderings: ()
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
       └── is-not [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
            ├── variable: c [type=string, outer=(3)]
@@ -766,8 +702,7 @@ select
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
  │    │    ├── stats: [rows=1000]
- │    │    ├── prune: (1,2)
- │    │    └── interesting orderings: ()
+ │    │    └── prune: (1,2)
  │    └── projections [outer=(1,2)]
  │         └── tuple [type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: x [type=int, outer=(1)]

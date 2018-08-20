@@ -207,8 +207,7 @@ project
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── scan xysd@secondary
- │    ├── stats: [rows=1000]
- │    └── interesting orderings: ()
+ │    └── stats: [rows=1000]
  └── projections
       └── const: 1 [type=int]
 
