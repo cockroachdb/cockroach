@@ -286,7 +286,7 @@ func (rq *replicateQueue) processOneChange(
 		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone,
-			desc.Replicas,
+			liveReplicas, // only include liveReplicas, since deadReplicas should soon be removed
 			rangeInfo,
 			disableStatsBasedRebalancing,
 		)
