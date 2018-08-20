@@ -743,45 +743,19 @@ render            ·              ·                (k)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-render                    ·         ·                (k)           ·
- │                        render 0  k                ·             ·
- └── sort                 ·         ·                (k, k, v)     -v,+k
-      │                   order     -v,+k            ·             ·
-      └── render          ·         ·                (k, k, v)     ·
-           │              render 0  k                ·             ·
-           │              render 1  k                ·             ·
-           │              render 2  v                ·             ·
-           └── join       ·         ·                (k, v, k, v)  ·
-                │         type      inner            ·             ·
-                │         equality  (k, v) = (k, v)  ·             ·
-                ├── scan  ·         ·                (k, v)        ·
-                │         table     kv@primary       ·             ·
-                │         spans     ALL              ·             ·
-                └── scan  ·         ·                (k, v)        ·
-·                         table     kv@primary       ·             ·
-·                         spans     ALL              ·             ·
-
-# The underlying index can be forced manually, of course.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
-----
-render                    ·         ·                (k)           ·
- │                        render 0  k                ·             ·
- └── sort                 ·         ·                (k, k, v)     -v,+k
-      │                   order     -v,+k            ·             ·
-      └── render          ·         ·                (k, k, v)     ·
-           │              render 0  k                ·             ·
-           │              render 1  k                ·             ·
-           │              render 2  v                ·             ·
-           └── join       ·         ·                (k, v, k, v)  ·
-                │         type      inner            ·             ·
-                │         equality  (k, v) = (k, v)  ·             ·
-                ├── scan  ·         ·                (k, v)        ·
-                │         table     kv@foo           ·             ·
-                │         spans     ALL              ·             ·
-                └── scan  ·         ·                (k, v)        ·
-·                         table     kv@foo           ·             ·
-·                         spans     ALL              ·             ·
+render          ·               ·                    (k)           ·
+ │              render 0        k                    ·             ·
+ └── join       ·               ·                    (k, v, k, v)  -v,+k
+      │         type            inner                ·             ·
+      │         equality        (v, k) = (v, k)      ·             ·
+      │         mergeJoinOrder  -"(v=v)",+"(k=k)"    ·             ·
+      │         pred            (k = k) AND (v = v)  ·             ·
+      ├── scan  ·               ·                    (k, v)        -v,+k
+      │         table           kv@foo               ·             ·
+      │         spans           ALL                  ·             ·
+      └── scan  ·               ·                    (k, v)        -v,+k
+·               table           kv@foo               ·             ·
+·               spans           ALL                  ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
