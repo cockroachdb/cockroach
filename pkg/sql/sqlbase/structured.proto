@@ -55,9 +55,6 @@ import "gogoproto/gogo.proto";
 // | DECIMAL(N)                     | DECIMAL        | NONE             | N         | 0     |                   |
 // | DECIMAL(N,M)                   | DECIMAL        | NONE             | N         | M     |                   |
 // |                                |                |                  |           |       |                   |
-// | BIT                            | INT            | BIT              | 0         | 1     | Incorrect, #20991 |
-// | BIT(N)                         | INT            | BIT              | 0         | N     | Incorrect, #20991 |
-// |                                |                |                  |           |       |                   |
 // | FLOAT8                         | FLOAT          | NONE             | 0         | 0     |                   |
 // | FLOAT4                         | FLOAT          | REAL             | 0         | 0     |                   |
 // |                                |                |                  |           |       |                   |
@@ -147,13 +144,13 @@ message ColumnType {
     INTEGER = 1;
     SMALLINT = 2;
     BIGINT = 3;
-    BIT = 4;
+    reserved 4;
     REAL = 5;
     DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, DECIMAL, CHAR and BINARY
+  // INT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
   // DECIMAL
   // Also FLOAT pre-2.1 (this was incorrect.)

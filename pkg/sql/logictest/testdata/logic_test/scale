@@ -31,30 +31,6 @@ statement error value too long
 UPDATE test SET t = 'cdefg' WHERE t = 'ab'
 
 statement ok
-CREATE TABLE tb (
-  b BIT(3),
-  UNIQUE INDEX a (b)
-)
-
-statement ok
-INSERT INTO tb VALUES (1)
-
-statement ok
-INSERT INTO tb VALUES (3)
-
-statement ok
-INSERT INTO tb VALUES (7)
-
-statement error integer out of range for type BIT \(column "b"\)
-INSERT INTO tb VALUES (15)
-
-statement ok
-UPDATE tb SET b = 2 WHERE b = 7
-
-statement error integer out of range for type BIT \(column "b"\)
-UPDATE tb SET b = 16 WHERE b = 2
-
-statement ok
 CREATE TABLE tc (
   b INT2,
   UNIQUE INDEX a (b)

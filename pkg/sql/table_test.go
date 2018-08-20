@@ -34,16 +34,6 @@ func TestMakeTableDescColumns(t *testing.T) {
 		nullable bool
 	}{
 		{
-			"BIT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 1, VisibleType: sqlbase.ColumnType_BIT},
-			true,
-		},
-		{
-			"BIT(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 3, VisibleType: sqlbase.ColumnType_BIT},
-			true,
-		},
-		{
 			"BOOLEAN",
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
 			true,

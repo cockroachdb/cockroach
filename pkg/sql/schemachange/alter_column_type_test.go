@@ -103,16 +103,11 @@ func TestColumnConversions(t *testing.T) {
 				SemanticType: sqlbase.ColumnType_INT,
 				VisibleType:  sqlbase.ColumnType_INTEGER,
 			}: ColumnConversionTrivial,
-			// See discussion in classifiers map.
-			{
-				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_BIT,
-			}: ColumnConversionDangerous,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 4}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_INT, Width: 32}: ColumnConversionValidate,
 		},
-		{SemanticType: sqlbase.ColumnType_INT, Width: 4}: {
-			{SemanticType: sqlbase.ColumnType_INT, Width: 2}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 8}: ColumnConversionTrivial,
+		{SemanticType: sqlbase.ColumnType_INT, Width: 32}: {
+			{SemanticType: sqlbase.ColumnType_INT, Width: 16}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_INT, Width: 64}: ColumnConversionTrivial,
 		},
 
 		{SemanticType: sqlbase.ColumnType_STRING}: {
