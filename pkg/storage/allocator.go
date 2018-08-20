@@ -51,6 +51,7 @@ const (
 	minReplicaWeight = 0.001
 
 	// priorities for various repair operations.
+	addDeadReplacementPriority            float64 = 12000
 	addMissingReplicaPriority             float64 = 10000
 	addDecommissioningReplacementPriority float64 = 5000
 	removeDeadReplicaPriority             float64 = 1000
@@ -259,12 +260,13 @@ func (a *Allocator) ComputeAction(
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
 	have := len(rangeInfo.Desc.Replicas)
-	quorum := computeQuorum(need)
+	desiredQuorum := computeQuorum(need)
+	quorum := computeQuorum(have)
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
-		priority := addMissingReplicaPriority + float64(quorum-have)
+		priority := addMissingReplicaPriority + float64(desiredQuorum-have)
 		log.VEventf(ctx, 3, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
 		return AllocatorAdd, priority
 	}
@@ -288,39 +290,34 @@ func (a *Allocator) ComputeAction(
 			liveReplicas, quorum)
 		return AllocatorNoop, 0
 	}
-	// Removal actions follow.
-	if len(deadReplicas) > 0 {
-		// The range has dead replicas, which should be removed immediately.
-		removeDead := false
-		switch {
-		case have > need:
-			// Allow removal of a dead replica if we have more than we need.
-			// Reduce priority for this case?
-			removeDead = true
-		default: // have == need
-			// Only allow removal of a dead replica if we have a suitable allocation
-			// target that we can up-replicate to. This isn't necessarily the target
-			// we'll up-replicate to, just an indication that such a target exists.
-			if _, _, err := a.AllocateTarget(
-				ctx,
-				zone,
-				liveReplicas,
-				rangeInfo,
-				disableStatsBasedRebalancing,
-			); err == nil {
-				removeDead = true
-			}
-		}
-		if removeDead {
-			// Adjust the priority by the distance of live replicas from quorum.
-			priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
-			log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-				len(deadReplicas), len(liveReplicas), quorum, priority)
-			return AllocatorRemoveDead, priority
-		}
+
+	if have == need && len(deadReplicas) > 0 {
+		// Range has dead replica(s). We should up-replicate to add another before
+		// before removing the dead one. This can avoid permanent data loss in cases
+		// where the node is only temporarily dead, but we remove it from the range
+		// and lose a second node before we can up-replicate (#25392).
+		// The dead replica(s) will be down-replicated later.
+		priority := addDeadReplacementPriority
+		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d dead replicas priority=%.2f",
+			len(deadReplicas), priority)
+		return AllocatorAdd, priority
 	}
 
-	if have > need && len(decommissioningReplicas) > 0 {
+	// Removal actions follow.
+	// TODO(a-robinson): There's an additional case related to dead replicas that
+	// we should handle above. If there are one or more dead replicas, have <
+	// need, and there are no available stores to up-replicate to, then we should
+	// try to remove the dead replica(s) to get down to an odd number of
+	// replicas.
+	if len(deadReplicas) > 0 {
+		// The range has dead replicas, which should be removed immediately.
+		priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
+		log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+			len(deadReplicas), len(liveReplicas), quorum, priority)
+		return AllocatorRemoveDead, priority
+	}
+
+	if len(decommissioningReplicas) > 0 {
 		// Range is over-replicated, and has a decommissioning replica which
 		// should be removed.
 		priority := removeDecommissioningReplicaPriority
@@ -365,7 +362,7 @@ func (a *Allocator) AllocateTarget(
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+		ctx, a.storePool.getStoreDescriptor, existing, zone)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
