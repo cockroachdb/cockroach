@@ -1662,9 +1662,17 @@ import_stmt:
   {
     $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}, Options: $6.kvOptions()}
   }
+| IMPORT import_format string_or_placeholder opt_with_options
+  {
+    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$3.expr()}, Options: $4.kvOptions()}
+  }
 | IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
   {
     $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
+  }
+| IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
+  {
+    $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
   }
 | IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
