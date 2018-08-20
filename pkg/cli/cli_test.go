@@ -521,6 +521,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	//
 	// zone ls
 	// .default
@@ -536,6 +537,7 @@ func Example_zone() {
 	//   ttlseconds: 600
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone get .meta
 	// .meta
 	// range_min_bytes: 1048576
@@ -544,6 +546,7 @@ func Example_zone() {
 	//   ttlseconds: 3600
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone get system.nonexistent
 	// pq: relation "system.public.nonexistent" does not exist
 	// zone get system.descriptor
@@ -554,6 +557,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
@@ -567,6 +571,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	//
 	// zone get system
 	// system
@@ -576,6 +581,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone rm system
 	// zone ls
 	// .default
@@ -591,6 +597,7 @@ func Example_zone() {
 	//   ttlseconds: 600
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
@@ -599,6 +606,7 @@ func Example_zone() {
 	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
@@ -607,6 +615,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
@@ -615,6 +624,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone get .system
 	// .system
@@ -624,6 +634,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	// zone ls
 	// .default
 	// .liveness
@@ -638,6 +649,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone get system
 	// .default
@@ -647,6 +659,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	// zone set .default --disable-replication
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -654,6 +667,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone get system
 	// .default
@@ -663,6 +677,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone rm .liveness
 	// zone rm .meta
 	// zone rm .system
@@ -707,6 +722,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone ls
 	// .default
@@ -720,6 +736,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	//
 	// zone ls
 	// .default
