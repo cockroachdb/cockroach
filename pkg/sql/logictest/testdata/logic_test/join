@@ -1071,3 +1071,10 @@ FROM
 ----
 1     2
 NULL  NULL
+
+# Regression test for #28817. Do not allow special functions in ON clause.
+query error generator functions are not allowed in ON
+SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
+
+query error aggregate functions are not allowed in ON
+SELECT * FROM foo JOIN bar ON max(foo.c) < 2

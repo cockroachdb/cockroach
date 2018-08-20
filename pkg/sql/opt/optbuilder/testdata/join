@@ -3197,3 +3197,14 @@ build
 SELECT * FROM foo JOIN bar ON foo.c
 ----
 error (42804): argument of ON must be type bool, not type float
+
+# Regression test for #28817. Do not allow special functions in ON clause.
+build
+SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
+----
+error: generate_series(): generator functions are not allowed in ON
+
+build
+SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+----
+error: max(): aggregate functions are not allowed in ON
