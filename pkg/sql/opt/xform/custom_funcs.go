@@ -205,7 +205,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		})
 		scan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&constrainedScan))
 
-		if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+		if c.e.mem.NormOp(remainingFilter) == opt.TrueOp {
 			c.e.exprs = append(
 				c.e.exprs,
 				memo.Expr(memo.MakeIndexJoinExpr(scan, def)),
@@ -336,7 +336,7 @@ func (c *CustomFuncs) ConstrainScan(filterGroup memo.GroupID, scanDef memo.Priva
 		return nil
 	}
 
-	if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+	if c.e.mem.NormOp(remainingFilter) == opt.TrueOp {
 		// No remaining filter. Add the constrained scan node to select's group.
 		constrainedScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
 		c.e.exprs = append(c.e.exprs, memo.Expr(constrainedScan))
@@ -379,7 +379,7 @@ func (c *CustomFuncs) ConstrainIndexJoinScan(
 	}
 	constrainedScan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&newDef))
 
-	if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+	if c.e.mem.NormOp(remainingFilter) == opt.TrueOp {
 		// No remaining filter. Add the constrained lookup join index scan node to
 		// select's group.
 		lookupJoin := memo.MakeIndexJoinExpr(constrainedScan, indexJoinDef)
