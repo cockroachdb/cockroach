@@ -158,8 +158,9 @@ func TestInternalServerAddress(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(internal)
 
-	if is := serverCtx.GetLocalInternalServerForAddr(serverCtx.Config.AdvertiseAddr); is != internal {
-		t.Fatalf("expected %+v, got %+v", internal, is)
+	exp := internalClientAdapter{internal}
+	if ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr); ic != exp {
+		t.Fatalf("expected %+v, got %+v", exp, ic)
 	}
 }
 
