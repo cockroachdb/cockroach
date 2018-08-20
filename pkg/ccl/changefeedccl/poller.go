@@ -233,11 +233,12 @@ func (p *poller) Run(ctx context.Context) error {
 				if req.StartTime == (hlc.Timestamp{}) {
 					req.MVCCFilter = roachpb.MVCCFilter_Latest
 				}
+				startTime := timeutil.Now()
 				res, pErr := client.SendWrappedWith(ctx, sender, header, req)
 				finished := atomic.AddInt64(&atomicFinished, 1)
 				if log.V(2) {
-					log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d`,
-						span.Key, span.EndKey, finished, len(requests))
+					log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
+						span.Key, span.EndKey, finished, len(requests), timeutil.Since(startTime))
 				}
 				if pErr != nil {
 					return errors.Wrapf(
