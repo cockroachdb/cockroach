@@ -54,11 +54,6 @@ func TestTransportMoveToFront(t *testing.T) {
 	gt.MoveToFront(rd3)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
 
-	// Mark replica 2 pending. Shouldn't be able to move it.
-	clients[2].pending = true
-	gt.MoveToFront(rd2)
-	verifyOrder([]roachpb.ReplicaDescriptor{rd3, rd1, rd2})
-
 	// Advance the client index and move replica 3 back to front.
 	gt.clientIndex++
 	gt.MoveToFront(rd3)
@@ -76,8 +71,7 @@ func TestTransportMoveToFront(t *testing.T) {
 		t.Fatalf("expected client index 0; got %d", gt.clientIndex)
 	}
 
-	// Mark replica 2 no longer pending. Should be able to move it.
-	clients[2].pending = false
+	// Move replica 2 to the front.
 	gt.MoveToFront(rd2)
 	verifyOrder([]roachpb.ReplicaDescriptor{rd2, rd1, rd3})
 
