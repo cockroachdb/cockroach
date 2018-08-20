@@ -155,6 +155,10 @@ message ChangeReplicasTrigger {
 
   option (gogoproto.goproto_stringer) = false;
 
+  // TODO(benesch): this trigger should just specify the updated descriptor,
+  // like the split and merge triggers, so that the receiver doesn't need to
+  // reconstruct the range descriptor update.
+
   ReplicaChangeType change_type = 1;
   // The replica being modified.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
