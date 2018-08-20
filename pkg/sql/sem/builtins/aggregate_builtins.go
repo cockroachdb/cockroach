@@ -638,7 +638,7 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 	delimiterSize := a.delimiterSize
 	// If this is called as part of a window function, the delimiter is passed in
 	// via the first element in others.
-	if len(others) == 1 {
+	if len(others) == 1 && others[0] != tree.DNull {
 		if a.forBytes {
 			delimiter = string(tree.MustBeDBytes(others[0]))
 		} else {
