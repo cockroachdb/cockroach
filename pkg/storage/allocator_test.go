@@ -3937,7 +3937,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
-		// Needs three replicas, have two
+		// Need three replicas, have three, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
@@ -3957,11 +3957,16 @@ func TestAllocatorComputeAction(t *testing.T) {
 						NodeID:    2,
 						ReplicaID: 2,
 					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
 				},
 			},
 			expectedAction: AllocatorAdd,
 		},
-		// Needs Five replicas, have four.
+		// Need five replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
@@ -3991,11 +3996,40 @@ func TestAllocatorComputeAction(t *testing.T) {
 						NodeID:    4,
 						ReplicaID: 4,
 					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
 				},
 			},
 			expectedAction: AllocatorAdd,
 		},
-		// Needs Five replicas, have four, one is on a dead store
+		// Need three replicas, have two.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   3,
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+		},
+		// Need five replicas, have four, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
@@ -4029,65 +4063,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorAdd,
 		},
-		// Needs three replicas, one is on a dead store.
-		{
-			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-					{
-						StoreID:   6,
-						NodeID:    6,
-						ReplicaID: 6,
-					},
-				},
-			},
-			expectedAction: AllocatorRemoveDead,
-		},
-		// Needs three replicas, one is dead.
-		{
-			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-					{
-						StoreID:   8,
-						NodeID:    8,
-						ReplicaID: 8,
-					},
-				},
-			},
-			expectedAction: AllocatorRemoveDead,
-		},
-		// Needs five replicas, one is on a dead store.
+		// Need five replicas, have four.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
@@ -4116,6 +4092,79 @@ func TestAllocatorComputeAction(t *testing.T) {
 						StoreID:   4,
 						NodeID:    4,
 						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction: AllocatorAdd,
+		},
+		// Need three replicas, have four, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   3,
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveDead,
+		},
+		// Need five replicas, have six, one is on a dead store.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas:   5,
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+					{
+						StoreID:   5,
+						NodeID:    5,
+						ReplicaID: 5,
 					},
 					{
 						StoreID:   6,
@@ -4430,70 +4479,77 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	zone := config.ZoneConfig{
+		NumReplicas: 3,
+	}
+	threeReplDesc := roachpb.RangeDescriptor{
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				StoreID:   1,
+				NodeID:    1,
+				ReplicaID: 1,
+			},
+			{
+				StoreID:   2,
+				NodeID:    2,
+				ReplicaID: 2,
+			},
+			{
+				StoreID:   3,
+				NodeID:    3,
+				ReplicaID: 3,
+			},
+		},
+	}
+	fourReplDesc := threeReplDesc
+	fourReplDesc.Replicas = append(fourReplDesc.Replicas, roachpb.ReplicaDescriptor{
+		StoreID:   4,
+		NodeID:    4,
+		ReplicaID: 4,
+	})
+
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
 	testCases := []struct {
-		zone           config.ZoneConfig
 		desc           roachpb.RangeDescriptor
-		expectedAction AllocatorAction
 		live           []roachpb.StoreID
 		dead           []roachpb.StoreID
+		expectedAction AllocatorAction
 	}{
-		// Needs three replicas, one is dead, but there is no replacement.
+		// Needs three replicas, one is dead, and there's no replacement.
 		{
-			zone: config.ZoneConfig{
-				NumReplicas: 3,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-					{
-						StoreID:   3,
-						NodeID:    3,
-						ReplicaID: 3,
-					},
-				},
-			},
-			expectedAction: AllocatorConsiderRebalance,
+			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2},
 			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorAdd,
 		},
 		// Needs three replicas, one is dead, but there is a replacement.
 		{
-			zone: config.ZoneConfig{
-				NumReplicas: 3,
-			},
-			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
-					{
-						StoreID:   1,
-						NodeID:    1,
-						ReplicaID: 1,
-					},
-					{
-						StoreID:   2,
-						NodeID:    2,
-						ReplicaID: 2,
-					},
-					{
-						StoreID:   3,
-						NodeID:    3,
-						ReplicaID: 3,
-					},
-				},
-			},
-			expectedAction: AllocatorRemoveDead,
+			desc:           threeReplDesc,
 			live:           []roachpb.StoreID{1, 2, 4},
 			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorAdd,
+		},
+		// Needs three replicas, two are dead (i.e. the range lacks a quorum).
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 4},
+			dead:           []roachpb.StoreID{2, 3},
+			expectedAction: AllocatorNoop,
+		},
+		// Needs three replicas, has four, one is dead.
+		{
+			desc:           fourReplDesc,
+			live:           []roachpb.StoreID{1, 2, 4},
+			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorRemoveDead,
+		},
+		// Needs three replicas, has four, two are dead (i.e. the range lacks a quorum).
+		{
+			desc:           fourReplDesc,
+			live:           []roachpb.StoreID{1, 4},
+			dead:           []roachpb.StoreID{2, 3},
+			expectedAction: AllocatorNoop,
 		},
 	}
 
@@ -4504,7 +4560,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, tcase.dead, nil, nil, nil)
 
-		action, _ := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc}, false)
+		action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &tcase.desc}, false)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 		}
