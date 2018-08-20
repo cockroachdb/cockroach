@@ -382,7 +382,7 @@ func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
 		on := expr.ChildGroup(c.f.mem, 2)
 
 		// Cross join always preserves left/right rows.
-		isCrossJoin := c.f.mem.NormExpr(on).Operator() == opt.TrueOp
+		isCrossJoin := c.f.mem.NormOp(on) == opt.TrueOp
 
 		// Inner joins may preserve left/right rows, according to
 		// JoinFiltersMatchAllLeftRows conditions.

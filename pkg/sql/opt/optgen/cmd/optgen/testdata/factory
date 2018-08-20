@@ -631,7 +631,7 @@ func (_f *Factory) ConstructSelect(
 					u := _expr2.ChildGroup(_f.mem, 1)
 					if _f.matchedRule == nil || _f.matchedRule(opt.Test) {
 						_group = _f.DynamicConstruct(
-							_f.mem.NormExpr(item).Operator(),
+							_f.mem.NormOp(item),
 							memo.DynamicOperands{
 								memo.DynamicID(_f.ConstructSelect(
 									t,
@@ -844,7 +844,7 @@ func (_f *Factory) ConstructSelect(
 			if _f.funcs.True() {
 				if _f.matchedRule == nil || _f.matchedRule(opt.Test) {
 					_group = _f.DynamicConstruct(
-						_f.mem.NormExpr(input).Operator(),
+						_f.mem.NormOp(input),
 						memo.DynamicOperands{
 							memo.DynamicID(expr1),
 							memo.DynamicID(expr2),
