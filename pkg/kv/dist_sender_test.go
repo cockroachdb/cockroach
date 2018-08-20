@@ -148,10 +148,6 @@ func (l *simpleTransportAdapter) IsExhausted() bool {
 	return l.nextReplica >= len(l.replicas)
 }
 
-func (l *simpleTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
-	return nil
-}
-
 func (l *simpleTransportAdapter) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
