@@ -99,7 +99,9 @@ insert_stmt ::=
 
 import_stmt ::=
 	'IMPORT' import_format '(' string_or_placeholder ')' opt_with_options
+	| 'IMPORT' import_format string_or_placeholder opt_with_options
 	| 'IMPORT' 'TABLE' table_name 'FROM' import_format '(' string_or_placeholder ')' opt_with_options
+	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options
 	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
