@@ -115,7 +115,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			},
 			params.extendedEvalCtx.Tracing,
 		)
-		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx)
+		distSQLPlanner.Run(
+			&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		n.run.executedStatement = true
 

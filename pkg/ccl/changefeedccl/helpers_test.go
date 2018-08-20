@@ -55,7 +55,6 @@ func createBenchmarkChangefeed(
 		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
 	}
 	progress := jobspb.Progress{}
-	metrics := MakeMetrics().(*Metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
@@ -63,7 +62,9 @@ func createBenchmarkChangefeed(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- runChangefeedFlow(ctx, execCfg, details, progress, metrics, resultsCh, nil)
+		errCh <- errors.New(`TODO(dan): The distsql PR (#28555) broke createBenchmarkChangefeed`)
+		var phs sql.PlanHookState
+		errCh <- distChangefeedFlow(ctx, phs, 0 /* jobID */, details, progress, resultsCh)
 	}()
 	return func() error {
 		select {

@@ -45,17 +45,17 @@ type Sink interface {
 	Close() error
 }
 
-func getSink(sinkURI string, resultsCh chan<- tree.Datums) (Sink, error) {
+func getSink(sinkURI string, targets map[sqlbase.ID]string) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
 	}
 	switch u.Scheme {
-	case sinkSchemeChannel:
-		return &channelSink{resultsCh: resultsCh}, nil
+	case sinkSchemeBuffer:
+		return &bufferSink{}, nil
 	case sinkSchemeKafka:
 		kafkaTopicPrefix := u.Query().Get(sinkParamTopicPrefix)
-		return getKafkaSink(kafkaTopicPrefix, u.Host)
+		return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
 	default:
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
@@ -71,7 +71,7 @@ type kafkaSink struct {
 	kafkaTopicPrefix string
 	client           sarama.Client
 	producer         sarama.AsyncProducer
-	topicsSeen       map[string]struct{}
+	topics           map[string]struct{}
 
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
@@ -85,10 +85,15 @@ type kafkaSink struct {
 	}
 }
 
-func getKafkaSink(kafkaTopicPrefix string, bootstrapServers string) (Sink, error) {
+func getKafkaSink(
+	kafkaTopicPrefix string, bootstrapServers string, targets map[sqlbase.ID]string,
+) (Sink, error) {
 	sink := &kafkaSink{
 		kafkaTopicPrefix: kafkaTopicPrefix,
-		topicsSeen:       make(map[string]struct{}),
+	}
+	sink.topics = make(map[string]struct{})
+	for _, tableName := range targets {
+		sink.topics[kafkaTopicPrefix+tableName] = struct{}{}
 	}
 
 	config := sarama.NewConfig()
@@ -162,11 +167,12 @@ func (s *kafkaSink) Close() error {
 }
 
 // EmitRow implements the Sink interface.
-func (s *kafkaSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
-	topic = s.kafkaTopicPrefix + topic
-	if _, ok := s.topicsSeen[topic]; !ok {
-		s.topicsSeen[topic] = struct{}{}
+func (s *kafkaSink) EmitRow(ctx context.Context, tableName string, key, value []byte) error {
+	topic := s.kafkaTopicPrefix + tableName
+	if _, ok := s.topics[topic]; !ok {
+		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
+
 	msg := &sarama.ProducerMessage{
 		Topic: topic,
 		Key:   sarama.ByteEncoder(key),
@@ -180,7 +186,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) e
 	// Staleness here does not impact correctness. Some new partitions will miss
 	// this resolved timestamp, but they'll eventually be picked up and get
 	// later ones.
-	for topic := range s.topicsSeen {
+	for topic := range s.topics {
 		// TODO(dan): Figure out how expensive this is to call. Maybe we need to
 		// cache it and rate limit?
 		partitions, err := s.client.Partitions(topic)
@@ -302,48 +308,66 @@ func (p *changefeedPartitioner) Partition(
 	return p.hash.Partition(message, numPartitions)
 }
 
-type channelSink struct {
-	resultsCh chan<- tree.Datums
-	alloc     sqlbase.DatumAlloc
+// encDatumRowBuffer is a FIFO of `EncDatumRow`s.
+//
+// TODO(dan): There's some potential allocation savings here by reusing the same
+// backing array.
+type encDatumRowBuffer []sqlbase.EncDatumRow
+
+func (b *encDatumRowBuffer) IsEmpty() bool {
+	return b == nil || len(*b) == 0
+}
+func (b *encDatumRowBuffer) Push(r sqlbase.EncDatumRow) {
+	*b = append(*b, r)
+}
+func (b *encDatumRowBuffer) Pop() sqlbase.EncDatumRow {
+	ret := (*b)[0]
+	*b = (*b)[1:]
+	return ret
+}
+
+type bufferSink struct {
+	buf    encDatumRowBuffer
+	alloc  sqlbase.DatumAlloc
+	closed bool
 }
 
 // EmitRow implements the Sink interface.
-func (s *channelSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
-	return s.emitDatums(ctx, tree.Datums{
-		s.alloc.NewDString(tree.DString(topic)),
-		s.alloc.NewDBytes(tree.DBytes(key)),
-		s.alloc.NewDBytes(tree.DBytes(value)),
+func (s *bufferSink) EmitRow(_ context.Context, topic string, key, value []byte) error {
+	if s.closed {
+		return errors.New(`cannot EmitRow on a closed sink`)
+	}
+	s.buf.Push(sqlbase.EncDatumRow{
+		{Datum: tree.DNull},                              // resolved span
+		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic
+		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},     // key
+		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},   //value
 	})
+	return nil
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *channelSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
-	return s.emitDatums(ctx, tree.Datums{
-		tree.DNull,
-		tree.DNull,
-		s.alloc.NewDBytes(tree.DBytes(payload)),
-	})
-}
-
-func (s *channelSink) emitDatums(ctx context.Context, row tree.Datums) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case s.resultsCh <- row:
-		return nil
+func (s *bufferSink) EmitResolvedTimestamp(_ context.Context, payload []byte) error {
+	if s.closed {
+		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+	s.buf.Push(sqlbase.EncDatumRow{
+		{Datum: tree.DNull},                              // resolved span
+		{Datum: tree.DNull},                              // topic
+		{Datum: tree.DNull},                              // key
+		{Datum: s.alloc.NewDBytes(tree.DBytes(payload))}, // value
+	})
+	return nil
 }
 
 // Flush implements the Sink interface.
-func (s *channelSink) Flush(_ context.Context) error {
+func (s *bufferSink) Flush(_ context.Context) error {
 	return nil
 }
 
 // Close implements the Sink interface.
-func (s *channelSink) Close() error {
-	// nil the channel so any later calls to EmitRow (there shouldn't be any)
-	// don't work.
-	s.resultsCh = nil
+func (s *bufferSink) Close() error {
+	s.closed = true
 	return nil
 }
 
@@ -377,6 +401,7 @@ func (s *metricsSink) EmitResolvedTimestamp(ctx context.Context, payload []byte)
 	}
 	return err
 }
+
 func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
 	err := s.wrapped.Flush(ctx)
@@ -385,6 +410,7 @@ func (s *metricsSink) Flush(ctx context.Context) error {
 	}
 	return err
 }
+
 func (s *metricsSink) Close() error {
 	return s.wrapped.Close()
 }

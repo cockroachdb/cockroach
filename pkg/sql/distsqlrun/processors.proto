@@ -20,6 +20,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
+import "jobs/jobspb/jobs.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
@@ -139,6 +140,8 @@ message ProcessorCoreUnion {
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
   optional LocalPlanNodeSpec localPlanNode = 24;
+  optional ChangeAggregatorSpec changeAggregator = 25;
+  optional ChangeFrontierSpec changeFrontier = 26;
 
   reserved 6, 12;
 }
@@ -957,4 +960,36 @@ message WindowerSpec {
   repeated uint32 partitionBy = 1;
   // WindowFns is the specification of all window functions to be computed.
   repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
+}
+
+// ChangeAggregatorSpec is the specification for a processor that watches for
+// changes in a set of spans. Each span may cross multiple ranges.
+message ChangeAggregatorSpec {
+  message Watch {
+    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
+    optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Watch watches = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+}
+
+// ChangeFrontierSpec is the specification for a processor that receives
+// span-level resolved timestamps, track them, and emits the changefeed-level
+// resolved timestamp whenever it changes.
+message ChangeFrontierSpec {
+  // TrackedSpans is the entire span set being watched. Once all these spans
+  // have been resolved at a certain timestamp, then it's safe to resolve the
+  // changefeed at that timestamp.
+  repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+
+  // JobID is the id of this changefeed in the system jobs.
+  optional int64 job_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
 }

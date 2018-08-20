@@ -45,7 +45,7 @@ const (
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
 
-	sinkSchemeChannel    = ``
+	sinkSchemeBuffer     = ``
 	sinkSchemeKafka      = `kafka`
 	sinkParamTopicPrefix = `topic_prefix`
 )
@@ -188,13 +188,7 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
-			// The job registry has a set of metrics used to monitor the various
-			// jobs it runs. They're all stored as the `metric.Struct` interface
-			// because of dependency cycles.
-			metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-			return runChangefeedFlow(
-				ctx, p.ExecCfg(), details, progress, metrics, resultsCh, nil, /* progressedFn */
-			)
+			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 		}
 
 		if err := utilccl.CheckEnterpriseEnabled(
@@ -311,14 +305,12 @@ type changefeedResumer struct{}
 func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
-	execCfg := planHookState.(sql.PlanHookState).ExecCfg()
+	phs := planHookState.(sql.PlanHookState)
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	metrics := job.RegistryMetrics().Changefeed.(*Metrics)
-	err := runChangefeedFlow(
-		ctx, execCfg, details, progress, metrics, startedCh, job.HighWaterProgressed)
+	err := distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
 	if err != nil {
-		log.Infof(ctx, `CHANGEFEED job %d returning with error: %+v`, *job.ID(), err)
+		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
 	}
 	return err
 }

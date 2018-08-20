@@ -266,6 +266,11 @@ func (db *DB) GetFactory() TxnSenderFactory {
 	return db.factory
 }
 
+// Clock returns the DB's hlc.Clock.
+func (db *DB) Clock() *hlc.Clock {
+	return db.clock
+}
+
 // NewDB returns a new DB.
 func NewDB(actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock) *DB {
 	return NewDBWithContext(actx, factory, clock, DefaultDBContext())
