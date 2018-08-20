@@ -1289,7 +1289,6 @@ func (ds *DistSender) sendToReplicas(
 	if err != nil {
 		return nil, err
 	}
-	defer transport.Close()
 	if transport.IsExhausted() {
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
