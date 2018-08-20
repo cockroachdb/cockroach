@@ -98,7 +98,9 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.CheckQueryResults(t, fmt.Sprintf("SHOW ZONE CONFIGURATION FOR %s", target),
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
+SELECT zone_id, cli_specifier, config_yaml, config_protobuf
+  FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
 
@@ -114,7 +116,9 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults(t, "SHOW ALL ZONE CONFIGURATIONS", expected)
+	sqlDB.CheckQueryResults(t, `
+SELECT zone_id, cli_specifier, config_yaml, config_protobuf
+  FROM [SHOW ALL ZONE CONFIGURATIONS]`, expected)
 }
 
 // ZoneConfigExists returns whether a zone config with the provided cliSpecifier

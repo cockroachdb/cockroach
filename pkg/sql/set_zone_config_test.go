@@ -18,10 +18,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestValidateZoneAttrsAndLocalities(t *testing.T) {
@@ -80,34 +82,35 @@ func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 		return nodes, nil
 	}
 
-	const expectSuccess = false
-	const expectErr = true
+	const expectSuccess = 0
+	const expectParseErr = 1
+	const expectValidateErr = 2
 	for i, tc := range []struct {
 		cfg       string
-		expectErr bool
+		expectErr int
 	}{
-		{`nonsense`, expectErr},
+		{`nonsense`, expectParseErr},
 		{`range_max_bytes: 100`, expectSuccess},
-		{`range_max_byte: 100`, expectErr},
+		{`range_max_byte: 100`, expectParseErr},
 		{`constraints: ["+region=us-east1"]`, expectSuccess},
 		{`constraints: {"+region=us-east1": 2, "+region=eu-west1": 1}`, expectSuccess},
-		{`constraints: ["+region=us-eas1"]`, expectErr},
-		{`constraints: {"+region=us-eas1": 2, "+region=eu-west1": 1}`, expectErr},
-		{`constraints: {"+region=us-east1": 2, "+region=eu-wes1": 1}`, expectErr},
-		{`constraints: ["+regio=us-east1"]`, expectErr},
+		{`constraints: ["+region=us-eas1"]`, expectValidateErr},
+		{`constraints: {"+region=us-eas1": 2, "+region=eu-west1": 1}`, expectValidateErr},
+		{`constraints: {"+region=us-east1": 2, "+region=eu-wes1": 1}`, expectValidateErr},
+		{`constraints: ["+regio=us-east1"]`, expectValidateErr},
 		{`constraints: ["+rack=17"]`, expectSuccess},
-		{`constraints: ["+rack=18"]`, expectErr},
-		{`constraints: ["+rach=17"]`, expectErr},
+		{`constraints: ["+rack=18"]`, expectValidateErr},
+		{`constraints: ["+rach=17"]`, expectValidateErr},
 		{`constraints: ["+highcpu"]`, expectSuccess},
 		{`constraints: ["+lowmem"]`, expectSuccess},
 		{`constraints: ["+ssd"]`, expectSuccess},
-		{`constraints: ["+highcp"]`, expectErr},
-		{`constraints: ["+owmem"]`, expectErr},
-		{`constraints: ["+sssd"]`, expectErr},
+		{`constraints: ["+highcp"]`, expectValidateErr},
+		{`constraints: ["+owmem"]`, expectValidateErr},
+		{`constraints: ["+sssd"]`, expectValidateErr},
 		{`lease_preferences: [["+region=us-east1", "+ssd"], ["+geo=us", "+highcpu"]]`, expectSuccess},
-		{`lease_preferences: [["+region=us-eat1", "+ssd"], ["+geo=us", "+highcpu"]]`, expectErr},
-		{`lease_preferences: [["+region=us-east1", "+foo"], ["+geo=us", "+highcpu"]]`, expectErr},
-		{`lease_preferences: [["+region=us-east1", "+ssd"], ["+geo=us", "+bar"]]`, expectErr},
+		{`lease_preferences: [["+region=us-eat1", "+ssd"], ["+geo=us", "+highcpu"]]`, expectValidateErr},
+		{`lease_preferences: [["+region=us-east1", "+foo"], ["+geo=us", "+highcpu"]]`, expectValidateErr},
+		{`lease_preferences: [["+region=us-east1", "+ssd"], ["+geo=us", "+bar"]]`, expectValidateErr},
 		{`constraints: ["-region=us-east1"]`, expectSuccess},
 		{`constraints: ["-regio=us-eas1"]`, expectSuccess},
 		{`constraints: {"-region=us-eas1": 2, "-region=eu-wes1": 1}`, expectSuccess},
@@ -116,10 +119,18 @@ func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 		{`constraints: ["-ssd"]`, expectSuccess},
 		{`constraints: ["-fake"]`, expectSuccess},
 	} {
-		err := validateZoneAttrsAndLocalities(context.Background(), getNodes, tc.cfg)
-		if err != nil && !tc.expectErr {
+		var zone config.ZoneConfig
+		err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
+		if err != nil && tc.expectErr == expectSuccess {
+			t.Fatalf("#%d: expected success for %q; got %v", i, tc.cfg, err)
+		} else if err == nil && tc.expectErr == expectParseErr {
+			t.Fatalf("#%d: expected parse err for %q; got success", i, tc.cfg)
+		}
+
+		err = validateZoneAttrsAndLocalities(context.Background(), getNodes, &zone)
+		if err != nil && tc.expectErr == expectSuccess {
 			t.Errorf("#%d: expected success for %q; got %v", i, tc.cfg, err)
-		} else if err == nil && tc.expectErr {
+		} else if err == nil && tc.expectErr == expectValidateErr {
 			t.Errorf("#%d: expected err for %q; got success", i, tc.cfg)
 		}
 	}

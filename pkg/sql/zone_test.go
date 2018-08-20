@@ -80,11 +80,6 @@ func TestValidSetShowZones(t *testing.T) {
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
-	tableDroppedRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
-		CLISpecifier: "NULL",
-		Config:       zoneOverride,
-	}
 
 	// Remove stock zone configs installed at cluster bootstrap. Otherwise this
 	// test breaks whenever these stock zone configs are adjusted.
@@ -213,7 +208,7 @@ func TestValidSetShowZones(t *testing.T) {
 	if !testutils.IsError(err, `relation "d.t" does not exist`) {
 		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
 	}
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, systemRow, jobsRow, tableDroppedRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, systemRow, jobsRow)
 }
 
 func TestInvalidSetShowZones(t *testing.T) {
