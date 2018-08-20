@@ -113,43 +113,15 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	return conn, nil
 }
 
-type internalServerAdapter struct {
-	roachpb.InternalClient
-}
-
-func (a internalServerAdapter) Batch(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
-	return a.InternalClient.Batch(ctx, ba)
-}
-
-func (a internalServerAdapter) RangeFeed(
-	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
-) error {
-	panic("unimplemented")
-}
-
-var _ roachpb.InternalServer = internalServerAdapter{}
-
-// IsLocal returns true if the given InternalServer is local.
-// TODO(bdarnell): This is a bit of a hack. Once RangeFeed has
-// settled, consider refactoring this so we return an object that
-// wraps all knowledge of local/remote issues instead of returning the
-// GRPC roachpb.InternalServer directly.
-func IsLocal(iface roachpb.InternalServer) bool {
-	_, ok := iface.(internalServerAdapter)
-	return !ok // internalServerAdapter is used for remote connections.
-}
-
-// DialInternalServer is a specialization of Dial for callers that
-// want a roachpb.InternalServer. This supports an optimization to
+// DialInternalClient is a specialization of Dial for callers that
+// want a roachpb.InternalClient. This supports an optimization to
 // bypass the network for the local node. Returns a context.Context
 // which should be used when making RPC calls on the returned server
 // (This context is annotated to mark this request as in-process and
 // bypass ctx.Peer checks).
-func (n *Dialer) DialInternalServer(
+func (n *Dialer) DialInternalClient(
 	ctx context.Context, nodeID roachpb.NodeID,
-) (context.Context, roachpb.InternalServer, error) {
+) (context.Context, roachpb.InternalClient, error) {
 	if n == nil || n.resolver == nil {
 		return nil, nil, errors.New("no node dialer configured")
 	}
@@ -157,14 +129,14 @@ func (n *Dialer) DialInternalServer(
 	if err != nil {
 		return nil, nil, err
 	}
-	if localServer := n.rpcContext.GetLocalInternalServerForAddr(addr.String()); localServer != nil {
-		log.VEvent(ctx, 2, "sending request to local server")
+	if localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String()); localClient != nil {
+		log.VEvent(ctx, 2, "sending request to local client")
 
 		// Create a new context from the existing one with the "local request" field set.
 		// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
 		localCtx := grpcutil.NewLocalRequestContext(ctx)
 
-		return localCtx, localServer, nil
+		return localCtx, localClient, nil
 	}
 
 	log.VEventf(ctx, 2, "sending request to %s", addr)
@@ -177,7 +149,7 @@ func (n *Dialer) DialInternalServer(
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		return nil, nil, err
 	}
-	return ctx, internalServerAdapter{roachpb.NewInternalClient(conn)}, nil
+	return ctx, roachpb.NewInternalClient(conn), nil
 }
 
 // ConnHealth returns nil if we have an open connection to the given node
@@ -193,8 +165,8 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 	}
 	// TODO(bdarnell): GRPCDial should detect local addresses and return
 	// a dummy connection instead of requiring callers to do this check.
-	if n.rpcContext.GetLocalInternalServerForAddr(addr.String()) != nil {
-		// The local server is always considered healthy.
+	if n.rpcContext.GetLocalInternalClientForAddr(addr.String()) != nil {
+		// The local client is always considered healthy.
 		return nil
 	}
 	conn := n.rpcContext.GRPCDial(addr.String())

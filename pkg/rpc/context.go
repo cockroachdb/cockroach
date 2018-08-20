@@ -282,7 +282,7 @@ type Context struct {
 
 	rpcCompression bool
 
-	localInternalServer roachpb.InternalServer
+	localInternalClient roachpb.InternalClient
 
 	conns syncmap.Map
 
@@ -354,18 +354,42 @@ func (ctx *Context) GetStatsMap() *syncmap.Map {
 	return &ctx.stats.stats
 }
 
-// GetLocalInternalServerForAddr returns the context's internal batch server
+// GetLocalInternalClientForAddr returns the context's internal batch client
 // for target, if it exists.
-func (ctx *Context) GetLocalInternalServerForAddr(target string) roachpb.InternalServer {
+func (ctx *Context) GetLocalInternalClientForAddr(target string) roachpb.InternalClient {
 	if target == ctx.AdvertiseAddr {
-		return ctx.localInternalServer
+		return ctx.localInternalClient
 	}
 	return nil
 }
 
+type internalClientAdapter struct {
+	roachpb.InternalServer
+}
+
+func (a internalClientAdapter) Batch(
+	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
+	return a.InternalServer.Batch(ctx, ba)
+}
+
+func (a internalClientAdapter) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	panic("unimplemented")
+}
+
+var _ roachpb.InternalClient = internalClientAdapter{}
+
+// IsLocal returns true if the given InternalClient is local.
+func IsLocal(iface roachpb.InternalClient) bool {
+	_, ok := iface.(internalClientAdapter)
+	return ok // internalClientAdapter is used for local connections.
+}
+
 // SetLocalInternalServer sets the context's local internal batch server.
 func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	ctx.localInternalServer = internalServer
+	ctx.localInternalClient = internalClientAdapter{internalServer}
 }
 
 func (ctx *Context) removeConn(key string, conn *Connection) {
@@ -551,7 +575,7 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // prioritize among a list of candidate nodes, but not to filter out
 // "unhealthy" nodes.
 func (ctx *Context) ConnHealth(target string) error {
-	if ctx.GetLocalInternalServerForAddr(target) != nil {
+	if ctx.GetLocalInternalClientForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
