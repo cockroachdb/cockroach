@@ -1,0 +1,9 @@
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
+
+# This file contains regression tests discovered by sqlsmith.
+
+
+# Regression: #28836 (nulls in string_agg)
+
+statement ok
+SELECT subq_0.c3 AS c0, subq_0.c6 AS c1, subq_0.c4 AS c2, CASE WHEN (SELECT start_key FROM crdb_internal.ranges LIMIT 1 OFFSET 6) < CAST(NULLIF(pg_catalog.string_agg(CAST((SELECT start_key FROM crdb_internal.ranges LIMIT 1 OFFSET 7) AS BYTES), CAST((SELECT pg_catalog.xor_agg(tgargs) FROM pg_catalog.pg_trigger) AS BYTES)) OVER (PARTITION BY subq_0.c0 ORDER BY subq_0.c0, subq_0.c5, subq_0.c2), CAST(NULL AS BYTES)) AS BYTES) THEN subq_0.c6 ELSE subq_0.c6 END AS c3, subq_0.c2 AS c4, subq_0.c7 AS c5, CAST(COALESCE(subq_0.c7, subq_0.c7) AS INT8) AS c6 FROM (SELECT ref_0.table_name AS c0, ref_0.table_catalog AS c1, ref_0.table_type AS c2, (SELECT rolcreatedb FROM pg_catalog.pg_roles LIMIT 1 OFFSET 79) AS c3, ref_0.table_name AS c4, ref_0.version AS c5, ref_0.version AS c6, ref_0.version AS c7 FROM information_schema.tables AS ref_0 WHERE (ref_0.version IS NOT NULL) OR (pg_catalog.set_masklen(CAST(CAST(NULL AS INET) AS INET), CAST(ref_0.version AS INT8)) != (SELECT pg_catalog.max(client_addr) FROM pg_catalog.pg_stat_activity)) LIMIT 101) AS subq_0 WHERE subq_0.c7 IS NOT NULL
