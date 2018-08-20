@@ -19,6 +19,24 @@ TABLE b
  └── INDEX primary
       └── x int not null
 
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
+----
+TABLE uv
+ ├── u int not null
+ ├── v int
+ └── INDEX primary
+      └── u int not null
+
 # --------------------------------------------------
 # EnsureJoinFiltersAnd
 # --------------------------------------------------
@@ -938,6 +956,113 @@ inner-join
  │         └── age(b, '2017-01-01 00:00:00+00:00') > '1d' [type=bool, outer=(3)]
  └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── a = b [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+
+# Regression for issue 28818. Try to trigger undetectable cycle between the
+# PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
+opt
+SELECT 1
+FROM a
+WHERE EXISTS (
+    SELECT 1
+    FROM xy
+    INNER JOIN uv
+    ON EXISTS (
+        SELECT 1
+        FROM b
+        WHERE a.s >= 'foo'
+        LIMIT 10
+    )
+    WHERE
+        (SELECT s FROM a) = 'foo'
+)
+----
+project
+ ├── columns: "?column?":22(int!null)
+ ├── fd: ()-->(22)
+ ├── distinct-on
+ │    ├── columns: a.k:1(int!null)
+ │    ├── grouping columns: a.k:1(int!null)
+ │    ├── key: (1)
+ │    └── select
+ │         ├── columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool!null)
+ │         ├── key: (1,6,8)
+ │         ├── fd: (1,6,8)-->(14)
+ │         ├── group-by
+ │         │    ├── columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null) true_agg:14(bool)
+ │         │    ├── grouping columns: a.k:1(int!null) xy.x:6(int!null) u:8(int!null)
+ │         │    ├── key: (1,6,8)
+ │         │    ├── fd: (1,6,8)-->(14)
+ │         │    ├── project
+ │         │    │    ├── columns: true:13(bool!null) a.k:1(int!null) xy.x:6(int!null) u:8(int!null)
+ │         │    │    ├── fd: ()-->(13)
+ │         │    │    ├── inner-join-apply
+ │         │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null) u:8(int!null)
+ │         │    │    │    ├── fd: (1)-->(4)
+ │         │    │    │    ├── scan a
+ │         │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
+ │         │    │    │    │    ├── key: (1)
+ │         │    │    │    │    └── fd: (1)-->(4)
+ │         │    │    │    ├── inner-join
+ │         │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
+ │         │    │    │    │    ├── outer: (4)
+ │         │    │    │    │    ├── inner-join
+ │         │    │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
+ │         │    │    │    │    │    ├── key: (6,8)
+ │         │    │    │    │    │    ├── select
+ │         │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
+ │         │    │    │    │    │    │    ├── key: (6)
+ │         │    │    │    │    │    │    ├── scan xy
+ │         │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
+ │         │    │    │    │    │    │    │    └── key: (6)
+ │         │    │    │    │    │    │    └── filters [type=bool]
+ │         │    │    │    │    │    │         └── eq [type=bool]
+ │         │    │    │    │    │    │              ├── subquery [type=string]
+ │         │    │    │    │    │    │              │    └── max1-row
+ │         │    │    │    │    │    │              │         ├── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
+ │         │    │    │    │    │    │              │         ├── key: ()
+ │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
+ │         │    │    │    │    │    │              │         └── scan a
+ │         │    │    │    │    │    │              │              └── columns: a.s:19(string)
+ │         │    │    │    │    │    │              └── const: 'foo' [type=string]
+ │         │    │    │    │    │    ├── select
+ │         │    │    │    │    │    │    ├── columns: u:8(int!null)
+ │         │    │    │    │    │    │    ├── key: (8)
+ │         │    │    │    │    │    │    ├── scan uv
+ │         │    │    │    │    │    │    │    ├── columns: u:8(int!null)
+ │         │    │    │    │    │    │    │    └── key: (8)
+ │         │    │    │    │    │    │    └── filters [type=bool]
+ │         │    │    │    │    │    │         └── eq [type=bool]
+ │         │    │    │    │    │    │              ├── subquery [type=string]
+ │         │    │    │    │    │    │              │    └── max1-row
+ │         │    │    │    │    │    │              │         ├── columns: a.s:19(string)
+ │         │    │    │    │    │    │              │         ├── cardinality: [0 - 1]
+ │         │    │    │    │    │    │              │         ├── key: ()
+ │         │    │    │    │    │    │              │         ├── fd: ()-->(19)
+ │         │    │    │    │    │    │              │         └── scan a
+ │         │    │    │    │    │    │              │              └── columns: a.s:19(string)
+ │         │    │    │    │    │    │              └── const: 'foo' [type=string]
+ │         │    │    │    │    │    └── true [type=bool]
+ │         │    │    │    │    ├── limit
+ │         │    │    │    │    │    ├── outer: (4)
+ │         │    │    │    │    │    ├── cardinality: [0 - 10]
+ │         │    │    │    │    │    ├── select
+ │         │    │    │    │    │    │    ├── outer: (4)
+ │         │    │    │    │    │    │    ├── scan b
+ │         │    │    │    │    │    │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │         │    │    │    │    │    │         └── a.s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │         │    │    │    │    │    └── const: 10 [type=int]
+ │         │    │    │    │    └── true [type=bool]
+ │         │    │    │    └── true [type=bool]
+ │         │    │    └── projections [outer=(1,6,8)]
+ │         │    │         └── true [type=bool]
+ │         │    └── aggregations [outer=(13)]
+ │         │         └── const-not-null-agg [type=bool, outer=(13)]
+ │         │              └── variable: true [type=bool, outer=(13)]
+ │         └── filters [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ │              └── true_agg IS NOT NULL [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ └── projections
+      └── const: 1 [type=int]
 
 # --------------------------------------------------
 # PushFilterIntoJoinLeft + PushFilterIntoJoinRight
