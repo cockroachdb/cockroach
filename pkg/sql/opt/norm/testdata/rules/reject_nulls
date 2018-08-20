@@ -462,3 +462,50 @@ project
       │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── column7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+# ConstNotNullAgg rejects nulls (regression test for #28810).
+norm
+SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
+----
+project
+ ├── columns: "?column?":17(int!null)
+ ├── fd: ()-->(17)
+ ├── left-join-apply
+ │    ├── columns: a.s:4(string) a.k:5(int) true_agg:15(bool)
+ │    ├── scan a
+ │    │    └── columns: a.s:4(string)
+ │    ├── select
+ │    │    ├── columns: a.k:5(int!null) true_agg:15(bool!null)
+ │    │    ├── outer: (4)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(15)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.k:5(int!null) true_agg:15(bool)
+ │    │    │    ├── grouping columns: a.k:5(int!null)
+ │    │    │    ├── outer: (4)
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: (5)-->(15)
+ │    │    │    ├── inner-join
+ │    │    │    │    ├── columns: a.k:5(int!null) a.s:12(string!null) true:14(bool!null)
+ │    │    │    │    ├── outer: (4)
+ │    │    │    │    ├── fd: ()-->(12,14)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: a.k:5(int!null)
+ │    │    │    │    │    └── key: (5)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:14(bool!null) a.s:12(string)
+ │    │    │    │    │    ├── fd: ()-->(14)
+ │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    └── columns: a.s:12(string)
+ │    │    │    │    │    └── projections [outer=(12)]
+ │    │    │    │    │         └── true [type=bool]
+ │    │    │    │    └── filters [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    │    │         └── a.s = a.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ])]
+ │    │    │    └── aggregations [outer=(14)]
+ │    │    │         └── const-not-null-agg [type=bool, outer=(14)]
+ │    │    │              └── variable: true [type=bool, outer=(14)]
+ │    │    └── filters [type=bool, outer=(15), constraints=(/15: (/NULL - ]; tight)]
+ │    │         └── true_agg IS NOT NULL [type=bool, outer=(15), constraints=(/15: (/NULL - ]; tight)]
+ │    └── true [type=bool]
+ └── projections
+      └── const: 1 [type=int]
