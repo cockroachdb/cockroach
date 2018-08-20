@@ -1173,63 +1173,53 @@ func TestTxnRestartCount(t *testing.T) {
 	value := []byte("value")
 	ctx := context.Background()
 
-	for _, expRestart := range []bool{true, false} {
-		t.Run(fmt.Sprintf("expected restart:%t", expRestart), func(t *testing.T) {
-			s, metrics, cleanupFn := setupMetricsTest(t)
-			defer cleanupFn()
+	s, metrics, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
 
-			// Start a transaction and do a GET. This forces a timestamp to be
-			// chosen for the transaction.
-			txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-			if _, err := txn.Get(ctx, readKey); err != nil {
-				t.Fatal(err)
-			}
-
-			// If expRestart is true, write the read key outside of the
-			// transaction, at a higher timestamp, which will necessitate a
-			// txn restart when the original read key span is updated.
-			if expRestart {
-				if err := s.DB.Put(ctx, readKey, value); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			// Outside of the transaction, read the same key as will be
-			// written within the transaction. This means that future
-			// attempts to write will forward the txn timestamp.
-			if _, err := s.DB.Get(ctx, writeKey); err != nil {
-				t.Fatal(err)
-			}
-
-			// This put will lay down an intent, txn timestamp will increase
-			// beyond OrigTimestamp.
-			if err := txn.Put(ctx, writeKey, value); err != nil {
-				t.Fatal(err)
-			}
-			proto := txn.Serialize()
-			if !proto.OrigTimestamp.Less(proto.Timestamp) {
-				t.Errorf("expected timestamp to increase: %s", proto)
-			}
-
-			// Wait for heartbeat to start.
-			tc := txn.Sender().(*TxnCoordSender)
-			testutils.SucceedsSoon(t, func() error {
-				if !tc.isTracking() {
-					return errors.New("expected heartbeat to start")
-				}
-				return nil
-			})
-
-			// Commit (should cause restart metric to increase).
-			err := txn.CommitOrCleanup(ctx)
-			if expRestart {
-				assertTransactionRetryError(t, err)
-				checkTxnMetrics(t, metrics, "restart txn", 0, 0, 0, 1, 1)
-			} else if err != nil {
-				t.Fatalf("expected no restart; got %s", err)
-			}
-		})
+	// Start a transaction and read a key that we're going to modify outside the
+	// txn. This ensures that refreshing the txn will not succeed, so a restart
+	// will be necessary.
+	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if _, err := txn.Get(ctx, readKey); err != nil {
+		t.Fatal(err)
 	}
+
+	// Write the read key outside of the transaction, at a higher timestamp, which
+	// will necessitate a txn restart when the original read key span is updated.
+	if err := s.DB.Put(ctx, readKey, value); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outside of the transaction, read the same key as will be
+	// written within the transaction. This means that future
+	// attempts to write will forward the txn timestamp.
+	if _, err := s.DB.Get(ctx, writeKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// This put will lay down an intent, txn timestamp will increase
+	// beyond OrigTimestamp.
+	if err := txn.Put(ctx, writeKey, value); err != nil {
+		t.Fatal(err)
+	}
+	proto := txn.Serialize()
+	if !proto.OrigTimestamp.Less(proto.Timestamp) {
+		t.Errorf("expected timestamp to increase: %s", proto)
+	}
+
+	// Wait for heartbeat to start.
+	tc := txn.Sender().(*TxnCoordSender)
+	testutils.SucceedsSoon(t, func() error {
+		if !tc.isTracking() {
+			return errors.New("expected heartbeat to start")
+		}
+		return nil
+	})
+
+	// Commit (should cause restart metric to increase).
+	err := txn.CommitOrCleanup(ctx)
+	assertTransactionRetryError(t, err)
+	checkTxnMetrics(t, metrics, "restart txn", 0, 0, 0, 1 /* aborts */, 1 /* restarts */)
 }
 
 func TestTxnDurations(t *testing.T) {
