@@ -1035,8 +1035,23 @@ var builtins = map[string]builtinDefinition{
 	"replace": makeBuiltin(defProps(),
 		stringOverload3("input", "find", "replace",
 			func(evalCtx *tree.EvalContext, input, from, to string) (tree.Datum, error) {
+				// Reserve memory for the largest possible result.
+				var maxResultLen int64
+				if len(from) == 0 {
+					// Replacing the empty string causes len(input)+1 insertions.
+					maxResultLen = int64(len(input) + (len(input)+1)*len(to))
+				} else if len(from) < len(to) {
+					// Largest result is if input is [from] repeated over and over.
+					maxResultLen = int64(len(input) / len(from) * len(to))
+				} else {
+					// Largest result is if there are no replacements.
+					maxResultLen = int64(len(input))
+				}
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), maxResultLen); err != nil {
+					return nil, err
+				}
 				result := strings.Replace(input, from, to, -1)
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(result))); err != nil {
+				if err := evalCtx.ActiveMemAcc.Resize(evalCtx.Ctx(), maxResultLen, int64(len(result))); err != nil {
 					return nil, err
 				}
 				return tree.NewDString(result), nil
