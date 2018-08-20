@@ -19,13 +19,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 )
 
 var testEvalCtx = &tree.EvalContext{
@@ -39,17 +42,33 @@ func descForTable(
 	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
 ) *sqlbase.TableDescriptor {
 	t.Helper()
-	parsed, err := parser.ParseOne(create)
+	parsed, err := parser.Parse(create)
 	if err != nil {
 		t.Fatalf("could not parse %q: %v", create, err)
 	}
-	stmt := parsed.(*tree.CreateTable)
-	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, testEvalCtx.StmtTimestamp.UnixNano())
-	if err != nil {
-		t.Fatalf("could interpret %q: %v", create, err)
+	nanos := testEvalCtx.StmtTimestamp.UnixNano()
+
+	var stmt *tree.CreateTable
+
+	if len(parsed) == 2 {
+		stmt = parsed[1].(*tree.CreateTable)
+		name := parsed[0].(*tree.CreateSequence).Name.String()
+
+		ts := hlc.Timestamp{WallTime: nanos}
+		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		desc, err := sql.MakeSequenceTableDesc(
+			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil, /* settings */
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fks.resolver[name] = &desc
+	} else {
+		stmt = parsed[0].(*tree.CreateTable)
 	}
-	if table.PrimaryIndex.Name == "primary" {
-		table.PrimaryIndex.Name = "PRIMARY"
+	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, fks, nanos)
+	if err != nil {
+		t.Fatalf("could not interpret %q: %v", create, err)
 	}
 	if err := fixDescriptorFKState(table); err != nil {
 		t.Fatal(err)
@@ -133,11 +152,12 @@ func readMysqlCreateFrom(
 		t.Fatal(err)
 	}
 	defer f.Close()
-	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks)
+
+	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tbl[0]
+	return tbl[len(tbl)-1]
 }
 
 func TestMysqldumpSchemaReader(t *testing.T) {
@@ -145,8 +165,8 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 
 	files := getMysqldumpTestdata(t)
 
-	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 51, NoFKs)
-	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 51, NoFKs)
+	simpleTable := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
+	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed:  true,
 		resolver: fkResolver(map[string]*sqlbase.TableDescriptor{referencedSimple.Name: referencedSimple}),
@@ -178,7 +198,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	})
 
 	t.Run("third-in-multi", func(t *testing.T) {
-		skip := fkHandler{allowed: true, skip: true}
+		skip := fkHandler{allowed: true, skip: true, resolver: make(fkResolver)}
 		expected := descForTable(t, readFile(t, `third.cockroach-schema.sql`), expectedParent, 51, skip)
 		got := readMysqlCreateFrom(t, files.wholeDB, "third", 51, skip)
 		compareTables(t, expected, got)
@@ -243,6 +263,6 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(expectedBytes, gotBytes) {
-		t.Fatalf("expected\n%+v\n, got\n%+v\n", expected, got)
+		t.Fatalf("expected\n%+v\n, got\n%+v\ndiff: %v", expected, got, pretty.Diff(expected, got))
 	}
 }

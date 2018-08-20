@@ -133,7 +133,7 @@ type fkHandler struct {
 }
 
 // NoFKs is used by formats that do not support FKs.
-var NoFKs = fkHandler{}
+var NoFKs = fkHandler{resolver: make(fkResolver)}
 
 // MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
@@ -707,6 +707,7 @@ func importPlanHook(
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
 		var names []string
+		seqVals := make(map[sqlbase.ID]int64)
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
 			if err != nil {
@@ -727,7 +728,7 @@ func importPlanHook(
 			switch format.Format {
 			case roachpb.IOFileFormat_Mysqldump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks)
+				tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks, seqVals)
 			case roachpb.IOFileFormat_PgDump:
 				evalCtx := &p.ExtendedEvalContext().EvalContext
 				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
@@ -806,6 +807,7 @@ func importPlanHook(
 			// GenerateUniqueDescID if there's any kind of error above.
 			// Reserving a table ID now means we can avoid the rekey work during restore.
 			tableRewrites := make(backupccl.TableRewriteMap)
+			newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
 			for _, tableDesc := range tableDescs {
 				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 				if err != nil {
@@ -815,7 +817,9 @@ func importPlanHook(
 					TableID:  id,
 					ParentID: parentID,
 				}
+				newSeqVals[id] = seqVals[tableDesc.ID]
 			}
+			seqVals = newSeqVals
 			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
 				return err
 			}
@@ -823,7 +827,7 @@ func importPlanHook(
 
 		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
 		for _, tbl := range tableDescs {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl})
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID]})
 		}
 		for _, name := range names {
 			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
@@ -1088,17 +1092,28 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	}
 
 	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
+	var seqs []roachpb.KeyValue
 	for i := range details.Tables {
 		toWrite[i] = details.Tables[i].Desc
 		toWrite[i].ParentID = details.ParentID
+		if d := details.Tables[i]; d.SeqVal != 0 {
+			key, val, err := sql.MakeSequenceKeyVal(d.Desc, d.SeqVal, false)
+			if err != nil {
+				return err
+			}
+			kv := roachpb.KeyValue{Key: key}
+			kv.Value.SetInt(val)
+			seqs = append(seqs, kv)
+		}
 	}
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings); err != nil {
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings, seqs); err != nil {
 		return errors.Wrapf(err, "creating tables")
 	}
+
 	return nil
 }
 
