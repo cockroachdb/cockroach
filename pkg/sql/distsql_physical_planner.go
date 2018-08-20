@@ -480,9 +480,14 @@ type PlanningCtx struct {
 	NodeAddresses map[roachpb.NodeID]string
 
 	// isLocal is set to true if we're planning this query on a single node.
-	isLocal  bool
-	planner  *planner
-	stmtType tree.StatementType
+	isLocal bool
+	planner *planner
+	// ignoreClose, when set to true, will prevent the closing of the planner's
+	// current plan. The top-level query needs to close it, but everything else
+	// (like subqueries or EXPLAIN ANALYZE) should set this to true to avoid
+	// double closes of the planNode tree.
+	ignoreClose bool
+	stmtType    tree.StatementType
 	// planDepth is set to the current depth of the planNode tree. It's used to
 	// keep track of whether it's valid to run a root node in a special fast path
 	// mode.

@@ -756,6 +756,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		err = planner.makePlan(ctx, stmt)
 		enhanceErrWithCorrelation(err, isCorrelated)
 	}
+	defer planner.curPlan.close(ctx)
 
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
 
@@ -806,7 +807,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
-		defer planner.curPlan.close(ctx)
 		ex.sessionTracing.TraceExecStart(ctx, "local")
 		err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 	}

@@ -63,6 +63,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
+	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
 	planCtx.validExtendedEvalCtx = true
@@ -154,10 +155,5 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
-	// If we managed to execute and we were in ANALYZE mode, our child planNode
-	// tree will already have been closed - so don't do anything to avoid a double
-	// close of that tree.
-	if !n.run.executedStatement {
-		n.plan.Close(ctx)
-	}
+	n.plan.Close(ctx)
 }

@@ -107,7 +107,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsqlrun.Row
 	return walkPlan(ctx, p.node, planObserver{
 		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
 			if plan == p.firstNotWrapped {
-				return makeRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped)), nil
+				return makeRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped), nil
 			}
 			return nil, nil
 		},
@@ -120,12 +120,23 @@ func (p *planNodeToRowSource) OutputTypes() []sqlbase.ColumnType {
 
 func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
 	p.params.ctx = ctx
+	if !p.started {
+		p.started = true
+		// This starts all of the nodes below this node.
+		if err := startExec(p.params, p.node); err != nil {
+			p.internalClose()
+			p.metadataBuf = append(p.metadataBuf, &distsqlrun.ProducerMetadata{Err: err})
+			return ctx
+		}
+	}
 	return ctx
 }
 
 func (p *planNodeToRowSource) internalClose() {
 	if p.running {
-		p.node.Close(p.params.ctx)
+		if p.toDrain != nil {
+			p.toDrain.ConsumerClosed()
+		}
 		p.running = false
 		p.started = true
 	}
@@ -140,48 +151,39 @@ func (p *planNodeToRowSource) startExec(_ runParams) error {
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
-	if !p.started {
-		p.started = true
-		// This starts all of the nodes below this node.
-		if err := startExec(p.params, p.node); err != nil {
-			p.internalClose()
-			return nil, &distsqlrun.ProducerMetadata{Err: err}
-		}
-
-		if p.fastPath {
-			var count int
-			// If our node is a "fast path node", it means that we're set up to just
-			// return a row count. So trigger the fast path and return the row count as
-			// a row with a single column.
-			if fastPath, ok := p.node.(planNodeFastPath); ok {
-				count, ok = fastPath.FastPathResults()
-				if !ok {
-					p.internalClose()
-					return nil, nil
-				}
-				if p.params.extendedEvalCtx.Tracing.Enabled() {
-					log.VEvent(p.params.ctx, 2, "fast path completed")
-				}
-			} else {
-				// If we have no fast path to trigger, fall back to counting the rows
-				// by Nexting our source until exhaustion.
-				next, err := p.node.Next(p.params)
-				for ; next; next, err = p.node.Next(p.params) {
-					// If we're tracking memory, clear the previous row's memory account.
-					if p.params.extendedEvalCtx.ActiveMemAcc != nil {
-						p.params.extendedEvalCtx.ActiveMemAcc.Clear(p.params.ctx)
-					}
-					count++
-				}
-				if err != nil {
-					return nil, &distsqlrun.ProducerMetadata{Err: err}
-				}
+	if p.running && p.fastPath {
+		var count int
+		// If our node is a "fast path node", it means that we're set up to just
+		// return a row count. So trigger the fast path and return the row count as
+		// a row with a single column.
+		if fastPath, ok := p.node.(planNodeFastPath); ok {
+			count, ok = fastPath.FastPathResults()
+			if !ok {
+				p.internalClose()
+				return nil, nil
 			}
-			p.internalClose()
-			// Return the row count the only way we can: as a single-column row with
-			// the count inside.
-			return sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
+			if p.params.extendedEvalCtx.Tracing.Enabled() {
+				log.VEvent(p.params.ctx, 2, "fast path completed")
+			}
+		} else {
+			// If we have no fast path to trigger, fall back to counting the rows
+			// by Nexting our source until exhaustion.
+			next, err := p.node.Next(p.params)
+			for ; next; next, err = p.node.Next(p.params) {
+				// If we're tracking memory, clear the previous row's memory account.
+				if p.params.extendedEvalCtx.ActiveMemAcc != nil {
+					p.params.extendedEvalCtx.ActiveMemAcc.Clear(p.params.ctx)
+				}
+				count++
+			}
+			if err != nil {
+				return nil, &distsqlrun.ProducerMetadata{Err: err}
+			}
 		}
+		p.internalClose()
+		// Return the row count the only way we can: as a single-column row with
+		// the count inside.
+		return sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
 	}
 
 	if len(p.metadataBuf) > 0 {
@@ -197,7 +199,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 		}
 		if !valid {
 			p.internalClose()
-			return nil, nil
+			return nil, p.drainHelper()
 		}
 
 		for i, datum := range p.node.Values() {
@@ -231,14 +233,26 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 			}
 		}
 	}
-	return nil, nil
+	return nil, p.drainHelper()
+}
+
+func (p *planNodeToRowSource) drainHelper() *distsqlrun.ProducerMetadata {
+	if len(p.metadataBuf) > 0 {
+		var m *distsqlrun.ProducerMetadata
+		m, p.metadataBuf = p.metadataBuf[0], p.metadataBuf[1:]
+		return m
+	}
+	return nil
 }
 
 func (p *planNodeToRowSource) ConsumerDone() {
-	p.internalClose()
+	if p.toDrain != nil {
+		p.toDrain.ConsumerDone()
+	}
 }
 
 func (p *planNodeToRowSource) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
 	p.internalClose()
 }
 

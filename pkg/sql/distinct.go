@@ -229,7 +229,7 @@ func (n *distinctNode) startExec(params runParams) error {
 		return err
 	}
 
-	n.run = makeRowSourceToPlanNode(proc, nil /* forwarder */, planColumns(n))
+	n.run = makeRowSourceToPlanNode(proc, nil /* forwarder */, planColumns(n), nil /* originalPlanNode */)
 
 	n.run.source.Start(params.ctx)
 
@@ -247,11 +247,8 @@ func (n *distinctNode) Values() tree.Datums {
 func (n *distinctNode) Close(ctx context.Context) {
 	if n.run != nil {
 		n.run.Close(ctx)
-	} else {
-		// If we haven't gotten around to initializing n.run yet, then we still
-		// need to propagate the close message to our inputs - do so directly.
-		n.plan.Close(ctx)
 	}
+	n.plan.Close(ctx)
 }
 
 // projectChildPropsToOnExprs takes the physical props (e.g. ordering info,
