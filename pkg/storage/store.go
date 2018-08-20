@@ -374,10 +374,12 @@ type Store struct {
 	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                StoreConfig
 	db                 *client.DB
-	engine             engine.Engine               // The underlying key-value store
-	compactor          *compactor.Compactor        // Schedules compaction of the engine
-	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
-	allocator          Allocator                   // Makes allocation decisions
+	engine             engine.Engine        // The underlying key-value store
+	compactor          *compactor.Compactor // Schedules compaction of the engine
+	tsCache            tscache.Cache        // Most recent timestamps for keys / key ranges
+	allocator          Allocator            // Makes allocation decisions
+	replRankings       *replicaRankings
+	storeRebalancer    *StoreRebalancer
 	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
 	mergeQueue         *mergeQueue                 // Range merging queue
@@ -924,6 +926,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			return 0, false
 		})
 	}
+	s.replRankings = newReplicaRankings()
 	s.intentResolver = newIntentResolver(s, cfg.IntentResolverTaskLimit)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
@@ -1009,6 +1012,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
 	}
+
+	s.storeRebalancer = NewStoreRebalancer(
+		s.cfg.AmbientCtx, cfg.Settings, s.replicateQueue, s.replRankings)
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
@@ -1142,7 +1148,7 @@ func (s *Store) SetDraining(drain bool) {
 								log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
 							}
 						}
-						leaseTransferred, err := s.replicateQueue.transferLease(
+						leaseTransferred, err := s.replicateQueue.findTargetAndTransferLease(
 							ctx,
 							r,
 							desc,
@@ -1540,6 +1546,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
 	}
+
+	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
@@ -2776,6 +2784,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
+	rankingsAccumulator := s.replRankings.newAccumulator()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		rangeCount++
 		if r.OwnsValidLease(now) {
@@ -2788,14 +2797,20 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 		// incorrectly low the first time or two it gets gossiped when a store
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
-		if qps, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
-			totalQueriesPerSecond += qps
+		var qps float64
+		if avgQPS, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+			qps = avgQPS
+			totalQueriesPerSecond += avgQPS
 			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
 		}
 		if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
+		rankingsAccumulator.addReplica(replicaWithStats{
+			repl: r,
+			qps:  qps,
+		})
 		return true
 	})
 	capacity.RangeCount = rangeCount
@@ -2806,6 +2821,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
+	s.replRankings.update(rankingsAccumulator)
 
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.StoreCapacity = capacity

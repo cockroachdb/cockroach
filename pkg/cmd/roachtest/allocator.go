@@ -33,7 +33,7 @@ func registerAllocator(r *registry) {
 		c.Put(ctx, workload, "./workload")
 
 		// Start the first `start` nodes and restore the fixture
-		args := startArgs("--args=--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5")
+		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
 		defer db.Close()

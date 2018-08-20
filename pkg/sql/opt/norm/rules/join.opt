@@ -49,17 +49,18 @@
 # Given this mapping, we can safely push the filter down to both sides and
 # remove it from the ON filters list.
 #
-# Note that this rule is only applied to InnerJoin and SemiJoin, not
-# InnerJoinApply or SemiJoinApply. The apply variants would cause a
-# non-detectable cycle with TryDecorrelateSelect, causing the filters to get
-# remapped to both sides and pushed down over and over again.
+# Note that this rule is only applied when the left and right inputs do not have
+# outer columns. If they do, then this rule can cause undetectable cycles with
+# TryDecorrelateSelect, since the filter is pushed down to both sides, but then
+# only pulled up from the right side by TryDecorrelateSelect. For this reason,
+# the rule also does not apply to InnerJoinApply or SemiJoinApply.
 #
 # NOTE: It is important that this rule is first among the join filter push-down
 #       rules.
 [PushFilterIntoJoinLeftAndRight, Normalize]
 (InnerJoin | SemiJoin
-    $left:*
-    $right:*
+    $left:* & ^(HasOuterCols $left)
+    $right:* & ^(HasOuterCols $right)
     $filters:(Filters
         $list:[
             ...

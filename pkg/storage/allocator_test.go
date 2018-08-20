@@ -1248,6 +1248,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	EnableStatsBasedRebalancing.Override(&a.storePool.st.SV, false)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
@@ -2040,6 +2041,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	EnableStatsBasedRebalancing.Override(&a.storePool.st.SV, false)
 	defer stopper.Stop(context.Background())
 
 	stores := []*roachpb.StoreDescriptor{
@@ -3817,7 +3819,7 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	for _, c := range testCases {
 		remoteStore.Capacity.LeaseCount = c.remoteLeases
 		sourceStore.Capacity.LeaseCount = c.sourceLeases
-		score := loadBasedLeaseRebalanceScore(
+		score, _ := loadBasedLeaseRebalanceScore(
 			context.Background(),
 			st,
 			c.remoteWeight,
