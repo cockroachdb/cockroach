@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -1979,20 +1980,28 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	// Install a filter that triggers a shutdown when stop is non-zero and the
 	// rhsDesc requests a new lease.
 	var mtc *multiTestContext
-	var rhsDesc *roachpb.RangeDescriptor
-	var stop int32
+	var state struct {
+		syncutil.Mutex
+		rhsDesc        *roachpb.RangeDescriptor
+		stop, stopping bool
+	}
 	storeCfg.TestingKnobs.TestingPostApplyFilter = func(args storagebase.ApplyFilterArgs) *roachpb.Error {
-		if atomic.LoadInt32(&stop) != 0 && args.RangeID == rhsDesc.RangeID && args.IsLeaseRequest {
+		state.Lock()
+		if state.stop && !state.stopping && args.RangeID == state.rhsDesc.RangeID && args.IsLeaseRequest {
 			// Shut down the store. The lease acquisition will notice that a merge is
 			// in progress and attempt to run a task to watch for its completion.
 			// Shutting down the store before running leasePostApply will prevent that
 			// task from launching. This error path would previously fatal a node
 			// incorrectly (#27552).
+			state.stopping = true
+			state.Unlock()
 			go mtc.Stop()
 			// Sleep to give the shutdown time to propagate. The test appeared to work
 			// without this sleep, but best to be somewhat robust to different
 			// goroutine schedules.
 			time.Sleep(10 * time.Millisecond)
+		} else {
+			state.Unlock()
 		}
 		return nil
 	}
@@ -2002,11 +2011,13 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	store := mtc.Store(0)
 	stopper := mtc.engineStoppers[0]
 
-	var err error
-	_, rhsDesc, err = createSplitRanges(ctx, store)
+	_, rhsDesc, err := createSplitRanges(ctx, store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	state.Lock()
+	state.rhsDesc = rhsDesc
+	state.Unlock()
 
 	// Simulate a merge transaction by launching a transaction that lays down
 	// intents on the two copies of the RHS range descriptor.
@@ -2020,7 +2031,9 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 
 	// Indicate to the store filter installed above that the next lease
 	// acquisition for the RHS should trigger a shutdown.
-	atomic.StoreInt32(&stop, 1)
+	state.Lock()
+	state.stop = true
+	state.Unlock()
 
 	// Expire all leases.
 	mtc.advanceClock(ctx)
