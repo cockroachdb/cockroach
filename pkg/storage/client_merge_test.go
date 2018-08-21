@@ -1010,8 +1010,9 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 
 	// Install a hook to observe when a get request for a special key,
 	// rhsSentinel, exits the command queue.
+	const getConcurrency = 10
 	rhsSentinel := roachpb.Key("rhs-sentinel")
-	getExitedCommandQueue := make(chan struct{})
+	getExitedCommandQueue := make(chan struct{}, getConcurrency)
 	storeCfg.TestingKnobs.OnCommandQueueAction = func(ba *roachpb.BatchRequest, action storagebase.CommandQueueAction) {
 		if action == storagebase.CommandQueueBeginExecuting {
 			for _, r := range ba.Requests {
@@ -1067,22 +1068,53 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Send a get request directly to the first store's replica of the RHS. It
-	// should notice the second store's lease is expired and try to acquire it.
-	getErr := make(chan error)
-	go func() {
-		_, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
-			RangeID: rhsDesc.RangeID,
-		}, getArgs(rhsSentinel))
-		getErr <- pErr.GoError()
-	}()
+	// Send several get requests to the the RHS. The first of these to arrive will
+	// acquire the lease; the remaining requests will wait for that lease
+	// acquisition to complete. Then all requests should block waiting for the
+	// Subsume request to complete. By sending several of these requests in
+	// parallel, we attempt to trigger a race where a request could slip through
+	// on the replica between when the new lease is installed and when the
+	// mergeComplete channel is installed.
+	//
+	// Note that the first request would never hit this race on its own. Nor would
+	// any request that arrived early enough to see an outdated lease in
+	// Replica.mu.state.Lease. All of these requests joined the in-progress lease
+	// acquisition and blocked until the lease command exited the command queue,
+	// at which point the mergeComplete channel was updated. To hit the race, the
+	// request needed to arrive exactly between the update to
+	// Replica.mu.state.Lease and the update to Replica.mu.mergeComplete.
+	//
+	// This race has since been fixed by installing the mergeComplete channel
+	// before the new lease.
+	getErrs := make(chan error)
+	for i := 0; i < getConcurrency; i++ {
+		go func(i int) {
+			// For this test to have a shot at triggering a race, this log message
+			// must be interleaved with the "new range lease" message, like so:
+			//
+			//     I180821 21:57:53.799207 388 storage/client_merge_test.go:1079  starting get 5
+			//     I180821 21:57:53.800122 72 storage/replica_proposal.go:214  [s1,r2/1:{b-/Max}] new range lease ...
+			//     I180821 21:57:53.800447 318 storage/client_merge_test.go:1079  starting get 6
+			//
+			// When this test was written, it would always produce the above
+			// interleaving, and successfully trigger the race when run with the race
+			// detector enabled about 50% of the time.
+			log.Infof(ctx, "starting get %d", i)
+			_, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
+				RangeID: rhsDesc.RangeID,
+			}, getArgs(rhsSentinel))
+			getErrs <- pErr.GoError()
+		}(i)
+		time.Sleep(time.Millisecond)
+	}
 
-	// Wait for the get request to fall out of the command queue, which is as far
-	// as it the request can get while the merge is in progress. Then wait a
-	// little bit longer. This tests that the request really does get stuck
-	// waiting for the merge to complete without depending too heavily on
-	// implementation details.
-	<-getExitedCommandQueue
+	// Wait for the get requests to fall out of the command queue, which is as far
+	// as they can get while the merge is in progress. Then wait a little bit
+	// longer. This tests that the requests really do get stuck waiting for the
+	// merge to complete without depending too heavily on implementation details.
+	for i := 0; i < getConcurrency; i++ {
+		<-getExitedCommandQueue
+	}
 	time.Sleep(50 * time.Millisecond)
 
 	// Finally, allow the merge to complete. It should complete successfully.
@@ -1092,10 +1124,12 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Because the merge completed successfully, r2 has ceased to exist. We
-	// therefore *must* see a RangeNotFound error. Anything else is a consistency
-	// error (or a bug in the test).
-	if err := <-getErr; !testutils.IsError(err, "r2 was not found") {
-		t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
+	// therefore *must* see a RangeNotFound error from every pending get request.
+	// Anything else is a consistency error (or a bug in the test).
+	for i := 0; i < getConcurrency; i++ {
+		if err := <-getErrs; !testutils.IsError(err, "r2 was not found") {
+			t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
+		}
 	}
 }
 
