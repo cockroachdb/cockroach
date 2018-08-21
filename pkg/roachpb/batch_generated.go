@@ -156,8 +156,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.Refresh
 	case *RequestUnion_RefreshRange:
 		return t.RefreshRange
-	case *RequestUnion_GetSnapshotForMerge:
-		return t.GetSnapshotForMerge
+	case *RequestUnion_Subsume:
+		return t.Subsume
 	case *RequestUnion_RangeStats:
 		return t.RangeStats
 	default:
@@ -242,8 +242,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.Refresh
 	case *ResponseUnion_RefreshRange:
 		return t.RefreshRange
-	case *ResponseUnion_GetSnapshotForMerge:
-		return t.GetSnapshotForMerge
+	case *ResponseUnion_Subsume:
+		return t.Subsume
 	case *ResponseUnion_RangeStats:
 		return t.RangeStats
 	default:
@@ -402,8 +402,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_Refresh{t}
 	case *RefreshRangeRequest:
 		union = &RequestUnion_RefreshRange{t}
-	case *GetSnapshotForMergeRequest:
-		union = &RequestUnion_GetSnapshotForMerge{t}
+	case *SubsumeRequest:
+		union = &RequestUnion_Subsume{t}
 	case *RangeStatsRequest:
 		union = &RequestUnion_RangeStats{t}
 	default:
@@ -491,8 +491,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_Refresh{t}
 	case *RefreshRangeResponse:
 		union = &ResponseUnion_RefreshRange{t}
-	case *GetSnapshotForMergeResponse:
-		union = &ResponseUnion_GetSnapshotForMerge{t}
+	case *SubsumeResponse:
+		union = &ResponseUnion_Subsume{t}
 	case *RangeStatsResponse:
 		union = &ResponseUnion_RangeStats{t}
 	default:
@@ -586,7 +586,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[36]++
 		case *RequestUnion_RefreshRange:
 			counts[37]++
-		case *RequestUnion_GetSnapshotForMerge:
+		case *RequestUnion_Subsume:
 			counts[38]++
 		case *RequestUnion_RangeStats:
 			counts[39]++
@@ -636,7 +636,7 @@ var requestNames = []string{
 	"RecomputeStats",
 	"Refresh",
 	"RefreshRng",
-	"GetSnapshotForMerge",
+	"Subsume",
 	"RngStats",
 }
 
@@ -813,9 +813,9 @@ type refreshRangeResponseAlloc struct {
 	union ResponseUnion_RefreshRange
 	resp  RefreshRangeResponse
 }
-type getSnapshotForMergeResponseAlloc struct {
-	union ResponseUnion_GetSnapshotForMerge
-	resp  GetSnapshotForMergeResponse
+type subsumeResponseAlloc struct {
+	union ResponseUnion_Subsume
+	resp  SubsumeResponse
 }
 type rangeStatsResponseAlloc struct {
 	union ResponseUnion_RangeStats
@@ -869,7 +869,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf35 []recomputeStatsResponseAlloc
 	var buf36 []refreshResponseAlloc
 	var buf37 []refreshRangeResponseAlloc
-	var buf38 []getSnapshotForMergeResponseAlloc
+	var buf38 []subsumeResponseAlloc
 	var buf39 []rangeStatsResponseAlloc
 
 	for i, r := range ba.Requests {
@@ -1140,11 +1140,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf37[0].union.RefreshRange = &buf37[0].resp
 			br.Responses[i].Value = &buf37[0].union
 			buf37 = buf37[1:]
-		case *RequestUnion_GetSnapshotForMerge:
+		case *RequestUnion_Subsume:
 			if buf38 == nil {
-				buf38 = make([]getSnapshotForMergeResponseAlloc, counts[38])
+				buf38 = make([]subsumeResponseAlloc, counts[38])
 			}
-			buf38[0].union.GetSnapshotForMerge = &buf38[0].resp
+			buf38[0].union.Subsume = &buf38[0].resp
 			br.Responses[i].Value = &buf38[0].union
 			buf38 = buf38[1:]
 		case *RequestUnion_RangeStats:

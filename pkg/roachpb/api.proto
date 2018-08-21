@@ -1253,19 +1253,17 @@ message RefreshRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// GetSnapshotForMerge is the argument to the GetSnapshotForMerge() method,
-// which notifies a range that its left-hand neighbor has initiated a merge and
-// needs a snapshot of its data.
+// SubsumeRequest is the argument to the Subsume() method, which freezes a range
+// for merging with its left-hand neighbor.
 //
-// GetSnapshotForMerge, when called correctly, provides important guarantees
-// that ensure there is no moment in time where the ranges involved in the merge
-// could both process commands for the same keys. See the comment on
-// GetSnapshotForMerge for details.
+// Subsume, when called correctly, provides important guarantees that ensure
+// there is no moment in time where the ranges involved in the merge could both
+// process commands for the same keys. See the comment on Subsume for details.
 //
-// GetSnapshotForMerge may return stale data when used outside of a merge
-// transaction. As a rule of thumb, it is incorrect to call GetSnapshotForMerge,
-// except from its carefully-chosen location within a merge transaction.
-message GetSnapshotForMergeRequest {
+// Subsume may return stale MVCC statistics when used outside of a merge
+// transaction. As a rule of thumb, it is incorrect to call Subsume, except from
+// its carefully-chosen location within a merge transaction.
+message SubsumeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -1275,8 +1273,8 @@ message GetSnapshotForMergeRequest {
   RangeDescriptor left_range = 2 [(gogoproto.nullable) = false];
 }
 
-// GetSnapshotForMergeResponse is the response to a GetSnapshotForMergeRequest.
-message GetSnapshotForMergeResponse {
+// SubsumeResponse is the response to a SubsumeRequest.
+message SubsumeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   reserved 2;
@@ -1288,7 +1286,7 @@ message GetSnapshotForMergeResponse {
   ];
 
   // LeaseAppliedIndex is the lease index of the last applied command at the
-  // time that the GetSnapshotForMerge request executed.
+  // time that the Subsume request executed.
   uint64 lease_applied_index = 4;
 
   // FreezeStart is a timestamp that is guaranteed to be greater than the
@@ -1364,7 +1362,7 @@ message RequestUnion {
     RecomputeStatsRequest recompute_stats = 39;
     RefreshRequest refresh = 40;
     RefreshRangeRequest refresh_range = 41;
-    GetSnapshotForMergeRequest get_snapshot_for_merge = 43;
+    SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
   }
   reserved 15, 23, 25, 27;
@@ -1411,7 +1409,7 @@ message ResponseUnion {
     RecomputeStatsResponse recompute_stats = 39;
     RefreshResponse refresh = 40;
     RefreshRangeResponse refresh_range = 41;
-    GetSnapshotForMergeResponse get_snapshot_for_merge = 43;
+    SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
   }
   reserved 15, 23, 25, 27, 28;

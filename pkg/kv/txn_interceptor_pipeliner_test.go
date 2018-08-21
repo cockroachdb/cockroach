@@ -459,7 +459,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	// all outstanding writes, even if its header doesn't imply any interaction.
 	keyRangeDesc := roachpb.Key("rangeDesc")
 	ba.Requests = nil
-	ba.Add(&roachpb.GetSnapshotForMergeRequest{
+	ba.Add(&roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: keyRangeDesc},
 	})
 
@@ -468,7 +468,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &roachpb.GetSnapshotForMergeRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.SubsumeRequest{}, ba.Requests[2].GetInner())
 
 		qiReq1 := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		qiReq2 := ba.Requests[1].GetInner().(*roachpb.QueryIntentRequest)
