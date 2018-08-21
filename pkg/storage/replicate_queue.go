@@ -345,8 +345,9 @@ func (rq *replicateQueue) processOneChange(
 				disableStatsBasedRebalancing,
 			)
 			if err != nil {
-				// Does not seem possible to go to the next odd replica state. Return an
-				// error so that the operation gets queued into the purgatory.
+				// It does not seem possible to go to the next odd replica state. Note
+				// that AllocateTarget returns an allocatorError (a purgatoryError)
+				// when purgatory is requested.
 				return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 			}
 		}
