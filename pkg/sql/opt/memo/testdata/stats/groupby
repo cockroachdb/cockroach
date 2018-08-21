@@ -189,11 +189,7 @@ project
       │         └── max [type=int, outer=(1)]
       │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-           └── in [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-                ├── variable: s [type=string, outer=(4)]
-                └── tuple [type=tuple{string, string}]
-                     ├── const: 'a' [type=string]
-                     └── const: 'b' [type=string]
+           └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
 # Estimate the distinct count for an aggregate column.
 build
@@ -224,9 +220,7 @@ select
  │         └── sum [type=decimal, outer=(1)]
  │              └── variable: x [type=int, outer=(1)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-      └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
-           ├── variable: column5 [type=decimal, outer=(5)]
-           └── const: 5 [type=decimal]
+      └── column5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
 
 # Scalar GroupBy.
 build
@@ -258,6 +252,4 @@ select
  │         └── max [type=int, outer=(2)]
  │              └── variable: y [type=int, outer=(2)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight), fd=()-->(5)]
-      └── eq [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight)]
-           ├── variable: column5 [type=float, outer=(5)]
-           └── const: 5.0 [type=float]
+      └── column5 = 5.0 [type=bool, outer=(5), constraints=(/5: [/5.0 - /5.0]; tight)]

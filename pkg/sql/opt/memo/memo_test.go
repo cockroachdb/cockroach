@@ -34,7 +34,8 @@ func TestLogicalProps(t *testing.T) {
 }
 
 func TestStats(t *testing.T) {
-	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
+		memo.ExprFmtHideScalars
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
