@@ -47,7 +47,7 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 	// effects. These can only be executed if the branch test evaluates to true,
 	// and so it's not possible to hoist out subqueries, since they would then be
 	// evaluated when they shouldn't be.
-	for i, end := 0, ev.ChildCount(); i < end; i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
 		if c.HasHoistableSubquery(child.Group()) {
 			scalar.Rule.HasHoistableSubquery = true
