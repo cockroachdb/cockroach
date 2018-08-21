@@ -2781,9 +2781,6 @@ func (r *Replica) limitTxnMaxTimestamp(
 // maybeWatchForMerge checks whether a merge of this replica into its left
 // neighbor is in its critical phase and, if so, arranges to block all requests
 // until the merge completes.
-//
-// TODO(benesch): now that merges require collocation, it might be cleaner to
-// fold this function into store.MergeRange.
 func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
