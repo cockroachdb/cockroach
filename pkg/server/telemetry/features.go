@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"fmt"
-	"math"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -26,14 +25,24 @@ import (
 // This can be used in telemetry to get ballpark ideas of how users use a given
 // feature, such as file sizes, qps, etc, without being as revealing as the
 // raw numbers.
-func Bucket10(num int) int {
-	return int(math.Pow(10, math.Floor(math.Log10(float64(num)))))
+// The numbers 0-10 are reported unchanged.
+func Bucket10(num int64) int64 {
+	if num <= 0 {
+		return 0
+	}
+	if num < 10 {
+		return num
+	}
+	res := int64(10)
+	for ; res < 1000000000000000000 && res*10 < num; res *= 10 {
+	}
+	return res
 }
 
 // CountBucketed counts the feature identified by prefix and the value, using
 // the bucketed value to pick a feature bucket to increment, e.g. a prefix of
 // "foo.bar" and value of 632 would be counted as "foo.bar.100".
-func CountBucketed(prefix string, value int) {
+func CountBucketed(prefix string, value int64) {
 	Count(fmt.Sprintf("%s.%d", prefix, Bucket10(value)))
 }
 
