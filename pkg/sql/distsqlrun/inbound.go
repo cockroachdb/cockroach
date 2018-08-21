@@ -18,6 +18,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -95,8 +96,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					err = errors.Wrap(
-						err, log.MakeMessage(ctx, "communication error", nil /* args */))
+					err = pgerror.NewErrorf(pgerror.CodeConnectionFailureError, "communication error: %s", err)
 					sendErrToConsumer(err)
 					errChan <- err
 					return
