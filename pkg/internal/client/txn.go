@@ -264,6 +264,12 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 // committing so this is not guaranteed to be the commit timestamp.
 // Use CommitTimestamp() when needed.
 func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.origTimestampLocked()
+}
+
+func (txn *Txn) origTimestampLocked() hlc.Timestamp {
 	return txn.mu.sender.OrigTimestamp()
 }
 
@@ -272,18 +278,24 @@ func (txn *Txn) OrigTimestamp() hlc.Timestamp {
 // method will guarantee that if a timestamp push is needed
 // the commit will fail with a retryable error.
 func (txn *Txn) CommitTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()
 }
 
 // CommitTimestampFixed returns true if the commit timestamp has
 // been fixed to the start timestamp and cannot be pushed forward.
 func (txn *Txn) CommitTimestampFixed() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestampFixed()
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTransactionRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	txn.systemConfigTrigger = true
 	return txn.mu.sender.SetSystemConfigTrigger()
 }
@@ -296,6 +308,8 @@ func (txn *Txn) SetSystemConfigTrigger() error {
 // DisablePipelining must be called before any operations are performed on the
 // transaction.
 func (txn *Txn) DisablePipelining() error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
 	return txn.mu.sender.DisablePipelining()
 }
 
@@ -559,7 +573,7 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		if deadline.Less(txn.OrigTimestamp()) {
+		if deadline.Less(txn.origTimestampLocked()) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s", deadline)
 		}
