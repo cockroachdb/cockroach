@@ -91,7 +91,7 @@ func TestPost(t *testing.T) {
 		},
 		{
 			name:        "fatal",
-			packageName: "storage",
+			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "TestGossipHandlesReplacedNode",
 			message:     "F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] on-disk and in-memory state diverged:",
 			author:      "bran",
@@ -110,9 +110,23 @@ func TestPost(t *testing.T) {
 Parameters:
 %s
 
+To repro, try:
+
+`+"```"+`
+# Don't forget to check out a clean suitable branch and experiment with the
+# stress invocation until the desired results present themselves. For example,
+# using stressrace instead of stress and passing the '-p' stressflag which
+# controls concurrency.
+`+regexp.QuoteMeta(`./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
+cd ~/go/src/github.com/cockroachdb/cockroach && \
+make stress TESTS=%s PKG=%s TESTTIMEOUT=5m STRESSFLAGS='-stderr=false -maxtime 20m -timeout 10m'`)+`
+`+"```"+`
+
 Failed test: %s`,
 					regexp.QuoteMeta(sha),
 					regexp.QuoteMeta(parameters),
+					c.testName,
+					c.packageName,
 					regexp.QuoteMeta(fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)),
 				)
 
