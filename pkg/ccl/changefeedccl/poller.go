@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -131,6 +132,10 @@ func equalSpanSets(a, b roachpb.Spans) bool {
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
 func (p *poller) Run(ctx context.Context) error {
+	if storage.RangefeedEnabled.Get(&p.settings.SV) {
+		return p.runUsingRangefeeds(ctx)
+	}
+
 	sender := p.db.NonTransactionalSender()
 	for {
 		pollDuration := changefeedPollInterval.Get(&p.settings.SV)
@@ -314,6 +319,55 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
 	}
 
 	return slurpKVs()
+}
+
+// TODO(nvanbenschoten): this should probably be a whole different type that
+// shares a common interface with poller.
+func (p *poller) runUsingRangefeeds(ctx context.Context) error {
+	startTS := p.clock.Now()
+	spans, err := fetchSpansForTargets(ctx, p.db, p.targets, startTS)
+	if err != nil {
+		return err
+	}
+
+	// TODO(nvanbenschoten): This is horrible.
+	ds := p.db.NonTransactionalSender().(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+	g := ctxgroup.WithContext(ctx)
+	for _, span := range spans {
+		req := &roachpb.RangeFeedRequest{
+			Header: roachpb.Header{
+				Timestamp: startTS,
+			},
+			Span: span,
+		}
+		g.GoCtx(func(ctx context.Context) error {
+			return ds.RangeFeed(ctx, req, eventC).GoError()
+		})
+	}
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case e := <-eventC:
+				switch t := e.GetValue().(type) {
+				case *roachpb.RangeFeedValue:
+					kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
+					if err := p.buf.AddKV(ctx, kv); err != nil {
+						return err
+					}
+				case *roachpb.RangeFeedCheckpoint:
+					if err := p.buf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
+						return err
+					}
+				default:
+					log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	return g.Wait()
 }
 
 type byValueTimestamp []roachpb.KeyValue
