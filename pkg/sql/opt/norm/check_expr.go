@@ -68,7 +68,7 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 	case opt.DistinctOnOp:
 		// Aggregates can be only FirstAgg or ConstAgg.
 		agg := ev.Child(1)
-		for i := 0; i < agg.ChildCount(); i++ {
+		for i, n := 0, agg.ChildCount(); i < n; i++ {
 			if childOp := agg.Child(i).Operator(); childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
 				panic(fmt.Sprintf("distinct-on contains %s", childOp))
 			}
@@ -77,7 +77,7 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		// Aggregates cannot be FirstAgg.
 		agg := ev.Child(1)
-		for i := 0; i < agg.ChildCount(); i++ {
+		for i, n := 0, agg.ChildCount(); i < n; i++ {
 			if childOp := agg.Child(i).Operator(); childOp == opt.FirstAggOp {
 				panic(fmt.Sprintf("group-by contains %s", childOp))
 			}

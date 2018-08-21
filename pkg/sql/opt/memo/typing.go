@@ -86,7 +86,7 @@ func FindAggregateOverload(ev ExprView) (name string, overload *tree.Overload) {
 	for o := range overloads {
 		overload = &overloads[o]
 		matches := true
-		for i := 0; i < ev.ChildCount(); i++ {
+		for i, n := 0, ev.ChildCount(); i < n; i++ {
 			typ := ev.Child(i).Logical().Scalar.Type
 			if !overload.Types.MatchAt(typ, i) {
 				matches = false
@@ -247,7 +247,7 @@ func typeAsAny(_ ExprView) types.T {
 // typeCoalesce returns the type of a coalesce expression, which is equal to
 // the type of its first non-null child.
 func typeCoalesce(ev ExprView) types.T {
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
 		if childType != types.Unknown {
 			return childType
@@ -267,7 +267,7 @@ func typeCoalesce(ev ExprView) types.T {
 // the type of the ELSE <expr> value if all the previous types are unknown.
 func typeCase(ev ExprView) types.T {
 	// Skip over the first child since that corresponds to the input <cond>.
-	for i := 1; i < ev.ChildCount(); i++ {
+	for i, n := 1, ev.ChildCount(); i < n; i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
 		if childType != types.Unknown {
 			return childType

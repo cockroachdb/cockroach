@@ -72,7 +72,7 @@ func onlyScalars(ev memo.ExprView) bool {
 	if !ev.IsScalar() {
 		return false
 	}
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		if !onlyScalars(ev.Child(i)) {
 			return false
 		}

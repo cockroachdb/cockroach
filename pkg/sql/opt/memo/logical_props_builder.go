@@ -113,7 +113,7 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	}
 
 	// If CanHaveSideEffects is true for any child, it's true for the expression.
-	for i, end := 0, ev.ChildCount(); i < end; i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		if ev.childGroup(i).logical.CanHaveSideEffects() {
 			logical.Relational.CanHaveSideEffects = true
 			break
@@ -301,7 +301,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	// Also add any column that projects a constant value, since the optimizer
 	// sometimes constructs these in order to guarantee a not-null column.
-	for i := 0; i < projections.ChildCount(); i++ {
+	for i, n := 0, projections.ChildCount(); i < n; i++ {
 		child := projections.Child(i)
 		if child.IsConstValue() {
 			if ExtractConstDatum(child) != tree.DNull {
@@ -713,7 +713,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 	// Outer Columns
 	// -------------
 	// Union outer columns from all row expressions.
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
 
@@ -1026,7 +1026,7 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 	// Outer Columns
 	// -------------
 	// Union outer columns from all input expressions.
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		relational.OuterCols.UnionWith(ev.childGroup(i).logical.OuterCols())
 	}
 
@@ -1061,7 +1061,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 
 	// By default, derive OuterCols and CanHaveSideEffects from all children, both
 	// relational and scalar.
-	for i, end := 0, ev.ChildCount(); i < end; i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childLogical := &ev.childGroup(i).logical
 
 		scalar.OuterCols.UnionWith(childLogical.OuterCols())
@@ -1097,7 +1097,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		}
 
 		// Check for filter conjuncts of the form: x = y.
-		for i := 0; i < ev.ChildCount(); i++ {
+		for i, n := 0, ev.ChildCount(); i < n; i++ {
 			child := ev.Child(i)
 			if child.Operator() == opt.EqOp {
 				left := child.Child(0)
