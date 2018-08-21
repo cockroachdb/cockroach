@@ -89,7 +89,6 @@ func TestSendToOneClient(t *testing.T) {
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
 	replicas  ReplicaSlice
-	args      roachpb.BatchRequest
 	numErrors int
 	numSent   int
 }
@@ -98,11 +97,9 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) GetPending() []roachpb.ReplicaDescriptor {
-	return nil
-}
-
-func (f *firstNErrorTransport) SendNext(_ context.Context) (*roachpb.BatchResponse, error) {
+func (f *firstNErrorTransport) SendNext(
+	_ context.Context, _ roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
 		err = roachpb.NewSendError("test")
@@ -116,9 +113,6 @@ func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
-}
-
-func (*firstNErrorTransport) Close() {
 }
 
 // TestComplexScenarios verifies various complex success/failure scenarios by
@@ -171,11 +165,9 @@ func TestComplexScenarios(t *testing.T) {
 				_ SendOptions,
 				_ *nodedialer.Dialer,
 				replicas ReplicaSlice,
-				args roachpb.BatchRequest,
 			) (Transport, error) {
 				return &firstNErrorTransport{
 					replicas:  replicas,
-					args:      args,
 					numErrors: test.numErrors,
 				}, nil
 			},
@@ -210,40 +202,40 @@ func TestSplitHealthy(t *testing.T) {
 		{nil, nil, 0},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: false},
-				{nodeID: 2, healthy: false},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 3, healthy: true},
-				{nodeID: 1, healthy: false},
-				{nodeID: 2, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 			},
 			1,
 		},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: false},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 3, healthy: true},
-				{nodeID: 2, healthy: false},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 			},
 			2,
 		},
 		{
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: true},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			[]batchClient{
-				{nodeID: 1, healthy: true},
-				{nodeID: 2, healthy: true},
-				{nodeID: 3, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
+				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
 			3,
 		},

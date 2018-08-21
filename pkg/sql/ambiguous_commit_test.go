@@ -40,14 +40,16 @@ import (
 
 type interceptingTransport struct {
 	kv.Transport
-	sendNext func(context.Context) (*roachpb.BatchResponse, error)
+	sendNext func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 }
 
-func (t *interceptingTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
+func (t *interceptingTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if fn := t.sendNext; fn != nil {
-		return fn(ctx)
+		return fn(ctx, ba)
 	} else {
-		return t.Transport.SendNext(ctx)
+		return t.Transport.SendNext(ctx, ba)
 	}
 }
 
@@ -85,13 +87,13 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		params.Knobs.KVClient = &kv.ClientTestingKnobs{
-			TransportFactory: func(opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice, args roachpb.BatchRequest) (kv.Transport, error) {
-				transport, err := kv.GRPCTransportFactory(opts, nodeDialer, replicas, args)
+			TransportFactory: func(opts kv.SendOptions, nodeDialer *nodedialer.Dialer, replicas kv.ReplicaSlice) (kv.Transport, error) {
+				transport, err := kv.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{
 					Transport: transport,
-					sendNext: func(ctx context.Context) (*roachpb.BatchResponse, error) {
+					sendNext: func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 						if ambiguousSuccess {
-							br, err := transport.SendNext(ctx)
+							br, err := transport.SendNext(ctx, ba)
 							// During shutdown, we may get responses that
 							// have call.Err set and all we have to do is
 							// not crash on those.
@@ -105,7 +107,7 @@ func TestAmbiguousCommit(t *testing.T) {
 							}
 							return br, err
 						} else {
-							if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
+							if req, ok := ba.GetArg(roachpb.ConditionalPut); ok {
 								if pErr := maybeRPCError(req.(*roachpb.ConditionalPutRequest)); pErr != nil {
 									// Blackhole the RPC and return an
 									// error to simulate an ambiguous
@@ -113,7 +115,7 @@ func TestAmbiguousCommit(t *testing.T) {
 									return nil, pErr.GoError()
 								}
 							}
-							return transport.SendNext(ctx)
+							return transport.SendNext(ctx, ba)
 						}
 					},
 				}, err

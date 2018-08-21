@@ -38,11 +38,13 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(ctx context.Context) (*roachpb.BatchResponse, error) {
+func (l *localTestClusterTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
-	return l.Transport.SendNext(ctx)
+	return l.Transport.SendNext(ctx, ba)
 }
 
 // InitFactoryForLocalTestCluster initializes a TxnCoordSenderFactory
@@ -94,9 +96,8 @@ func NewDistSenderForLocalTestCluster(
 				opts SendOptions,
 				nodeDialer *nodedialer.Dialer,
 				replicas ReplicaSlice,
-				args roachpb.BatchRequest,
 			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, nodeDialer, replicas, args)
+				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
 				if err != nil {
 					return nil, err
 				}
