@@ -21,6 +21,8 @@ import "gogoproto/gogo.proto";
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 count = 1 [(gogoproto.nullable) = false];
 
   // FirstAttemptCount collects the total number of times a first
@@ -31,10 +33,16 @@ message StatementStatistics {
   // can be computed as FirstAttemptCount / Count.
   // The cumulative number of retries can be computed with
   // Count - FirstAttemptCount.
+  //
+  // When transmitted to the reporting server, this value gets
+  // simplified so that the proportion of statements that could be
+  // executed without retry remains as FirstAttemptCount / Count.
   optional int64 first_attempt_count = 2 [(gogoproto.nullable) = false];
 
   // MaxRetries collects the maximum observed number of automatic
   // retries in the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
   optional int64 max_retries = 3 [(gogoproto.nullable) = false];
 
   // LastErr collects the last error encountered.
@@ -64,6 +72,8 @@ message StatementStatistics {
   // We store it separately (as opposed to computing it post-hoc) because the combined
   // variance for the overhead cannot be derived from the variance of the separate latencies.
   optional NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
+
+  // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
 message NumericStat {
