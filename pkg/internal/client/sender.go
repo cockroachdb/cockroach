@@ -51,10 +51,27 @@ const (
 	LeafTxn
 )
 
-// Sender is the interface used to call into a CockroachDB instance.
-// If the returned *roachpb.Error is not nil, no response should be
-// returned.
+// Sender is implemented by modules throughout the crdb stack, on both the
+// "client" and the "server", involved in passing along and ultimately
+// evaluating requests (batches). The interface is now considered regrettable
+// because it's too narrow and at times leaky.
+// Notable implementors: client.Txn, kv.TxnCoordSender, storage.Node,
+// storage.Store, storage.Replica.
 type Sender interface {
+	// Send sends a batch for evaluation.
+	// The contract about whether both a response and an error can be returned
+	// varies between layers.
+	// The ownership of the pointers inside the batch (notably the Txn and the
+	// requests) is unusual, and the interface is leaky; the idea is that we don't
+	// clone batches before passing them to a transport, and the server on the
+	// other side of the transport might be local (and so the local server gets a
+	// shallow copy of the batch, like all the order Senders). Server-side modules
+	// are allowed to hold on to parts of the request and read them async (e.g. we
+	// might put a request in the timestamp cache). This all means that, once the
+	// batch reaches the transport boundary, all its deep fields are immutable -
+	// neither the server side nor the client side can change anything anymore
+	// (they must clone whatever they want to change). This is enforced in race
+	// tests by the "race transport" (transport_race.go).
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
