@@ -496,9 +496,8 @@ func (r *Replica) AdminMerge(
 
 		// Send off this batch, ensuring that intents are placed on both the local
 		// copy and meta2's copy of the right-hand side range descriptor before we
-		// send the GetSnapshotForMerge request below. This is the precondition for
-		// sending a GetSnapshotForMerge request; see the godoc on the
-		// GetSnapshotForMerge request for details.
+		// send the Subsume request below. This is the precondition for sending a
+		// Subsume request; see the godoc on the Subsume request for details.
 		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
@@ -508,14 +507,14 @@ func (r *Replica) AdminMerge(
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
 		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
-			&roachpb.GetSnapshotForMergeRequest{
+			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftRange:     *origLeftDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
 		}
-		rhsSnapshotRes := br.(*roachpb.GetSnapshotForMergeResponse)
+		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
 		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
@@ -543,15 +542,15 @@ func (r *Replica) AdminMerge(
 
 	// If the merge transaction encounters an error, we need to trigger a full
 	// abort and try again with a new transaction. Why? runMergeTxn has the side
-	// effect of sending a GetSnapshotForMerge request to the right-hand range,
-	// which blocks the right-hand range from serving any traffic until the
-	// transaction commits or aborts. If we retry using the same transaction
-	// (i.e., a "transaction restart"), we'll send requests to the blocked
-	// right-hand range and deadlock. The right-hand range will see that the
-	// transaction is still pending and refuse to respond, but the transaction
-	// cannot commit until the right-hand range responds. By instead marking the
-	// transaction as aborted, we'll unlock the right-hand range, giving the next,
-	// fresh transaction a chance to succeed.
+	// effect of sending a Subsume request to the right-hand range, which blocks
+	// the right-hand range from serving any traffic until the transaction commits
+	// or aborts. If we retry using the same transaction (i.e., a "transaction
+	// restart"), we'll send requests to the blocked right-hand range and
+	// deadlock. The right-hand range will see that the transaction is still
+	// pending and refuse to respond, but the transaction cannot commit until the
+	// right-hand range responds. By instead marking the transaction as aborted,
+	// we'll unlock the right-hand range, giving the next, fresh transaction a
+	// chance to succeed.
 	//
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.

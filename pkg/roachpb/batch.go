@@ -178,11 +178,11 @@ func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
 	return false
 }
 
-// IsSingleGetSnapshotForMergeRequest returns true iff the batch contains a
-// single request, and that request is an GetSnapshotForMergeRequest.
-func (ba *BatchRequest) IsSingleGetSnapshotForMergeRequest() bool {
+// IsSingleSubsumeRequest returns true iff the batch contains a single request,
+// and that request is an SubsumeRequest.
+func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
 	if ba.IsSingleRequest() {
-		_, ok := ba.Requests[0].GetInner().(*GetSnapshotForMergeRequest)
+		_, ok := ba.Requests[0].GetInner().(*SubsumeRequest)
 		return ok
 	}
 	return false

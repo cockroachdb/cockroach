@@ -229,11 +229,11 @@ func mergeWithData(t *testing.T, retries int64) {
 					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
 				}
 			}
-			if req.GetGetSnapshotForMerge() != nil {
+			if req.GetSubsume() != nil {
 				// Introduce targeted chaos by forcing a lease acquisition before
-				// GetSnapshotForMerge can execute. This triggers an unusual code path
-				// where the lease acquisition, not GetSnapshotForMerge, notices the
-				// merge and installs a mergeComplete channel on the replica.
+				// Subsume can execute. This triggers an unusual code path where the
+				// lease acquisition, not Subsume, notices the merge and installs a
+				// mergeComplete channel on the replica.
 				mtc.advanceClock(ctx)
 			}
 		}
@@ -474,13 +474,12 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 // starts at time T1.
 //
 // To merge A and B, S3 will launch a merge transaction that sends several RPCs
-// to S4. Suppose that, just before S4 begins executing the GetSnapshotForMerge
-// request, a read sneaks in for some key K at a large timestamp T3. S4 will
-// bump its clock from T1 to T3, so when the GetSnapshotForMerge goes to
-// determine the current time to use for the FreezeStart field in the
-// GetSnapshotForMerge response, it will use T3. When S3 completes the merge, it
-// will thus use T3 as the timestamp cache's low water mark for the keys that
-// previously belonged to B.
+// to S4. Suppose that, just before S4 begins executing the Subsume request, a
+// read sneaks in for some key K at a large timestamp T3. S4 will bump its clock
+// from T1 to T3, so when the Subsume goes to determine the current time to use
+// for the FreezeStart field in the Subsume response, it will use T3. When S3
+// completes the merge, it will thus use T3 as the timestamp cache's low water
+// mark for the keys that previously belonged to B.
 //
 // Importantly, S3 must also update its clock from T1 to T3. Otherwise, as this
 // test demonstrates, it is possible for S3 to send a lease to another store, in
@@ -489,13 +488,13 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 // serializability violation!
 //
 // Note that there are several mechanisms that *almost* prevent this problem. If
-// the read of K at T3 occurs slightly earlier, the batch response for
-// GetSnapshotForMerge will set the Now field to T3, which S3 will use to bump
-// its clock. (BatchResponse.Now is computed when the batch is received, not
-// when it finishes executing.) If S3 receives a write for K at T2, it will a)
-// properly bump the write to T4, because its timestamp cache is up to date, and
-// then b) bump its clock to T4. Or if S4 were to send a single RPC to S3, S3
-// would bump its clock based on the BatchRequest.Timestamp.
+// the read of K at T3 occurs slightly earlier, the batch response for Subsume
+// will set the Now field to T3, which S3 will use to bump its clock.
+// (BatchResponse.Now is computed when the batch is received, not when it
+// finishes executing.) If S3 receives a write for K at T2, it will a) properly
+// bump the write to T4, because its timestamp cache is up to date, and then b)
+// bump its clock to T4. Or if S4 were to send a single RPC to S3, S3 would bump
+// its clock based on the BatchRequest.Timestamp.
 //
 // In short, this sequence of events is likely to be exceedingly unlikely in
 // practice, but is subtle enough to warrant a test.
@@ -508,9 +507,9 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	readTSChan := make(chan hlc.Timestamp, 1)
 	rhsKey := roachpb.Key("c")
 	mtc.storeConfig.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
-		if ba.IsSingleGetSnapshotForMergeRequest() {
-			// Before we execute a GetSnapshotForMergeRequest, execute a read on the
-			// same store at a much higher timestamp.
+		if ba.IsSingleSubsumeRequest() {
+			// Before we execute a Subsume request, execute a read on the same store
+			// at a much higher timestamp.
 			gba := roachpb.BatchRequest{}
 			gba.RangeID = ba.RangeID
 			gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
@@ -565,7 +564,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 
 	// Merge [a, b) and [b, Max). Our request filter above will intercept the
 	// merge and execute a read with a large timestamp immediately before the
-	// GetSnapshotForMerge request executes.
+	// Subsume request executes.
 	if _, pErr := client.SendWrappedWith(ctx, mtc.Store(2), roachpb.Header{
 		RangeID: lhsRangeID,
 	}, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
@@ -1120,8 +1119,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 		del := ba.Requests[0].GetDelete()
 		if del != nil && bytes.HasSuffix(del.Key, keys.LocalRangeDescriptorSuffix) && rand.Int()%4 == 0 {
 			// After every few deletions of the local range descriptor, expire all
-			// range leases. This makes the following sequence of events quite
-			// likely:
+			// range leases. This makes the following sequence of events quite likely:
 			//
 			//     1. The merge transaction begins and lays down deletion intents for
 			//        the meta2 and local copies of the RHS range descriptor.
@@ -1133,16 +1131,14 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 			//        channel.
 			//     4. The Get request blocks on the newly installed mergeComplete
 			//        channel.
-			//     5. The GetSnapshotForMerge request arrives. (Or, if the merge
-			//        transaction is incorrectly pipelined, the QueryIntent request
-			//        for the RHS range descriptor key that precedes the
-			//        GetSnapshotForMerge request arrives.)
+			//     5. The Subsume request arrives. (Or, if the merge transaction is
+			//        incorrectly pipelined, the QueryIntent request for the RHS range
+			//        descriptor key that precedes the Subsume request arrives.)
 			//
 			// This scenario previously caused deadlock. The merge was not able to
-			// complete until the GetSnapshotForMerge request completed, but the
-			// GetSnapshotForMerge request was stuck in the command queue until the
-			// Get request finished, which was itself waiting for the merge to
-			// complete. Whoops!
+			// complete until the Subsume request completed, but the Subsume request
+			// was stuck in the command queue until the Get request finished, which
+			// was itself waiting for the merge to complete. Whoops!
 			mtc.advanceClock(ctx)
 		}
 		return nil
@@ -2211,7 +2207,7 @@ func TestMergeQueue(t *testing.T) {
 	})
 }
 
-func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
+func TestInvalidSubsumeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -2220,7 +2216,7 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	defer mtc.Stop()
 	store := mtc.Store(0)
 
-	// A GetSnapshotForMerge request that succeeds when it shouldn't will wedge a
+	// A Subsume request that succeeds when it shouldn't will wedge a
 	// store because it waits for a merge that is not actually in progress. Set a
 	// short timeout to limit the damage.
 	ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
@@ -2231,12 +2227,12 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	getSnapArgs := roachpb.GetSnapshotForMergeRequest{
+	getSnapArgs := roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: rhsDesc.StartKey.AsRawKey()},
 		LeftRange:     *lhsDesc,
 	}
 
-	// GetSnapshotForMerge from a non-neighboring LHS should fail.
+	// Subsume from a non-neighboring LHS should fail.
 	{
 		badArgs := getSnapArgs
 		badArgs.LeftRange.EndKey = append(roachpb.RKey{}, badArgs.LeftRange.EndKey...).Next()
@@ -2248,7 +2244,7 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 		}
 	}
 
-	// GetSnapshotForMerge without an intent on the local range descriptor should fail.
+	// Subsume without an intent on the local range descriptor should fail.
 	_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, &getSnapArgs)
@@ -2256,13 +2252,13 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 		t.Fatalf("expected %q error, but got %v", exp, pErr)
 	}
 
-	// GetSnapshotForMerge when a non-deletion intent is present on the
+	// Subsume when a non-deletion intent is present on the
 	// local range descriptor should fail.
 	err = store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.Put(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey), "garbage"); err != nil {
 			return err
 		}
-		// NB: GetSnapshotForMerge intentionally takes place outside of the txn so
+		// NB: Subsume intentionally takes place outside of the txn so
 		// that it sees an intent rather than the value the txn just wrote.
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
