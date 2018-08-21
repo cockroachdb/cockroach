@@ -17,13 +17,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"runtime"
 	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
 
@@ -234,4 +240,228 @@ func registerVersion(r *registry) {
 			},
 		})
 	}
+
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("import-upgrade/from=%s", version),
+		MinVersion: "v2.1.0",
+		Nodes:      nodes(3),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if err := func() error {
+				goos := ifLocal(runtime.GOOS, "linux")
+				b, err := binfetcher.Download(ctx, binfetcher.Options{
+					Binary:  "cockroach",
+					Version: version,
+					GOOS:    goos,
+					GOARCH:  "amd64",
+				})
+				if err != nil {
+					return err
+				}
+
+				c.Put(ctx, b, "./cockroach", c.Node(1))
+				c.Put(ctx, cockroach, "./cockroach", c.Range(2, 3))
+
+				files := map[string][]byte{
+					"/1": []byte("1\n2\n3\n4"),
+					"/2": []byte("5\n6\n7\n8"),
+				}
+				lock := make(chan bool, 10)
+				defer close(lock)
+				allow := func(n int) {
+					for i := 0; i < n; i++ {
+						lock <- true
+					}
+				}
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.Method {
+					case "GET":
+						select {
+						case <-lock:
+						case <-r.Context().Done():
+						}
+						b, ok := files[r.URL.Path]
+						if !ok {
+							http.Error(w, "no such file", 404)
+							return
+						}
+						w.Write(b)
+					case "PUT":
+						b, err := ioutil.ReadAll(r.Body)
+						if err != nil {
+							http.Error(w, err.Error(), 500)
+							return
+						}
+						files[r.URL.Path] = b
+						w.WriteHeader(201)
+					case "DELETE":
+						delete(files, r.URL.Path)
+						w.WriteHeader(204)
+					default:
+						http.Error(w, "unsupported method", 400)
+					}
+				}))
+				defer srv.Close()
+
+				c.Start(ctx, c.Range(1, 3))
+
+				db := c.Conn(ctx, 1)
+				defer db.Close()
+
+				if _, err := db.ExecContext(ctx, `CREATE DATABASE d; USE d`); err != nil {
+					return err
+				}
+
+				var oldVersion string
+				if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&oldVersion); err != nil {
+					return err
+				}
+				c.l.Printf("cluster version is %s\n", oldVersion)
+
+				// Run an IMPORT on n1. It should successfully complete even though n2 and
+				// n3 are present (and would fail if those nodes were scheduled with work.
+				allow(4)
+				if _, err := db.ExecContext(ctx,
+					`IMPORT TABLE d.a (i INT PRIMARY KEY) CSV DATA ($1, $2) WITH sstsize = '1b'`,
+					srv.URL+"/1",
+					srv.URL+"/2",
+				); err != nil {
+					return err
+				}
+				var fingerprint string
+				if err := db.QueryRowContext(ctx,
+					`SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.a]`,
+				).Scan(&fingerprint); err != nil {
+					return err
+				} else if fingerprint != "8" {
+					return fmt.Errorf("unexpected fingerprint: %s", fingerprint)
+				}
+
+				// Start an IMPORT on n1 but don't let it finish. Kill n1 and verify that
+				// n2 and n3 fail the job instead of resume it.
+				allow(1)
+				errch := make(chan error)
+				go func() {
+					c.l.Printf("start import\n")
+					_, err := db.ExecContext(ctx, `IMPORT TABLE d.b (i INT) CSV DATA ($1, $2) WITH sstsize = '1b'`, srv.URL+"/1", srv.URL+"/2")
+					errch <- err
+				}()
+
+				// Wait until the job is started.
+				var coordinator, jobid int
+				for until := time.After(time.Second * 10); ; {
+					// Note: "id" was the column name in 2.0. It was changed to "job_id" in 2.1.
+					if err := db.QueryRowContext(ctx,
+						`SELECT id, coordinator_id FROM [SHOW JOBS] WHERE description LIKE 'IMPORT TABLE d.public.b%'`,
+					).Scan(&jobid, &coordinator); err != nil && err != sql.ErrNoRows {
+						return err
+					} else if coordinator > 0 {
+						break
+					}
+					select {
+					case <-time.After(time.Second):
+					case <-until:
+						return fmt.Errorf("timeout waiting for job creation")
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				c.l.Printf("old coordinator id: %d\n", coordinator)
+
+				db2 := c.Conn(ctx, 2)
+				defer db2.Close()
+
+				if _, err := db.ExecContext(ctx,
+					`SET CLUSTER SETTING jobs.registry.leniency = '0s'`,
+				); err != nil {
+					return err
+				}
+
+				// Wait a bit so n2 and n3 see each other. Shutting down n1 before this
+				// sometimes results and n2 and n3 being wedged since they only know about n1.
+				waitForFullReplication(t, db)
+				c.Stop(ctx, c.Node(1))
+				if err := <-errch; err == nil {
+					return errors.New("expected error")
+				}
+
+				// n2 or n3 should not fail the job yet because the cluster version is still 2.0.5.
+				c.l.Printf("ensure job not leased\n")
+			Loop:
+				for until := time.After(jobs.DefaultAdoptInterval + 5*time.Second); ; {
+					var new_coord int
+					var status jobs.Status
+					var job_err string
+					if err := db2.QueryRowContext(ctx,
+						`SELECT coordinator_id, status, error FROM [SHOW JOBS] WHERE job_id = $1`, jobid,
+					).Scan(&new_coord, &status, &job_err); err != nil {
+						return err
+					} else if coordinator != new_coord {
+						return fmt.Errorf("unexpected coordinator id change: %d -> %d", coordinator, new_coord)
+					} else if status != jobs.StatusRunning {
+						return fmt.Errorf("unexpected status: %s: %s", status, job_err)
+					}
+
+					select {
+					case <-time.After(time.Second):
+					case <-until:
+						break Loop
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+
+				// Do an IMPORT on n2 and make sure n1 is ok afterward.
+				c.l.Printf("run IMPORT on n2\n")
+				c.Start(ctx, c.Node(1))
+				allow(4)
+				if _, err := db2.ExecContext(ctx, `IMPORT TABLE d.c (i INT) CSV DATA ($1, $2) WITH sstsize = '1b'`, srv.URL+"/1", srv.URL+"/2"); err != nil {
+					t.Fatal(err)
+				}
+				var count int
+				if err := db.QueryRowContext(ctx, `SELECT count(*) FROM [SHOW TABLES FROM d] WHERE "Table" = 'c'`).Scan(&count); err != nil {
+					t.Fatal(err)
+				} else if count != 1 {
+					t.Fatal("didn't find table c")
+				}
+
+				// Upgrade n1. This should upgrade the cluster version and fail the job.
+				c.Stop(ctx, c.Node(1))
+				c.Put(ctx, cockroach, "./cockroach", c.Node(1))
+				// Not sure why this is needed, but it prevents an occasional connection error.
+				time.Sleep(10 * time.Second)
+				c.Start(ctx, c.Node(1))
+
+				c.l.Printf("wait for job failure\n")
+				for until := time.After(jobs.DefaultAdoptInterval + 5*time.Second); ; {
+					var new_coord int
+					var status jobs.Status
+					var job_err string
+					if err := db2.QueryRowContext(ctx,
+						`SELECT coordinator_id, status, error FROM [SHOW JOBS] WHERE job_id = $1`, jobid,
+					).Scan(&new_coord, &status, &job_err); err != nil {
+						return err
+					} else if coordinator != new_coord {
+						return fmt.Errorf("unexpected coordinator id change: %d -> %d", coordinator, new_coord)
+					} else if status == jobs.StatusFailed {
+						break
+					} else if status != jobs.StatusRunning {
+						return fmt.Errorf("unexpected status: %s: %s", status, job_err)
+					}
+
+					select {
+					case <-time.After(time.Second):
+					case <-until:
+						return fmt.Errorf("timeout waiting for job failure")
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+
+				return nil
+			}(); err != nil {
+				t.Fatal(err)
+			}
+		},
+	})
 }
