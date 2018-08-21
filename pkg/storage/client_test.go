@@ -522,6 +522,12 @@ func (t *multiTestContextKVTransport) SendNext(
 	return br, nil
 }
 
+func (t *multiTestContextKVTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
+}
+
 func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if t.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
