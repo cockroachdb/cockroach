@@ -578,32 +578,20 @@ select
 opt
 SELECT b OR b FROM c
 ----
-project
- ├── columns: "?column?":7(bool)
- ├── scan c
- │    └── columns: b:2(bool)
- └── projections [outer=(2)]
-      └── variable: b [type=bool, outer=(2)]
+scan c
+ └── columns: "?column?":2(bool)
 
 opt
 SELECT a OR (a AND b) OR (a AND c) FROM c
 ----
-project
- ├── columns: "?column?":7(bool)
- ├── scan c
- │    └── columns: a:1(bool)
- └── projections [outer=(1)]
-      └── variable: a [type=bool, outer=(1)]
+scan c
+ └── columns: "?column?":1(bool)
 
 opt
 SELECT (a AND b) OR a OR (a AND c) FROM c
 ----
-project
- ├── columns: "?column?":7(bool)
- ├── scan c
- │    └── columns: a:1(bool)
- └── projections [outer=(1)]
-      └── variable: a [type=bool, outer=(1)]
+scan c
+ └── columns: "?column?":1(bool)
 
 opt
 SELECT (a AND b) OR (b AND a) FROM c

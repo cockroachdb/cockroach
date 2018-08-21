@@ -90,14 +90,8 @@ SELECT
     a.d / 1 AS t
 FROM a
 ----
-project
- ├── columns: r:6(decimal) s:7(float) t:8(decimal)
- ├── scan a
- │    └── columns: i:2(int) f:3(float) d:4(decimal)
- └── projections [outer=(2-4)]
-      ├── variable: i [type=int, outer=(2)]
-      ├── variable: f [type=float, outer=(3)]
-      └── variable: d [type=decimal, outer=(4)]
+scan a
+ └── columns: r:2(int) s:3(float) t:4(decimal)
 
 # --------------------------------------------------
 # InvertMinus
@@ -124,12 +118,8 @@ project
 opt
 SELECT -(-a.i::int) AS r FROM a
 ----
-project
- ├── columns: r:6(int)
- ├── scan a
- │    └── columns: i:2(int)
- └── projections [outer=(2)]
-      └── variable: i [type=int, outer=(2)]
+scan a
+ └── columns: r:2(int)
 
 # --------------------------------------------------
 # FoldUnaryMinus
