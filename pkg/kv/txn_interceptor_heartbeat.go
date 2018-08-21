@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+const (
+	turningCommitToRollbackMsg string = "Turning commit to rollback. All writes are part of old epochs."
+)
+
 // txnHeartbeat is a txnInterceptor in charge of the txn's heartbeat loop.
 // The heartbeat loop is started upon the first write. txnHeartbeat is also in
 // charge of prepending a BeginTransaction to the first write batch and possibly
@@ -187,20 +191,22 @@ func (h *txnHeartbeat) SendLocked(
 	// See if we can elide an EndTxn. We can elide it for read-only transactions.
 	lastIndex := int32(len(ba.Requests) - 1)
 	var elideEndTxn bool
+	var commitTurnedToRollback bool
 	if haveEndTxn {
 		// Are we writing now or have we written in the past?
 		elideEndTxn = !h.mu.everSentBeginTxn
 		if elideEndTxn {
 			ba.Requests = ba.Requests[:lastIndex]
-		} else {
+		} else if etReq.Commit {
 			// If all the writes were part of old epochs, we can turn the commit into
 			// a rollback. Besides the rollback being potentially cheaper, this
 			// transformation is important in situations where it's unclear if the txn
 			// record exist: if it doesn't, then a commit would return a
 			// TransactionStatusError where a rollback returns success.
 			if h.mu.needBeginTxn {
-				log.VEventf(ctx, 2, "Turning commit in rollback. All writes are part of old epochs.")
+				log.VEventf(ctx, 2, turningCommitToRollbackMsg)
 				etReq.Commit = false
+				commitTurnedToRollback = true
 			}
 		}
 	}
@@ -262,12 +268,26 @@ func (h *txnHeartbeat) SendLocked(
 		if br.Txn == nil {
 			txn := ba.Txn.Clone()
 			br.Txn = &txn
+		} else {
+			clone := br.Txn.Clone()
+			br.Txn = &clone
 		}
 		br.Txn.Status = status
 		// Synthesize an EndTransactionResponse.
 		resp := &roachpb.EndTransactionResponse{}
 		resp.Txn = br.Txn
 		br.Add(resp)
+	} else if commitTurnedToRollback {
+		// If we transformed a commit into a rollback, flip the status so that it
+		// looks like a successful commit to the higher layers. In particular, the
+		// SQL module looks at this status and wants it to be COMMITTED after a "1pc
+		// planNode" runs.
+		//
+		// Note: if we sent an EndTransaction and got back a successful response, we
+		// expect br.Txn to be filled.
+		clone := br.Txn.Clone()
+		br.Txn = &clone
+		br.Txn.Status = roachpb.COMMITTED
 	}
 
 	return br, nil
