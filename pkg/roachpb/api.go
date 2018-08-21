@@ -573,7 +573,7 @@ func (*RefreshRequest) Method() Method { return Refresh }
 func (*RefreshRangeRequest) Method() Method { return RefreshRange }
 
 // Method implements the Request interface.
-func (*GetSnapshotForMergeRequest) Method() Method { return GetSnapshotForMerge }
+func (*SubsumeRequest) Method() Method { return Subsume }
 
 // Method implements the Request interface.
 func (*RangeStatsRequest) Method() Method { return RangeStats }
@@ -807,7 +807,7 @@ func (r *RefreshRangeRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (r *GetSnapshotForMergeRequest) ShallowCopy() Request {
+func (r *SubsumeRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1078,7 +1078,7 @@ func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange
 func (*RefreshRequest) flags() int      { return isRead | isTxn | updatesReadTSCache }
 func (*RefreshRangeRequest) flags() int { return isRead | isTxn | isRange | updatesReadTSCache }
 
-func (*GetSnapshotForMergeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
+func (*SubsumeRequest) flags() int { return isRead | isAlone | updatesReadTSCache }
 
 func (*RangeStatsRequest) flags() int { return isRead }
 

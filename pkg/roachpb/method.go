@@ -143,9 +143,8 @@ const (
 	// since the transaction orig timestamp and sets a new span in the
 	// timestamp cache at the current transaction timestamp.
 	RefreshRange
-	// GetSnapshotForMerge notifies a range that its left-hand neighbor has
-	// initiated a merge and needs a snapshot of its data.
-	GetSnapshotForMerge
+	// Subsume freezes a range for merging with its left-hand neighbor.
+	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
 )
