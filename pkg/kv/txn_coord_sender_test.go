@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1164,63 +1166,53 @@ func TestTxnRestartCount(t *testing.T) {
 	value := []byte("value")
 	ctx := context.Background()
 
-	for _, expRestart := range []bool{true, false} {
-		t.Run(fmt.Sprintf("expected restart:%t", expRestart), func(t *testing.T) {
-			s, metrics, cleanupFn := setupMetricsTest(t)
-			defer cleanupFn()
+	s, metrics, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
 
-			// Start a transaction and do a GET. This forces a timestamp to be
-			// chosen for the transaction.
-			txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-			if _, err := txn.Get(ctx, readKey); err != nil {
-				t.Fatal(err)
-			}
-
-			// If expRestart is true, write the read key outside of the
-			// transaction, at a higher timestamp, which will necessitate a
-			// txn restart when the original read key span is updated.
-			if expRestart {
-				if err := s.DB.Put(ctx, readKey, value); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			// Outside of the transaction, read the same key as will be
-			// written within the transaction. This means that future
-			// attempts to write will forward the txn timestamp.
-			if _, err := s.DB.Get(ctx, writeKey); err != nil {
-				t.Fatal(err)
-			}
-
-			// This put will lay down an intent, txn timestamp will increase
-			// beyond OrigTimestamp.
-			if err := txn.Put(ctx, writeKey, value); err != nil {
-				t.Fatal(err)
-			}
-			proto := txn.Serialize()
-			if !proto.OrigTimestamp.Less(proto.Timestamp) {
-				t.Errorf("expected timestamp to increase: %s", proto)
-			}
-
-			// Wait for heartbeat to start.
-			tc := txn.Sender().(*TxnCoordSender)
-			testutils.SucceedsSoon(t, func() error {
-				if !tc.isTracking() {
-					return errors.New("expected heartbeat to start")
-				}
-				return nil
-			})
-
-			// Commit (should cause restart metric to increase).
-			err := txn.CommitOrCleanup(ctx)
-			if expRestart {
-				assertTransactionRetryError(t, err)
-				checkTxnMetrics(t, metrics, "restart txn", 0, 0, 1, 1)
-			} else if err != nil {
-				t.Fatalf("expected no restart; got %s", err)
-			}
-		})
+	// Start a transaction and read a key that we're going to modify outside the
+	// txn. This ensures that refreshing the txn will not succeed, so a restart
+	// will be necessary.
+	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if _, err := txn.Get(ctx, readKey); err != nil {
+		t.Fatal(err)
 	}
+
+	// Write the read key outside of the transaction, at a higher timestamp, which
+	// will necessitate a txn restart when the original read key span is updated.
+	if err := s.DB.Put(ctx, readKey, value); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outside of the transaction, read the same key as will be
+	// written within the transaction. This means that future
+	// attempts to write will forward the txn timestamp.
+	if _, err := s.DB.Get(ctx, writeKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// This put will lay down an intent, txn timestamp will increase
+	// beyond OrigTimestamp.
+	if err := txn.Put(ctx, writeKey, value); err != nil {
+		t.Fatal(err)
+	}
+	proto := txn.Serialize()
+	if !proto.OrigTimestamp.Less(proto.Timestamp) {
+		t.Errorf("expected timestamp to increase: %s", proto)
+	}
+
+	// Wait for heartbeat to start.
+	tc := txn.Sender().(*TxnCoordSender)
+	testutils.SucceedsSoon(t, func() error {
+		if !tc.isTracking() {
+			return errors.New("expected heartbeat to start")
+		}
+		return nil
+	})
+
+	// Commit (should cause restart metric to increase).
+	err := txn.CommitOrCleanup(ctx)
+	assertTransactionRetryError(t, err)
+	checkTxnMetrics(t, metrics, "restart txn", 0, 0, 1 /* aborts */, 1 /* restarts */)
 }
 
 func TestTxnDurations(t *testing.T) {
@@ -2373,5 +2365,99 @@ func TestAnchorKey(t *testing.T) {
 		return txn.Run(ctx, ba)
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestCommitTurnedToRollback tests that the TxnCoordSender (or, rather, one of
+// the interceptors) turns a commit into a rollback in situations where a txn
+// has performed writes at old epochs but no writes at the current epoch. See
+// the comment in txnHeartbeat about why this is needed.
+// We check that the transformation happened (by looking at a trace) and that
+// other things (e.g. the proto status) look like a committed transaction even
+// though we technically performed a rollback.
+func TestCommitTurnedToRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, metrics, cleanupFn := setupMetricsTest(t)
+	defer cleanupFn()
+
+	readKey := []byte("read")
+	writeKey := []byte("write")
+	value := []byte("value")
+
+	// Start a transaction and read a key that we're going to modify outside the
+	// txn. This ensures that refreshing the txn will not succeed, so a restart
+	// will be necessary.
+	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if _, err := txn.Get(ctx, readKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write the read key outside of the
+	// transaction, at a higher timestamp, which will necessitate a
+	// txn restart when the original read key span is updated.
+	if err := s.DB.Put(ctx, readKey, value); err != nil {
+		t.Fatal(err)
+	}
+
+	// Outside of the transaction, read the same key as will be
+	// written within the transaction. This means that future
+	// attempts to write will forward the txn timestamp.
+	if _, err := s.DB.Get(ctx, writeKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// This put will lay down an intent, txn timestamp will be bumped.
+	if err := txn.Put(ctx, writeKey, value); err != nil {
+		t.Fatal(err)
+	}
+	proto := txn.Serialize()
+	if !proto.OrigTimestamp.Less(proto.Timestamp) {
+		t.Errorf("expected timestamp to increase: %s", proto)
+	}
+
+	// Attempt to commit, expect a retriable error.
+	err := txn.Commit(ctx)
+	assertTransactionRetryError(t, err)
+
+	// Attempt to commit again, at the next epoch. This should succeed, and the
+	// commit should be turned to a rollback.
+	tr := tracing.NewTracer()
+	sp := tr.StartSpan("test", tracing.Recordable)
+	tracing.StartRecording(sp, tracing.SingleNodeRecording)
+	commitCtx := opentracing.ContextWithSpan(ctx, sp)
+	err = txn.Commit(commitCtx)
+	sp.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the commit metric has been incremented.
+	checkTxnMetrics(t, metrics, "commit turned to rollback",
+		1 /* commits */, 0, 0, 1 /* restarts */)
+
+	// Check that the proto's status is the expected one for a commit.
+	if s := txn.Serialize().Status; s != roachpb.COMMITTED {
+		t.Fatalf("expected COMMITTED status, got: %s", s)
+	}
+
+	// Look for a specific log message indicating that this test is not fooling
+	// itself and indeed we transformed a commit to a rollback.
+	var found bool
+	for _, recSp := range tracing.GetRecording(sp) {
+		msg := ""
+		for _, l := range recSp.Logs {
+			for _, f := range l.Fields {
+				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
+			}
+		}
+		if strings.Contains(msg, turningCommitToRollbackMsg) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("didn't find trace message: %s", turningCommitToRollbackMsg)
 	}
 }
