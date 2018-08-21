@@ -646,9 +646,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	}
 
 	if rResult.Merge != nil {
-		if err := r.store.MergeRange(ctx, r, rResult.Merge.LeftDesc.EndKey,
-			rResult.Merge.RightDesc,
-		); err != nil {
+		if err := r.store.MergeRange(ctx, r, rResult.Merge.LeftDesc, rResult.Merge.RightDesc); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
 			log.Fatalf(ctx, "failed to update store after merging range: %s", err)
 		}

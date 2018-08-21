@@ -1357,7 +1357,9 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng); err != nil {
+	newLeftDesc := *repl.Desc()
+	newLeftDesc.EndKey = splitKey
+	if err = store.SplitRange(repl.AnnotateCtx(context.TODO()), repl, newRng, newLeftDesc); err != nil {
 		t.Fatal(err)
 	}
 	return newRng

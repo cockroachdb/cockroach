@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -276,7 +277,13 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
-	leftDesc.IncrementGeneration()
+	if r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
+		// To be safe, don't increment the generation counter unless all nodes are
+		// known to be aware of its existence. Since encoded range descriptors are
+		// used in CPut operations, it is theorized that non-nil generation counters
+		// in mixed-version clusters could cause subtle breakage.
+		leftDesc.IncrementGeneration()
+	}
 	leftDesc.EndKey = splitKey
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
@@ -382,6 +389,10 @@ func (r *Replica) AdminMerge(
 	ctx context.Context, args roachpb.AdminMergeRequest,
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
+
+	if err := r.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
+		return reply, roachpb.NewError(err)
+	}
 
 	origLeftDesc := r.Desc()
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
@@ -826,6 +837,9 @@ func (r *Replica) changeReplicas(
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				// TODO(benesch): this trigger should just specify the updated
+				// descriptor, like the split and merge triggers, so that the receiver
+				// doesn't need to reconstruct the range descriptor update.
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
@@ -961,9 +975,6 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
-// TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
-// and load it automatically instead of reconstructing individual
-// changes.
 func updateRangeDescriptor(
 	b *client.Batch,
 	descKey roachpb.Key,

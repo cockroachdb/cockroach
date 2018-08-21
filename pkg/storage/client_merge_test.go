@@ -1170,6 +1170,12 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 // have occurred since the preemptive snapshot, even if the sequence of splits
 // or merges left the keyspan of the range unchanged. This diabolical edge case
 // is tested here.
+//
+// Note that splits will not increment the generation counter until the cluster
+// version includes VersionRangeMerges. That's ok, because a sequence of splits
+// alone will always result in a descriptor with a smaller end key. Only a
+// sequence of splits AND merges can result in an unchanged end key, and merges
+// always increment the generation counter.
 func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2028,6 +2034,70 @@ func TestInvalidGetSnapshotForMergeRequest(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStoreRangeMergeClusterVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
+		cluster.VersionByKey(cluster.Version2_0), /* minVersion */
+		cluster.BinaryServerVersion /* serverVersion */)
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
+
+	repl, err := store.GetReplica(roachpb.RangeID(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Splits should not increment the generation counter before
+	// VersionRangeMerges is active.
+	splitArgs := adminSplitArgs(roachpb.Key("b2"))
+	if _, pErr := client.SendWrapped(ctx, store.TestSender(), splitArgs); pErr != nil {
+		t.Fatal(err)
+	}
+	if gen := repl.Desc().GetGeneration(); gen != 0 {
+		t.Fatalf("expected generation to be 0, but got %d", gen)
+	}
+
+	// Merges should not be permitted before VersionRangeMerges is active.
+	mergeArgs := adminMergeArgs(roachpb.Key("a"))
+	_, pErr := client.SendWrapped(ctx, store.TestSender(), mergeArgs)
+	if exp := "cluster version does not support range merges"; !testutils.IsPError(pErr, exp) {
+		t.Fatalf("expected %q error, but got %v", exp, pErr)
+	}
+
+	// Bump the version to VersionRangeMerges.
+	if err := storeCfg.Settings.InitializeVersion(cluster.ClusterVersion{
+		MinimumVersion: cluster.VersionByKey(cluster.VersionRangeMerges),
+		UseVersion:     cluster.BinaryServerVersion,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Splits should increment the generation counter after VersionRangeMerges is
+	// active.
+	splitArgs = adminSplitArgs(roachpb.Key("b1"))
+	if _, pErr := client.SendWrapped(ctx, store.TestSender(), splitArgs); pErr != nil {
+		t.Fatal(err)
+	}
+	if gen := repl.Desc().GetGeneration(); gen != 1 {
+		t.Fatalf("expected generation to be 1, but got %d", gen)
+	}
+
+	// Merges should increment the generation counter after VersionRangeMerges is
+	// active.
+	mergeArgs = adminMergeArgs(roachpb.Key("a"))
+	if _, pErr := client.SendWrapped(ctx, store.TestSender(), mergeArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	if gen := repl.Desc().GetGeneration(); gen != 2 {
+		t.Fatalf("expected generation to be 2, but got %d", gen)
 	}
 }
 
