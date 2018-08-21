@@ -464,6 +464,12 @@ func TestChangefeedMonitoring(t *testing.T) {
 	if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
 		t.Errorf(`expected 0 got %d`, c)
 	}
+	if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c != 0 {
+		t.Errorf(`expected 0 got %d`, c)
+	}
+	if c := s.MustGetSQLCounter(`changefeed.flushes`); c != 0 {
+		t.Errorf(`expected 0 got %d`, c)
+	}
 	if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c != 0 {
 		t.Errorf(`expected 0 got %d`, c)
 	}
@@ -481,6 +487,12 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 11 {
 			return errors.Errorf(`expected 11 got %d`, c)
 		}
+		if c := s.MustGetSQLCounter(`changefeed.emit_nanos`); c <= 0 {
+			return errors.Errorf(`expected > 0 got %d`, c)
+		}
+		if c := s.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
+			return errors.Errorf(`expected > 0 got %d`, c)
+		}
 		if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
 			return errors.Errorf(`expected > 0 got %d`, c)
 		}
@@ -497,10 +509,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 	fooCopy.Next()
 	testutils.SucceedsSoon(t, func() error {
 		if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 4 {
-			return errors.Errorf(`expected 1 got %d`, c)
+			return errors.Errorf(`expected 4 got %d`, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 44 {
-			return errors.Errorf(`expected 11 got %d`, c)
+			return errors.Errorf(`expected 44 got %d`, c)
 		}
 		return nil
 	})
