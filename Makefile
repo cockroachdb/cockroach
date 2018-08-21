@@ -714,13 +714,9 @@ all: build
 .PHONY: c-deps
 c-deps: $(C_LIBS_CCL)
 
-build-mode = build -o $(build-output)
+build-mode = build -o $@
 
 go-install: build-mode = install
-
-$(COCKROACH): build-output = $(COCKROACH)
-$(COCKROACHOSS): build-output = $(COCKROACHOSS)
-$(COCKROACHSHORT): build-output = $(COCKROACHSHORT)
 
 $(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
 
@@ -779,7 +775,8 @@ buildshort: ## Build the CockroachDB binary without the admin UI.
 build: $(COCKROACH)
 buildoss: $(COCKROACHOSS)
 buildshort: $(COCKROACHSHORT)
-build buildoss buildshort: $(DOCGEN_TARGETS) $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
+build buildoss buildshort: $(DOCGEN_TARGETS)
+build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
 
 # For historical reasons, symlink cockroach to cockroachshort.
 # TODO(benesch): see if it would break anyone's workflow to remove this.
@@ -1285,9 +1282,10 @@ bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
 
-$(SETTINGS_DOC_PAGE): $(build-output)
-	 @$(build-output) gen settings-list --format=html > $@.tmp
-	 @mv -f $@.tmp $@
+settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+
+$(SETTINGS_DOC_PAGE): $(settings-doc-gen)
+	@$(settings-doc-gen) gen settings-list --format=html > $@
 
 optgen-defs := pkg/sql/opt/ops/*.opt
 optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
