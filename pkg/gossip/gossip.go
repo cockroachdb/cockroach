@@ -51,7 +51,6 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -541,20 +540,27 @@ func (g *Gossip) LogStatus() {
 	)
 }
 
-func (g *Gossip) clientStatus() string {
-	var buf bytes.Buffer
-
+func (g *Gossip) clientStatus() ClientStatus {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 
-	fmt.Fprintf(&buf, "gossip client (%d/%d cur/max conns)\n", len(g.clientsMu.clients), g.outgoing.maxSize)
+	var status ClientStatus
+
+	status.MaxConns = int32(g.outgoing.maxSize)
+	status.ConnStatus = make([]OutgoingConnStatus, 0, len(g.clientsMu.clients))
 	for _, c := range g.clientsMu.clients {
-		fmt.Fprintf(&buf, "  %d: %s (%s: %s)\n",
-			c.peerID, c.addr, roundSecs(timeutil.Since(c.createdAt)), c.clientMetrics)
+		status.ConnStatus = append(status.ConnStatus, OutgoingConnStatus{
+			ConnStatus: ConnStatus{
+				NodeID:   c.peerID,
+				Address:  c.addr.String(),
+				AgeNanos: timeutil.Since(c.createdAt).Nanoseconds(),
+			},
+			MetricSnap: c.clientMetrics.Snapshot(),
+		})
 	}
-	return buf.String()
+	return status
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
@@ -954,10 +960,15 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 
 // GetInfoStatus returns the a copy of the contents of the infostore.
 func (g *Gossip) GetInfoStatus() InfoStatus {
+	clientStatus := g.clientStatus()
+	serverStatus := g.server.status()
+
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	is := InfoStatus{
-		Infos: make(map[string]Info),
+		Infos:  make(map[string]Info),
+		Client: clientStatus,
+		Server: serverStatus,
 	}
 	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
@@ -1447,28 +1458,4 @@ var _ security.RequestWithUser = &Request{}
 // Gossip messages are always sent by the node user.
 func (*Request) GetUser() string {
 	return security.NodeUser
-}
-
-// Metrics contains gossip metrics used per node and server.
-type Metrics struct {
-	ConnectionsRefused *metric.Counter
-	BytesReceived      *metric.Counter
-	BytesSent          *metric.Counter
-	InfosReceived      *metric.Counter
-	InfosSent          *metric.Counter
-}
-
-func (m Metrics) String() string {
-	return fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
-		m.InfosSent.Count(), m.InfosReceived.Count(), m.BytesSent.Count(), m.BytesReceived.Count())
-}
-
-func makeMetrics() Metrics {
-	return Metrics{
-		ConnectionsRefused: metric.NewCounter(MetaConnectionsRefused),
-		BytesReceived:      metric.NewCounter(MetaBytesReceived),
-		BytesSent:          metric.NewCounter(MetaBytesSent),
-		InfosReceived:      metric.NewCounter(MetaInfosReceived),
-		InfosSent:          metric.NewCounter(MetaInfosSent),
-	}
 }

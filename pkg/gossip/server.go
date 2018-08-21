@@ -15,9 +15,7 @@
 package gossip
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -378,20 +376,23 @@ func (s *server) start(addr net.Addr) {
 	})
 }
 
-func (s *server) status() string {
+func (s *server) status() ServerStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
-		s.mu.incoming.gauge.Value(), s.mu.incoming.maxSize, s.serverMetrics)
+
+	var status ServerStatus
+	status.ConnStatus = make([]ConnStatus, 0, len(s.mu.nodeMap))
+	status.MaxConns = int32(s.mu.incoming.maxSize)
+	status.MetricSnap = s.serverMetrics.Snapshot()
+
 	for addr, info := range s.mu.nodeMap {
-		// TODO(peter): Report per connection sent/received statistics. The
-		// structure of server.Gossip and server.gossipReceiver makes this
-		// irritating to track.
-		fmt.Fprintf(&buf, "  %d: %s (%s)\n",
-			info.peerID, addr.AddressField, roundSecs(timeutil.Since(info.createdAt)))
+		status.ConnStatus = append(status.ConnStatus, ConnStatus{
+			NodeID:   info.peerID,
+			Address:  addr.String(),
+			AgeNanos: timeutil.Since(info.createdAt).Nanoseconds(),
+		})
 	}
-	return buf.String()
+	return status
 }
 
 func roundSecs(d time.Duration) time.Duration {
