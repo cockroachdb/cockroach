@@ -86,6 +86,25 @@ var (
 	}
 )
 
+// quorumError indicates a retryable error condition which sends replicas being
+// processed through the replicate queue into purgatory so that they can be
+// retried quickly as soon as nodes come online.
+type quorumError struct {
+	msg string
+}
+
+func newQuorumError(f string, args ...interface{}) *quorumError {
+	return &quorumError{
+		msg: fmt.Sprintf(f, args...),
+	}
+}
+
+func (e *quorumError) Error() string {
+	return e.msg
+}
+
+func (*quorumError) purgatoryErrorMarker() {}
+
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
 type ReplicateQueueMetrics struct {
 	AddReplicaCount        *metric.Counter
@@ -267,7 +286,7 @@ func (rq *replicateQueue) processOneChange(
 	{
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr < quorum {
-			return false, errors.Errorf(
+			return false, newQuorumError(
 				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)", lr, quorum)
 		}
 	}
