@@ -17,6 +17,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -373,10 +375,65 @@ func (a internalClientAdapter) Batch(
 	return a.InternalServer.Batch(ctx, ba)
 }
 
+type rangeFeedClientAdapter struct {
+	ctx    context.Context
+	eventC chan *roachpb.RangeFeedEvent
+	errC   chan error
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
+	select {
+	case e := <-a.eventC:
+		return e, nil
+	case err := <-a.errC:
+		return nil, err
+	}
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
+	// TODO(nvanbenschoten): should we return an error instead of blocking?
+	a.eventC <- e
+	return nil
+}
+
+// grpc.ClientStream methods.
+func (rangeFeedClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
+func (rangeFeedClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
+func (rangeFeedClientAdapter) CloseSend() error             { panic("unimplemented") }
+
+// grpc.ServerStream methods.
+func (rangeFeedClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
+func (rangeFeedClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
+
+// grpc.Stream methods.
+func (a rangeFeedClientAdapter) Context() context.Context  { return a.ctx }
+func (rangeFeedClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
+
+var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
+var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
+
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
-	panic("unimplemented")
+	rfAdapter := rangeFeedClientAdapter{
+		ctx:    ctx,
+		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		errC:   make(chan error, 1),
+	}
+
+	go func() {
+		err := a.InternalServer.RangeFeed(args, rfAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		rfAdapter.errC <- err
+	}()
+
+	return rfAdapter, nil
 }
 
 var _ roachpb.InternalClient = internalClientAdapter{}

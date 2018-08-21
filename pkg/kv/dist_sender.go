@@ -17,6 +17,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync/atomic"
 	"unsafe"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1051,6 +1053,7 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
+			// TODO(nvanbenschoten): shouldn't we be passing an eviction token here?
 			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
@@ -1394,5 +1397,192 @@ func (ds *DistSender) sendToReplicas(
 		curReplica = transport.NextReplica()
 		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
 		br, err = transport.SendNext(ctx, ba)
+	}
+}
+
+// RangeFeed divides a RangeFeed request on range boundaries and establishes a
+// RangeFeed to each of the individual ranges. It streams back results on the
+// provided channel.
+func (ds *DistSender) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, eventCh chan<- *roachpb.RangeFeedEvent,
+) *roachpb.Error {
+	ctx = ds.AnnotateCtx(ctx)
+	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
+	defer cleanup()
+
+	startRKey, err := keys.Addr(args.Span.Key)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	endRKey, err := keys.Addr(args.Span.EndKey)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	rs := roachpb.RSpan{Key: startRKey, EndKey: endRKey}
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		return ds.divideAndSendRangeFeedToRanges(ctx, &g, args, rs, eventCh)
+	})
+	return roachpb.NewError(g.Wait())
+}
+
+func (ds *DistSender) divideAndSendRangeFeedToRanges(
+	ctx context.Context,
+	g *ctxgroup.Group,
+	args *roachpb.RangeFeedRequest,
+	rs roachpb.RSpan,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+) error {
+	ri := NewRangeIterator(ds)
+	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
+		desc := ri.Desc()
+		partialRS, err := rs.Intersect(desc)
+		if err != nil {
+			return err
+		}
+
+		ds.partialRangeFeed(g, *args, partialRS, desc, ri.Token(), eventCh)
+		if !ri.NeedAnother(rs) {
+			break
+		}
+	}
+	return ri.Error().GoError()
+}
+
+// partialRangeFeed establishes a RangeFeed to the range specified by desc. It
+// manages lifecycle events of the range in order to maintain the RangeFeed
+// connection.
+func (ds *DistSender) partialRangeFeed(
+	g *ctxgroup.Group,
+	argsCopy roachpb.RangeFeedRequest,
+	rs roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	evictToken *EvictionToken,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+) {
+	g.GoCtx(func(ctx context.Context) error {
+		// Start a retry loop for sending the batch to the range.
+		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+			// If we've cleared the descriptor on a send failure, re-lookup.
+			if desc == nil {
+				var err error
+				desc, evictToken, err = ds.getDescriptor(ctx, rs.Key, nil, false)
+				if err != nil {
+					log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
+					continue
+				}
+			}
+
+			// Establish a RangeFeed for a single Range.
+			maxTS, pErr := ds.singleRangeFeed(ctx, argsCopy, desc, eventCh)
+
+			// Forward the timestamp of the request in case we end up sending it
+			// again.
+			argsCopy.Timestamp.Forward(maxTS)
+
+			if pErr != nil {
+				switch t := pErr.GetDetail().(type) {
+				case *roachpb.SendError, *roachpb.RangeNotFoundError:
+					// Evict the decriptor from the cache and reload on next attempt.
+					if err := evictToken.Evict(ctx); err != nil {
+						return err
+					}
+					desc = nil
+					continue
+				case *roachpb.RangeKeyMismatchError:
+					// Evict the decriptor from the cache.
+					if err := evictToken.Evict(ctx); err != nil {
+						return err
+					}
+					return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, rs, eventCh)
+				case *roachpb.RangeFeedRetryError:
+					switch t.Reason {
+					case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+						roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+						roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING:
+						// Try again with same descriptor. These are transient
+						// errors that should not show up again.
+						continue
+					case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+						roachpb.RangeFeedRetryError_REASON_RANGE_MERGED:
+						// Evict the decriptor from the cache.
+						if err := evictToken.Evict(ctx); err != nil {
+							return err
+						}
+						return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, rs, eventCh)
+					default:
+						log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
+					}
+				default:
+					return t
+				}
+			}
+			break
+		}
+		return nil
+	})
+}
+
+// singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
+// RPC call. Results will be send on the provided channel.
+func (ds *DistSender) singleRangeFeed(
+	ctx context.Context,
+	argsCopy roachpb.RangeFeedRequest,
+	desc *roachpb.RangeDescriptor,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+) (hlc.Timestamp, *roachpb.Error) {
+	argsCopy.RangeID = desc.RangeID
+	argsCopy.Span = desc.RSpan().AsRawSpanWithNoLocals()
+
+	var latencyFn LatencyFunc
+	if ds.rpcContext != nil {
+		latencyFn = ds.rpcContext.RemoteClocks.Latency
+	}
+	replicas := NewReplicaSlice(ds.gossip, desc)
+	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
+
+	transport, err := ds.transportFactory(SendOptions{}, ds.nodeDialer, replicas)
+	if err != nil {
+		return argsCopy.Timestamp, roachpb.NewError(err)
+	}
+
+	for {
+		if transport.IsExhausted() {
+			return argsCopy.Timestamp, roachpb.NewError(roachpb.NewSendError(
+				fmt.Sprintf("sending to all %d replicas failed", len(replicas)),
+			))
+		}
+
+		argsCopy.Replica = transport.NextReplica()
+		clientCtx, client, err := transport.NextInternalClient(ctx)
+		if err != nil {
+			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			continue
+		}
+
+		stream, err := client.RangeFeed(clientCtx, &argsCopy)
+		if err != nil {
+			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+			continue
+		}
+		for {
+			event, err := stream.Recv()
+			if err == io.EOF {
+				return argsCopy.Timestamp, nil
+			}
+			if err != nil {
+				return argsCopy.Timestamp, roachpb.NewError(err)
+			}
+			switch t := event.GetValue().(type) {
+			case *roachpb.RangeFeedCheckpoint:
+				if t.Span.Contains(argsCopy.Span) {
+					argsCopy.Timestamp.Forward(t.ResolvedTS)
+				}
+			case *roachpb.RangeFeedError:
+				return argsCopy.Timestamp, &t.Error
+			}
+			eventCh <- event
+		}
 	}
 }
