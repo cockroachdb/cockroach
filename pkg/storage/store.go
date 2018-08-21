@@ -2304,7 +2304,7 @@ func splitPostApply(
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
 	// to the store's replica map.
-	if err := r.store.SplitRange(ctx, r, rightRng); err != nil {
+	if err := r.store.SplitRange(ctx, r, rightRng, split.LeftDesc); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.Fatalf(ctx, "%s: failed to update Store after split: %s", r, err)
 	}
@@ -2342,42 +2342,41 @@ func splitPostApply(
 //
 // This is only called from the split trigger in the context of the execution
 // of a Raft command.
-func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error {
-	origDesc := origRng.Desc()
-	newDesc := newRng.Desc()
+func (s *Store) SplitRange(
+	ctx context.Context, leftRepl, rightRepl *Replica, newLeftDesc roachpb.RangeDescriptor,
+) error {
+	oldLeftDesc := leftRepl.Desc()
+	rightDesc := rightRepl.Desc()
 
-	if !bytes.Equal(origDesc.EndKey, newDesc.EndKey) ||
-		bytes.Compare(origDesc.StartKey, newDesc.StartKey) >= 0 {
-		return errors.Errorf("orig range is not splittable by new range: %+v, %+v", origDesc, newDesc)
+	if !bytes.Equal(oldLeftDesc.EndKey, rightDesc.EndKey) ||
+		bytes.Compare(oldLeftDesc.StartKey, rightDesc.StartKey) >= 0 {
+		return errors.Errorf("left range is not splittable by right range: %+v, %+v", oldLeftDesc, rightDesc)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if exRng, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
+	if exRng, ok := s.mu.uninitReplicas[rightDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range we require pointer
-		// equivalence with newRng. See Store.splitTriggerPostApply().
-		if exRng != newRng {
-			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
+		// equivalence with rightRepl. See Store.splitTriggerPostApply().
+		if exRng != rightRepl {
+			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, rightRepl)
 		}
-		s.unlinkReplicaByRangeIDLocked(newDesc.RangeID)
+		s.unlinkReplicaByRangeIDLocked(rightDesc.RangeID)
 	}
 
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
-	if kr := s.mu.replicasByKey.Delete(origRng); kr != origRng {
-		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, origRng)
+	if kr := s.mu.replicasByKey.Delete(leftRepl); kr != leftRepl {
+		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, leftRepl)
 	}
 
-	copyDesc := *origDesc
-	copyDesc.IncrementGeneration()
-	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
-	origRng.setDescWithoutProcessUpdate(&copyDesc)
+	leftRepl.setDescWithoutProcessUpdate(&newLeftDesc)
 
 	// Clear the LHS txn wait queue, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate
 	// to ensure that no pre-split commands are inserted into the
 	// txnWaitQueue after we clear it.
-	origRng.txnWaitQueue.Clear(false /* disable */)
+	leftRepl.txnWaitQueue.Clear(false /* disable */)
 
 	// The rangefeed processor will no longer be provided logical ops for
 	// its entire range, so it needs to be shut down and all registrations
@@ -2385,28 +2384,28 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// TODO(nvanbenschoten): It should be possible to only reject registrations
 	// that overlap with the new range of the split and keep registrations that
 	// are only interested in keys that are still on the original range running.
-	origRng.disconnectRangefeedWithReasonRaftMuLocked(
+	leftRepl.disconnectRangefeedWithReasonRaftMuLocked(
 		roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 	)
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
-	origRng.leaseholderStats.resetRequestCounts()
-	origRng.writeStats.splitRequestCounts(newRng.writeStats)
+	leftRepl.leaseholderStats.resetRequestCounts()
+	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
 
-	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
-		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
+	if kr := s.mu.replicasByKey.ReplaceOrInsert(leftRepl); kr != nil {
+		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, leftRepl)
 	}
 
-	if err := s.addReplicaInternalLocked(newRng); err != nil {
-		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", newRng, err)
+	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
+		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rightRepl, err)
 	}
 
 	// Update the max bytes and other information of the new range.
 	// This may not happen if the system config has not yet been loaded.
 	// Since this is done under the store lock, system config update will
 	// properly set these fields.
-	if err := newRng.updateRangeInfo(newRng.Desc()); err != nil {
+	if err := rightRepl.updateRangeInfo(rightRepl.Desc()); err != nil {
 		return err
 	}
 
@@ -2414,7 +2413,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	s.metrics.ReplicaCount.Inc(1)
 	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
 
-	return s.processRangeDescriptorUpdateLocked(ctx, origRng)
+	return s.processRangeDescriptorUpdateLocked(ctx, leftRepl)
 }
 
 // MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
@@ -2422,16 +2421,11 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 // store and the raftMus for both the left-hand and right-hand replicas must be
 // held.
 func (s *Store) MergeRange(
-	ctx context.Context,
-	leftRepl *Replica,
-	updatedEndKey roachpb.RKey,
-	rightDesc roachpb.RangeDescriptor,
+	ctx context.Context, leftRepl *Replica, newLeftDesc, rightDesc roachpb.RangeDescriptor,
 ) error {
-	leftDesc := leftRepl.Desc()
-
-	if !leftDesc.EndKey.Less(updatedEndKey) {
+	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
-			updatedEndKey, leftDesc.EndKey)
+			newLeftDesc.EndKey, oldLeftDesc.EndKey)
 	}
 
 	rightRepl, err := s.GetReplica(rightDesc.RangeID)
@@ -2490,11 +2484,8 @@ func (s *Store) MergeRange(
 
 	// TODO(benesch): bump the timestamp cache of the LHS.
 
-	// Update the end key of the subsuming range.
-	copy := *leftDesc
-	copy.IncrementGeneration()
-	copy.EndKey = updatedEndKey
-	return leftRepl.setDesc(&copy)
+	// Update the subsuming range's descriptor.
+	return leftRepl.setDesc(&newLeftDesc)
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
