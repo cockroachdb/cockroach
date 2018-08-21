@@ -17,12 +17,14 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func registerCDC(r *registry) {
@@ -41,7 +43,7 @@ func registerCDC(r *registry) {
 
 		c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 		c.Put(ctx, workload, "./workload", workloadNode)
-		c.Start(ctx, crdbNodes)
+		c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=poller=2`))
 
 		t.Status("loading initial data")
 		c.Run(ctx, workloadNode, fmt.Sprintf(
@@ -78,7 +80,7 @@ func registerCDC(r *registry) {
 		m.Go(func(ctx context.Context) error {
 			defer func() { doneCh <- struct{}{} }()
 			c.Run(ctx, workloadNode, fmt.Sprintf(
-				`./workload run tpcc --warehouses=%d {pgurl:1-%d} --duration=30m`,
+				`./workload run tpcc --warehouses=%d {pgurl:1-%d} --duration=120m`,
 				warehouses, c.nodes-1,
 			))
 			return nil
@@ -100,7 +102,7 @@ func registerCDC(r *registry) {
 				tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
 				tpcc.order, tpcc.new_order, tpcc.item, tpcc.stock,
 				tpcc.order_line
-			INTO $1 WITH timestamps`
+			INTO $1 WITH resolved`
 			extraArgs := []interface{}{`kafka://` + c.InternalIP(ctx, kafkaNode)[0] + `:9092`}
 			if !initialScan {
 				createStmt += `, cursor=$2`
@@ -120,26 +122,31 @@ func registerCDC(r *registry) {
 				case <-time.After(time.Second):
 				}
 
-				// Until we have changefeed monitoring, query the job progress
-				// proto directly.
-				var progressBytes []byte
+				var status string
+				var hwRaw gosql.NullString
 				if err := db.QueryRow(
-					`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
-				).Scan(&progressBytes); err != nil {
+					`SELECT status, high_water_timestamp FROM crdb_internal.jobs WHERE job_id = $1`,
+					jobID,
+				).Scan(&status, &hwRaw); err != nil {
 					return err
 				}
-				var progress jobspb.Progress
-				if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
-					return err
+				if status != `running` {
+					return errors.Errorf(`unexpected status: %s`, status)
 				}
-				if hw := progress.GetHighWater(); hw != nil && hw.WallTime > 0 {
+				if hwRaw.Valid {
+					// Intentionally not using tree.DecimalToHLC to avoid the dep.
+					hwWallTime, err := strconv.ParseInt(
+						hwRaw.String[:strings.IndexRune(hwRaw.String, '.')], 10, 64)
+					if err != nil {
+						return errors.Wrapf(err, "parsing [%s]", hwRaw.String)
+					}
 					if initialScanLatency == 0 {
-						initialScanLatency = timeutil.Since(timeutil.Unix(0, hw.WallTime))
+						initialScanLatency = timeutil.Since(timeutil.Unix(0, hwWallTime))
 						l.printf("initial scan latency %s\n", initialScanLatency)
 						t.Status("finished initial scan")
 						continue
 					}
-					latency := timeutil.Since(timeutil.Unix(0, hw.WallTime))
+					latency := timeutil.Since(timeutil.Unix(0, hwWallTime))
 					if latency < maxLatencyAllowed {
 						latencyDroppedBelowMaxAllowed = true
 					}
