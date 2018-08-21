@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: fakedist
 
 #
 # Tests that verify DistSQL support and auto mode determination.
@@ -128,44 +128,3 @@ query BT
 EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
 ----
 false  https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFLBDEQhXt_hbw64K6IxVQ2h1yjx3KNSIpc8jgW9pJlkgXlyH-X3RRiIVz53pv53swVMQW-uQsz5BM9rMGsyTPnpKvVBvbhC9IZjHFeympbA5-UkCvKWCZCcHSniQNdoD50MAgsbpw27Kzjxen3izt5GAyMgSr3j0_PIjLsXo8fhx1sNUhL-eXn4s6E9NXcfsPAPKeY-af-P3JXrQHDme3PnBb1PGjyW02T79veZgTm0tK-iX1sUbX17icAAP__JLhsAQ==
-
-# Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
-# statistics.
-
-statement ok
-INSERT INTO kv VALUES (1,1);
-
-statement ok
-INSERT INTO kw VALUES (1,1);
-
-# This query verifies stat collection for the tableReader, mergeJoiner, and
-# aggregator.
-query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.k GROUP BY kv.k]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0Fv1DAQhe_8CmtOW2FpY29PlpCyXFChbFBVkBCKKhMPwSKJo7FDW1X731Hsw5Jss7CIW_w8n_3ejPMEnTO40y16UF9AQMmhJ1eh945GKRVcmQdQGQfb9UMY5ZJD5QhBPUGwoUFQcKu_NniD2iCtM-BgMGjbxGN7sq2mx_zHT-BA7t4zQm0UE8DBB900LNgWFcs8cCiGoFguoNxzcEM4XOiDrhGU2PN_MyUWTN3_B1Ny0dTBy9A5MkhoJj7KkfxTyTPJ3iPV-NbZDmktp8ka_BZWuXh58Yps_T19Ao8ymwWN2lHaiM1Lk3hU2-oH1mLr6JENHo1iMmPv7OtDz3guF9u2OWeW27omrHVwtN5MA-ejvyJ1Lo6Jw3b3-W5X3N7tPl5fr3Ix5t9-erPK5cVfTPsok0iZlmJcnhPjBn3vOo_zV_Dsydk4ejQ1pqfk3UAVfiBXxWvSsohcFAz6kHZlWlx1cSv-M7_D4gxYzmF5Et5M4GwOb07ClzO43L_4FQAA__-EfYCR
-
-# This query verifies stats collection for the hashJoiner, distinct and sorter.
-query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT DISTINCT(kw.w) FROM kv JOIN kw ON kv.k = kw.w ORDER BY kw.w]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyck8FunDAQhu99CmtOrWppMZCLpUoo6qFppaZKe6s4uHi6sQIYzZgmUbTvXmEipbCBLnuD3_PBN_b4CVpv8atpkEH_BAWlhI58hcyehmgsuLIPoBMJru36MMSlhMoTgn6C4EKNoOGH-VXjDRqLtEtAgsVgXB0_25FrDD0Wd39AAvl7FoTGaqFAAgdT1yK4BrVIGCRc90GLQkF5kOD78PJDDmaPoNVBnielFqTuT5ZKF6XSRakXl771ZJHQTjzKgfxfySudfTJ8-9m7FmmXThur8Xd4W6h3H8jtb-MTyBiKWZcxO2o1UvPSMTyq5eAJrWBnUYtYAxIa8yAabDw9ip7RapEm4ou7fF6xju-e80RcnrC12Zbz_u4pIO2y6Y4U6v0JZ3zkrVa8l2zzLbYfHQfXVmGXz32HfRknId6FM-TXJC-2SN4gd75lnE_tq19OhlFFu8dx9Nn3VOE38lX8zfh6HbkYWOQwrqbjy1Ubl-Id_xdWG-B0DqercDaBkzmcrcL5OpyvwhczuDy8-RsAAP__mE7PKQ==
-
-# Verify that EXPLAIN ANALYZE on an unsupported query doesn't return an error.
-statement ok
-EXPLAIN ANALYZE (DISTSQL) SHOW QUERIES;
-
-statement ok
-EXPLAIN ANALYZE (DISTSQL) EXPLAIN SELECT 1
-
-# This query verifies support for zeroNode in DistSQL.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE]
-----
-true
-
-# This query verifies stat collection for the tableReader and windower.
-query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT avg(k) OVER () FROM kv]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkUFLMzEQhu_frwjv6RMC3RRPOVUvUgQrRfQge4iboQQ3m2Uma1vK_nfp5qAVKvU47-SZ94Ec0CVPDy6SwL7CoNboOTUkkvgYlQdLv4OtNELXD_kY1xpNYoI9IIfcEiye3FtLa3KeeFZBw1N2oZ3O9hyi4_3i_QManLaimJy3ykBDsmtblUMkqyqBxmrIVi0M6lEjDfmrULLbEKwZ9eVSL6HzaUs8M6dGN893_xfm6gKd6HYqUky8V4OQt-q6Uvfh9qze_C96a5I-dUIncucuV2OtQX5D5V8kDdzQI6dmqinjauKmwJPksjVlWHZldRT8Dptf4fkPuB7_fQYAAP__QWu4Ow==
