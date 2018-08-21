@@ -99,7 +99,7 @@ func MakeExprView(mem *Memo, best BestExprID) ExprView {
 // bestExprs have been populated). See the struct comment in factory.go for
 // more details about the normalized expression tree.
 func MakeNormExprView(mem *Memo, group GroupID) ExprView {
-	return MakeExprView(mem, BestExprID{group: group, ordinal: normBestOrdinal})
+	return ExprView{mem: mem, group: group, op: mem.NormExpr(group).Operator(), best: normBestOrdinal}
 }
 
 // Operator returns the type of the expression.
@@ -135,7 +135,7 @@ func (ev ExprView) Child(nth int) ExprView {
 		// normBestOrdinal is the special BestExpr index that indicates traversal
 		// of the normalized expression tree, regardless of whether it's the
 		// lowest cost.
-		group := ev.ChildGroup(nth)
+		group := ev.mem.NormExpr(ev.group).ChildGroup(ev.mem, nth)
 		return MakeNormExprView(ev.mem, group)
 	}
 	return MakeExprView(ev.mem, ev.bestExpr().Child(nth))
@@ -245,7 +245,7 @@ func (ev ExprView) RequestColStat(evalCtx *tree.EvalContext, cols opt.ColSet) {
 // HasOnlyConstChildren returns true if all children of ev are constant values
 // (tuples of constant values are considered constant values).
 func HasOnlyConstChildren(ev ExprView) bool {
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
 		switch {
 		case child.IsConstValue():

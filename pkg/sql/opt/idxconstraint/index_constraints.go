@@ -679,7 +679,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 	// a map could help here.
 	c.makeSpansForExpr(offset, ev.Child(0), out)
 	var exprConstraint constraint.Constraint
-	for i := 1; i < ev.ChildCount(); i++ {
+	for i, n := 1, ev.ChildCount(); i < n; i++ {
 		c.makeSpansForExpr(offset, ev.Child(i), &exprConstraint)
 		out.IntersectWith(c.evalCtx, &exprConstraint)
 	}
@@ -716,7 +716,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 		}
 
 		c.makeSpansForExpr(offset+delta, ev.Child(0), &ofsC)
-		for j := 1; j < ev.ChildCount(); j++ {
+		for j, n := 1, ev.ChildCount(); j < n; j++ {
 			c.makeSpansForExpr(offset+delta, ev.Child(j), &exprConstraint)
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
