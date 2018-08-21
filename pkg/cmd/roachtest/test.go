@@ -756,12 +756,12 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 					timeout = t.spec.Timeout
 				}
 
+				runCtx, cancel := context.WithCancel(ctx)
 				done := make(chan struct{})
 				defer func() {
 					close(done)
+					defer cancel() // in case of panic
 				}()
-
-				runCtx, cancel := context.WithCancel(ctx)
 
 				go func() {
 					defer cancel()
