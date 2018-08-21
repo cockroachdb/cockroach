@@ -88,6 +88,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 			AmbientCtx: ambient,
 			Clock:      s.Clock(),
 			RPCContext: s.RPCContext(),
+			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
 		},
 		s.(*server.TestServer).Gossip(),
 	)
@@ -1001,6 +1002,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 					kv.DistSenderConfig{
 						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
 						Clock:      clock, RPCContext: s.RPCContext(),
+						NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
 					},
 					s.(*server.TestServer).Gossip(),
 				)
