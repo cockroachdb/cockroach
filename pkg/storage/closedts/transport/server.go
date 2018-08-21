@@ -63,9 +63,13 @@ func (s *Server) Get(client ctpb.InboundClient) error {
 	const closedTimestampNoUpdateWarnThreshold = 10 * time.Second
 	t := timeutil.NewTimer()
 
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	// NB: We can't use Stopper.RunWorker because doing so would race with
+	// calling Stopper.Stop.
+	if err := s.stopper.RunAsyncTask(ctx, "closedts-subscription", func(ctx context.Context) {
 		s.p.Subscribe(ctx, ch)
-	})
+	}); err != nil {
+		return err
+	}
 	for {
 		reaction, err := client.Recv()
 		if err != nil {

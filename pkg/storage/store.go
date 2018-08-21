@@ -2417,11 +2417,16 @@ func (s *Store) SplitRange(
 }
 
 // MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
-// replica, identified by rightDesc. The right-hand replica must exist on this
-// store and the raftMus for both the left-hand and right-hand replicas must be
-// held.
+// replica, identified by rightDesc. freezeStart specifies the time at which the
+// right-hand replica promised to stop serving traffic and is used to initialize
+// the timestamp cache's low water mark for the right-hand keyspace. The
+// right-hand replica must exist on this store and the raftMus for both the
+// left-hand and right-hand replicas must be held.
 func (s *Store) MergeRange(
-	ctx context.Context, leftRepl *Replica, newLeftDesc, rightDesc roachpb.RangeDescriptor,
+	ctx context.Context,
+	leftRepl *Replica,
+	newLeftDesc, rightDesc roachpb.RangeDescriptor,
+	freezeStart hlc.Timestamp,
 ) error {
 	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
@@ -2482,7 +2487,23 @@ func (s *Store) MergeRange(
 	// left-hand replica, if necessary.
 	rightRepl.txnWaitQueue.Clear(true /* disable */)
 
-	// TODO(benesch): bump the timestamp cache of the LHS.
+	leftLease, _ := leftRepl.GetLease()
+	rightLease, _ := rightRepl.GetLease()
+	if leftLease.OwnedBy(s.Ident.StoreID) && !rightLease.OwnedBy(s.Ident.StoreID) {
+		// We hold the lease for the LHS, but do not hold the lease for the RHS.
+		// That means we don't have up-to-date timestamp cache entries for the
+		// keyspace previously owned by the RHS. Bump the low water mark for the RHS
+		// keyspace to freezeStart, the time at which the RHS promised to stop
+		// serving traffic, as freezeStart is guaranteed to be greater than any
+		// entry in the RHS's timestamp cache.
+		//
+		// Note that we need to update our clock with freezeStart to preserve the
+		// invariant that our clock is always greater than or equal to any
+		// timestamps in the timestamp cache. For a full discussion, see the comment
+		// on TestStoreRangeMergeTimestampCacheCausality.
+		_ = s.Clock().Update(freezeStart)
+		s.tsCache.SetLowWater(rightDesc.StartKey.AsRawKey(), rightDesc.EndKey.AsRawKey(), freezeStart)
+	}
 
 	// Update the subsuming range's descriptor.
 	return leftRepl.setDesc(&newLeftDesc)

@@ -887,6 +887,17 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::storage::engine::enginepb::MVCCStats* mutable_right_mvcc_stats();
   void set_allocated_right_mvcc_stats(::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats);
 
+  bool has_freeze_start() const;
+  void clear_freeze_start();
+  static const int kFreezeStartFieldNumber = 5;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_freeze_start() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& freeze_start() const;
+  ::cockroach::util::hlc::Timestamp* release_freeze_start();
+  ::cockroach::util::hlc::Timestamp* mutable_freeze_start();
+  void set_allocated_freeze_start(::cockroach::util::hlc::Timestamp* freeze_start);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.MergeTrigger)
  private:
 
@@ -894,6 +905,7 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::RangeDescriptor* left_desc_;
   ::cockroach::roachpb::RangeDescriptor* right_desc_;
   ::cockroach::storage::engine::enginepb::MVCCStats* right_mvcc_stats_;
+  ::cockroach::util::hlc::Timestamp* freeze_start_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -3000,6 +3012,53 @@ inline void MergeTrigger::set_allocated_right_mvcc_stats(::cockroach::storage::e
   }
   right_mvcc_stats_ = right_mvcc_stats;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_mvcc_stats)
+}
+
+inline bool MergeTrigger::has_freeze_start() const {
+  return this != internal_default_instance() && freeze_start_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& MergeTrigger::_internal_freeze_start() const {
+  return *freeze_start_;
+}
+inline const ::cockroach::util::hlc::Timestamp& MergeTrigger::freeze_start() const {
+  const ::cockroach::util::hlc::Timestamp* p = freeze_start_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.freeze_start)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* MergeTrigger::release_freeze_start() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.freeze_start)
+  
+  ::cockroach::util::hlc::Timestamp* temp = freeze_start_;
+  freeze_start_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* MergeTrigger::mutable_freeze_start() {
+  
+  if (freeze_start_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    freeze_start_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MergeTrigger.freeze_start)
+  return freeze_start_;
+}
+inline void MergeTrigger::set_allocated_freeze_start(::cockroach::util::hlc::Timestamp* freeze_start) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(freeze_start_);
+  }
+  if (freeze_start) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      freeze_start = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, freeze_start, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  freeze_start_ = freeze_start;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.freeze_start)
 }
 
 // -------------------------------------------------------------------
