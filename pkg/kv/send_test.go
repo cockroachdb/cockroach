@@ -108,6 +108,12 @@ func (f *firstNErrorTransport) SendNext(
 	return &roachpb.BatchResponse{}, err
 }
 
+func (f *firstNErrorTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
+}
+
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{}
 }
