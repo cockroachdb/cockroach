@@ -286,7 +286,7 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 		}
 	}
 
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		ev.Child(i).format(f, tp)
 	}
 }
@@ -310,7 +310,7 @@ func (ev ExprView) formatScalar(f *ExprFmtCtx, tp treeprinter.Node) {
 		ev.FormatScalarProps(f)
 		tp = tp.Child(f.Buffer.String())
 	}
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
 		child.format(f, tp)
 	}
