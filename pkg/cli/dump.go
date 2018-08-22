@@ -370,23 +370,43 @@ func extractArray(val interface{}) ([]string, error) {
 
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
-	query := fmt.Sprintf(`
-		SELECT COLUMN_NAME, DATA_TYPE
+
+	makeQuery := func(colname string) string {
+		// This query is parameterized by the column name because of
+		// 2.0/2.1beta/2.1 trans-version compatibility requirements.  See
+		// below for details.
+		return fmt.Sprintf(`
+		SELECT COLUMN_NAME, %s
 		FROM %s.information_schema.columns
 		AS OF SYSTEM TIME %s
 		WHERE TABLE_CATALOG = $1
 			AND TABLE_SCHEMA = $2
 			AND TABLE_NAME = $3
 			AND GENERATION_EXPRESSION = ''
-		`, &md.name.CatalogName, lex.EscapeSQLString(ts))
-	rows, err := conn.Query(query+` AND IS_HIDDEN = 'NO'`,
+		`, colname, &md.name.CatalogName, lex.EscapeSQLString(ts))
+	}
+	rows, err := conn.Query(makeQuery("CRDB_SQL_TYPE")+` AND IS_HIDDEN = 'NO'`,
 		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {
+		// IS_HIDDEN was introduced in the first 2.1 beta. CRDB_SQL_TYPE
+		// some time after that.  To ensure `cockroach dump` works across
+		// versions we must try the previous forms if the first form
+		// fails.
+		//
+		// TODO(knz): Remove this fallback logic post-2.2.
+		if strings.Contains(err.Error(), "column \"crdb_sql_type\" does not exist") {
+			// Pre-2.1 CRDB_SQL_HIDDEN did not exist in
+			// information_schema.columns. When it does not exist,
+			// information_schema.columns.data_type contains a usable SQL
+			// type name instead. Use that.
+			rows, err = conn.Query(makeQuery("DATA_TYPE")+` AND IS_HIDDEN = 'NO'`,
+				[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
+		}
 		if strings.Contains(err.Error(), "column \"is_hidden\" does not exist") {
 			// Pre-2.1 IS_HIDDEN did not exist in information_schema.columns.
 			// When it does not exist, information_schema.columns only returns
 			// non-hidden columns so we can still use that.
-			rows, err = conn.Query(query,
+			rows, err = conn.Query(makeQuery("DATA_TYPE"),
 				[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 		}
 		if err != nil {
