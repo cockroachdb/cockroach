@@ -64,7 +64,10 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	if err := MVCCPut(ctx, olDist, nil, localKey, hlc.Timestamp{Logical: 3}, value2, &txn1Seq); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, olDist, nil, testKey2, hlc.Timestamp{Logical: 3}, value3, txn1); err != nil {
+	// Set the txn timestamp to a larger value than the intent.
+	txn1LargerTS := *txn1
+	txn1LargerTS.Timestamp = hlc.Timestamp{Logical: 4}
+	if err := MVCCPut(ctx, olDist, nil, testKey2, hlc.Timestamp{Logical: 3}, value3, &txn1LargerTS); err != nil {
 		t.Fatal(err)
 	}
 	olDist.Close()
@@ -133,7 +136,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 		makeOp(&enginepb.MVCCWriteIntentOp{
 			TxnID:     txn1.ID,
 			TxnKey:    txn1.Key,
-			Timestamp: hlc.Timestamp{Logical: 3},
+			Timestamp: hlc.Timestamp{Logical: 4},
 		}),
 		makeOp(&enginepb.MVCCCommitIntentOp{
 			TxnID:     txn1.ID,
