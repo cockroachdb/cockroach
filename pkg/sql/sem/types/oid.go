@@ -119,62 +119,6 @@ var OidToType = map[oid.Oid]T{
 	oid.T_record: FamTuple,
 }
 
-// AliasedOidToName maps Postgres object IDs to type names for those OIDs that map to
-// Cockroach types that have more than one associated OID, like Int. The name
-// for these OIDs will override the type name of the corresponding type when
-// looking up the display name for an OID.
-var aliasedOidToName = map[oid.Oid]string{
-	// TODO(justin): find a better solution to this than mapping every array type.
-	oid.T_anyarray:     "anyarray",
-	oid.T_bit:          "bit",
-	oid.T__bit:         "_bit",
-	oid.T_bpchar:       "bpchar",
-	oid.T__bpchar:      "_bpchar",
-	oid.T_bool:         "bool",
-	oid.T__bool:        "_bool",
-	oid.T_bytea:        "bytea",
-	oid.T__bytea:       "_bytea",
-	oid.T_char:         "char",
-	oid.T__char:        "_char",
-	oid.T_date:         "date",
-	oid.T__date:        "_date",
-	oid.T_float4:       "float4",
-	oid.T__float4:      "_float4",
-	oid.T_float8:       "float8",
-	oid.T__float8:      "_float8",
-	oid.T_inet:         "inet",
-	oid.T__inet:        "_inet",
-	oid.T_int2:         "int2",
-	oid.T__int2:        "_int2",
-	oid.T_int4:         "int4",
-	oid.T__int4:        "_int4",
-	oid.T_int8:         "int8",
-	oid.T__int8:        "_int8",
-	oid.T_interval:     "interval",
-	oid.T__interval:    "_interval",
-	oid.T_name:         "name",
-	oid.T__name:        "_name",
-	oid.T_numeric:      "numeric",
-	oid.T__numeric:     "_numeric",
-	oid.T_oid:          "oid",
-	oid.T__oid:         "_oid",
-	oid.T_text:         "text",
-	oid.T__text:        "_text",
-	oid.T_time:         "time",
-	oid.T__time:        "_time",
-	oid.T_timestamp:    "timestamp",
-	oid.T__timestamp:   "_timestamp",
-	oid.T_timestamptz:  "timestamptz",
-	oid.T__timestamptz: "_timestamptz",
-	oid.T_uuid:         "uuid",
-	oid.T__uuid:        "_uuid",
-	oid.T_varchar:      "varchar",
-	oid.T__varchar:     "_varchar",
-	oid.T_oidvector:    "oidvector",
-	oid.T_record:       "record",
-	oid.T_int2vector:   "int2vector",
-}
-
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
 var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_anyelement:  oid.T_anyarray,
@@ -200,14 +144,6 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_timestamptz: oid.T__timestamptz,
 	oid.T_varchar:     oid.T__varchar,
 	oid.T_uuid:        oid.T__uuid,
-}
-
-// PGDisplayName returns the Postgres display name for a given type.
-func PGDisplayName(typ T) string {
-	if typname, ok := aliasedOidToName[typ.Oid()]; ok {
-		return typname
-	}
-	return typ.String()
 }
 
 // TOid represents an alias to the Int type with a different Postgres OID.
