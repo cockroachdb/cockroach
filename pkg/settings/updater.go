@@ -54,11 +54,15 @@ type updater struct {
 // then set the rest to default in ResetRemaining().
 type Updater interface {
 	Set(k, rawValue, valType string) error
+	Reset(k string) error
 	ResetRemaining()
 }
 
 // A NoopUpdater ignores all updates.
 type NoopUpdater struct{}
+
+// Reset implements Updater. It is a no-op.
+func (u NoopUpdater) Reset(string) error { return nil }
 
 // Set implements Updater. It is a no-op.
 func (u NoopUpdater) Set(_, _, _ string) error { return nil }
@@ -74,15 +78,23 @@ func NewUpdater(sv *Values) Updater {
 	}
 }
 
-// Set attempts to parse and update a setting and notes that it was updated.
-func (u updater) Set(key, rawValue string, vt string) error {
+func (u updater) get(key string) (Setting, error) {
 	d, ok := Registry[key]
 	if !ok {
 		if _, ok := retiredSettings[key]; ok {
-			return nil
+			return nil, nil
 		}
 		// Likely a new setting this old node doesn't know about.
-		return errors.Errorf("unknown setting '%s'", key)
+		return nil, errors.Errorf("unknown setting '%s'", key)
+	}
+	return d, nil
+}
+
+// Set attempts to parse and update a setting and notes that it was updated.
+func (u updater) Set(key, rawValue string, vt string) error {
+	d, err := u.get(key)
+	if err != nil || d == nil {
+		return err
 	}
 
 	u.m[key] = struct{}{}
@@ -128,6 +140,15 @@ func (u updater) Set(key, rawValue string, vt string) error {
 	case *StateMachineSetting:
 		return setting.set(u.sv, []byte(rawValue))
 	}
+	return nil
+}
+
+func (u updater) Reset(key string) error {
+	d, err := u.get(key)
+	if err != nil || d == nil {
+		return err
+	}
+	d.setToDefault(u.sv)
 	return nil
 }
 

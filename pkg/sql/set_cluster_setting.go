@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -94,6 +95,7 @@ func (p *planner) SetClusterSetting(
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
 	var reportedValue string
+	var updateLocal func(settings.Updater) error
 	if n.value == nil {
 		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx, "reset-setting", params.p.txn,
@@ -102,6 +104,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			return err
 		}
 		reportedValue = "DEFAULT"
+		updateLocal = func(u settings.Updater) error { return u.Reset(n.name) }
 	} else {
 		value, err := n.value.Eval(params.p.EvalContext())
 		if err != nil {
@@ -119,8 +122,36 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
+		updateLocal = func(u settings.Updater) error { return u.Set(n.name, encoded, n.setting.Typ()) }
 	}
+
+	// Update our local in-memory cache with the setting's new value if and when
+	// the transaction commits.
+	//
+	// To see why this is important, suppose a user executes `SET CLUSTER SETTING
+	// foo = bar`, then executes another statement in the same SQL session that
+	// depends on the new value of foo. Without this explicit update, that latter
+	// statement might not see the new value of foo, as the node won't update its
+	// in-memory cache with the new value until the update propagates through
+	// gossip! This race reproduces easily on both real and test clusters and
+	// makes for an extremely poor user experience as well as flaky tests.
+	//
+	// With this explicit update, we guarantee that the user will see the updated
+	// setting value in the same SQL session after the transaction commits
+	// (unless, of course, there are concurrent updates to the same setting).
+	// Racing with concurrent updates to the same setting is not a concern, as
+	// gossip will always eventually update the setting with the correct value.
+	//
+	// SET CLUSTER SETTING is still likely to return before the update has
+	// propagated on other nodes, but fixing that is a more difficult problem and
+	// is left to future work. (For example, how do you wait for a settings update
+	// on a dead node?)
+	params.p.txn.AddCommitTrigger(func(ctx context.Context) {
+		if err := updateLocal(n.st.MakeUpdater()); err != nil {
+			log.Fatalf(params.ctx, "node failed to process known-good update to setting %q: %s",
+				n.name, err)
+		}
+	})
 
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
