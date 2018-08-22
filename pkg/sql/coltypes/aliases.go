@@ -80,8 +80,6 @@ var (
 	VarChar = &TString{Name: "VARCHAR"}
 	// String is an immutable T instance.
 	String = &TString{Name: "STRING"}
-	// Text is an immutable T instance.
-	Text = &TString{Name: "TEXT"}
 	// QChar is an immutable T instance.
 	QChar = &TString{Name: `"char"`}
 

@@ -1,7 +1,7 @@
 1:
 -
 SELECT
-	NULL::TEXT
+	NULL::STRING
 		AS pktable_cat,
 	pkn.nspname
 		AS pktable_schem,
@@ -9,7 +9,7 @@ SELECT
 		AS pktable_name,
 	pka.attname
 		AS pkcolumn_name,
-	NULL::TEXT
+	NULL::STRING
 		AS fktable_cat,
 	fkn.nspname
 		AS fktable_schem,
@@ -129,7 +129,7 @@ ORDER BY
 8:
 --------
 SELECT
-	NULL::TEXT
+	NULL::STRING
 		AS pktable_cat,
 	pkn.nspname
 		AS pktable_schem,
@@ -137,7 +137,7 @@ SELECT
 		AS pktable_name,
 	pka.attname
 		AS pkcolumn_name,
-	NULL::TEXT
+	NULL::STRING
 		AS fktable_cat,
 	fkn.nspname
 		AS fktable_schem,
@@ -256,7 +256,7 @@ ORDER BY
 16:
 ----------------
 SELECT
-	NULL::TEXT
+	NULL::STRING
 		AS pktable_cat,
 	pkn.nspname
 		AS pktable_schem,
@@ -264,7 +264,7 @@ SELECT
 		AS pktable_name,
 	pka.attname
 		AS pkcolumn_name,
-	NULL::TEXT
+	NULL::STRING
 		AS fktable_cat,
 	fkn.nspname
 		AS fktable_schem,
@@ -381,130 +381,121 @@ ORDER BY
 
 19:
 -------------------
-  SELECT NULL::TEXT
-			AS pktable_cat,
-         pkn.nspname
-			AS pktable_schem,
-         pkc.relname
-			AS pktable_name,
-         pka.attname
-			AS pkcolumn_name,
-         NULL::TEXT
-			AS fktable_cat,
-         fkn.nspname
-			AS fktable_schem,
-         fkc.relname
-			AS fktable_name,
-         fka.attname
-			AS fkcolumn_name,
-         pos.n
-			AS key_seq,
-         CASE con.confupdtype
-         WHEN 'c'
-         THEN 0
-         WHEN 'n'
-         THEN 2
-         WHEN 'd'
-         THEN 4
-         WHEN 'r'
-         THEN 1
-         WHEN 'a'
-         THEN 3
-         ELSE NULL
-         END
-			AS update_rule,
-         CASE con.confdeltype
-         WHEN 'c'
-         THEN 0
-         WHEN 'n'
-         THEN 2
-         WHEN 'd'
-         THEN 4
-         WHEN 'r'
-         THEN 1
-         WHEN 'a'
-         THEN 3
-         ELSE NULL
-         END
-			AS delete_rule,
-         con.conname
-			AS fk_name,
-         pkic.relname
-			AS pk_name,
-         CASE
-         WHEN con.condeferrable
-     AND con.condeferred
-         THEN 5
-         WHEN con.condeferrable
-         THEN 6
-         ELSE 7
-         END AS deferrability
-    FROM pg_catalog.pg_namespace
-			AS pkn,
-         pg_catalog.pg_class
-			AS pkc,
-         pg_catalog.pg_attribute
-			AS pka,
-         pg_catalog.pg_namespace
-			AS fkn,
-         pg_catalog.pg_class
-			AS fkc,
-         pg_catalog.pg_attribute
-			AS fka,
-         pg_catalog.pg_constraint
-			AS con,
-         pg_catalog.generate_series(
-			1,
-			32
-         )
-			AS pos
-				(
-					n
-				),
-         pg_catalog.pg_depend
-			AS dep,
-         pg_catalog.pg_class
-			AS pkic
-   WHERE pkn.oid
-         = pkc.relnamespace
-     AND pkc.oid
-         = pka.attrelid
-     AND pka.attnum
-         = con.confkey[pos.n]
-     AND con.confrelid
-         = pkc.oid
-     AND fkn.oid
-         = fkc.relnamespace
-     AND fkc.oid
-         = fka.attrelid
-     AND fka.attnum
-         = con.conkey[pos.n]
-     AND con.conrelid
-         = fkc.oid
-     AND con.contype
-         = 'f'
-     AND con.oid
-         = dep.objid
-     AND pkic.oid
-         = dep.refobjid
-     AND pkic.relkind
-         = 'i'
-     AND dep.classid
-         = 'pg_constraint'::REGCLASS::OID
-     AND dep.refclassid
-         = 'pg_class'::REGCLASS::OID
-     AND fkn.nspname
-         = 'public'
-     AND fkc.relname
-         = 'orders'
-ORDER BY pkn.nspname,
-         pkc.relname,
-         con.conname,
-         pos.n
+SELECT
+	NULL::STRING
+		AS pktable_cat,
+	pkn.nspname
+		AS pktable_schem,
+	pkc.relname
+		AS pktable_name,
+	pka.attname
+		AS pkcolumn_name,
+	NULL::STRING
+		AS fktable_cat,
+	fkn.nspname
+		AS fktable_schem,
+	fkc.relname
+		AS fktable_name,
+	fka.attname
+		AS fkcolumn_name,
+	pos.n
+		AS key_seq,
+	CASE con.confupdtype
+	WHEN 'c' THEN 0
+	WHEN 'n' THEN 2
+	WHEN 'd' THEN 4
+	WHEN 'r' THEN 1
+	WHEN 'a' THEN 3
+	ELSE NULL
+	END
+		AS update_rule,
+	CASE con.confdeltype
+	WHEN 'c' THEN 0
+	WHEN 'n' THEN 2
+	WHEN 'd' THEN 4
+	WHEN 'r' THEN 1
+	WHEN 'a' THEN 3
+	ELSE NULL
+	END
+		AS delete_rule,
+	con.conname
+		AS fk_name,
+	pkic.relname
+		AS pk_name,
+	CASE
+	WHEN con.condeferrable
+	AND con.condeferred
+	THEN 5
+	WHEN con.condeferrable
+	THEN 6
+	ELSE 7
+	END AS deferrability
+FROM
+	pg_catalog.pg_namespace
+		AS pkn,
+	pg_catalog.pg_class
+		AS pkc,
+	pg_catalog.pg_attribute
+		AS pka,
+	pg_catalog.pg_namespace
+		AS fkn,
+	pg_catalog.pg_class
+		AS fkc,
+	pg_catalog.pg_attribute
+		AS fka,
+	pg_catalog.pg_constraint
+		AS con,
+	pg_catalog.generate_series(
+		1,
+		32
+	)
+		AS pos (n),
+	pg_catalog.pg_depend
+		AS dep,
+	pg_catalog.pg_class
+		AS pkic
+WHERE
+	pkn.oid
+	= pkc.relnamespace
+	AND pkc.oid
+		= pka.attrelid
+	AND pka.attnum
+		= con.confkey[pos.n]
+	AND con.confrelid
+		= pkc.oid
+	AND fkn.oid
+		= fkc.relnamespace
+	AND fkc.oid
+		= fka.attrelid
+	AND fka.attnum
+		= con.conkey[pos.n]
+	AND con.conrelid
+		= fkc.oid
+	AND con.contype
+		= 'f'
+	AND con.oid
+		= dep.objid
+	AND pkic.oid
+		= dep.refobjid
+	AND pkic.relkind
+		= 'i'
+	AND dep.classid
+		= 'pg_constraint'::REGCLASS::OID
+	AND dep.refclassid
+		= 'pg_class'::REGCLASS::OID
+	AND fkn.nspname
+		= 'public'
+	AND fkc.relname
+		= 'orders'
+ORDER BY
+	pkn.nspname,
+	pkc.relname,
+	con.conname,
+	pos.n
 
-20:
---------------------
-  SELECT NULL::TEXT
+21:
+---------------------
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -512,7 +503,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -626,7 +617,7 @@ ORDER BY pkn.nspname,
 
 23:
 -----------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -634,7 +625,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -746,7 +737,7 @@ ORDER BY pkn.nspname,
 
 24:
 ------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -754,7 +745,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -856,7 +847,7 @@ ORDER BY pkn.nspname,
 
 26:
 --------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -864,7 +855,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -964,7 +955,7 @@ ORDER BY pkn.nspname,
 
 27:
 ---------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -972,7 +963,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1071,7 +1062,7 @@ ORDER BY pkn.nspname,
 
 28:
 ----------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -1079,7 +1070,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1177,7 +1168,7 @@ ORDER BY pkn.nspname,
 
 29:
 -----------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -1185,7 +1176,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1281,7 +1272,7 @@ ORDER BY pkn.nspname,
 
 31:
 -------------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -1289,7 +1280,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1380,7 +1371,7 @@ ORDER BY pkn.nspname,
 
 32:
 --------------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -1388,7 +1379,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1476,7 +1467,7 @@ ORDER BY pkn.nspname,
 
 33:
 ---------------------------------
-  SELECT NULL::TEXT
+  SELECT NULL::STRING
 			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
@@ -1484,7 +1475,7 @@ ORDER BY pkn.nspname,
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT
+         NULL::STRING
 			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
@@ -1571,14 +1562,16 @@ ORDER BY pkn.nspname,
 
 35:
 -----------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING
+			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
          pkc.relname
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING
+			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
          fkc.relname
@@ -1662,14 +1655,16 @@ ORDER BY pkn.nspname,
 
 36:
 ------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING
+			AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
          pkc.relname
 			AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING
+			AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
          fkc.relname
@@ -1749,13 +1744,13 @@ ORDER BY pkn.nspname,
 
 37:
 -------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname
 			AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname
 			AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname
 			AS fktable_schem,
          fkc.relname AS fktable_name,
@@ -1833,11 +1828,11 @@ ORDER BY pkn.nspname,
 
 38:
 --------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -1912,11 +1907,11 @@ ORDER BY pkn.nspname,
 
 39:
 ---------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -1990,11 +1985,11 @@ ORDER BY pkn.nspname,
 
 40:
 ----------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2063,11 +2058,11 @@ ORDER BY pkn.nspname,
 
 41:
 -----------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2135,11 +2130,11 @@ ORDER BY pkn.nspname,
 
 49:
 -------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2205,11 +2200,11 @@ ORDER BY pkn.nspname,
 
 51:
 ---------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2274,11 +2269,11 @@ ORDER BY pkn.nspname,
 
 53:
 -----------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2339,11 +2334,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 54:
 ------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2402,11 +2397,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 58:
 ----------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2464,11 +2459,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 121:
 -------------------------------------------------------------------------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2522,11 +2517,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 139:
 -------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2566,11 +2561,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 328:
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2601,11 +2596,11 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
 493:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat,
+  SELECT NULL::STRING AS pktable_cat,
          pkn.nspname AS pktable_schem,
          pkc.relname AS pktable_name,
          pka.attname AS pkcolumn_name,
-         NULL::TEXT AS fktable_cat,
+         NULL::STRING AS fktable_cat,
          fkn.nspname AS fktable_schem,
          fkc.relname AS fktable_name,
          fka.attname AS fkcolumn_name,
@@ -2619,13 +2614,13 @@ ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
    WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-682:
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
+686:
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT NULL::STRING AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::STRING AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability
     FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic
    WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders'
 ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
 
-1550:
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-SELECT NULL::TEXT AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::TEXT AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders' ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
+1554:
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SELECT NULL::STRING AS pktable_cat, pkn.nspname AS pktable_schem, pkc.relname AS pktable_name, pka.attname AS pkcolumn_name, NULL::STRING AS fktable_cat, fkn.nspname AS fktable_schem, fkc.relname AS fktable_name, fka.attname AS fkcolumn_name, pos.n AS key_seq, CASE con.confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS update_rule, CASE con.confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE NULL END AS delete_rule, con.conname AS fk_name, pkic.relname AS pk_name, CASE WHEN con.condeferrable AND con.condeferred THEN 5 WHEN con.condeferrable THEN 6 ELSE 7 END AS deferrability FROM pg_catalog.pg_namespace AS pkn, pg_catalog.pg_class AS pkc, pg_catalog.pg_attribute AS pka, pg_catalog.pg_namespace AS fkn, pg_catalog.pg_class AS fkc, pg_catalog.pg_attribute AS fka, pg_catalog.pg_constraint AS con, pg_catalog.generate_series(1, 32) AS pos (n), pg_catalog.pg_depend AS dep, pg_catalog.pg_class AS pkic WHERE pkn.oid = pkc.relnamespace AND pkc.oid = pka.attrelid AND pka.attnum = con.confkey[pos.n] AND con.confrelid = pkc.oid AND fkn.oid = fkc.relnamespace AND fkc.oid = fka.attrelid AND fka.attnum = con.conkey[pos.n] AND con.conrelid = fkc.oid AND con.contype = 'f' AND con.oid = dep.objid AND pkic.oid = dep.refobjid AND pkic.relkind = 'i' AND dep.classid = 'pg_constraint'::REGCLASS::OID AND dep.refclassid = 'pg_class'::REGCLASS::OID AND fkn.nspname = 'public' AND fkc.relname = 'orders' ORDER BY pkn.nspname, pkc.relname, con.conname, pos.n
