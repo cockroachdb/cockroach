@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -46,6 +47,10 @@ is omitted, dump all tables in the database.
 	RunE: MaybeDecorateGRPCError(runDump),
 }
 
+// runDumps performs a dump of a table or database.
+//
+// The approach here and its current flaws are summarized
+// in https://github.com/cockroachdb/cockroach/issues/28948.
 func runDump(cmd *cobra.Command, args []string) error {
 	conn, err := getPasswordAndMakeSQLClient("cockroach dump")
 	if err != nil {
@@ -370,6 +375,8 @@ func extractArray(val interface{}) ([]string, error) {
 
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
+	//
+	// TODO(knz): this approach is flawed, see #28948.
 
 	makeQuery := func(colname string) string {
 		// This query is parameterized by the column name because of
@@ -576,6 +583,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					f.WriteString(", ")
 				}
 				var d tree.Datum
+				// TODO(knz): this approach is brittle+flawed, see #28948.
 				switch t := sv.(type) {
 				case nil:
 					d = tree.DNull
@@ -588,13 +596,14 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				case string:
 					d = tree.NewDString(t)
 				case []byte:
+					// TODO(knz): this approach is brittle+flawed, see #28948.
 					switch ct := md.columnTypes[cols[si]]; ct {
 					case "INTERVAL":
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
 							return err
 						}
-					case "BYTES":
+					case "BYTES", "BLOB", "BYTEA":
 						d = tree.NewDBytes(tree.DBytes(t))
 					case "UUID":
 						d, err = tree.ParseDUuidFromString(string(t))
@@ -606,7 +615,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						if err != nil {
 							return err
 						}
-					case "JSON":
+					case "JSON", "JSONB":
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
@@ -617,7 +626,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						// In addition, we can only observe ARRAY types by their [] suffix.
 						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
 							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
-							elemType, err := tree.ArrayElementTypeStringToColType(typ)
+							elemType, err := parseArrayElementTypeString(typ)
 							if err != nil {
 								return err
 							}
@@ -626,9 +635,14 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 							if err != nil {
 								return err
 							}
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "TEXT") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "CHAR") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "VARCHAR") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], `"char"`) {
 							d = tree.NewDString(string(t))
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") ||
+							strings.HasPrefix(md.columnTypes[cols[si]], "NUMERIC") {
 							d, err = tree.ParseDDecimal(string(t))
 							if err != nil {
 								return err
@@ -681,6 +695,61 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 		return nil
 	})
 	return g.Wait()
+}
+
+// parseArrayElementTypeString returns a column type given a string
+// representation of the type. Used by dump. It only supports those
+// type names that can appear immediately before `[]`.
+//
+// Although there is now just mostly one name for each type, pre-2.1
+// some types had multiple names (e.g. FLOAT vs FLOAT8). We support
+// both here to ensure `cockroach dump` works across versions.
+//
+// TODO(knz): This should really interface with the parser for DRY.
+// This is currently brittle and flawed, see #28948.
+func parseArrayElementTypeString(s string) (coltypes.T, error) {
+	switch s {
+	case "BOOL", "BOOLEAN":
+		return coltypes.Bool, nil
+	case "INT", "INTEGER":
+		return coltypes.Int, nil
+	case "INT2", "SMALLINT":
+		return coltypes.Int2, nil
+	case "INT4":
+		return coltypes.Int4, nil
+	case "INT8", "BIGINT", "INT64":
+		return coltypes.Int8, nil
+	case "FLOAT", "FLOAT8", "DOUBLE PRECISION", "DOUBLE":
+		return coltypes.Float8, nil
+	case "REAL", "FLOAT4":
+		return coltypes.Float4, nil
+	case "DECIMAL", "NUMERIC":
+		return coltypes.Decimal, nil
+	case "TIMESTAMP":
+		return coltypes.Timestamp, nil
+	case "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE":
+		return coltypes.TimestampWithTZ, nil
+	case "INTERVAL":
+		return coltypes.Interval, nil
+	case "UUID":
+		return coltypes.UUID, nil
+	case "INET":
+		return coltypes.INet, nil
+	case "DATE":
+		return coltypes.Date, nil
+	case "TIME":
+		return coltypes.Time, nil
+	case "STRING", "TEXT", "VARCHAR", "CHAR", `"char"`:
+		return coltypes.String, nil
+	case "NAME":
+		return coltypes.Name, nil
+	case "BYTES", "BLOB", "BYTEA":
+		return coltypes.Bytes, nil
+	case "OID":
+		return coltypes.Oid, nil
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected column type %s", s)
+	}
 }
 
 func writeInserts(w io.Writer, tmd tableMetadata, inserts []string) {
