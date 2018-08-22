@@ -221,7 +221,7 @@ CREATE TABLE abc (
   a INT,
   b INT,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b, c),
   UNIQUE INDEX bc (b, c),
   INDEX ba (b, a),

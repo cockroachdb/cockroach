@@ -5,8 +5,8 @@ INSERT INTO kv VALUES ('a', 'b')
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR,
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR,
   UNIQUE INDEX a (v),
   FAMILY (k),
   FAMILY (v)
@@ -420,7 +420,7 @@ INSERT INTO insert_t (VALUES (1, DEFAULT), (2,'BBB') LIMIT 1)
 statement error DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
 INSERT INTO insert_t (VALUES (1, DEFAULT), (2,'BBB')) LIMIT 1
 
-# Check string/bytes type conflicts during insertions.
+subtest string_bytes_conflicts
 
 statement ok
 CREATE TABLE bytes_t (
@@ -443,3 +443,81 @@ INSERT INTO bytes_t SELECT * FROM string_t
 
 query error value type bytes doesn't match type STRING of column "s"
 INSERT INTO string_t SELECT * FROM bytes_t
+
+subtest string_width_check
+
+statement ok
+CREATE TABLE sw (
+ a CHAR,
+ b CHAR(3),
+ c VARCHAR,
+ d VARCHAR(3),
+ e STRING,
+ f STRING(3),
+ g "char",
+ ac CHAR COLLATE en,
+ bc CHAR(3) COLLATE en,
+ cc VARCHAR COLLATE en,
+ dc VARCHAR(3) COLLATE en,
+ ec STRING COLLATE en,
+ fc STRING(3) COLLATE en
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE sw]
+----
+CREATE TABLE sw (
+   a CHAR NULL,
+   b CHAR(3) NULL,
+   c VARCHAR NULL,
+   d VARCHAR(3) NULL,
+   e STRING NULL,
+   f STRING(3) NULL,
+   g "char" NULL,
+   ac CHAR COLLATE en NULL,
+   bc CHAR(3) COLLATE en NULL,
+   cc VARCHAR COLLATE en NULL,
+   dc VARCHAR(3) COLLATE en NULL,
+   ec STRING COLLATE en NULL,
+   fc STRING(3) COLLATE en NULL,
+   FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
+)
+
+statement ok
+INSERT INTO sw VALUES (
+   'a', 'b', 'c', 'd', 'e', 'f', 'g',
+   'A' COLLATE en, 'B' COLLATE en, 'C' COLLATE en, 'D' COLLATE en, 'E' COLLATE en, 'F' COLLATE en)
+
+statement ok
+INSERT INTO sw VALUES (
+   '', '', '', '', '', '', '',
+   '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en, '' COLLATE en)
+
+statement error value too long for type CHAR \(column "a"\)
+INSERT INTO sw(a) VALUES ('ab')
+
+statement error value too long for type CHAR COLLATE en \(column "ac"\)
+INSERT INTO sw(ac) VALUES ('ab' COLLATE en)
+
+statement ok
+INSERT INTO sw (b, c, d, e, f, g, bc, cc, dc, ec, fc) VALUES (
+   'b22', 'c22', 'd22', 'e22', 'f22', 'g22',
+   'B22' COLLATE en, 'C22' COLLATE en, 'D22' COLLATE en, 'E22' COLLATE en, 'F22' COLLATE en)
+
+statement error value too long for type CHAR\(3\) \(column "b"\)
+INSERT INTO sw(b) VALUES ('abcd')
+
+statement error value too long for type CHAR\(3\) COLLATE en \(column "bc"\)
+INSERT INTO sw(bc) VALUES ('abcd' COLLATE en)
+
+statement error value too long for type VARCHAR\(3\) \(column "d"\)
+INSERT INTO sw(d) VALUES ('abcd')
+
+statement error value too long for type VARCHAR\(3\) COLLATE en \(column "dc"\)
+INSERT INTO sw(dc) VALUES ('abcd' COLLATE en)
+
+statement error value too long for type STRING\(3\) \(column "f"\)
+INSERT INTO sw(f) VALUES ('abcd')
+
+statement error value too long for type STRING\(3\) COLLATE en \(column "fc"\)
+INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)

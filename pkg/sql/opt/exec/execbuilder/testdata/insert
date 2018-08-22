@@ -2,8 +2,8 @@
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR,
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR,
   UNIQUE INDEX a (v),
   FAMILY (k),
   FAMILY (v)
