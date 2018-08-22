@@ -89,6 +89,9 @@ const (
 	// statistic was computed. The statistics themselves are not stored in gossip;
 	// the keys are used to notify nodes to invalidate table statistic caches.
 	KeyTableStatAddedPrefix = "table-stat-added"
+
+	// KeyGossipClientsPrefix ...
+	KeyGossipClientsPrefix = "gossip-clients"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -129,6 +132,11 @@ func NodeIDFromKey(key string, prefix string) (roachpb.NodeID, error) {
 		return 0, errors.Wrapf(err, "failed parsing NodeID from key %q", key)
 	}
 	return roachpb.NodeID(nodeID), nil
+}
+
+// MakeGossipClientsKey ...
+func MakeGossipClientsKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyGossipClientsPrefix, nodeID.String())
 }
 
 // MakeNodeHealthAlertKey returns the gossip key under which the given node can
