@@ -58,6 +58,10 @@ const (
 	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
 
+	// GoogleBillingProjectParam is the query parameter for the billing project
+	// in a gs URI.
+	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
+
 	// AuthParam is the query parameter for the cluster settings named
 	// key in a URI.
 	AuthParam         = "AUTH"
@@ -115,9 +119,10 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	case "gs":
 		conf.Provider = roachpb.ExportStorageProvider_GoogleCloud
 		conf.GoogleCloudConfig = &roachpb.ExportStorage_GCS{
-			Bucket: uri.Host,
-			Prefix: uri.Path,
-			Auth:   uri.Query().Get(AuthParam),
+			Bucket:         uri.Host,
+			Prefix:         uri.Path,
+			Auth:           uri.Query().Get(AuthParam),
+			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	case "azure":
@@ -676,8 +681,12 @@ func makeGCSStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
+	bucket := g.Bucket(conf.Bucket)
+	if conf.BillingProject != `` {
+		bucket = bucket.UserProject(conf.BillingProject)
+	}
 	return &gcsStorage{
-		bucket:   g.Bucket(conf.Bucket),
+		bucket:   bucket,
 		client:   g,
 		conf:     conf,
 		prefix:   conf.Prefix,

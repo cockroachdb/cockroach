@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package cli
 
 import (
 	"context"
@@ -27,41 +27,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var checkCmd = setCmdDefaults(&cobra.Command{
-	Use:   `check`,
-	Short: `Check a running cluster's data for consistency`,
-})
-
 func init() {
-	for _, meta := range workload.Registered() {
-		gen := meta.New()
-		if hooks, ok := gen.(workload.Hookser); !ok || hooks.Hooks().CheckConsistency == nil {
-			continue
-		}
+	AddSubCmd(func() *cobra.Command {
+		var checkCmd = SetCmdDefaults(&cobra.Command{
+			Use:   `check`,
+			Short: `check a running cluster's data for consistency`,
+		})
+		for _, meta := range workload.Registered() {
+			gen := meta.New()
+			if hooks, ok := gen.(workload.Hookser); !ok || hooks.Hooks().CheckConsistency == nil {
+				continue
+			}
 
-		var genFlags *pflag.FlagSet
-		if f, ok := gen.(workload.Flagser); ok {
-			genFlags = f.Flags().FlagSet
-			// Hide irrelevant flags so they don't clutter up the help text, but
-			// don't remove them entirely so if someone switches from
-			// `./workload run` to `./workload check` they don't have to remove
-			// them from the invocation.
-			for flagName, meta := range f.Flags().Meta {
-				if meta.RuntimeOnly && !meta.CheckConsistencyOnly {
-					_ = genFlags.MarkHidden(flagName)
+			var genFlags *pflag.FlagSet
+			if f, ok := gen.(workload.Flagser); ok {
+				genFlags = f.Flags().FlagSet
+				// Hide irrelevant flags so they don't clutter up the help text, but
+				// don't remove them entirely so if someone switches from
+				// `./workload run` to `./workload check` they don't have to remove
+				// them from the invocation.
+				for flagName, meta := range f.Flags().Meta {
+					if meta.RuntimeOnly && !meta.CheckConsistencyOnly {
+						_ = genFlags.MarkHidden(flagName)
+					}
 				}
 			}
-		}
 
-		genCheckCmd := setCmdDefaults(&cobra.Command{
-			Use:  meta.Name + ` [CRDB URI]`,
-			Args: cobra.RangeArgs(0, 1),
-		})
-		genCheckCmd.Flags().AddFlagSet(genFlags)
-		genCheckCmd.Run = cmdHelper(gen, check)
-		checkCmd.AddCommand(genCheckCmd)
-	}
-	rootCmd.AddCommand(checkCmd)
+			genCheckCmd := SetCmdDefaults(&cobra.Command{
+				Use:  meta.Name + ` [CRDB URI]`,
+				Args: cobra.RangeArgs(0, 1),
+			})
+			genCheckCmd.Flags().AddFlagSet(genFlags)
+			genCheckCmd.Run = CmdHelper(gen, check)
+			checkCmd.AddCommand(genCheckCmd)
+		}
+		return checkCmd
+	})
 }
 
 func check(gen workload.Generator, urls []string, dbName string) error {
