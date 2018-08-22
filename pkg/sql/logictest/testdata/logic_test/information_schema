@@ -826,6 +826,9 @@ DROP TABLE nullability
 statement ok
 CREATE TABLE data_types (
   a   INT,
+  a2  INT2,
+  a4  INT4,
+  a8  INT8,
   b   FLOAT,
   br  REAL,
   c   DECIMAL,
@@ -848,6 +851,9 @@ WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
 table_name  column_name  data_type                 crdb_sql_type
 data_types  a            integer                   INT
+data_types  a2           smallint                  INT2
+data_types  a4           integer                   INT4
+data_types  a8           bigint                    INT8
 data_types  b            double precision          FLOAT8
 data_types  br           real                      FLOAT4
 data_types  c            numeric                   DECIMAL
