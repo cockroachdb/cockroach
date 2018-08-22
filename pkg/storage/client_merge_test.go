@@ -2085,6 +2085,7 @@ func TestMergeQueue(t *testing.T) {
 	storeCfg.TestingKnobs.DisableScanner = true
 	sv := &storeCfg.Settings.SV
 	storage.MergeQueueEnabled.Override(sv, true)
+	storage.MergeQueueInterval.Override(sv, 0) // process greedily
 	var mtc multiTestContext
 	mtc.storeConfig = &storeCfg
 	mtc.Start(t, 2)

@@ -32,12 +32,6 @@ import (
 )
 
 const (
-	// mergeQueueTimerDuration is the duration between merges of queued ranges.
-	//
-	// TODO(benesch): rate-limit merges before 2.1 is released. It's currently set
-	// aggressively to smoke out problems in alphas.
-	mergeQueueTimerDuration = 0
-
 	// mergeQueuePurgatoryCheckInterval is the interval at which replicas in
 	// purgatory make merge attempts. Since merges are relatively untested, the
 	// reasons that a range may fail to merge are unknown, so the merge queue has
@@ -57,6 +51,18 @@ var MergeQueueEnabled = func() *settings.BoolSetting {
 		"kv.range_merge.queue_enabled",
 		"whether the automatic merge queue is enabled",
 		false,
+	)
+	s.Hide()
+	return s
+}()
+
+// MergeQueueInterval is a setting that controls how often the merge queue waits
+// between processing replicas.
+var MergeQueueInterval = func() *settings.DurationSetting {
+	s := settings.RegisterNonNegativeDurationSetting(
+		"kv.range_merge.queue_interval",
+		"how long the merge queue waits between processing replicas",
+		time.Second,
 	)
 	s.Hide()
 	return s
@@ -274,8 +280,8 @@ func (mq *mergeQueue) process(
 	return nil
 }
 
-func (*mergeQueue) timer(time.Duration) time.Duration {
-	return mergeQueueTimerDuration
+func (mq *mergeQueue) timer(time.Duration) time.Duration {
+	return MergeQueueInterval.Get(&mq.store.ClusterSettings().SV)
 }
 
 func (mq *mergeQueue) purgatoryChan() <-chan time.Time {
