@@ -37,14 +37,14 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE c (
-     id INT NOT NULL,
-     foo JSON NULL,
-     bar JSON NULL,
-     CONSTRAINT "primary" PRIMARY KEY (id ASC),
-     INVERTED INDEX c_foo_idx (foo),
-     INVERTED INDEX c_bar_idx (bar),
-     FAMILY "primary" (id, foo, bar)
-   )
+   id INT NOT NULL,
+   foo JSONB NULL,
+   bar JSONB NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX c_bar_idx (bar),
+   FAMILY "primary" (id, foo, bar)
+)
 
 statement error indexing more than one column with an inverted index is not supported
 CREATE TABLE d (

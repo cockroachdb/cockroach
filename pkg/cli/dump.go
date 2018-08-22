@@ -624,7 +624,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						if err != nil {
 							return err
 						}
-					case coltypes.JSON, coltypes.JSONB:
+					case coltypes.JSON:
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
