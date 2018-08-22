@@ -183,7 +183,7 @@ project
       ├── a.s::JSON [type=jsonb, outer=(4)]
       ├── a.s::VARCHAR(2) [type=string, outer=(4)]
       ├── a.i::SMALLINT::INT8 [type=int, outer=(2)]
-      ├── a.s::TEXT::CHAR::VARCHAR [type=string, outer=(4)]
+      ├── a.s::CHAR::VARCHAR [type=string, outer=(4)]
       ├── ARRAY[1,2]::OIDVECTOR [type=oid[]]
       └── ARRAY[1,2]::INT2VECTOR [type=int[]]
 

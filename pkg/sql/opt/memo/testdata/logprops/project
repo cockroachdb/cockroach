@@ -348,7 +348,7 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── projections [outer=(2)]
-      └── cast: TEXT [type=string, outer=(2)]
+      └── cast: STRING [type=string, outer=(2)]
            └── variable: xysd.y [type=int, outer=(2)]
 
 # We don't have the FD: d --> d::TEXT because d is a composite type.
@@ -368,5 +368,5 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── projections [outer=(4)]
-      └── cast: TEXT [type=string, outer=(4)]
+      └── cast: STRING [type=string, outer=(4)]
            └── variable: xysd.d [type=decimal, outer=(4)]
