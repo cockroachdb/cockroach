@@ -51,14 +51,23 @@ type FixtureConfig struct {
 	// you run a csv-server next to each CockroachDB node,
 	// `http://localhost:<port>` will work.
 	CSVServerURL string
+
+	// BillingProject if non-empty, is the Google Cloud project to bill for all
+	// storage requests. This is required to be set if using a "requestor pays"
+	// bucket.
+	BillingProject string
 }
 
 func (s FixtureConfig) objectPathToURI(folder string) string {
-	return (&url.URL{
+	u := &url.URL{
 		Scheme: fixtureGCSURIScheme,
 		Host:   s.GCSBucket,
 		Path:   folder,
-	}).String()
+	}
+	if s.BillingProject != `` {
+		u.RawQuery = `GOOGLE_BILLING_PROJECT=` + url.QueryEscape(s.BillingProject)
+	}
+	return u.String()
 }
 
 // Fixture describes pre-computed data for a Generator, allowing quick
@@ -109,7 +118,7 @@ func generatorToGCSFolder(config FixtureConfig, gen workload.Generator) string {
 
 // FixtureURL returns the URL for pre-computed Generator data stored on GCS.
 func FixtureURL(config FixtureConfig, gen workload.Generator) string {
-	return fmt.Sprintf("gs://%s/%s", config.GCSBucket, generatorToGCSFolder(config, gen))
+	return config.objectPathToURI(generatorToGCSFolder(config, gen))
 }
 
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
@@ -118,6 +127,9 @@ func GetFixture(
 	ctx context.Context, gcs *storage.Client, config FixtureConfig, gen workload.Generator,
 ) (Fixture, error) {
 	b := gcs.Bucket(config.GCSBucket)
+	if config.BillingProject != `` {
+		b = b.UserProject(config.BillingProject)
+	}
 
 	fixtureFolder := generatorToGCSFolder(config, gen)
 	_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
@@ -193,7 +205,11 @@ func (c *groupCSVWriter) groupWriteCSVs(
 		path := path.Join(c.folder, table.Name, fmt.Sprintf(`%09d.csv`, rowStart))
 		const maxAttempts = 3
 		err := retry.WithMaxAttempts(ctx, defaultRetryOptions(), maxAttempts, func() error {
-			w := c.gcs.Bucket(c.config.GCSBucket).Object(path).NewWriter(ctx)
+			b := c.gcs.Bucket(c.config.GCSBucket)
+			if c.config.BillingProject != `` {
+				b = b.UserProject(c.config.BillingProject)
+			}
+			w := b.Object(path).NewWriter(ctx)
 			var err error
 			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
 			closeErr := w.Close()
@@ -451,6 +467,9 @@ func ListFixtures(
 	ctx context.Context, gcs *storage.Client, config FixtureConfig,
 ) ([]string, error) {
 	b := gcs.Bucket(config.GCSBucket)
+	if config.BillingProject != `` {
+		b = b.UserProject(config.BillingProject)
+	}
 
 	var fixtures []string
 	gensPrefix := config.GCSPrefix + `/`
