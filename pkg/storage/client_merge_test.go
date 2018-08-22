@@ -892,8 +892,9 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
-		if _, err := txn1.Get(ctx, rhsKey); !testutils.IsError(err, "txn aborted") {
-			t.Fatalf("expected 'txn aborted' error but got %v", err)
+		expErr := `TransactionAbortedError\(ABORT_REASON_ABORT_SPAN\)`
+		if _, err := txn1.Get(ctx, rhsKey); !testutils.IsError(err, expErr) {
+			t.Fatalf("expected %s but got %v", expErr, err)
 		}
 	})
 

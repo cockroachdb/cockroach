@@ -26,8 +26,6 @@ func (ru ErrorDetail) GetInner() error {
 		return t.TransactionPush
 	case *ErrorDetail_TransactionRetry:
 		return t.TransactionRetry
-	case *ErrorDetail_TransactionReplay:
-		return t.TransactionReplay
 	case *ErrorDetail_TransactionStatus:
 		return t.TransactionStatus
 	case *ErrorDetail_WriteIntent:
@@ -269,8 +267,6 @@ func (ru *ErrorDetail) SetInner(r error) bool {
 		union = &ErrorDetail_TransactionPush{t}
 	case *TransactionRetryError:
 		union = &ErrorDetail_TransactionRetry{t}
-	case *TransactionReplayError:
-		union = &ErrorDetail_TransactionReplay{t}
 	case *TransactionStatusError:
 		union = &ErrorDetail_TransactionStatus{t}
 	case *WriteIntentError:

@@ -522,8 +522,9 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 		if respWithErr.resp != nil {
 			t.Errorf("expected nil response; got %+v", respWithErr.resp)
 		}
-		if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
-			t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+		expErr := `TransactionAbortedError\(ABORT_REASON_PUSHER_ABORTED\)`
+		if !testutils.IsPError(respWithErr.pErr, expErr) {
+			t.Errorf("expected %s; got %v", expErr, respWithErr.pErr)
 		}
 	})
 }
