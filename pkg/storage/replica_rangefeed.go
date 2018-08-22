@@ -150,6 +150,14 @@ func (r *Replica) RangeFeed(
 		return roachpb.NewError(err)
 	}
 
+	// Ensure that the range does not require an expiration-based lease. If it
+	// does, it will never get closed timestamp updates and the rangefeed will
+	// never be able to advance its resolved timestamp.
+	if r.requiresExpiringLease() {
+		r.raftMu.Unlock()
+		return roachpb.NewErrorf("expiration-based leases are incompatible with rangefeeds")
+	}
+
 	// Ensure that the rangefeed processor is running.
 	p := r.maybeInitRangefeedRaftMuLocked()
 
