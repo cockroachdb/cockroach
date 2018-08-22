@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -549,6 +550,12 @@ type Store struct {
 		m map[roachpb.RangeID]struct{}
 	}
 
+	// The subset of replicas with active rangefeeds.
+	rangefeedReplicas struct {
+		syncutil.Mutex
+		m map[roachpb.RangeID]struct{}
+	}
+
 	// replicaQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
@@ -948,6 +955,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.unquiescedReplicas.Lock()
 	s.unquiescedReplicas.m = map[roachpb.RangeID]struct{}{}
 	s.unquiescedReplicas.Unlock()
+
+	s.rangefeedReplicas.Lock()
+	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.rangefeedReplicas.Unlock()
 
 	tsCacheMetrics := tscache.MakeMetrics()
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
@@ -1546,6 +1557,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
+	// Connect rangefeeds to closed timestamp updates.
+	s.startClosedTimestampRangefeedSubscriber(ctx)
+
 	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
 
 	// Start the storage engine compactor.
@@ -1705,6 +1719,67 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// startClosedTimestampRangefeedSubscriber establishes a new ClosedTimestamp
+// subscription and runs an infinite loop to listen for closed timestamp updates
+// and inform Replicas with active Rangefeeds about them.
+func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
+	// NB: We can't use Stopper.RunWorker because doing so would race with
+	// calling Stopper.Stop. We give the subscription channel a small capacity
+	// to avoid blocking the closed timestamp goroutine.
+	ch := make(chan ctpb.Entry, 8)
+	const name = "closedts-rangefeed-subscriber"
+	if err := s.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
+		s.cfg.ClosedTimestamp.Provider.Subscribe(ctx, ch)
+	}); err != nil {
+		return
+	}
+
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var replIDs []roachpb.RangeID
+		for {
+			select {
+			case <-ch:
+				// Drain all notifications from the channel.
+				for len(ch) > 0 {
+					<-ch
+				}
+
+				// Gather replicas to notify under lock.
+				s.rangefeedReplicas.Lock()
+				for replID := range s.rangefeedReplicas.m {
+					replIDs = append(replIDs, replID)
+				}
+				s.rangefeedReplicas.Unlock()
+
+				// Notify each replica with an active rangefeed to
+				// check for an updated closed timestamp.
+				for _, replID := range replIDs {
+					repl, err := s.GetReplica(replID)
+					if err != nil {
+						continue
+					}
+					repl.handleClosedTimestampUpdate()
+				}
+				replIDs = replIDs[:0]
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
+	s.rangefeedReplicas.Lock()
+	s.rangefeedReplicas.m[rangeID] = struct{}{}
+	s.rangefeedReplicas.Unlock()
+}
+
+func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
+	s.rangefeedReplicas.Lock()
+	delete(s.rangefeedReplicas.m, rangeID)
+	s.rangefeedReplicas.Unlock()
 }
 
 // systemGossipUpdate is a callback for gossip updates to
