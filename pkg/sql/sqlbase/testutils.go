@@ -173,13 +173,17 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 }
 
 var (
-	columnSemanticTypes []ColumnType_SemanticType
-	collationLocales    = [...]string{"da", "de", "en"}
+	columnSemanticTypes    []ColumnType_SemanticType
+	arrayElemSemanticTypes []ColumnType_SemanticType
+	collationLocales       = [...]string{"da", "de", "en"}
 )
 
 func init() {
 	for k := range ColumnType_SemanticType_name {
 		columnSemanticTypes = append(columnSemanticTypes, ColumnType_SemanticType(k))
+		if ColumnType_SemanticType(k) != ColumnType_ARRAY {
+			arrayElemSemanticTypes = append(arrayElemSemanticTypes, ColumnType_SemanticType(k))
+		}
 	}
 }
 
@@ -195,7 +199,7 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 		typ.Locale = RandCollationLocale(rng)
 	}
 	if typ.SemanticType == ColumnType_ARRAY {
-		typ.ArrayContents = &columnSemanticTypes[rng.Intn(len(columnSemanticTypes))]
+		typ.ArrayContents = &arrayElemSemanticTypes[rng.Intn(len(arrayElemSemanticTypes))]
 		if *typ.ArrayContents == ColumnType_COLLATEDSTRING {
 			// TODO(justin): change this when collated arrays are supported.
 			s := ColumnType_STRING
