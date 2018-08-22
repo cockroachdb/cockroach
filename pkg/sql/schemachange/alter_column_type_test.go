@@ -98,16 +98,28 @@ func TestColumnConversions(t *testing.T) {
 		},
 
 		{SemanticType: sqlbase.ColumnType_INT}: {
-			// Verify that INT -> INTEGER is a no-op
+			{
+				SemanticType: sqlbase.ColumnType_INT,
+				VisibleType:  sqlbase.ColumnType_BIGINT,
+				Width:        64,
+			}: ColumnConversionTrivial,
 			{
 				SemanticType: sqlbase.ColumnType_INT,
 				VisibleType:  sqlbase.ColumnType_INTEGER,
-			}: ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 32}: ColumnConversionValidate,
+				Width:        32,
+			}: ColumnConversionValidate,
 		},
 		{SemanticType: sqlbase.ColumnType_INT, Width: 32}: {
-			{SemanticType: sqlbase.ColumnType_INT, Width: 16}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_INT, Width: 64}: ColumnConversionTrivial,
+			{
+				SemanticType: sqlbase.ColumnType_INT,
+				VisibleType:  sqlbase.ColumnType_SMALLINT,
+				Width:        16,
+			}: ColumnConversionValidate,
+			{
+				SemanticType: sqlbase.ColumnType_INT,
+				VisibleType:  sqlbase.ColumnType_BIGINT,
+				Width:        64,
+			}: ColumnConversionTrivial,
 		},
 
 		{SemanticType: sqlbase.ColumnType_STRING}: {
@@ -207,7 +219,15 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case sqlbase.ColumnType_INT:
-						insert = []interface{}{int64(math.MinInt64), int64(-1), int64(0), int64(1), int64(math.MaxInt64)}
+						insert = []interface{}{int64(-1), int64(0), int64(1)}
+						switch from.Width {
+						case 0, 64:
+							insert = append(insert, int64(math.MinInt64), int64(math.MaxInt64))
+						case 32:
+							insert = append(insert, int64(math.MinInt32), int64(math.MaxInt32))
+						case 16:
+							insert = append(insert, int64(math.MinInt16), int64(math.MaxInt16))
+						}
 						switch to.SemanticType {
 						case sqlbase.ColumnType_INT:
 							expect = insert

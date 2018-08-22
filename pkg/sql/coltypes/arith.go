@@ -34,36 +34,37 @@ func (node *TBool) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 
 // TInt represents an INT, INTEGER, SMALLINT or BIGINT type.
 type TInt struct {
-	Name          string
-	Width         int
-	ImplicitWidth bool
+	Width int
+}
+
+// IntegerTypeNames maps a TInt data width to a canonical type name.
+var IntegerTypeNames = map[int]string{
+	0:  "INT",
+	16: "INT2",
+	32: "INT4",
+	64: "INT8",
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TInt) TypeName() string { return node.Name }
+func (node *TInt) TypeName() string { return IntegerTypeNames[node.Width] }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
-	if node.Width > 0 && !node.ImplicitWidth {
-		fmt.Fprintf(buf, "(%d)", node.Width)
-	}
+	buf.WriteString(node.TypeName())
 }
 
 // TSerial represents a SERIAL type.
-type TSerial struct {
-	IntType *TInt
-}
+type TSerial struct{ *TInt }
 
-var serialNames = map[*TInt]string{
-	Int:  "SERIAL",
-	Int2: "SERIAL2",
-	Int4: "SERIAL4",
-	Int8: "SERIAL8",
+var serialNames = map[int]string{
+	0:  "SERIAL",
+	16: "SERIAL2",
+	32: "SERIAL4",
+	64: "SERIAL8",
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TSerial) TypeName() string { return serialNames[node.IntType] }
+func (node *TSerial) TypeName() string { return serialNames[node.Width] }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TSerial) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {

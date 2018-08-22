@@ -28,29 +28,22 @@ var (
 	Bool = &TBool{}
 
 	// Int is an immutable T instance.
-	Int = &TInt{Name: "INT"}
+	Int = &TInt{}
 	// Int2 is an immutable T instance.
-	Int2 = &TInt{Name: "INT2", Width: 16, ImplicitWidth: true}
+	Int2 = &TInt{Width: 16}
 	// Int4 is an immutable T instance.
-	Int4 = &TInt{Name: "INT4", Width: 32, ImplicitWidth: true}
+	Int4 = &TInt{Width: 32}
 	// Int8 is an immutable T instance.
-	Int8 = &TInt{Name: "INT8"}
-	// Int64 is an immutable T instance.
-	Int64 = &TInt{Name: "INT64"}
-	// Integer is an immutable T instance.
-	Integer = &TInt{Name: "INTEGER"}
-	// SmallInt is an immutable T instance.
-	SmallInt = &TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	// BigInt is an immutable T instance.
-	BigInt = &TInt{Name: "BIGINT"}
+	Int8 = &TInt{Width: 64}
+
 	// Serial is an immutable T instance.
-	Serial = &TSerial{IntType: Int}
+	Serial = &TSerial{TInt: Int}
 	// Serial2 is an immutable T instance.
-	Serial2 = &TSerial{IntType: Int2}
+	Serial2 = &TSerial{TInt: Int2}
 	// Serial4 is an immutable T instance.
-	Serial4 = &TSerial{IntType: Int4}
+	Serial4 = &TSerial{TInt: Int4}
 	// Serial8 is an immutable T instance.
-	Serial8 = &TSerial{IntType: Int8}
+	Serial8 = &TSerial{TInt: Int8}
 
 	// Float4 is an immutable T instance.
 	Float4 = &TFloat{Short: true}
