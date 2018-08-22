@@ -483,8 +483,8 @@ COPY t (a, b, c) FROM stdin;
 				ORDER BY descriptor_name
 				`: {{
 					`CREATE TABLE a (
-	i INTEGER NOT NULL,
-	k INTEGER NULL,
+	i INT NOT NULL,
+	k INT NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
 	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a (i),
 	INDEX a_auto_index_a_k_fkey (k ASC),
@@ -492,7 +492,7 @@ COPY t (a, b, c) FROM stdin;
 	FAMILY "primary" (i, k)
 )`}, {
 					`CREATE TABLE b (
-	j INTEGER NOT NULL,
+	j INT NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
 	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a (i),
 	FAMILY "primary" (j)
@@ -631,8 +631,8 @@ const (
 )`
 	testPgdumpCreateWeather = `CREATE TABLE weather (
 	city VARCHAR(80) NULL,
-	temp_lo INTEGER NULL,
-	temp_hi INTEGER NULL,
+	temp_lo INT NULL,
+	temp_hi INT NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
 	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities (city),
@@ -2220,7 +2220,7 @@ func TestImportPgDump(t *testing.T) {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE simple`, [][]string{{
 					"simple", `CREATE TABLE simple (
-	i INTEGER NOT NULL,
+	i INT NOT NULL,
 	s STRING NULL,
 	b BYTES NULL,
 	CONSTRAINT simple_pkey PRIMARY KEY (i ASC),
@@ -2262,7 +2262,7 @@ func TestImportPgDump(t *testing.T) {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE second`, [][]string{{
 					"second", `CREATE TABLE second (
-	i INTEGER NOT NULL,
+	i INT NOT NULL,
 	s STRING NULL,
 	CONSTRAINT second_pkey PRIMARY KEY (i ASC),
 	FAMILY "primary" (i, s)
@@ -2296,8 +2296,8 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
 					"seqtable", `CREATE TABLE seqtable (
-	a INTEGER NULL DEFAULT nextval('public.a_seq':::STRING),
-	b INTEGER NULL,
+	a INT NULL DEFAULT nextval('public.a_seq':::STRING),
+	b INT NULL,
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})
