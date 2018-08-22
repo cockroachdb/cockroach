@@ -198,7 +198,10 @@ func TestDumpRandom(t *testing.T) {
 		CREATE TABLE d.t (
 			rowid int,
 			i int,
+			si smallint,
+			bi bigint,
 			f float,
+			fr real,
 			d date,
 			m timestamp,
 			n interval,
@@ -209,7 +212,7 @@ func TestDumpRandom(t *testing.T) {
 			u uuid,
 			ip inet,
 			j json,
-			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b, u, ip)
+			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, n, o, e, s, b, u, ip)
 		);
 		SET extra_float_digits = 3;
 	`, nil); err != nil {
@@ -278,7 +281,10 @@ func TestDumpRandom(t *testing.T) {
 			vals := []driver.Value{
 				_i,
 				i,
+				i & 0x7fff, // si
+				i,          // bi
 				f,
+				f, // fr
 				d,
 				m,
 				[]byte(n), // intervals come out as `[]byte`s
@@ -290,14 +296,14 @@ func TestDumpRandom(t *testing.T) {
 				[]byte(ip.String()),
 				[]byte(j.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)
