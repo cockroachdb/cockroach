@@ -127,9 +127,10 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &LeaseManagerTestingKnobs{
-				GossipUpdateEvent: func(cfg config.SystemConfig) {
+				GossipUpdateEvent: func(cfg config.SystemConfig) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
+					return nil
 				},
 			},
 		},
