@@ -149,6 +149,13 @@ func (r *Replica) RangeFeed(
 		return roachpb.NewError(err)
 	}
 
+	// Ensure that the range is using a compatible lease.
+	lease, _ := r.GetLease()
+	if pErr := leaseCompatibleWithRangeFeeds(lease); pErr != nil {
+		r.raftMu.Unlock()
+		return pErr
+	}
+
 	// Ensure that the rangefeed processor is running.
 	p := r.maybeInitRangefeedRaftMuLocked()
 
@@ -317,4 +324,38 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 
 	// Pass the ops to the rangefeed processor.
 	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
+}
+			r.disconnectRangefeedWithErrRaftMuLocked(roachpb.NewErrorf(
+				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
+			))
+			return
+		}
+		*valPtr = val.RawBytes
+	}
+
+	// Pass the ops to the rangefeed processor.
+	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
+}
+
+// leaseCompatibleWithRangeFeeds returns an error if the lease is not compatbile
+// with rangefeeds.
+func leaseCompatibleWithRangeFeeds(lease roachpb.Lease) *roachpb.Error {
+	if lease.Type() != roachpb.LeaseEpoch {
+		return roachpb.NewErrorf("replica lease %v (type=%s) incompatible with rangefeeds",
+			lease, lease.Type())
+	}
+	return nil
+}
+
+// handleRangeFeedWithLeaseUpdateRaftMuLocked determines if a new lease is
+// compatible with the active rangefeed, if one is running. No-op if a rangefeed
+// is not active. Requires raftMu to be locked.
+func (r *Replica) handleRangeFeedWithLeaseUpdateRaftMuLocked(lease roachpb.Lease) {
+	if r.raftMu.rangefeed == nil {
+		return
+	}
+	pErr := leaseCompatibleWithRangeFeeds(lease)
+	if pErr != nil {
+		r.disconnectRangefeedWithErrRaftMuLocked(pErr)
+	}
 }

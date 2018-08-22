@@ -364,6 +364,9 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		r.EmitMLAI()
 	}
 
+	// If a rangefeed is active, ensure that the lease is compatible.
+	r.handleRangeFeedWithLeaseUpdateRaftMuLocked(newLease)
+
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(newLease)
