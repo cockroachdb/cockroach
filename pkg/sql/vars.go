@@ -279,6 +279,28 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_force_split_at`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getSingleBool("experimental_force_split_at", evalCtx, values)
+			if err != nil {
+				return err
+			}
+			m.SetForceSplitAt(bool(*s))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ForceSplitAt)
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetForceSplitAt(false)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_force_zigzag_join`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,

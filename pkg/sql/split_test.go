@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,6 +45,21 @@ func TestSplitAt(t *testing.T) {
 		INDEX s_idx (s)
 	)`)
 	r.Exec(t, `CREATE TABLE d.i (k INT PRIMARY KEY)`)
+
+	// Verify that ALTER TABLE ... SPLIT AT is rejected when the merge queue is
+	// enabled.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = true")
+	expErr := "splits would be immediately discarded by merge queue"
+	if _, err := db.Exec("ALTER TABLE d.t SPLIT AT VALUES (1, 'a')"); !testutils.IsError(err, expErr) {
+		t.Fatalf("expected %q error but got %v", expErr, err)
+	}
+
+	// Verify that we can override the merge queue check with a session variable.
+	r.Exec(t, "SET experimental_force_split_at = true")
+	r.Exec(t, "ALTER TABLE d.t SPLIT AT VALUES (1, 'a')")
+
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	tests := []struct {
 		in    string
