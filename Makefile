@@ -301,6 +301,7 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
+.SECONDARY: bin/.submodules-initialized
 bin/.submodules-initialized:
 ifneq ($(GIT_DIR),)
 	git submodule update --init --recursive
@@ -1076,7 +1077,7 @@ bin/.cpp_ccl_protobuf_sources: $(PROTOC) $(CPP_PROTOS_CCL)
 
 .SECONDARY: $(UI_JS_OSS) $(UI_JS_CCL)
 $(UI_JS_CCL): $(JS_PROTOS_CCL)
-$(UI_JS_OSS) $(UI_JS_CCL): $(GW_PROTOS) pkg/ui/yarn.installed
+$(UI_JS_OSS) $(UI_JS_CCL): $(GW_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$^) >> $@
