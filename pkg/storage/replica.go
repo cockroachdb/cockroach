@@ -2540,6 +2540,10 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // the read timestamp cache. That is, if the read timestamp cache returns a
 // value below minReadTS, minReadTS (without an associated txn id) will be used
 // instead to adjust the batch's timestamp.
+//
+// The timestamp cache also has a role in preventing replays of BeginTransaction
+// reordered after an EndTransaction. If that's detected, an error will be
+// returned.
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
@@ -2560,7 +2564,7 @@ func (r *Replica) applyTimestampCache(
 				// associated txnID and will be due to the low-water mark.
 				switch wTxnID {
 				case ba.Txn.ID:
-					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
+					return false, roachpb.NewError(roachpb.NewTransactionReplayError())
 				case uuid.UUID{} /* noTxnID */ :
 					if !wTS.Less(ba.Txn.Timestamp) {
 						// This is a crucial bit of code. The timestamp cache is
@@ -2570,9 +2574,9 @@ func (r *Replica) applyTimestampCache(
 						// replay. We move the timestamp forward and return
 						// retry. If it's really a replay, it won't retry.
 						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
+						txn.Timestamp.Forward(wTS.Next())
 						err := roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
-						return bumped, roachpb.NewErrorWithTxn(err, &txn)
+						return false, roachpb.NewErrorWithTxn(err, &txn)
 					}
 				default:
 					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
