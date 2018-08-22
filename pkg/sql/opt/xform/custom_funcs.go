@@ -524,7 +524,7 @@ func harvestEqualityColumns(
 	if on.Operator() != opt.FiltersOp {
 		return nil, nil
 	}
-	for i := 0; i < on.ChildCount(); i++ {
+	for i, n := 0, on.ChildCount(); i < n; i++ {
 		e := on.Child(i)
 		ok, left, right := isJoinEquality(leftCols, rightCols, e)
 		if !ok {

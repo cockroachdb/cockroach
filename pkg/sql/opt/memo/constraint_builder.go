@@ -410,7 +410,7 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 		// (e.g. when using optsteps).
 		if ev.ChildCount() > 0 {
 			c, tight := cb.getConstraints(ev.Child(0))
-			for i := 1; i < ev.ChildCount(); i++ {
+			for i, n := 1, ev.ChildCount(); i < n; i++ {
 				ci, tighti := cb.getConstraints(ev.Child(i))
 				c = c.Intersect(cb.evalCtx, ci)
 				tight = tight && tighti

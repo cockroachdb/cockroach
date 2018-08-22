@@ -504,7 +504,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil /* clock */)
 	mtc := &multiTestContext{storeConfig: &storeCfg}
-	readTSChan := make(chan hlc.Timestamp, 1)
+	var readTS hlc.Timestamp
 	rhsKey := roachpb.Key("c")
 	mtc.storeConfig.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		if ba.IsSingleSubsumeRequest() {
@@ -519,7 +519,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 			if pErr != nil {
 				t.Error(pErr) // different goroutine, so can't use t.Fatal
 			}
-			readTSChan <- gbr.Timestamp
+			readTS = gbr.Timestamp
 		}
 		return nil
 	}
@@ -570,9 +570,6 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	}, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 		t.Fatal(pErr)
 	}
-
-	// Find out what time the request filter's read executed at.
-	readTS := <-readTSChan
 
 	// Immediately transfer the lease on the merged range [a, Max) from s3 to s2.
 	// To test that it is, in fact, the merge trigger that properly bumps s3's

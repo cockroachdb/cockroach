@@ -1005,9 +1005,9 @@ func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet, ev ExprView) *prop
 	// map to find the exact count of distinct values for the columns in colSet.
 	distinct := make(map[string]struct{}, ev.Child(0).ChildCount())
 	groups := make([]GroupID, 0, colSet.Len())
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, in := 0, ev.ChildCount(); i < in; i++ {
 		groups = groups[:0]
-		for j := 0; j < ev.Child(i).ChildCount(); j++ {
+		for j, jn := 0, ev.Child(i).ChildCount(); j < jn; j++ {
 			if colSet.Contains(int(colList[j])) {
 				groups = append(groups, ev.Child(i).ChildGroup(j))
 			}
@@ -1176,7 +1176,7 @@ func (sb *statisticsBuilder) buildZip(ev ExprView, relProps *props.Relational) {
 
 	// The row count of a zip operation is equal to the maximum row count of its
 	// children.
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
 		if child.Operator() == opt.FunctionOp {
 			def := child.Private().(*FuncOpDef)
@@ -1420,7 +1420,7 @@ func (sb *statisticsBuilder) applyFilter(
 		// conjunct.
 		applyConjunct(filter, constraintSet, tight)
 	} else {
-		for i := 0; i < filter.ChildCount(); i++ {
+		for i, n := 0, filter.ChildCount(); i < n; i++ {
 			child := filter.Child(i)
 			constraintSet = child.Logical().Scalar.Constraints
 			tight = child.Logical().Scalar.TightConstraints

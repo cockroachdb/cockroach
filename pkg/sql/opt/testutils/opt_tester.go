@@ -290,7 +290,7 @@ func fillInLazyProps(ev memo.ExprView) {
 		xform.DeriveInterestingOrderings(ev)
 	}
 
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		fillInLazyProps(ev.Child(i))
 	}
 }
