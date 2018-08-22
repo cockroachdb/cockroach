@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -82,6 +83,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	var spans []tracing.RecordedSpan
 	if n.analyze {
+		if params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
+			return pgerror.NewErrorf(
+				pgerror.CodeObjectNotInPrerequisiteStateError,
+				"cannot run EXPLAIN ANALYZE while distsql is disabled",
+			)
+		}
 		if params.extendedEvalCtx.Tracing.Enabled() {
 			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
 				"cannot run EXPLAIN ANALYZE while tracing is enabled")
