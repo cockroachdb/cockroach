@@ -824,7 +824,22 @@ statement ok
 DROP TABLE nullability
 
 statement ok
-CREATE TABLE data_types (a INT, b FLOAT, c DECIMAL, d STRING, e BYTES, f TIMESTAMP, g TIMESTAMPTZ)
+CREATE TABLE data_types (
+  a   INT,
+  b   FLOAT,
+  br  REAL,
+  c   DECIMAL,
+  cp  DECIMAL(3,2),
+  d   STRING,
+  dc  CHAR,
+  dc2 CHAR(2),
+  dv  VARCHAR,
+  dv2 VARCHAR(2),
+  dq  "char",
+  e   BYTES,
+  f   TIMESTAMP,
+  g   TIMESTAMPTZ
+  )
 
 query TTTT colnames
 SELECT table_name, column_name, data_type, crdb_sql_type
@@ -834,8 +849,15 @@ WHERE table_schema = 'public' AND table_name = 'data_types'
 table_name  column_name  data_type                 crdb_sql_type
 data_types  a            integer                   INT
 data_types  b            double precision          FLOAT8
+data_types  br           real                      FLOAT4
 data_types  c            numeric                   DECIMAL
+data_types  cp           numeric                   DECIMAL(3,2)
 data_types  d            text                      STRING
+data_types  dc           character                 CHAR
+data_types  dc2          character                 CHAR(2)
+data_types  dv           character varying         VARCHAR
+data_types  dv2          character varying         VARCHAR(2)
+data_types  dq           char                      "char"
 data_types  e            bytea                     BYTES
 data_types  f            timestamp                 TIMESTAMP
 data_types  g            timestamp with time zone  TIMESTAMP WITH TIME ZONE
@@ -845,7 +867,14 @@ statement ok
 DROP TABLE data_types
 
 statement ok
-CREATE TABLE char_len (a INT, b INT2, c INT4, d STRING, e STRING(12), f FLOAT)
+CREATE TABLE char_len (
+  a INT, b INT2, c INT4,
+  d STRING, e STRING(12),
+  dc CHAR, ec CHAR(12),
+  dv VARCHAR, ev VARCHAR(12),
+  dq "char",
+  f FLOAT
+  )
 
 query TTII colnames
 SELECT table_name, column_name, character_maximum_length, character_octet_length
@@ -858,6 +887,11 @@ char_len    b            16                        NULL
 char_len    c            32                        NULL
 char_len    d            NULL                      NULL
 char_len    e            12                        48
+char_len    dc           1                         4
+char_len    ec           12                        48
+char_len    dv           NULL                      NULL
+char_len    ev           12                        48
+char_len    dq           NULL                      NULL
 char_len    f            NULL                      NULL
 char_len    rowid        NULL                      NULL
 
