@@ -49,7 +49,7 @@ const (
 var MergeQueueEnabled = settings.RegisterBoolSetting(
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
-	false,
+	true,
 )
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
