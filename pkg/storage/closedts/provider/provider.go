@@ -328,8 +328,8 @@ func (p *Provider) CanServe(
 
 		ok = found &&
 			ctOK &&
-			mlai <= lai &&
-			entry.Epoch == epoch
+			entry.Epoch == epoch &&
+			mlai <= lai
 
 		// We're done either if we proved that the read is possible, or if we're
 		// already done looking at closed timestamps large enough to satisfy it.
@@ -338,4 +338,22 @@ func (p *Provider) CanServe(
 	})
 
 	return ok
+}
+
+// MaxClosed implements closedts.Provider.
+func (p *Provider) MaxClosed(
+	nodeID roachpb.NodeID, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
+) hlc.Timestamp {
+	var maxTS hlc.Timestamp
+	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) bool {
+		if mlai, found := entry.MLAI[rangeID]; found {
+			if entry.Epoch == epoch && mlai <= lai {
+				maxTS = entry.ClosedTimestamp
+				return true
+			}
+		}
+		return false
+	})
+
+	return maxTS
 }
