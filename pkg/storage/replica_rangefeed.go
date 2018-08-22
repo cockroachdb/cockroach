@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -199,6 +200,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		EventChanCap:   128,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
+	r.store.addReplicaWithRangefeed(r.RangeID)
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := r.Engine().NewIterator(engine.IterOptions{
@@ -213,9 +215,10 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	})
 	r.raftMu.rangefeed.Start(r.store.Stopper(), rtsIter)
 
-	// TODO(nvanbenschoten): forward the rangefeed's closed timestamp if the
-	// range has established a closed timestamp.
-	// r.raftMu.rangefeed.ForwardClosedTS(r.ClosedTimestamp)
+	// Check for an initial closed timestamp update immediately to help
+	// initialize the rangefeed's resolved timestamp as soon as possible.
+	r.handleClosedTimestampUpdateRaftMuLocked()
+
 	return r.raftMu.rangefeed
 }
 
@@ -229,6 +232,7 @@ func (r *Replica) maybeDestroyRangefeedRaftMuLocked(p *rangefeed.Processor) {
 	if r.raftMu.rangefeed.Len() == 0 {
 		r.raftMu.rangefeed.Stop()
 		r.raftMu.rangefeed = nil
+		r.store.removeReplicaWithRangefeed(r.RangeID)
 	}
 }
 
@@ -241,6 +245,7 @@ func (r *Replica) disconnectRangefeedWithErrRaftMuLocked(pErr *roachpb.Error) {
 	}
 	r.raftMu.rangefeed.StopWithErr(pErr)
 	r.raftMu.rangefeed = nil
+	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
 // disconnectRangefeedWithReasonRaftMuLocked broadcasts the provided rangefeed
@@ -325,17 +330,6 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	// Pass the ops to the rangefeed processor.
 	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
 }
-			r.disconnectRangefeedWithErrRaftMuLocked(roachpb.NewErrorf(
-				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
-			))
-			return
-		}
-		*valPtr = val.RawBytes
-	}
-
-	// Pass the ops to the rangefeed processor.
-	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
-}
 
 // leaseCompatibleWithRangeFeeds returns an error if the lease is not compatbile
 // with rangefeeds.
@@ -357,5 +351,34 @@ func (r *Replica) handleRangeFeedWithLeaseUpdateRaftMuLocked(lease roachpb.Lease
 	pErr := leaseCompatibleWithRangeFeeds(lease)
 	if pErr != nil {
 		r.disconnectRangefeedWithErrRaftMuLocked(pErr)
+	}
+}
+
+// handleClosedTimestampUpdate determines the current maximum closed timestamp
+// for the replica and informs the rangefeed, if one is running. No-op if a
+// rangefeed is not active.
+func (r *Replica) handleClosedTimestampUpdate() {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.handleClosedTimestampUpdateRaftMuLocked()
+}
+
+// handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
+// but it requires raftMu to be locked.
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
+	if r.raftMu.rangefeed == nil {
+		return
+	}
+
+	r.mu.RLock()
+	lai := r.mu.state.LeaseAppliedIndex
+	lease := *r.mu.state.Lease
+	r.mu.RUnlock()
+
+	// Determine what the maximum closed timestamp is for this replica.
+	if closedTS := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
+		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai),
+	); !closedTS.IsEmpty() {
+		r.raftMu.rangefeed.ForwardClosedTS(closedTS)
 	}
 }
