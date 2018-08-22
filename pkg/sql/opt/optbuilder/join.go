@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // buildJoin builds a set of memo groups that represent the given join table
@@ -35,11 +36,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScope)
 
 	// Check that the same table name is not used on both sides.
-	leftTables := make(map[string]struct{})
-	for _, leftCol := range leftScope.cols {
-		leftTables[leftCol.table.FQString()] = exists
-	}
-	b.validateJoinTableNames(leftTables, rightScope)
+	b.validateJoinTableNames(leftScope, rightScope)
 
 	joinType := sqlbase.JoinTypeFromAstString(join.Join)
 
@@ -84,21 +81,49 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 // tables from the left side of the join, and rightScope contains the
 // scopeColumns (and corresponding table names) from the right side of the
 // join.
-func (b *Builder) validateJoinTableNames(leftTables map[string]struct{}, rightScope *scope) {
-	for _, rightCol := range rightScope.cols {
-		t := rightCol.table
-		if t.TableName == "" {
+func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
+	// skipDups creates a FastIntSet containing the ordinal of each column that
+	// has a different table name than the previous column. Only these non-
+	// duplicate names need to be validated.
+	skipDups := func(scope *scope) util.FastIntSet {
+		var ords util.FastIntSet
+		for i := range scope.cols {
 			// Allow joins of sources that define columns with no
 			// associated table name. At worst, the USING/NATURAL
 			// detection code or expression analysis for ON will detect an
 			// ambiguity later.
-			continue
+			if scope.cols[i].table.TableName == "" {
+				continue
+			}
+
+			if i == 0 || scope.cols[i].table != scope.cols[i-1].table {
+				ords.Add(i)
+			}
 		}
-		if _, ok := leftTables[t.FQString()]; ok {
+		return ords
+	}
+
+	leftOrds := skipDups(leftScope)
+	rightOrds := skipDups(rightScope)
+
+	// Look for table name in left scope that exists in right scope.
+	for left, ok := leftOrds.Next(0); ok; left, ok = leftOrds.Next(left + 1) {
+		leftName := &leftScope.cols[left].table
+
+		for right, ok := rightOrds.Next(0); ok; right, ok = rightOrds.Next(right + 1) {
+			rightName := &rightScope.cols[right].table
+
+			// Must match all name parts.
+			if leftName.TableName != rightName.TableName ||
+				leftName.SchemaName != rightName.SchemaName ||
+				leftName.CatalogName != rightName.CatalogName {
+				continue
+			}
+
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeDuplicateAliasError,
 				"source name %q specified more than once (missing AS clause)",
-				tree.ErrString(&t.TableName),
+				tree.ErrString(&leftName.TableName),
 			)})
 		}
 	}
@@ -107,11 +132,13 @@ func (b *Builder) validateJoinTableNames(leftTables map[string]struct{}, rightSc
 // commonColumns returns the names of columns common on the
 // left and right sides, for use by NATURAL JOIN.
 func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
-	for _, leftCol := range leftScope.cols {
+	for i := range leftScope.cols {
+		leftCol := &leftScope.cols[i]
 		if leftCol.hidden {
 			continue
 		}
-		for _, rightCol := range rightScope.cols {
+		for j := range rightScope.cols {
+			rightCol := &rightScope.cols[j]
 			if rightCol.hidden {
 				continue
 			}
@@ -150,12 +177,13 @@ func (b *Builder) buildUsingJoin(
 	if len(mergedCols) > 0 {
 		// Wrap in a projection to include the merged columns and ensure that all
 		// remaining columns are passed through unchanged.
-		for i, col := range outScope.cols {
+		for i := range outScope.cols {
+			col := &outScope.cols[i]
 			if mergedCol, ok := mergedCols[col.id]; ok {
-				outScope.cols[i].group = mergedCol
+				col.group = mergedCol
 			} else {
 				// Mark column as passthrough.
-				outScope.cols[i].group = 0
+				col.group = 0
 			}
 		}
 
@@ -275,11 +303,13 @@ func (b *Builder) buildUsingJoinPredicate(
 			// The merged column is the same as the corresponding column from the
 			// left side.
 			outScope.cols = append(outScope.cols, *leftCol)
+			joined[name] = leftCol
 		} else if joinType == sqlbase.RightOuterJoin &&
 			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
 			// The merged column is the same as the corresponding column from the
 			// right side.
 			outScope.cols = append(outScope.cols, *rightCol)
+			joined[name] = rightCol
 		} else {
 			// Construct a new merged column to represent IFNULL(left, right).
 			var typ types.T
@@ -292,9 +322,8 @@ func (b *Builder) buildUsingJoinPredicate(
 			merged := b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{leftVar, rightVar}))
 			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr, merged)
 			mergedCols[col.id] = merged
+			joined[name] = nil
 		}
-
-		joined[name] = &outScope.cols[len(outScope.cols)-1]
 	}
 
 	// Hide other columns that have the same name as the merged columns.
@@ -312,15 +341,16 @@ func (b *Builder) buildUsingJoinPredicate(
 //     not equal, it is marked as hidden and added to the scope.
 // (3) All other columns are added to the scope without modification.
 func hideMatchingColumns(cols []scopeColumn, joined map[tree.Name]*scopeColumn, scope *scope) {
-	for _, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if foundCol, ok := joined[col.name]; ok {
 			// Hide other columns with the same name.
-			if col == *foundCol {
+			if col == foundCol {
 				continue
 			}
 			col.hidden = true
 		}
-		scope.cols = append(scope.cols, col)
+		scope.cols = append(scope.cols, *col)
 	}
 }
 
