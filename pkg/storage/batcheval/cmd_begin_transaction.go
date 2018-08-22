@@ -86,7 +86,7 @@ func BeginTransaction(
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
-			return result.Result{}, roachpb.NewTransactionAbortedError()
+			return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch > tmpTxn.Epoch {
@@ -122,7 +122,7 @@ func BeginTransaction(
 	// See #9265.
 	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
 	if reply.Txn.LastActive().Less(threshold) {
-		return result.Result{}, roachpb.NewTransactionAbortedError()
+		return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_BEGIN_TOO_OLD)
 	}
 
 	// Initialize the LastHeartbeat field to the present time. This allows the

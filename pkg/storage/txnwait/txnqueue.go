@@ -523,7 +523,8 @@ func (q *Queue) MaybeWaitForPush(
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
 			case roachpb.ABORTED:
 				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), updatedPusher)
+				return nil, roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED), updatedPusher)
 			}
 			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
 			if updatedPusher.Priority > pusherPriority {

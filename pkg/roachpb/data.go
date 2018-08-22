@@ -1085,9 +1085,7 @@ func PrepareTransactionForRetry(
 		// advanced to at least the error's timestamp?
 		now := clock.Now()
 		newTxnTimestamp := now
-		if newTxnTimestamp.Less(txn.Timestamp) {
-			newTxnTimestamp = txn.Timestamp
-		}
+		newTxnTimestamp.Forward(txn.Timestamp)
 		txn = MakeTransaction(
 			txn.Name,
 			nil, // baseKey
