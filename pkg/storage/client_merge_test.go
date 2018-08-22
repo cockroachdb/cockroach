@@ -2091,6 +2091,7 @@ func TestMergeQueue(t *testing.T) {
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	store := mtc.Store(0)
+	store.SetMergeQueueActive(true)
 
 	split := func(t *testing.T, key roachpb.Key) {
 		t.Helper()

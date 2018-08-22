@@ -34,6 +34,10 @@ INSERT INTO abc VALUES
   ('2', '3', '4'),
   ('3', '4', '5')
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 statement ok
 ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
 

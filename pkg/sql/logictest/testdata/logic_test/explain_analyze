@@ -49,6 +49,10 @@ CREATE TABLE kw (k INT PRIMARY KEY, w INT)
 statement ok
 INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split into 5 parts, each row from each table goes to one node.
 statement ok
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)

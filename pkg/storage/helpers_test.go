@@ -184,6 +184,11 @@ func (s *Store) SetSplitQueueActive(active bool) {
 	s.setSplitQueueActive(active)
 }
 
+// SetMergeQueueActive enables or disables the split queue.
+func (s *Store) SetMergeQueueActive(active bool) {
+	s.setMergeQueueActive(active)
+}
+
 // SetRaftSnapshotQueueActive enables or disables the raft snapshot queue.
 func (s *Store) SetRaftSnapshotQueueActive(active bool) {
 	s.setRaftSnapshotQueueActive(active)

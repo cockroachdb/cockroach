@@ -163,6 +163,11 @@ const (
 // NB: Since we always split at the same points (specific warehouse IDs and
 // item IDs), splitting is idempotent.
 func splitTables(db *gosql.DB, warehouses int) {
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		panic(err)
+	}
+
 	var g errgroup.Group
 	const concurrency = 64
 	sem := make(chan struct{}, concurrency)

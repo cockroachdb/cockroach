@@ -7,6 +7,10 @@ CREATE TABLE xyz (
   z TEXT
 )
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 statement ok
 ALTER TABLE xyz SPLIT AT VALUES (2), (3), (4), (5)
 

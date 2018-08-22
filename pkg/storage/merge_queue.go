@@ -46,15 +46,11 @@ const (
 
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
-var MergeQueueEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		"kv.range_merge.queue_enabled",
-		"whether the automatic merge queue is enabled",
-		false,
-	)
-	s.Hide()
-	return s
-}()
+var MergeQueueEnabled = settings.RegisterBoolSetting(
+	"kv.range_merge.queue_enabled",
+	"whether the automatic merge queue is enabled",
+	false,
+)
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
 // between processing replicas.
