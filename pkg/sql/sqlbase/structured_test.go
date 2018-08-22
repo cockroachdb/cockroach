@@ -1100,50 +1100,8 @@ func TestColumnTypeSQLString(t *testing.T) {
 	}
 }
 
-func TestColumnValueEncodedSize(t *testing.T) {
-	tests := []struct {
-		colType ColumnType
-		size    int // -1 means unbounded
-	}{
-		{ColumnType{SemanticType: ColumnType_BOOL}, 1},
-		{ColumnType{SemanticType: ColumnType_INT}, 10},
-		{ColumnType{SemanticType: ColumnType_INT, Width: 2}, 10},
-		{ColumnType{SemanticType: ColumnType_FLOAT}, 9},
-		{ColumnType{SemanticType: ColumnType_FLOAT, Precision: 100}, 9},
-		{ColumnType{SemanticType: ColumnType_DECIMAL}, -1},
-		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 100}, 69},
-		{ColumnType{SemanticType: ColumnType_DECIMAL, Precision: 100, Width: 100}, 69},
-		{ColumnType{SemanticType: ColumnType_DATE}, 10},
-		{ColumnType{SemanticType: ColumnType_TIMESTAMP}, 10},
-		{ColumnType{SemanticType: ColumnType_INTERVAL}, 28},
-		{ColumnType{SemanticType: ColumnType_STRING}, -1},
-		{ColumnType{SemanticType: ColumnType_STRING, Width: 100}, 110},
-		{ColumnType{SemanticType: ColumnType_BYTES}, -1},
-	}
-	for i, test := range tests {
-		testIsBounded := test.size != -1
-		size, isBounded := upperBoundColumnValueEncodedSize(ColumnDescriptor{
-			Type: test.colType,
-		})
-		if isBounded != testIsBounded {
-			if isBounded {
-				t.Errorf("%d: expected unbounded but got bounded", i)
-			} else {
-				t.Errorf("%d: expected bounded but got unbounded", i)
-			}
-			continue
-		}
-		if isBounded && size != test.size {
-			t.Errorf("%d: got size %d but expected %d", i, size, test.size)
-		}
-	}
-}
-
 func TestFitColumnToFamily(t *testing.T) {
-	intEncodedSize, _ := upperBoundColumnValueEncodedSize(ColumnDescriptor{
-		ID:   8,
-		Type: ColumnType{SemanticType: ColumnType_INT},
-	})
+	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
 
 	makeTestTableDescriptor := func(familyTypes [][]ColumnType) TableDescriptor {
 		nextColumnID := ColumnID(8)
