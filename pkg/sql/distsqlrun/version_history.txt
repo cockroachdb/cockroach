@@ -79,3 +79,5 @@
 - Version: 21 (MinAcceptedVersion: 6)
     - Permit non-public (mutation) columns in TableReader return values, when
       requested. The new processor spec would be ignored by old versions.
+- MinAcceptedVersion: 21
+    - Bump in preparation for the 2.1 release.
