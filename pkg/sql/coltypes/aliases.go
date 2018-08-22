@@ -74,14 +74,14 @@ var (
 	// Interval is an immutable T instance.
 	Interval = &TInterval{}
 
-	// Char is an immutable T instance.
-	Char = &TString{Name: "CHAR"}
-	// VarChar is an immutable T instance.
-	VarChar = &TString{Name: "VARCHAR"}
-	// String is an immutable T instance.
-	String = &TString{Name: "STRING"}
-	// QChar is an immutable T instance.
-	QChar = &TString{Name: `"char"`}
+	// Char is an immutable T instance. See strings.go for details.
+	Char = &TString{Variant: TStringVariantCHAR, N: 1}
+	// VarChar is an immutable T instance. See strings.go for details.
+	VarChar = &TString{Variant: TStringVariantVARCHAR}
+	// String is an immutable T instance. See strings.go for details.
+	String = &TString{Variant: TStringVariantSTRING}
+	// QChar is an immutable T instance. See strings.go for details.
+	QChar = &TString{Variant: TStringVariantQCHAR}
 
 	// Name is an immutable T instance.
 	Name = &TName{}

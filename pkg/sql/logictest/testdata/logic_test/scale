@@ -15,7 +15,7 @@ INSERT INTO test VALUES ('ab')
 statement ok
 INSERT INTO test VALUES ('abcd')
 
-statement error value too long for type STRING\(4\) \(column "t"\)
+statement error value too long for type CHAR\(4\) \(column "t"\)
 INSERT INTO test VALUES ('abcdef')
 
 statement ok

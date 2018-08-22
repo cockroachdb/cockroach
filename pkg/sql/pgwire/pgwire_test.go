@@ -524,7 +524,7 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 
 		if _, err := tx.Exec(`
 	CREATE DATABASE d;
-	CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+	CREATE TABLE d.kv (k VARCHAR PRIMARY KEY, v VARCHAR);
 `); err != nil {
 			t.Fatal(err)
 		}

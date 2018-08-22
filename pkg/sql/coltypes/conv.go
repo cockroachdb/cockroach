@@ -109,7 +109,10 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 
 	switch typ := t.(type) {
 	case types.TCollatedString:
-		return &TCollatedString{Name: "STRING", Locale: typ.Locale}, nil
+		return &TCollatedString{
+			TString: TString{Variant: TStringVariantSTRING},
+			Locale:  typ.Locale,
+		}, nil
 	case types.TArray:
 		elemTyp, err := DatumTypeToColumnType(typ.Typ)
 		if err != nil {

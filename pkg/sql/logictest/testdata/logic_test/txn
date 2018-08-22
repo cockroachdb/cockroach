@@ -6,8 +6,8 @@ BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR
 )
 
 statement ok

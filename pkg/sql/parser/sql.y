@@ -6147,13 +6147,14 @@ bit_without_length:
 character_with_length:
   character_base '(' iconst64 ')'
   {
-    $$.val = $1.colType()
+    colTyp := *($1.colType().(*coltypes.TString))
     n := $3.int64()
-    if n != 0 {
-      strType := &coltypes.TString{N: int(n)}
-      strType.Name = $$.val.(*coltypes.TString).Name
-      $$.val = strType
+    if n == 0 {
+      sqllex.Error(fmt.Sprintf("length for type %s must be at least 1", &colTyp))
+      return 1
     }
+    colTyp.N = uint(n)
+    $$.val = &colTyp
   }
 
 character_without_length:
@@ -6163,13 +6164,13 @@ character_without_length:
   }
 
 character_base:
-  CHARACTER opt_varying
+  char_aliases
   {
     $$.val = coltypes.Char
   }
-| CHAR opt_varying
+| char_aliases VARYING
   {
-    $$.val = coltypes.Char
+    $$.val = coltypes.VarChar
   }
 | VARCHAR
   {
@@ -6179,6 +6180,10 @@ character_base:
   {
     $$.val = coltypes.String
   }
+
+char_aliases:
+  CHAR
+| CHARACTER
 
 opt_varying:
   VARYING {}

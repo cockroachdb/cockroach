@@ -1127,6 +1127,10 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b STRING)`},
 		{`CREATE TABLE a (b BYTES, c BYTEA, d BLOB)`,
 			`CREATE TABLE a (b BYTES, c BYTES, d BYTES)`},
+		{`CREATE TABLE a (b CHAR(1), c CHARACTER(1), d CHARACTER(3))`,
+			`CREATE TABLE a (b CHAR, c CHAR, d CHAR(3))`},
+		{`CREATE TABLE a (b CHAR VARYING, c CHARACTER VARYING(3))`,
+			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
@@ -2148,6 +2152,13 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
 CREATE TABLE foo(a BIT)
                       ^
 HINT: See: https://github.com/cockroachdb/cockroach/issues/20991`,
+		},
+		{
+			`CREATE TABLE foo(a CHAR(0))`,
+			`length for type CHAR must be at least 1 at or near ")"
+CREATE TABLE foo(a CHAR(0))
+                         ^
+`,
 		},
 	}
 	for _, d := range testData {

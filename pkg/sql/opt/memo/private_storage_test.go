@@ -386,15 +386,16 @@ func TestInternColType(t *testing.T) {
 	test(coltypes.Oid, &coltypes.TOid{Name: "OID"}, true)
 
 	// String types.
-	test(coltypes.String, &coltypes.TString{Name: "STRING"}, true)
-	test(coltypes.VarChar, &coltypes.TString{Name: "VARCHAR"}, true)
+	test(coltypes.String, &coltypes.TString{Variant: coltypes.TStringVariantSTRING}, true)
+	test(coltypes.VarChar, &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR}, true)
 	test(coltypes.VarChar, coltypes.String, false)
-	test(&coltypes.TString{Name: "VARCHAR", N: 9}, &coltypes.TString{Name: "VARCHAR", N: 10}, false)
+	test(&coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 9},
+		&coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 10}, false)
 
-	tstr1 := &coltypes.TCollatedString{Name: "STRING"}
-	tstr2 := &coltypes.TCollatedString{Name: "STRING", N: 256}
-	tstr3 := &coltypes.TCollatedString{Name: "STRING", N: 256, Locale: "en_US"}
-	tstr4 := &coltypes.TCollatedString{Name: "STRING", Locale: "en_US"}
+	tstr1 := &coltypes.TCollatedString{}
+	tstr2 := &coltypes.TCollatedString{TString: coltypes.TString{N: 256}}
+	tstr3 := &coltypes.TCollatedString{TString: coltypes.TString{N: 256}, Locale: "en_US"}
+	tstr4 := &coltypes.TCollatedString{Locale: "en_US"}
 	test(tstr1, tstr2, false)
 	test(tstr2, tstr2, true)
 	test(tstr2, tstr3, false)
