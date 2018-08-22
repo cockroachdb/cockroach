@@ -188,6 +188,9 @@ type RowFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
+	// knownPrefixLength is the number of bytes in the index key prefix this
+	// RowFetcher is configured for. The index key prefix is the table id, index
+	// id pair at the start of the key.
 	knownPrefixLength int
 
 	// Used to save whether or not the next batch is from a new span in `nextKV`.
@@ -494,24 +497,6 @@ func (rf *RowFetcher) nextKV(
 		return false, kv, false, nil
 	}
 	return rf.nextKV(ctx)
-}
-
-// IndexKeyString returns the currently searching index key up to `numCols`.
-// For example, if there is an index on 2 columns and the current index key
-// is '/Table/81/1/12/13/1', IndexKeyString(1) will return 'Table/81/1/12'.
-func (rf *RowFetcher) IndexKeyString(numCols int) string {
-	if rf.kv.Key == nil {
-		return ""
-	}
-	splitKey := strings.Split(rf.kv.Key.String(), "/")
-	// Take example index key from above, will be split into:
-	// ["", "Table", "81", "1", "12", "13", "1"], first 4 are always returned
-	// plus any additional columns requested.
-	targetSlashes := 4 + numCols
-	if targetSlashes > len(splitKey) {
-		return strings.Join(splitKey, "/")
-	}
-	return strings.Join(splitKey[:targetSlashes], "/")
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
@@ -1295,6 +1280,21 @@ func (rf *RowFetcher) finalizeRow() error {
 // Key returns nil when there are no more rows.
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
+}
+
+// PartialKey returns a partial slice of the next key (the key that follows the
+// last returned row) containing nCols columns, without the ending column
+// family. Returns nil when there are no more rows.
+func (rf *RowFetcher) PartialKey(nCols int) (roachpb.Key, error) {
+	if rf.kv.Key == nil {
+		return nil, nil
+	}
+	n, err := consumeIndexKeyWithoutTableIDIndexIDPrefix(
+		rf.currentTable.index, nCols, rf.kv.Key[rf.knownPrefixLength:])
+	if err != nil {
+		return nil, err
+	}
+	return rf.kv.Key[:n+rf.knownPrefixLength], nil
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.
