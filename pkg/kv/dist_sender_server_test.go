@@ -1772,7 +1772,7 @@ func TestTxnStarvation(t *testing.T) {
 	}
 }
 
-// Test that, if the TxnCoordSender gets a TransactionAbortError, it sends an
+// Test that, if the TxnCoordSender gets a TransactionAbortedError, it sends an
 // EndTransaction with Poison=true (the poisoning is so that concurrent readers
 // don't miss their writes).
 func TestAsyncAbortPoisons(t *testing.T) {
@@ -1827,8 +1827,9 @@ func TestAsyncAbortPoisons(t *testing.T) {
 
 	atomic.StoreInt64(&expectPoison, 1)
 
-	if _, err := txn.Get(context.TODO(), keyA); !testutils.IsError(err, "txn aborted") {
-		t.Fatal(err)
+	if _, err := txn.Get(context.TODO(), keyA); !testutils.IsError(
+		err, "TransactionAbortedError\\(ABORT_REASON_ABORT_SPAN\\)") {
+		t.Fatalf("expected TransactionAbortedError, got: %v", err)
 	}
 	if err := <-commitCh; err != nil {
 		t.Fatal(err)

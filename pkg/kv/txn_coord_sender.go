@@ -705,7 +705,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{})
 	}
 	if tc.mu.txn.Status == roachpb.ABORTED {
-		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &tc.mu.txn)
+		abortedErr := roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr,
 			// priority is not used for aborted errors

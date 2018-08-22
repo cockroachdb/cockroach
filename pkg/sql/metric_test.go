@@ -173,7 +173,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 				restarted = true
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(), args.Hdr.Txn)
+					roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
 			}
 		}
 		return nil
@@ -190,8 +191,9 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	}
 
 	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
-	if !testutils.IsError(err, "aborted") {
-		t.Fatalf("expected aborted error, got: %v", err)
+	expErr := `TransactionAbortedError\(ABORT_REASON_ABORTED_RECORD_FOUND\)`
+	if !testutils.IsError(err, expErr) {
+		t.Fatalf("expected %s, got: %v", expErr, err)
 	}
 
 	if err = txn.Rollback(); err != nil {

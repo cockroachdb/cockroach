@@ -226,7 +226,8 @@ func evalEndTransaction(
 		// to abort, but the transaction is definitely aborted and its intents
 		// can go.
 		reply.Txn.Intents = args.IntentSpans
-		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), roachpb.NewTransactionAbortedError()
+		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
+			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
 	case roachpb.PENDING:
 		if h.Txn.Epoch < reply.Txn.Epoch {
