@@ -124,7 +124,7 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 
 	var rejectNullCols opt.ColSet
 	var savedInColID opt.ColumnID
-	for i, end := 0, aggs.ChildCount(); i < end; i++ {
+	for i, n := 0, aggs.ChildCount(); i < n; i++ {
 		agg := aggs.Child(i)
 		aggOp := agg.Operator()
 
