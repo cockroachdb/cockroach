@@ -71,6 +71,11 @@ func SplitTable(
 		t.Fatal(err)
 	}
 
+	// Prevent the merge queue from immediately discarding our split.
+	if _, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	_, rightRange, err := tc.Server(0).SplitRange(pik)
 	if err != nil {
 		t.Fatal(err)
@@ -88,8 +93,8 @@ func SplitTable(
 }
 
 // TestPlanningDuringSplits verifies that table reader planning (resolving
-// spans) tolerates concurrent splits.
-func TestPlanningDuringSplits(t *testing.T) {
+// spans) tolerates concurrent splits and merges.
+func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const n = 100
@@ -316,6 +321,8 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 
 	// We're going to split one of the tables, but node 4 is unaware of this.
 	_, err = db0.Exec(fmt.Sprintf(`
+	-- Prevent the merge queue from immediately discarding our splits.
+	SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 	ALTER TABLE "right" SPLIT AT VALUES (1), (2), (3);
 	ALTER TABLE "right" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
 	`,
@@ -396,6 +403,9 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 
 	r.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
+
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	for i := 0; i < numNodes; i++ {
 		r.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", n*i/5))
@@ -483,6 +493,9 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
+
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	r.Exec(t, "SET DISTSQL = ON")
 	// Force the query to be distributed.
