@@ -6007,10 +6007,18 @@ numeric:
   {
     $$.val = coltypes.Int
   }
+| INTEGER
+  {
+    $$.val = coltypes.Int
+  }
 | INT2
-    {
-      $$.val = coltypes.Int2
-    }
+  {
+    $$.val = coltypes.Int2
+  }
+| SMALLINT
+  {
+    $$.val = coltypes.Int2
+  }
 | INT4
   {
     $$.val = coltypes.Int4
@@ -6021,19 +6029,11 @@ numeric:
   }
 | INT64
   {
-    $$.val = coltypes.Int64
-  }
-| INTEGER
-  {
-    $$.val = coltypes.Integer
-  }
-| SMALLINT
-  {
-    $$.val = coltypes.SmallInt
+    $$.val = coltypes.Int8
   }
 | BIGINT
   {
-    $$.val = coltypes.BigInt
+    $$.val = coltypes.Int8
   }
 | REAL
   {

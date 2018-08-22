@@ -165,7 +165,7 @@ func classifierWidth(
 	switch {
 	case oldType.Width == newType.Width:
 		return ColumnConversionTrivial
-	case oldType.Width == 0:
+	case oldType.Width == 0 && newType.Width < 64:
 		return ColumnConversionValidate
 	case newType.Width == 0 || newType.Width > oldType.Width:
 		return ColumnConversionTrivial

@@ -79,7 +79,7 @@ func (p *planner) processSerialInColumnDef(
 
 	case sessiondata.SerialUsesSQLSequences:
 		// With real sequences we can use exactly the requested type.
-		newSpec.Type = t.IntType
+		newSpec.Type = t.TInt
 	}
 
 	if serialNormalizationMode == sessiondata.SerialUsesRowID {
