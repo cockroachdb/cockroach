@@ -1791,45 +1791,6 @@ func TestValueEncodingRand(t *testing.T) {
 	}
 }
 
-func TestUpperBoundValueEncodingSize(t *testing.T) {
-	tests := []struct {
-		colID uint32
-		typ   Type
-		width int
-		size  int // -1 means unbounded
-	}{
-		{colID: 0, typ: Null, size: 1},
-		{colID: 0, typ: True, size: 1},
-		{colID: 0, typ: False, size: 1},
-		{colID: 0, typ: Int, size: 10},
-		{colID: 0, typ: Int, width: 100, size: 10},
-		{colID: 0, typ: Float, size: 9},
-		{colID: 0, typ: Decimal, size: -1},
-		{colID: 0, typ: Decimal, width: 100, size: 69},
-		{colID: 0, typ: Time, size: 19},
-		{colID: 0, typ: Duration, size: 28},
-		{colID: 0, typ: Bytes, size: -1},
-		{colID: 0, typ: Bytes, width: 100, size: 110},
-
-		{colID: 8, typ: True, size: 2},
-	}
-	for i, test := range tests {
-		testIsBounded := test.size != -1
-		size, isBounded := UpperBoundValueEncodingSize(test.colID, test.typ, test.width)
-		if isBounded != testIsBounded {
-			if isBounded {
-				t.Errorf("%d: expected unbounded but got bounded", i)
-			} else {
-				t.Errorf("%d: expected bounded but got unbounded", i)
-			}
-			continue
-		}
-		if isBounded && size != test.size {
-			t.Errorf("%d: got size %d but expected %d", i, size, test.size)
-		}
-	}
-}
-
 func TestPrettyPrintValueEncoded(t *testing.T) {
 	uuidStr := "63616665-6630-3064-6465-616462656562"
 	u, err := uuid.FromString(uuidStr)
