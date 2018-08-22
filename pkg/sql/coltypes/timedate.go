@@ -61,7 +61,7 @@ func (node *TTimestampTZ) TypeName() string { return "TIMESTAMPTZ" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TTimestampTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIMESTAMP WITH TIME ZONE")
+	buf.WriteString(node.TypeName())
 }
 
 // TInterval represents an INTERVAL type

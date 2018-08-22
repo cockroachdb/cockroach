@@ -33,7 +33,7 @@ statement ok
 CREATE TABLE u (
   a BIGINT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d DATE,
   e INTERVAL
 )
@@ -176,7 +176,7 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP WITH TIME ZONE
+  v TIMESTAMPTZ
 )
 
 statement ok
@@ -336,9 +336,9 @@ statement ok
 CREATE TABLE ex (
   k BIGINT PRIMARY KEY,
   element STRING,
-  input TIMESTAMP WITH TIME ZONE,
+  input TIMESTAMPTZ,
   extract_result INT,
-  date_trunc_result TIMESTAMP WITH TIME ZONE
+  date_trunc_result TIMESTAMPTZ
 )
 
 statement ok
@@ -907,17 +907,17 @@ statement ok
 CREATE TABLE tz (
   a INT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d TIMESTAMPTZ
 )
 
 query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a  INT                       false  NULL  ·  {"primary"}  false
-b  TIMESTAMP                 true   NULL  ·  {}           false
-c  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}           false
-d  TIMESTAMP WITH TIME ZONE  true   NULL  ·  {}           false
+a  INT          false  NULL  ·  {"primary"}  false
+b  TIMESTAMP    true   NULL  ·  {}           false
+c  TIMESTAMPTZ  true   NULL  ·  {}           false
+d  TIMESTAMPTZ  true   NULL  ·  {}           false
 
 statement ok
 INSERT INTO tz VALUES
