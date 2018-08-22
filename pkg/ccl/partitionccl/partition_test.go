@@ -853,7 +853,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		case sqlbase.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
-		case sqlbase.ColumnType_JSON:
+		case sqlbase.ColumnType_JSONB:
 			// Not indexable.
 			continue
 		}

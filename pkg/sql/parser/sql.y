@@ -891,7 +891,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <coltypes.T> numeric opt_numeric_modifiers
 %type <coltypes.T> opt_float
 %type <coltypes.T> character_with_length character_without_length
-%type <coltypes.T> const_datetime const_interval const_json
+%type <coltypes.T> const_datetime const_interval
 %type <coltypes.T> bit_with_length bit_without_length
 %type <coltypes.T> character_base
 %type <coltypes.CastTargetType> postgres_oid
@@ -5877,13 +5877,7 @@ opt_array_bounds:
 
 const_json:
   JSON
-  {
-    $$.val = coltypes.JSON
-  }
 | JSONB
-  {
-    $$.val = coltypes.JSONB
-  }
 
 simple_typename:
   const_typename
@@ -5907,6 +5901,9 @@ const_typename:
 | character_without_length
 | const_datetime
 | const_json
+  {
+    $$.val = coltypes.JSON
+  }
 | BLOB
   {
     $$.val = coltypes.Bytes

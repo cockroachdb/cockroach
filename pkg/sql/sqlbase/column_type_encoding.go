@@ -633,7 +633,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(data)
 			return r, nil
 		}
-	case ColumnType_JSON:
+	case ColumnType_JSONB:
 		if v, ok := val.(*tree.DJSON); ok {
 			data, err := json.EncodeJSON(nil, v.JSON)
 			if err != nil {
