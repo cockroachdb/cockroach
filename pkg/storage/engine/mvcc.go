@@ -1381,8 +1381,13 @@ func mvccPutInternal(
 		Timestamp: timestamp,
 		Safe:      true,
 	}
-	if buf.newMeta.Txn != nil {
-		logicalOpDetails.Txn = *buf.newMeta.Txn
+	if txn := buf.newMeta.Txn; txn != nil {
+		logicalOpDetails.Txn = *txn
+		// The intent may be at a lower timestamp than the transaction's
+		// current timestamp, meaning that it will never actually commit
+		// at the timestamp it's written at. In that case, we can forward
+		// the timestamp of the logical operation to the txn's timestamp.
+		logicalOpDetails.Timestamp.Forward(txn.Timestamp)
 	}
 	engine.LogLogicalOp(logicalOp, logicalOpDetails)
 
