@@ -1885,8 +1885,10 @@ when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
 character_base ::=
-	'CHARACTER' opt_varying
-	| 'CHAR' opt_varying
+	'CHARACTER'
+	| 'CHAR'
+	| 'CHARACTER' 'VARYING'
+	| 'CHAR' 'VARYING'
 	| 'VARCHAR'
 	| 'STRING'
 
@@ -2037,10 +2039,6 @@ special_function ::=
 tuple1_unambiguous_values ::=
 	a_expr ','
 	| a_expr ',' expr_list
-
-opt_varying ::=
-	'VARYING'
-	| 
 
 window_definition ::=
 	window_name 'AS' window_specification

@@ -618,7 +618,7 @@ NULL
 
 statement ok
 CREATE TABLE abc (
-  a CHAR PRIMARY KEY,
+  a VARCHAR PRIMARY KEY,
   b FLOAT,
   c BOOLEAN,
   d DECIMAL

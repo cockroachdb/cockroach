@@ -105,7 +105,22 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"CHAR",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 1},
+			true,
+		},
+		{
+			"CHAR(3)",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 3},
+			true,
+		},
+		{
+			"VARCHAR",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 0},
+			true,
+		},
+		{
+			"VARCHAR(3)",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 3},
 			true,
 		},
 		{

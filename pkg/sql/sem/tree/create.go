@@ -234,7 +234,7 @@ func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (colty
 	locale := string(c)
 	switch s := typ.(type) {
 	case *coltypes.TString:
-		return &coltypes.TCollatedString{Name: s.Name, N: s.N, Locale: locale}, nil
+		return &coltypes.TCollatedString{Variant: s.Variant, N: s.N, Locale: locale}, nil
 	case *coltypes.TCollatedString:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)

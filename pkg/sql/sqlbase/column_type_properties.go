@@ -146,10 +146,12 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	case *coltypes.TJSON:
 	case *coltypes.TString:
 		base.Width = int32(t.N)
+		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
 	case *coltypes.TName:
 	case *coltypes.TBytes:
 	case *coltypes.TCollatedString:
 		base.Width = int32(t.N)
+		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
@@ -186,6 +188,37 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.BigInt.Name:   ColumnType_BIGINT,
 }
 
+// coltypeStringVariantToVisibleType encodes the visible type of a
+// coltypes.TString/TCollatedString variant.
+func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) ColumnType_VisibleType {
+	switch c {
+	case coltypes.TStringVariantVARCHAR:
+		return ColumnType_VARCHAR
+	case coltypes.TStringVariantCHAR:
+		return ColumnType_CHAR
+	case coltypes.TStringVariantQCHAR:
+		return ColumnType_QCHAR
+	default:
+		return ColumnType_NONE
+	}
+}
+
+// stringTypeName returns the visible type name for the given
+// STRING/COLLATEDSTRING column type.
+func (c *ColumnType) stringTypeName() string {
+	typName := "STRING"
+	switch c.VisibleType {
+	case ColumnType_VARCHAR:
+		typName = "VARCHAR"
+	case ColumnType_CHAR:
+		typName = "CHAR"
+	case ColumnType_QCHAR:
+		// yes, that's the name. The ways of PostgreSQL are inscrutable.
+		typName = `"char"`
+	}
+	return typName
+}
+
 // SQLString returns the CockroachDB native SQL string that can be
 // used to reproduce the ColumnType (via parsing -> coltypes.T ->
 // CastTargetToColumnType -> PopulateAttrs).
@@ -197,9 +230,11 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
 	case ColumnType_STRING:
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
+		typName := c.stringTypeName()
+		if !(c.VisibleType == ColumnType_CHAR && c.Width == 1) && c.Width > 0 {
+			return fmt.Sprintf("%s(%d)", typName, c.Width)
 		}
+		return typName
 	case ColumnType_FLOAT:
 		const realName = "FLOAT4"
 		const doubleName = "FLOAT8"
@@ -231,10 +266,11 @@ func (c *ColumnType) SQLString() string {
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
+		typName := c.stringTypeName()
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
+			typName = fmt.Sprintf("%s(%d)", typName, c.Width)
 		}
-		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
+		return fmt.Sprintf("%s COLLATE %s", typName, *c.Locale)
 	case ColumnType_ARRAY:
 		return c.elementColumnType().SQLString() + "[]"
 	}
@@ -264,8 +300,15 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 		return c.VisibleType.String()
 
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
-		// TODO(knz): this misses the distinction between text, varchar,
-		// char and "char".
+		switch c.VisibleType {
+		case ColumnType_VARCHAR:
+			return "character varying"
+		case ColumnType_CHAR:
+			return "character"
+		case ColumnType_QCHAR:
+			// Not the same as "character". Beware.
+			return "char"
+		}
 		return "text"
 
 	case ColumnType_FLOAT:
