@@ -426,9 +426,11 @@ type Store struct {
 	// Semaphore to limit concurrent non-empty snapshot application.
 	snapshotApplySem chan struct{}
 
-	// Channel of newly-acquired expiration-based leases that we want to
-	// proactively renew.
-	expirationBasedLeaseChan chan *Replica
+	// Track newly-acquired expiration-based leases that we want to proactively
+	// renew. An object is sent on the signal whenever a new entry is added to
+	// the map.
+	renewableLeases       syncutil.IntMap // map[roachpb.RangeID]*Replica
+	renewableLeasesSignal chan struct{}
 
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
@@ -965,10 +967,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
-	// The channel size here is arbitrary. We don't want it to fill up, but it
-	// isn't a disaster if it does and it shouldn't unless a huge number of meta2
-	// range leases are acquired at once.
-	s.expirationBasedLeaseChan = make(chan *Replica, 64)
+	s.renewableLeasesSignal = make(chan struct{})
 
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
@@ -1682,36 +1681,23 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// lease expires and when we should attempt to renew it as a result.
 		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
 		for {
-			for repl := range repls {
+			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
+				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
-				_, pErr := repl.redirectOnOrAcquireLease(annotatedCtx)
-				if pErr != nil {
+				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
-					delete(repls, repl)
-					continue
+					s.renewableLeases.Delete(k)
 				}
-			}
+				return true
+			})
 
 			if len(repls) > 0 {
 				timer.Reset(renewalDuration)
 			}
 			select {
-			case repl := <-s.expirationBasedLeaseChan:
-				repls[repl] = struct{}{}
-				// If we got one entry off the channel, there may be more (e.g. a node
-				// holding a bunch of meta2 ranges just failed), so keep pulling until
-				// we can't get any more.
-			continuepulling:
-				for {
-					select {
-					case repl := <-s.expirationBasedLeaseChan:
-						repls[repl] = struct{}{}
-					default:
-						break continuepulling
-					}
-				}
+			case <-s.renewableLeasesSignal:
 			case <-timer.C:
 				timer.Read = true
 			case <-s.stopper.ShouldStop():
