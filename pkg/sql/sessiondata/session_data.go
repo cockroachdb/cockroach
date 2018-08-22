@@ -46,6 +46,9 @@ type SessionData struct {
 	// lookup join where the left side is scanned and index lookups are done on
 	// the right side. Will emit a warning if a lookup join can't be planned.
 	LookupJoinEnabled bool
+	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
+	// TABLE ... SPLIT AT should be skipped.
+	ForceSplitAt bool
 	// OptimizerMode indicates whether to use the experimental optimizer for
 	// query planning.
 	OptimizerMode OptimizerMode

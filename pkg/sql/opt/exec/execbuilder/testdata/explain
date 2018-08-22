@@ -160,7 +160,7 @@ EXPLAIN SHOW DATABASE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 32 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -168,7 +168,7 @@ EXPLAIN SHOW TIME ZONE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 32 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -176,7 +176,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 32 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -184,7 +184,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 32 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -192,7 +192,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 32 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
