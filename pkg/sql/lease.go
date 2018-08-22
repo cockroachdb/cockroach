@@ -1168,8 +1168,9 @@ var _ base.ModuleTestingKnobs = &LeaseStoreTestingKnobs{}
 type LeaseManagerTestingKnobs struct {
 	// A callback called when a gossip update is received, before the leases are
 	// refreshed. Careful when using this to block for too long - you can block
-	// all the gossip users in the system.
-	GossipUpdateEvent func(config.SystemConfig)
+	// all the gossip users in the system. If it returns an error the gossip
+	// update is ignored.
+	GossipUpdateEvent func(config.SystemConfig) error
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
 
@@ -1627,7 +1628,9 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 			case <-gossipUpdateC:
 				cfg, _ := g.GetSystemConfig()
 				if m.testingKnobs.GossipUpdateEvent != nil {
-					m.testingKnobs.GossipUpdateEvent(cfg)
+					if err := m.testingKnobs.GossipUpdateEvent(cfg); err != nil {
+						break
+					}
 				}
 				// Read all tables and their versions
 				if log.V(2) {
