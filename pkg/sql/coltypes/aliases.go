@@ -142,7 +142,7 @@ func ArrayOf(colType T, bounds []int32) (T, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
-	return &TArray{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
+	return &TArray{ParamType: colType, Bounds: bounds}, nil
 }
 
 var typNameLiterals map[string]T

@@ -22,21 +22,29 @@ import (
 
 // TArray represents an ARRAY column type.
 type TArray struct {
-	Name string
 	// ParamTyp is the type of the elements in this array.
 	ParamType T
 	Bounds    []int32
 }
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TArray) TypeName() string { return node.Name }
+func (node *TArray) TypeName() string {
+	return node.ParamType.TypeName() + "[]"
+}
 
 // Format implements the ColTypeFormatter interface.
 func (node *TArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString(node.Name)
 	if collation, ok := node.ParamType.(*TCollatedString); ok {
-		buf.WriteString(" COLLATE ")
+		// We cannot use node.ParamType.Format() directly here (and DRY
+		// across the two branches of the if) because if we have an array
+		// of collated strings, the COLLATE string must appear after the
+		// square brackets.
+		collation.TString.Format(buf, f)
+		buf.WriteString("[] COLLATE ")
 		lex.EncodeUnrestrictedSQLIdent(buf, collation.Locale, f)
+	} else {
+		node.ParamType.Format(buf, f)
+		buf.WriteString("[]")
 	}
 }
 
