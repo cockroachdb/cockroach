@@ -35,8 +35,9 @@ import (
 var useast1bFixtures = workloadccl.FixtureConfig{
 	// TODO(dan): Keep fixtures in more than one region to better support
 	// geo-distributed clusters.
-	GCSBucket: `cockroach-fixtures`,
-	GCSPrefix: `workload`,
+	GCSBucket:      `cockroach-fixtures`,
+	GCSPrefix:      `workload`,
+	BillingProject: `cockroach-shared`,
 }
 
 func config() workloadccl.FixtureConfig {
@@ -46,6 +47,9 @@ func config() workloadccl.FixtureConfig {
 	}
 	if len(*gcsPrefixOverride) > 0 {
 		config.GCSPrefix = *gcsPrefixOverride
+	}
+	if len(*gcsBillingProjectOverride) > 0 {
+		config.BillingProject = *gcsBillingProjectOverride
 	}
 	config.CSVServerURL = *fixturesMakeCSVServerURL
 	return config
@@ -83,14 +87,18 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 var fixturesLoadRunChecks = fixturesLoadCmd.PersistentFlags().Bool(
 	`checks`, true, `Run validity checks on the loaded fixture`)
 
-// gcs-bucket-override and gcs-prefix-override are exposed for testing.
-var gcsBucketOverride, gcsPrefixOverride *string
+var gcsBucketOverride, gcsPrefixOverride, gcsBillingProjectOverride *string
 
 func init() {
 	gcsBucketOverride = fixturesCmd.PersistentFlags().String(`gcs-bucket-override`, ``, ``)
 	gcsPrefixOverride = fixturesCmd.PersistentFlags().String(`gcs-prefix-override`, ``, ``)
 	_ = fixturesCmd.PersistentFlags().MarkHidden(`gcs-bucket-override`)
 	_ = fixturesCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
+
+	gcsBillingProjectOverride = fixturesCmd.PersistentFlags().String(
+		`gcs-billing-project`, ``,
+		`Google Cloud project to use for storage billing; `+
+			`required to be non-empty if the bucket is requestor pays`)
 }
 
 const storageError = `failed to create google cloud client ` +

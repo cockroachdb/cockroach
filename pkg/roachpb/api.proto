@@ -1048,6 +1048,10 @@ message ExportStorage {
     string bucket = 1;
     string prefix = 2;
     string auth = 3;
+
+    // BillingProject if non-empty, is the Google Cloud project to bill for all storage requests.
+    // This is required to be set if using a "requestor pays" bucket.
+    string billing_project = 4;
   }
   message Azure {
     option (gogoproto.equal) = true;
