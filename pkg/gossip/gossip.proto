@@ -103,9 +103,9 @@ message ClientStatus {
 }
 
 message ServerStatus {
-	// TODO(peter): Report per connection sent/received statistics. The
-	// structure of server.Gossip and server.gossipReceiver makes this
-	// irritating to track.
+  // TODO(peter): Report per connection sent/received statistics. The
+  // structure of server.Gossip and server.gossipReceiver makes this
+  // irritating to track.
 
   option (gogoproto.goproto_stringer) = false;
 
@@ -114,11 +114,27 @@ message ServerStatus {
   MetricSnap metrics = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+message Connectivity {
+  option (gogoproto.goproto_stringer) = false;
+
+  message Conn {
+    int32 source_id = 1 [(gogoproto.customname) = "SourceID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    int32 target_id = 2 [(gogoproto.customname) = "TargetID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  }
+
+  int32 sentinel_node_id = 1 [(gogoproto.customname) = "SentinelNodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  repeated Conn client_conns = 2 [(gogoproto.nullable) = false];
+}
+
 // InfoStatus contains information about the current status of the infoStore.
 message InfoStatus {
   map<string, Info> infos = 1 [(gogoproto.nullable) = false];
   ClientStatus client = 2 [(gogoproto.nullable) = false];
   ServerStatus server = 3 [(gogoproto.nullable) = false];
+  Connectivity connectivity = 4 [(gogoproto.nullable) = false];
 }
 
 // Info is the basic unit of information traded over the
