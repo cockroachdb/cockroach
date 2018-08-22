@@ -1793,12 +1793,12 @@ reference_actions ::=
 
 numeric ::=
 	'INT'
+	| 'INTEGER'
 	| 'INT2'
+	| 'SMALLINT'
 	| 'INT4'
 	| 'INT8'
 	| 'INT64'
-	| 'INTEGER'
-	| 'SMALLINT'
 	| 'BIGINT'
 	| 'REAL'
 	| 'FLOAT4'

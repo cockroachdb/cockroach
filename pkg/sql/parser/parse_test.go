@@ -585,6 +585,9 @@ func TestParse(t *testing.T) {
 
 		{`SELECT BOOL 'foo', 'foo'::BOOL`},
 		{`SELECT INT 'foo', 'foo'::INT`},
+		{`SELECT INT2 'foo', 'foo'::INT2`},
+		{`SELECT INT4 'foo', 'foo'::INT4`},
+		{`SELECT INT8 'foo', 'foo'::INT8`},
 		{`SELECT FLOAT4 'foo', 'foo'::FLOAT4`},
 		{`SELECT DECIMAL 'foo', 'foo'::DECIMAL`},
 		{`SELECT CHAR 'foo', 'foo'::CHAR`},
@@ -1105,6 +1108,8 @@ func TestParse2(t *testing.T) {
 
 		{`CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL)`,
 			`CREATE TABLE a (b SERIAL8, c SERIAL2)`},
+		{`CREATE TABLE a (b BIGINT, c SMALLINT, d INTEGER)`,
+			`CREATE TABLE a (b INT8, c INT2, d INT)`},
 		{`CREATE TABLE a (b FLOAT, c FLOAT(10), d FLOAT(40), e REAL, f DOUBLE PRECISION)`,
 			`CREATE TABLE a (b FLOAT8, c FLOAT4, d FLOAT8, e FLOAT4, f FLOAT8)`},
 		{`CREATE TABLE a (b NUMERIC, c NUMERIC(10), d DEC)`,

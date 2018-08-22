@@ -123,7 +123,7 @@ COPY public.t (s) FROM stdin;
 		}
 		fmt.Fprintf(&sb, "%s;\n", s)
 	}
-	const expect = `CREATE TABLE public.second (i INTEGER NOT NULL, s STRING);
+	const expect = `CREATE TABLE public.second (i INT NOT NULL, s STRING);
 COPY public.second (i, s) FROM STDIN;
 "0"	"0";
 "1"	"1";
