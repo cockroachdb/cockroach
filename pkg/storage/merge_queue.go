@@ -50,18 +50,6 @@ const (
 	mergeQueueConcurrency = 1
 )
 
-// MergeMaxRHSSize is a setting the controls the maximum size of the right-hand
-// range in a merge.
-var MergeMaxRHSSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
-		"kv.range_merge.max_rhs_size",
-		"maximum size of the right-hand range in a merge",
-		0,
-	)
-	s.Hide()
-	return s
-}()
-
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
 var MergeQueueEnabled = func() *settings.BoolSetting {
@@ -79,13 +67,9 @@ var MergeQueueEnabled = func() *settings.BoolSetting {
 //
 // A range will only be queued if it is beneath the minimum size threshold. Once
 // queued, the size of the right-hand neighbor will additionally be checked;
-// merges can only proceed if a) the right-hand neighbor is smaller than
-// MergeMaxRHSSize, and b) the merged range would not need to be immediately
+// merges can only proceed if a) the right-hand neighbor is beneath the minimum
+// size threshold, and b) the merged range would not need to be immediately
 // split, e.g. because the new range would exceed the maximum size threshold.
-// Note that (a) is a limitation of the current merge implementation. The right-
-// hand range's data must be rewritten into the left-hand range, even if the
-// ranges are collocated, which results in quite a bit of write amplification.
-// We hope to lift this restriction once this copy is unnecessary.
 //
 // Note that the merge queue is not capable of initiating all possible merges.
 // Consider the example below:
@@ -230,11 +214,6 @@ func (mq *mergeQueue) process(
 	if rhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
-		return nil
-	}
-	if maxBytes := MergeMaxRHSSize.Get(&mq.store.ClusterSettings().SV); rhsStats.Total() > maxBytes {
-		log.VEventf(ctx, 2, "skipping merge: RHS exceeds maximum size %d with %d bytes",
-			maxBytes, rhsStats.Total())
 		return nil
 	}
 
