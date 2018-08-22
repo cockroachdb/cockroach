@@ -216,6 +216,17 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	}
 
 	if leaseChangingHands && iAmTheLeaseHolder {
+		// When taking over the lease, we need to check whether a merge is in
+		// progress, as only the old leaseholder would have been explicitly notified
+		// of the merge. If there is a merge in progress, maybeWatchForMerge will
+		// arrange to block all traffic to this replica unless the merge aborts.
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			// We were unable to determine whether a merge was in progress. We cannot
+			// safely proceed.
+			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
+				newLease, err)
+		}
+
 		// If this replica is a new holder of the lease, update the low water
 		// mark of the timestamp cache. Note that clock offset scenarios are
 		// handled via a stasis period inherent in the lease which is documented
@@ -266,10 +277,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		}
 	}
 
-	// We're setting the new lease after we've updated the timestamp cache in
-	// order to avoid race conditions where a replica starts serving requests
-	// for a lease without first having taken into account requests served
-	// by the previous lease holder.
+	// Ordering is critical here. We only install the new lease after we've
+	// checked for an in-progress merge and updated the timestamp cache. If the
+	// ordering were reversed, it would be possible for requests to see the new
+	// lease but not the updated merge or timestamp cache state, which can result
+	// in serializability violations.
 	r.mu.Lock()
 	r.mu.state.Lease = &newLease
 	expirationBasedLease := r.requiresExpiringLeaseRLocked()
@@ -803,15 +815,6 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		for _, txn := range *lResult.UpdatedTxns {
 			r.txnWaitQueue.UpdateTxn(ctx, txn)
 			lResult.UpdatedTxns = nil
-		}
-	}
-
-	if lResult.DetachMaybeWatchForMerge() {
-		if err := r.maybeWatchForMerge(ctx); err != nil {
-			// If maybeWatchForMerge fails, we do not know whether there is an
-			// in-progress merge that would prevent us from serving traffic. We cannot
-			// safely proceed.
-			log.Fatal(ctx, err)
 		}
 	}
 
