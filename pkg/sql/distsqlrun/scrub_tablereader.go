@@ -40,7 +40,7 @@ import (
 var ScrubTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_STRING},
 	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_JSON},
+	{SemanticType: sqlbase.ColumnType_JSONB},
 }
 
 type scrubTableReader struct {
