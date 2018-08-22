@@ -1508,34 +1508,6 @@ func (desc *TableDescriptor) validatePartitioning() error {
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
 
-// upperBoundColumnValueEncodedSize returns the maximum encoded size of the
-// given column using the "value" encoding. If the size is unbounded, false is returned.
-func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
-	var typ encoding.Type
-	var size int
-	switch col.Type.SemanticType {
-	case ColumnType_BOOL:
-		typ = encoding.True
-	case ColumnType_INT, ColumnType_DATE, ColumnType_TIME,
-		ColumnType_TIMESTAMP,
-		ColumnType_TIMESTAMPTZ, ColumnType_OID:
-		typ, size = encoding.Int, int(col.Type.Width)
-	case ColumnType_FLOAT:
-		typ = encoding.Float
-	case ColumnType_INTERVAL:
-		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME, ColumnType_UUID, ColumnType_INET:
-		// STRINGs are counted as runes, so this isn't totally correct, but this
-		// seems better than always assuming the maximum rune width.
-		typ, size = encoding.Bytes, int(col.Type.Width)
-	case ColumnType_DECIMAL:
-		typ, size = encoding.Decimal, int(col.Type.Precision)
-	default:
-		panic(errors.Errorf("unknown column type: %s", col.Type.SemanticType))
-	}
-	return encoding.UpperBoundValueEncodingSize(uint32(col.ID), typ, size)
-}
-
 // fitColumnToFamily attempts to fit a new column into the existing column
 // families. If the heuristics find a fit, true is returned along with the
 // index of the selected family. Otherwise, false is returned and the column
