@@ -118,6 +118,118 @@ semi-join
  └── filters [type=bool, outer=(2,6)]
       └── (x - i) > (i * i) [type=bool, outer=(2,6)]
 
+exec-ddl
+CREATE TABLE crdb_internal.zones (
+    zone_id INT NOT NULL,
+    cli_specifier STRING NULL,
+    config_yaml BYTES NOT NULL,
+    config_protobuf BYTES NOT NULL
+)
+----
+TABLE zones
+ ├── zone_id int not null
+ ├── cli_specifier string
+ ├── config_yaml bytes not null
+ ├── config_protobuf bytes not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #28827. Ensure that inlining is not applied when there
+# is a correlated subquery in the filter.
+norm
+SELECT
+  subq_0.c0 AS c0
+FROM (SELECT 1 AS c0, 2 as c1) AS subq_0
+WHERE
+  1
+  >= CASE
+    WHEN subq_0.c1 IS NOT NULL
+    THEN pg_catalog.extract(
+      CAST(
+        CASE
+        WHEN
+        (
+            EXISTS(
+              SELECT
+                ref_1.config_yaml AS c0,
+                ref_1.config_yaml AS c1,
+                subq_0.c0 AS c2,
+                ref_1.config_yaml AS c3
+              FROM
+                crdb_internal.zones AS ref_1
+              WHERE
+                subq_0.c0 IS NOT NULL
+              LIMIT
+                52
+            )
+          )
+        THEN pg_catalog.version()
+        ELSE pg_catalog.version()
+        END
+          AS TEXT
+      ),
+      CAST(pg_catalog.current_date() AS DATE)
+    )
+    ELSE 1
+    END
+LIMIT
+  107
+----
+project
+ ├── columns: c0:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c0:1(int!null) c1:2(int!null)
+      ├── cardinality: [0 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── project
+      │    ├── columns: c0:1(int!null) c1:2(int!null)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2)
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── tuple [type=tuple]
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── filters [type=bool, outer=(1,2), side-effects]
+           └── le [type=bool, outer=(1,2), side-effects]
+                ├── case [type=int, outer=(1,2), side-effects]
+                │    ├── true [type=bool]
+                │    ├── when [type=int, outer=(1,2), side-effects]
+                │    │    ├── c1 IS NOT NULL [type=bool, outer=(2)]
+                │    │    └── function: extract [type=int, outer=(1), side-effects]
+                │    │         ├── cast: TEXT [type=string, outer=(1)]
+                │    │         │    └── case [type=string, outer=(1)]
+                │    │         │         ├── true [type=bool]
+                │    │         │         ├── when [type=string, outer=(1)]
+                │    │         │         │    ├── exists [type=bool, outer=(1)]
+                │    │         │         │    │    └── limit
+                │    │         │         │    │         ├── columns: config_yaml:5(bytes!null)
+                │    │         │         │    │         ├── outer: (1)
+                │    │         │         │    │         ├── cardinality: [0 - 52]
+                │    │         │         │    │         ├── select
+                │    │         │         │    │         │    ├── columns: config_yaml:5(bytes!null)
+                │    │         │         │    │         │    ├── outer: (1)
+                │    │         │         │    │         │    ├── scan zones
+                │    │         │         │    │         │    │    └── columns: config_yaml:5(bytes!null)
+                │    │         │         │    │         │    └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │         │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │         │    │         └── const: 52 [type=int]
+                │    │         │         │    └── function: version [type=string]
+                │    │         │         └── function: version [type=string]
+                │    │         └── function: current_date [type=date, side-effects]
+                │    └── const: 1 [type=int]
+                └── const: 1 [type=int]
+
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------

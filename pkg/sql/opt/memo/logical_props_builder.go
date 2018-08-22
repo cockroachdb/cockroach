@@ -1059,8 +1059,9 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		return logical
 	}
 
-	// By default, derive OuterCols and CanHaveSideEffects from all children, both
-	// relational and scalar.
+	// By default, derive OuterCols and CanHaveSideEffects from all children,
+	// both relational and scalar. Derive HasCorrelatedSubquery from scalar
+	// children.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childLogical := &ev.childGroup(i).logical
 
@@ -1068,6 +1069,10 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 
 		if childLogical.CanHaveSideEffects() {
 			scalar.CanHaveSideEffects = true
+		}
+
+		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
+			scalar.HasCorrelatedSubquery = true
 		}
 	}
 
@@ -1114,12 +1119,17 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		funcOpDef := ev.Private().(*FuncOpDef)
 		if funcOpDef.Properties.Impure {
 			// Impure functions can return different value on each call.
-			logical.Scalar.CanHaveSideEffects = true
+			scalar.CanHaveSideEffects = true
 		}
 
 	case opt.DivOp:
 		// Division by zero error is possible.
-		logical.Scalar.CanHaveSideEffects = true
+		scalar.CanHaveSideEffects = true
+
+	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+		if !scalar.OuterCols.Empty() {
+			scalar.HasCorrelatedSubquery = true
+		}
 	}
 
 	return logical
