@@ -174,7 +174,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	pik, err := sqlbase.MakePrimaryIndexKey(tableDesc, pk)
+	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
@@ -452,7 +452,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 
 func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
-		key, err := sqlbase.MakePrimaryIndexKey(tableDesc, val)
+		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {
 			panic(err)
 		}

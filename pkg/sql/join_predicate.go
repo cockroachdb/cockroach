@@ -318,7 +318,7 @@ func (p *joinPredicate) encode(b []byte, row tree.Datums, cols []int) ([]byte, b
 		if row[colIdx] == tree.DNull {
 			containsNull = true
 		}
-		b, err = sqlbase.EncodeDatum(b, row[colIdx])
+		b, err = sqlbase.EncodeDatumKeyAscending(b, row[colIdx])
 		if err != nil {
 			return nil, false, err
 		}

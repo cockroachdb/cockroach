@@ -861,13 +861,13 @@ func (a *aggregateFuncHolder) canAdd(
 	ctx context.Context, encodingPrefix []byte, firstArg tree.Datum, otherArgs tree.Datums,
 ) (bool, error) {
 	if a.seen != nil {
-		encoded, err := sqlbase.EncodeDatum(encodingPrefix, firstArg)
+		encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
 		if err != nil {
 			return false, err
 		}
 		// Encode additional arguments if necessary.
 		if otherArgs != nil {
-			encoded, err = sqlbase.EncodeDatums(encoded, otherArgs)
+			encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
 			if err != nil {
 				return false, err
 			}
