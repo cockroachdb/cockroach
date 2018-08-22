@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 type splitNode struct {
@@ -38,6 +39,11 @@ type splitNode struct {
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
+	if storage.MergeQueueEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, errors.New("splits would be immediately discarded by merge queue; " +
+			"disable the merge queue first by running 'SET CLUSTER SETTING kv.range_merge.queue_enabled = false'")
+	}
+
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err

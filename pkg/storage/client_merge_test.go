@@ -2052,14 +2052,13 @@ func TestMergeQueue(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
-	sv := &storeCfg.Settings.SV
-	storage.MergeQueueEnabled.Override(sv, true)
-	storage.MergeQueueInterval.Override(sv, 0) // process greedily
+	storage.MergeQueueInterval.Override(&storeCfg.Settings.SV, 0) // process greedily
 	var mtc multiTestContext
 	mtc.storeConfig = &storeCfg
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	store := mtc.Store(0)
+	store.SetMergeQueueActive(true)
 
 	split := func(t *testing.T, key roachpb.Key) {
 		t.Helper()

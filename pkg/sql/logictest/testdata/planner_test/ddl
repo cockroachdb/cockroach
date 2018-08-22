@@ -88,6 +88,10 @@ output row: [3 9]
 statement ok
 CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 query TTTTT colnames
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----

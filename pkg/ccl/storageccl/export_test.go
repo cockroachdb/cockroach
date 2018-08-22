@@ -167,6 +167,9 @@ func TestExportCmd(t *testing.T) {
 
 	var res5 ExportAndSlurpResult
 	t.Run("ts5", func(t *testing.T) {
+		// The merge queue would immediately discard the split, so we need to
+		// disable it.
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 		sqlDB.Exec(t, `ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
 		res5 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res5, 2, 2, 2, 7)

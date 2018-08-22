@@ -291,6 +291,10 @@ SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d ORDER BY c, d
 statement ok
 CREATE TABLE one (k INT PRIMARY KEY, v INT)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 statement ok
 ALTER TABLE one SPLIT AT VALUES (0), (99)
 

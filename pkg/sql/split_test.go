@@ -45,6 +45,9 @@ func TestSplitAt(t *testing.T) {
 	)`)
 	r.Exec(t, `CREATE TABLE d.i (k INT PRIMARY KEY)`)
 
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+
 	tests := []struct {
 		in    string
 		error string

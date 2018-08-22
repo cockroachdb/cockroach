@@ -51,6 +51,9 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 

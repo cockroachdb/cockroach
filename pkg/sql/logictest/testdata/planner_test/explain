@@ -127,6 +127,10 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
 alter table  ·  ·
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
 ----
