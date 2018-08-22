@@ -501,7 +501,7 @@ func mysqlColToCockroach(
 	case mysqltypes.VarChar:
 		def.Type = strOpt(coltypes.VarChar, length)
 	case mysqltypes.Text:
-		def.Type = strOpt(coltypes.Text, length)
+		def.Type = strOpt(coltypes.String, length)
 
 	case mysqltypes.Blob:
 		def.Type = coltypes.Bytes

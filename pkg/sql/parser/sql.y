@@ -5913,7 +5913,7 @@ const_typename:
   }
 | TEXT
   {
-    $$.val = coltypes.Text
+    $$.val = coltypes.String
   }
 | NAME
   {
