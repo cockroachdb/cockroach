@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -4387,7 +4388,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}{
 		{roachpb.Key("a"), doesNotExist, txn.Epoch, txn.Timestamp, "txn record not found"},
 		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "already committed"},
-		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted"},
+		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp,
+			regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)")},
 		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "epoch regression: 0"},
 		{roachpb.Key("d"), roachpb.PENDING, txn.Epoch, regressTS, `timestamp regression: 0`},
 	}
@@ -4678,10 +4680,12 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 				t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
 			}
 
-			// Now replay begin & put. BeginTransaction should fail with a replay error.
+			// Now replay begin & put. BeginTransaction should fail with a
+			// TransactionAbortedError.
 			_, pErr = tc.Sender().Send(context.Background(), ba)
-			if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
-				t.Errorf("expected transaction replay for iso=%s; got %s", iso, pErr)
+			expErr := "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)"
+			if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
+				t.Errorf("expected %s; got %v", expErr, pErr)
 			}
 
 			// Intent should not have been created.
@@ -8461,6 +8465,9 @@ func TestAmbiguousResultErrorOnRetry(t *testing.T) {
 				// The one phase transaction will succeed because the original command
 				// executes first. However, the response the client gets corresponds to
 				// the retried one, and that one fails because of MVCC protections.
+				//
+				// TODO(andrei): update the comment above and remove references to
+				// TransactionReplayError once 28985 is fixed.
 				detail := pErr.GetDetail()
 				are, ok := detail.(*roachpb.AmbiguousResultError)
 				if !ok {
@@ -10601,7 +10608,12 @@ func TestRollbackMissingTxnRecordNoError(t *testing.T) {
 			Key: key,
 		},
 	})
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionReplayError); !ok {
-		t.Fatalf("expected replay error, got: %v", pErr)
+	// Note that, as explained in the abort reason comments, the server generates
+	// a retryable TransactionAbortedError, but if there's actually a sort of
+	// replay at work and a client is still waiting for the error, the error would
+	// be transformed into something more ambiguous on the way.
+	expErr := "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)"
+	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
+		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
 }
