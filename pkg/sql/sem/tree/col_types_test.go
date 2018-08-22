@@ -49,7 +49,7 @@ func TestParseColumnType(t *testing.T) {
 		{"JSONB", &coltypes.TJSON{}},
 		{"TIME", &coltypes.TTime{}},
 		{"TIMESTAMP", &coltypes.TTimestamp{}},
-		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},
+		{"TIMESTAMPTZ", &coltypes.TTimestampTZ{}},
 		{"INTERVAL", &coltypes.TInterval{}},
 		{"STRING", &coltypes.TString{Variant: coltypes.TStringVariantSTRING}},
 		{"CHAR", &coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 1}},
