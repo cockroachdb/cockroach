@@ -513,6 +513,35 @@ func TestRegistryLifecycle(t *testing.T) {
 		<-termCh
 		check(t)
 	})
+
+	t.Run("fail 2.0 jobs with no progress", func(t *testing.T) {
+		clear()
+		job, _, err := registry.StartJob(ctx, nil, mockJob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		sqlDB.Exec(t, "PAUSE JOB $1", *job.ID())
+		resumeCheckCh <- struct{}{}
+		progressCh <- struct{}{}
+		e.resumeExit++
+		check(t)
+		sqlDB.Exec(t, `UPDATE system.jobs SET progress = NULL, status = $2 WHERE id = $1`, *job.ID(), jobs.StatusRunning)
+		testutils.SucceedsSoon(t, func() error {
+			var status jobs.Status
+			var err string
+			sqlDB.QueryRow(t, `SELECT error, status FROM [SHOW JOBS] WHERE job_id = $1`, *job.ID()).Scan(&err, &status)
+			if status != jobs.StatusFailed {
+				return errors.Errorf("unexpected status: %s", status)
+			}
+			if err != "job predates cluster upgrade and must be re-run" {
+				return errors.Errorf("unexpected error: %s", err)
+			}
+			return nil
+		})
+		check(t)
+	})
 }
 
 func TestJobLifecycle(t *testing.T) {
