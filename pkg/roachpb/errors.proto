@@ -109,15 +109,75 @@ message ReadWithinUncertaintyIntervalError {
   repeated ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
-// A TransactionAbortedError indicates that the transaction was aborted by
-// another concurrent transaction. Upon seeing this error, the client is
-// supposed to reset its Transaction proto and try the transaction again.
+// TransactionAbortedReason specifies what caused a TransactionAbortedError.
+// The reasons below are not necessarily disjoint - they describe where the
+// error was generated, but generally it's possible that a
+// TransactionAbortedError would have been generated somewhere else if the
+// client would have performed different operations.
+enum TransactionAbortedReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // For backwards compatibility.
+  ABORT_REASON_UNKNOWN = 0;
+
+  // A BeginTransaction or EndTransaction(commit=true) request found an aborted
+  // transaction record. Another txn must have written this record - that other
+  // txn probably ran into one of our intents written before BeginTransaction
+  // (on a different range) and pushed it successfully. Or, a high-priority
+  // transaction simply pushed us, or we failed to heartbeat for a while and
+  // another txn (of any priority) considered us abandoned and pushed us.
+  ABORT_REASON_ABORTED_RECORD_FOUND = 1;
+
+  // The BeginTransaction has a timestamp below the TxnSpanGCThreshold, so there
+  // might have been an ABORTED txn record that got GCed (so, we might be in the
+  // ABORT_REASON_ABORTED_RECORD_FOUND case and not know).
+  ABORT_REASON_BEGIN_TOO_OLD = 2;
+
+  // The client is trying to use a transaction that's already been aborted. The
+  // TxnCoordSender detects this. Either the client is misusing a txn, or the
+  // TxnCoordSender found out about the transaction being aborted async through
+  // the heartbeat loop.
+  ABORT_REASON_CLIENT_REJECT = 3;
+
+  // The txn was trying to push another and found out that it itself got aborted
+  // somehow while waiting for the push.
+  ABORT_REASON_PUSHER_ABORTED = 4;
+
+  // The txn ran into the "abort span" - it was trying to read from a range
+  // where it had previously laid down intents that have been cleaned up in the
+  // meantime because the transaction was aborted.
+  ABORT_REASON_ABORT_SPAN = 5;
+
+  // An EndTransaction encountered a timestamp cache entry for the txn key, and
+  // the entry identifies this transaction. This means that the transaction
+  // definitely committed or rolled back before.
+  // So, this EndTransaction is either a delayed replay of some sort, or it
+  // raced with an async abort and lost. If a client gets this
+  // TransactionAbortedError (without it being wrapped in an ambiguous error),
+  // it must be the latter case, and the transaction can be retried.
+  ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY = 6;
+
+  // Like the above, except the timestamp cache doesn't have a txn id in it.
+  // This means that it no longer has good accuracy; likely as a result of a
+  // lease transfer. As above, if the error has not been converted by the time
+  // it reaches a client, then it's not a replay.
+  ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY= 7;
+}
+
+// A TransactionAbortedError indicates that the client should retry the
+// transaction (and use a different txn id, as opposed to
+// TransactionRetryError). This most often happens when the transaction was
+// aborted by another concurrent transaction. Upon seeing this error, the client
+// is supposed to reset its Transaction proto and try the transaction again.
 //
 // In contrast with other errors, the Transaction that the client gets in the
-// pErr carrying this ErrorDetail is not supposed to be used by the client,
-// besides checking that the transaction's ID is right.
+// pErr carrying this ErrorDetail is not supposed to be used as is by the
+// client; the ID should be checked and then attributes like the timestamp
+// should be used in creating a new txn.
 message TransactionAbortedError {
   option (gogoproto.equal) = true;
+
+  optional TransactionAbortedReason reason = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionPushError indicates that the transaction could not
@@ -155,14 +215,6 @@ message TransactionRetryError {
   option (gogoproto.equal) = true;
 
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
-}
-
-// A TransactionReplayError indicates that a BeginTransaction request
-// is being replayed. This can happen on network replays in which a
-// BeginTransaction request is sent again either from the client or
-// is belatedly delivered after an earlier attempt succeeded.
-message TransactionReplayError {
-  option (gogoproto.equal) = true;
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -420,7 +472,7 @@ message RangeFeedRetryError {
 message ErrorDetail {
   option (gogoproto.equal) = true;
 
-  reserved 25, 29, 30;
+  reserved 22, 25, 29, 30;
   oneof value {
     NotLeaseHolderError not_lease_holder = 1;
     RangeNotFoundError range_not_found = 2;
@@ -429,7 +481,6 @@ message ErrorDetail {
     TransactionAbortedError transaction_aborted = 5;
     TransactionPushError transaction_push = 6;
     TransactionRetryError transaction_retry = 7;
-    TransactionReplayError transaction_replay = 22;
     TransactionStatusError transaction_status = 8;
     WriteIntentError write_intent = 9;
     WriteTooOldError write_too_old = 10;
