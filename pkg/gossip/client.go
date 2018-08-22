@@ -307,6 +307,8 @@ func (c *client) gossip(
 		defer wg.Done()
 
 		errCh <- func() error {
+			var peerID roachpb.NodeID
+
 			for {
 				reply, err := stream.Recv()
 				if err != nil {
@@ -314,6 +316,10 @@ func (c *client) gossip(
 				}
 				if err := c.handleResponse(ctx, g, reply); err != nil {
 					return err
+				}
+				if peerID == 0 && c.peerID != 0 {
+					peerID = c.peerID
+					g.updateClients()
 				}
 			}
 		}()
