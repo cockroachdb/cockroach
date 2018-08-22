@@ -2122,29 +2122,10 @@ func TestMergeQueue(t *testing.T) {
 		verifyMerged(t)
 	})
 
-	t.Run("rhs-setting-threshold", func(t *testing.T) {
-		reset(t)
-
-		if err := store.DB().Put(ctx, "b-key", "val"); err != nil {
-			t.Fatal(err)
-		}
-		store.ForceMergeScanAndProcess()
-		verifyUnmerged(t)
-
-		storage.MergeMaxRHSSize.Override(sv, 100)
-		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
-		store.ForceMergeScanAndProcess()
-		verifyMerged(t)
-	})
-
 	rng, _ := randutil.NewPseudoRand()
 
 	t.Run("rhs-replica-threshold", func(t *testing.T) {
 		reset(t)
-
-		// Make the RHS cluster setting threshold irrelevant.
-		storage.MergeMaxRHSSize.Override(sv, 1<<32)
-		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
 
 		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
 		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
@@ -2175,9 +2156,6 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("combined-threshold", func(t *testing.T) {
 		reset(t)
-
-		storage.MergeMaxRHSSize.Override(sv, 1<<32)
-		defer storage.MergeMaxRHSSize.Override(sv, storage.MergeMaxRHSSize.Default())
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
