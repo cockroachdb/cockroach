@@ -286,7 +286,7 @@ var options = map[string]struct {
 		},
 	},
 	`display_format`: {
-		"the output format for tabular data (table, csv, tsv, html, sql, records, raw, pretty)",
+		"the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
 		false,
 		true,
 		func(_ *cliState, val string) error {
