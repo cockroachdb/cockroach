@@ -444,28 +444,27 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 	}
 
 	def := ev.Private().(*ScanOpDef)
+	inputStats := sb.makeTableStatistics(def.Table)
+	s.RowCount = inputStats.RowCount
+
 	if def.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
 		applied := sb.applyConstraint(def.Constraint, ev, relProps)
 
-		// Calculate selectivity
-		// ---------------------
+		// Calculate row count and selectivity
+		// -----------------------------------
 		if applied {
 			var cols opt.ColSet
 			for i := 0; i < def.Constraint.Columns.Count(); i++ {
 				cols.Add(int(def.Constraint.Columns.Get(i).ID()))
 			}
-			s.Selectivity = sb.selectivityFromDistinctCounts(cols, ev, relProps)
+			s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
 		} else {
-			s.Selectivity = sb.selectivityFromUnappliedConstraints(1 /* numUnappliedConstraints */)
+			s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(1 /* numUnappliedConstraints */))
 		}
 	}
 
-	// Calculate row count
-	// -------------------
-	inputStats := sb.makeTableStatistics(def.Table)
-	sb.applySelectivity(inputStats.RowCount, s)
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -477,7 +476,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 	colStat := sb.copyColStat(colSet, s, sb.colStatTable(def.Table, colSet))
 	if s.Selectivity != 1 {
 		tableStats := sb.makeTableStatistics(def.Table)
-		sb.applySelectivityToColStat(colStat, s.Selectivity, tableStats.RowCount)
+		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
 	}
 
 	// Cap distinct count at limit, if it exists.
@@ -535,23 +534,25 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, equivReps, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
 	inputFD := &ev.Child(0).Logical().Relational.FuncDeps
 	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
 
-	// Calculate selectivity
-	// ---------------------
-	s.Selectivity = sb.selectivityFromDistinctCounts(constrainedCols, ev, relProps)
-	s.Selectivity *= sb.selectivityFromEquivalencies(equivReps, filterFD, ev, relProps)
-	s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
-
-	// Calculate row count
-	// -------------------
+	// Calculate selectivity and row count
+	// -----------------------------------
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
-	sb.applySelectivity(inputStats.RowCount, s)
+	s.RowCount = inputStats.RowCount
+	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
+	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, filterFD, ev, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
+
+	// Update distinct counts based on equivalencies; this should happen after
+	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
+	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
+
 	sb.finalizeFromCardinality(relProps)
 }
 
@@ -560,7 +561,7 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
-	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
+	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	return colStat
 }
 
@@ -688,7 +689,7 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, equivReps, ev, relProps)
+	numUnappliedConstraints, constrainedCols := sb.applyFilter(on, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -698,16 +699,16 @@ func (sb *statisticsBuilder) buildJoin(ev ExprView, relProps *props.Relational) 
 	rightCols = sb.tryReduceCols(rightCols, s, &rightProps.FuncDeps)
 	constrainedCols = leftCols.Union(rightCols)
 
-	// Calculate selectivity
-	// ---------------------
-	s.Selectivity = sb.selectivityFromDistinctCounts(constrainedCols, ev, relProps)
-	s.Selectivity *= sb.selectivityFromEquivalencies(equivReps, filterFD, ev, relProps)
-	s.Selectivity *= sb.selectivityFromUnappliedConstraints(numUnappliedConstraints)
+	// Calculate selectivity and row count
+	// -----------------------------------
+	s.RowCount = leftStats.RowCount * rightStats.RowCount
+	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
+	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, filterFD, ev, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
 
-	// Calculate row count
-	// -------------------
-	inputRowCount := leftStats.RowCount * rightStats.RowCount
-	sb.applySelectivity(inputRowCount, s)
+	// Update distinct counts based on equivalencies; this should happen after
+	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
+	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 
 	// The above calculation is for inner joins. Tweak the row count and
 	// distinct counts for other types of joins.
@@ -772,7 +773,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
 		colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
-		sb.applySelectivityToColStat(colStat, s.Selectivity, leftStats.RowCount)
+		colStat.ApplySelectivity(s.Selectivity, leftStats.RowCount)
 		return colStat
 
 	default:
@@ -801,13 +802,13 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 			colStat = sb.copyColStatFromChild(leftCols, ev, 0 /* childIdx */, s)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
-				sb.applySelectivityToColStat(colStat, s.Selectivity, inputRowCount)
+				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else if leftCols.Empty() {
 			colStat = sb.copyColStatFromChild(rightCols, ev, 1 /* childIdx */, s)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
-				sb.applySelectivityToColStat(colStat, s.Selectivity, inputRowCount)
+				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else {
 			// Make a copy of the input column stats so we don't modify the originals.
@@ -815,12 +816,14 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 			rightColStat := *sb.colStatFromChild(rightCols, ev, 1 /* childIdx */)
 			switch ev.Operator() {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-				sb.applySelectivityToColStat(&leftColStat, s.Selectivity, inputRowCount)
-				sb.applySelectivityToColStat(&rightColStat, s.Selectivity, inputRowCount)
+				leftColStat.ApplySelectivity(s.Selectivity, inputRowCount)
+				rightColStat.ApplySelectivity(s.Selectivity, inputRowCount)
+
 			case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-				sb.applySelectivityToColStat(&rightColStat, s.Selectivity, inputRowCount)
+				rightColStat.ApplySelectivity(s.Selectivity, inputRowCount)
+
 			case opt.RightJoinOp, opt.RightJoinApplyOp:
-				sb.applySelectivityToColStat(&leftColStat, s.Selectivity, inputRowCount)
+				leftColStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 			colStat = sb.makeColStat(colSet, s)
 			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
@@ -1056,7 +1059,7 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props
 	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 
 	// Scale distinct count based on the selectivity of the limit operation.
-	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
+	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	return colStat
 }
 
@@ -1098,7 +1101,7 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *prop
 	colStat := sb.copyColStatFromChild(colSet, ev, 0 /* childIdx */, s)
 
 	// Scale distinct count based on the selectivity of the offset operation.
-	sb.applySelectivityToColStat(colStat, s.Selectivity, inputStats.RowCount)
+	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
 	return colStat
 }
 
@@ -1366,9 +1369,9 @@ const (
 	unknownDistinctCountRatio = 0.7
 )
 
-// applyFilter uses constraints and FD equivalencies to update the distinct
-// counts for the constrained columns in the filter. These distinct counts
-// will be used later to determine the selectivity of the filter.
+// applyFilter uses constraints to update the distinct counts for the
+// constrained columns in the filter. The changes in the distinct counts will be
+// used later to determine the selectivity of the filter.
 //
 // Some filters can be translated directly to distinct counts using the
 // constraint set. For example, the tight constraint `/a: [/1 - /1]` indicates
@@ -1384,7 +1387,7 @@ const (
 // See applyEquivalencies and selectivityFromEquivalencies for details.
 //
 func (sb *statisticsBuilder) applyFilter(
-	filter ExprView, equivReps opt.ColSet, ev ExprView, relProps *props.Relational,
+	filter ExprView, ev ExprView, relProps *props.Relational,
 ) (numUnappliedConstraints int, constrainedCols opt.ColSet) {
 	constraintSet := filter.Logical().Scalar.Constraints
 	tight := filter.Logical().Scalar.TightConstraints
@@ -1425,8 +1428,6 @@ func (sb *statisticsBuilder) applyFilter(
 		}
 	}
 
-	filterFD := &filter.Logical().Scalar.FuncDeps
-	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
 	return numUnappliedConstraints, constrainedCols
 }
 
@@ -1595,7 +1596,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
 	s := &relProps.Stats
 
 	// Find the minimum distinct count for all columns in this equivalency group.
-	minDistinctCount := math.MaxFloat64
+	minDistinctCount := s.RowCount
 	equivGroup.ForEach(func(i int) {
 		col := opt.ColumnID(i)
 		colStat, ok := s.ColStats[col]
@@ -1628,83 +1629,62 @@ func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
 //                columns}
 //
 // This selectivity will be used later to update the row count and the
-// distinct count for the unconstrained columns in applySelectivityToColStat.
+// distinct count for the unconstrained columns.
 //
-// If some of the columns are equivalent, this algorithm only uses one column
-// from each equivalency group, and chooses the most selective column
-// (i.e., the one with lowest selectivity). Otherwise, this algorithm assumes
-// the columns are completely independent.
+// This algorithm assumes the columns are completely independent.
 //
 func (sb *statisticsBuilder) selectivityFromDistinctCounts(
-	cols opt.ColSet, ev ExprView, relProps *props.Relational,
+	cols opt.ColSet, ev ExprView, s *props.Statistics,
 ) (selectivity float64) {
-	s := &relProps.Stats
-	fd := &relProps.FuncDeps
-	var seen opt.ColSet
-
 	selectivity = 1.0
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		if seen.Contains(col) {
-			// If an equivalent column was already included in the selectivity
-			// calculation, don't include this one.
-			continue
-		}
 		colStat, ok := s.ColStats[opt.ColumnID(col)]
 		if !ok {
 			continue
 		}
 
-		localSelectivity := 1.0
-		eqCols := fd.ComputeEquivClosure(colStat.Cols)
-		eqCols.ForEach(func(i int) {
-			col := opt.ColumnID(i)
-			if eqStat, ok := s.ColStats[col]; ok {
-				localSelectivity = min(
-					localSelectivity, sb.selectivityFromDistinctCount(eqStat, ev, relProps),
-				)
-			}
-		})
-
-		seen.UnionWith(eqCols)
-		selectivity *= localSelectivity
+		inputStat := sb.colStatFromInput(colStat.Cols, ev)
+		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
+			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
+		}
 	}
 
 	return selectivity
 }
 
-func (sb *statisticsBuilder) selectivityFromDistinctCount(
-	colStat *props.ColumnStatistic, ev ExprView, relProps *props.Relational,
-) float64 {
-	inputStat := sb.colStatFromInput(colStat.Cols, ev)
-	if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
-		return colStat.DistinctCount / inputStat.DistinctCount
-	}
-	return 1.0
-}
-
+// selectivityFromEquivalencies determines the selectivity of equality
+// constraints. It must be called before applyEquivalencies.
 func (sb *statisticsBuilder) selectivityFromEquivalencies(
-	equivReps opt.ColSet, filterFD *props.FuncDepSet, ev ExprView, relProps *props.Relational,
+	equivReps opt.ColSet, filterFD *props.FuncDepSet, ev ExprView, s *props.Statistics,
 ) (selectivity float64) {
 	selectivity = 1.0
 	equivReps.ForEach(func(i int) {
 		equivGroup := filterFD.ComputeEquivGroup(opt.ColumnID(i))
-		selectivity *= sb.selectivityFromEquivalency(equivGroup, ev, relProps)
+		selectivity *= sb.selectivityFromEquivalency(equivGroup, ev, s)
 	})
 	return selectivity
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalency(
-	equivGroup opt.ColSet, ev ExprView, relProps *props.Relational,
+	equivGroup opt.ColSet, ev ExprView, s *props.Statistics,
 ) (selectivity float64) {
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
 	equivGroup.ForEach(func(i int) {
-		inputColStat := sb.colStatFromInput(util.MakeFastIntSet(i), ev)
-		if maxDistinctCount < inputColStat.DistinctCount {
-			maxDistinctCount = inputColStat.DistinctCount
+		// If any of the distinct counts were updated by the filter, we want to use
+		// the updated value.
+		colStat, ok := s.ColStats[opt.ColumnID(i)]
+		if !ok {
+			colStat = sb.colStatFromInput(util.MakeFastIntSet(i), ev)
+		}
+		if maxDistinctCount < colStat.DistinctCount {
+			maxDistinctCount = colStat.DistinctCount
 		}
 	})
+	if maxDistinctCount > s.RowCount {
+		maxDistinctCount = s.RowCount
+	}
 
 	// The selectivity of an equality condition var1=var2 is
 	// 1/max(distinct(var1), distinct(var2)).
@@ -1713,59 +1693,6 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 		selectivity = 1 / maxDistinctCount
 	}
 	return selectivity
-}
-
-// applySelectivityToColStat updates the given column statistics according to
-// the filter selectivity.
-func (sb *statisticsBuilder) applySelectivityToColStat(
-	colStat *props.ColumnStatistic, selectivity, inputRows float64,
-) {
-	if selectivity == 0 || colStat.DistinctCount == 0 {
-		colStat.DistinctCount = 0
-		return
-	}
-
-	n := inputRows
-	d := colStat.DistinctCount
-
-	// If each distinct value appears n/d times, and the probability of a
-	// row being filtered out is (1 - selectivity), the probability that all
-	// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
-	// number of values that are filtered out is d*(1 - selectivity)^(n/d).
-	//
-	// This formula returns d * selectivity when d=n but is closer to d
-	// when d << n.
-	colStat.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
-}
-
-// applySelectivity updates the row count according to the filter selectivity,
-// and ensures that no distinct counts are larger than the row count.
-func (sb *statisticsBuilder) applySelectivity(inputRows float64, s *props.Statistics) {
-	if s.Selectivity == 0 {
-		sb.updateStatsFromContradiction(s)
-		return
-	}
-
-	s.RowCount = inputRows * s.Selectivity
-
-	// At this point we only have single-column stats on columns that were
-	// constrained by the filter. Make sure none of the distinct counts are
-	// larger than the row count.
-	for _, colStat := range s.ColStats {
-		colStat.DistinctCount = min(colStat.DistinctCount, s.RowCount)
-	}
-}
-
-// updateStatsFromContradiction sets the row count and distinct count to zero,
-// since a contradiction results in 0 rows.
-func (sb *statisticsBuilder) updateStatsFromContradiction(s *props.Statistics) {
-	s.RowCount = 0
-	for i := range s.ColStats {
-		s.ColStats[i].DistinctCount = 0
-	}
-	for i := range s.MultiColStats {
-		s.MultiColStats[i].DistinctCount = 0
-	}
 }
 
 func (sb *statisticsBuilder) selectivityFromUnappliedConstraints(

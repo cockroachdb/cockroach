@@ -502,7 +502,7 @@ SELECT * FROM order_history WHERE item_id = order_id AND item_id = customer_id A
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
- ├── stats: [rows=0.00204081633, distinct(1)=0.00204081633, distinct(2)=0.00204081633, distinct(3)=0.00204081633]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
  ├── fd: ()-->(1-3), (1)==(2,3), (2)==(1,3), (3)==(1,2)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
@@ -588,3 +588,68 @@ select
  └── filters [type=bool, outer=(1), constraints=(/1: [/0 - /99]; tight)]
       ├── x >= 0 [type=bool, outer=(1), constraints=(/1: [/0 - ]; tight)]
       └── x < 100 [type=bool, outer=(1), constraints=(/1: (/NULL - /99]; tight)]
+
+exec-ddl
+CREATE TABLE uvw (u INT, v INT, w INT)
+----
+TABLE uvw
+ ├── u int
+ ├── v int
+ ├── w int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Test selectivity calculations by applying the two constraints in different
+# orders.
+norm
+SELECT * FROM uvw WHERE u=v AND u=10
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ ├── scan uvw
+ │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: (/NULL - ]), fd=()-->(1,2), (1)==(2), (2)==(1)]
+      ├── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]
+
+norm disable=MergeSelects
+SELECT * FROM (SELECT * FROM uvw WHERE u=10) WHERE u=v
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1.0003063, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ ├── select
+ │    ├── columns: u:1(int!null) v:2(int) w:3(int)
+ │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(2)=1.42813399]
+ │    ├── fd: ()-->(1)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── filters [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+ │         └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+
+norm disable=MergeSelects
+SELECT * FROM (SELECT * FROM uvw WHERE u=v) WHERE u=10
+----
+select
+ ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ ├── stats: [rows=1, distinct(1)=1]
+ ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ ├── select
+ │    ├── columns: u:1(int!null) v:2(int!null) w:3(int)
+ │    ├── stats: [rows=1.42857143, distinct(1)=1.42857143, distinct(2)=1.42857143]
+ │    ├── fd: (1)==(2), (2)==(1)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │         └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]

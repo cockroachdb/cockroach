@@ -895,15 +895,15 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.0100267051
+ ├── cost: 0.17464683
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=4.73185689e-06, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06, distinct(11)=4.0816376e-06, distinct(12)=4.08163265e-06]
- │    ├── cost: 2.66578201e-05
+ │    ├── stats: [rows=0.136054422, distinct(3)=4.08163265e-06, distinct(5)=4.0816376e-06, distinct(11)=4.0816376e-06, distinct(12)=4.08163265e-06]
+ │    ├── cost: 0.163286286
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
