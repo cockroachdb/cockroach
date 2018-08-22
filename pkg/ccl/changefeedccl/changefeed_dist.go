@@ -110,6 +110,10 @@ func distChangefeedFlow(
 			Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 		},
 	}}
+	// NB: This SpanFrontier processor depends on the set of tracked spans being
+	// static. Currently there is no way for them to change after the changefeed
+	// is created, even if it is paused and unpaused, but #28982 describes some
+	// ways that this might happen in the future.
 	changeFrontierSpec := distsqlrun.ChangeFrontierSpec{
 		TrackedSpans: trackedSpans,
 		Feed:         details,
