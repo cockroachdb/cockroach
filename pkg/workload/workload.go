@@ -362,6 +362,11 @@ func Setup(
 
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+		return err
+	}
+
 	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
