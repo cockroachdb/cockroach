@@ -51,8 +51,13 @@ func (x *ConstraintValidity) UnmarshalJSON(data []byte) error {
 }
 func (ConstraintValidity) EnumDescriptor() ([]byte, []int) { return fileDescriptorStructured, []int{0} }
 
-// These mirror the types supported by the sql/parser. See
-// sql/parser/col_types.go.
+// These mirror the types supported by sql/coltypes.
+//
+// Note: when adding constants to this list or renaming constants,
+// verify with PostgreSQL what the type name should be in
+// information_schema.columns.data_type, and modify
+// (*ColumnType).InformationSchemaVisibleType() accordingly.
+//
 type ColumnType_SemanticType int32
 
 const (
