@@ -689,3 +689,81 @@ inner-join (merge)
       ├── right ordering: +5
       └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            └── a = e [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+exec-ddl
+CREATE TABLE uvw (u INT, v INT, w INT)
+----
+TABLE uvw
+ ├── u int
+ ├── v int
+ ├── w int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT)
+----
+TABLE xyz
+ ├── x int
+ ├── y int
+ ├── z int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Verify that two equivalent formulations of a join lead to similar statistics.
+# In the first case, x=10 is pushed down; in the second case it is part of the
+# ON condition. The latter formulation happens in practice when we convert to
+# lookup join (we incorporate the filter back into the ON condition).
+
+norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) ON u=x
+----
+inner-join
+ ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
+ ├── stats: [rows=1.429009, distinct(1)=1, distinct(5)=1]
+ ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
+ ├── select
+ │    ├── columns: u:1(int) v:2(int) w:3(int!null)
+ │    ├── stats: [rows=1.42857143, distinct(1)=1.42813399, distinct(3)=1]
+ │    ├── fd: ()-->(3)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=700, distinct(3)=700]
+ │    └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+ ├── select
+ │    ├── columns: x:5(int!null) y:6(int) z:7(int)
+ │    ├── stats: [rows=1.42857143, distinct(5)=1]
+ │    ├── fd: ()-->(5)
+ │    ├── scan xyz
+ │    │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    │    └── stats: [rows=1000, distinct(5)=700]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+ │         └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
+----
+inner-join
+ ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
+ ├── stats: [rows=1.429009, distinct(1)=1, distinct(5)=1]
+ ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
+ ├── select
+ │    ├── columns: u:1(int) v:2(int) w:3(int!null)
+ │    ├── stats: [rows=1.42857143, distinct(1)=1.42813399, distinct(3)=1]
+ │    ├── fd: ()-->(3)
+ │    ├── scan uvw
+ │    │    ├── columns: u:1(int) v:2(int) w:3(int)
+ │    │    └── stats: [rows=1000, distinct(1)=700, distinct(3)=700]
+ │    └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+ ├── scan xyz
+ │    ├── columns: x:5(int) y:6(int) z:7(int)
+ │    └── stats: [rows=1000, distinct(5)=700]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: [/10 - /10]), fd=()-->(1,5), (1)==(5), (5)==(1)]
+      ├── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]

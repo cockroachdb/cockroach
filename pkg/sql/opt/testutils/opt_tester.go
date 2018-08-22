@@ -87,9 +87,12 @@ type OptTesterFlags struct {
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
 
+	// DisableRules is a set of rules that are not allowed to run.
+	DisableRules map[opt.RuleName]struct{}
+
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
-	ExploreTraceRule string
+	ExploreTraceRule opt.RuleName
 
 	ColStats []opt.ColSet
 }
@@ -164,6 +167,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
+//
+//  - disable: disables optimizer rules by name. Examples:
+//      opt disable=ConstrainScan
+//      norm disable=(NegateOr,NegateAnd)
 //
 //  - rule: used with exploretrace; the value is the name of a rule. When
 //    specified, the exploretrace output is filtered to only show expression
@@ -326,11 +333,30 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		// Hiding qualifications defeats the purpose.
 		f.ExprFormat &= ^memo.ExprFmtHideQualifications
 
+	case "disable":
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("disable requires arguments")
+		}
+		if f.DisableRules == nil {
+			f.DisableRules = make(map[opt.RuleName]struct{})
+		}
+		for _, s := range arg.Vals {
+			r, err := ruleFromString(s)
+			if err != nil {
+				return err
+			}
+			f.DisableRules[r] = struct{}{}
+		}
+
 	case "rule":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("rule requires one argument")
 		}
-		f.ExploreTraceRule = arg.Vals[0]
+		var err error
+		f.ExploreTraceRule, err = ruleFromString(arg.Vals[0])
+		if err != nil {
+			return err
+		}
 
 	case "colstat":
 		if len(arg.Vals) == 0 {
@@ -356,21 +382,40 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
 func (ot *OptTester) OptBuild() (memo.ExprView, error) {
-	return ot.optimizeExpr(false /* allowNormalizations */, false /* allowExplorations */)
+	o := ot.makeOptimizer()
+	o.DisableOptimizations()
+	return ot.optimizeExpr(o)
 }
 
 // OptNorm constructs an opt expression tree for the SQL query, with all
 // normalization transformations applied to it. The normalized output of the
 // optbuilder is the final expression tree.
 func (ot *OptTester) OptNorm() (memo.ExprView, error) {
-	return ot.optimizeExpr(true /* allowNormalizations */, false /* allowExplorations */)
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if !ruleName.IsNormalize() {
+			return false
+		}
+		if _, disabled := ot.Flags.DisableRules[ruleName]; disabled {
+			return false
+		}
+		return true
+	})
+	return ot.optimizeExpr(o)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
 func (ot *OptTester) Optimize() (memo.ExprView, error) {
-	return ot.optimizeExpr(true /* allowNormalizations */, true /* allowExplorations */)
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if _, disabled := ot.Flags.DisableRules[ruleName]; disabled {
+			return false
+		}
+		return true
+	})
+	return ot.optimizeExpr(o)
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -399,20 +444,16 @@ func (ot *OptTester) RuleStats() (string, error) {
 		stats[i].rule = opt.RuleName(i)
 	}
 
-	var o xform.Optimizer
-	o.Init(&ot.evalCtx)
-
+	o := ot.makeOptimizer()
 	o.NotifyOnAppliedRule(
 		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
 			stats[ruleName].numApplied++
 			stats[ruleName].numAdded += added
 		},
 	)
-	root, required, err := ot.buildExpr(o.Factory())
-	if err != nil {
+	if _, err := ot.optimizeExpr(o); err != nil {
 		return "", err
 	}
-	o.Optimize(root, required)
 
 	// Split the rules.
 	var norm, explore []ruleStats
@@ -629,7 +670,8 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 			break
 		}
 
-		if ot.Flags.ExploreTraceRule != "" && et.LastRuleName().String() != ot.Flags.ExploreTraceRule {
+		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
+			et.LastRuleName() != ot.Flags.ExploreTraceRule {
 			continue
 		}
 
@@ -669,18 +711,13 @@ func (ot *OptTester) buildExpr(
 	return b.Build()
 }
 
-func (ot *OptTester) optimizeExpr(
-	allowNormalizations, allowExplorations bool,
-) (memo.ExprView, error) {
+func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx)
-	if !allowExplorations {
-		if allowNormalizations {
-			o.DisableExplorations()
-		} else {
-			o.DisableOptimizations()
-		}
-	}
+	return &o
+}
+
+func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (memo.ExprView, error) {
 	root, required, err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return memo.ExprView{}, err
@@ -705,4 +742,16 @@ func (ot *OptTester) indent(str string) {
 	for _, line := range lines {
 		ot.output("  %s\n", line)
 	}
+}
+
+// ruleFromString returns the rule that matches the given string,
+// or InvalidRuleName if there is no such rule.
+func ruleFromString(str string) (opt.RuleName, error) {
+	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
+		if i.String() == str {
+			return i, nil
+		}
+	}
+
+	return opt.InvalidRuleName, fmt.Errorf("rule '%s' does not exist", str)
 }
