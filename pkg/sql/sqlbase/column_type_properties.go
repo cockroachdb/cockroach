@@ -16,6 +16,7 @@ package sqlbase
 
 import (
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
@@ -196,12 +197,7 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 // Is is used in error messages and also to produce the output
 // of SHOW CREATE.
 //
-// TODO(knz): This is currently also used for
-// information_schema.columns and produces invalid/incompatible values
-// in that context. Either the standard names of the strings produced
-// by SQLString() here must become those expected by users of
-// information_schema.columns, or another function must be provided
-// for the information schema instead.
+// See also InformationSchemaVisibleType() below.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
 	case ColumnType_STRING:
@@ -250,6 +246,63 @@ func (c *ColumnType) SQLString() string {
 		return c.VisibleType.String()
 	}
 	return c.SemanticType.String()
+}
+
+// InformationSchemaVisibleType returns the string suitable to
+// populate the data_type column of information_schema.columns.
+//
+// This is different from SQLString() in that it must report SQL
+// standard names that are compatible with PostgreSQL client
+// expectations.
+func (c *ColumnType) InformationSchemaVisibleType() string {
+	switch c.SemanticType {
+	case ColumnType_BOOL:
+		return "boolean"
+
+	case ColumnType_INT:
+		// TODO(knz): This is not exactly correct. See #28690 for a
+		// followup. This needs to use the type width instead.
+		if c.VisibleType == ColumnType_NONE {
+			return "integer"
+		}
+		return c.VisibleType.String()
+
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+		// TODO(knz): this misses the distinction between text, varchar,
+		// char and "char".
+		return "text"
+
+	case ColumnType_FLOAT:
+		width, _ := c.FloatProperties()
+
+		switch width {
+		case 64:
+			return "double precision"
+		case 32:
+			return "real"
+		default:
+			panic(fmt.Sprintf("programming error: unknown float width: %d", width))
+		}
+
+	case ColumnType_DECIMAL:
+		return "numeric"
+	case ColumnType_TIMESTAMPTZ:
+		return "timestamp with time zone"
+	case ColumnType_BYTES:
+		return "bytea"
+	case ColumnType_JSON:
+		return "jsonb"
+	case ColumnType_NULL:
+		return "unknown"
+	case ColumnType_TUPLE:
+		return "record"
+	case ColumnType_ARRAY:
+		return "ARRAY"
+	}
+
+	// The name of the remaining semantic type constants are suitable
+	// for the data_type column in information_schema.columns.
+	return strings.ToLower(c.SemanticType.String())
 }
 
 // MaxCharacterLength returns the declared maximum length of
@@ -303,20 +356,8 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 	case ColumnType_INT:
 		return 64, true
 	case ColumnType_FLOAT:
-		switch c.VisibleType {
-		case ColumnType_REAL:
-			return 24, true
-		default:
-			// NONE now means double precision.
-			// Pre-2.1 there were 3 cases:
-			// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
-			// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
-			// - VisibleType = NONE, Width > 0 -> we need to derive the precision.
-			if c.Precision >= 1 && c.Precision <= 24 {
-				return 24, true
-			}
-			return 53, true
-		}
+		_, prec := c.FloatProperties()
+		return prec, true
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			return c.Precision, true
@@ -362,6 +403,24 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 		}
 	}
 	return 0, false
+}
+
+// FloatProperties returns the width and precision for a FLOAT column type.
+func (c *ColumnType) FloatProperties() (int32, int32) {
+	switch c.VisibleType {
+	case ColumnType_REAL:
+		return 32, 24
+	default:
+		// NONE now means double precision.
+		// Pre-2.1 there were 3 cases:
+		// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
+		// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
+		// - VisibleType = NONE, Width > 0 -> we need to derive the precision.
+		if c.Precision >= 1 && c.Precision <= 24 {
+			return 32, 24
+		}
+		return 64, 53
+	}
 }
 
 // datumTypeToColumnSemanticType converts a types.T to a SemanticType.

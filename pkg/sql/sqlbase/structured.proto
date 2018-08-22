@@ -100,8 +100,13 @@ import "gogoproto/gogo.proto";
 message ColumnType {
   option (gogoproto.equal) = true;
 
-  // These mirror the types supported by the sql/parser. See
-  // sql/parser/col_types.go.
+  // These mirror the types supported by sql/coltypes.
+  //
+  // Note: when adding constants to this list or renaming constants,
+  // verify with PostgreSQL what the type name should be in
+  // information_schema.columns.data_type, and modify
+  // (*ColumnType).InformationSchemaVisibleType() accordingly.
+  //
   enum SemanticType {
     BOOL = 0;
     INT = 1;        // INT(width)
