@@ -56,7 +56,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 			e DECIMAL NULL,
 			u UUID NULL,
 			ip INET NULL,
-			tz TIMESTAMP WITH TIME ZONE NULL
+			tz TIMESTAMPTZ NULL
 		);
 	`); err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestCopyRandom(t *testing.T) {
 			b BYTES,
 			u UUID,
 			ip INET,
-			tz TIMESTAMP WITH TIME ZONE
+			tz TIMESTAMPTZ
 		);
 		SET extra_float_digits = 3; -- to preserve floats entirely
 	`); err != nil {

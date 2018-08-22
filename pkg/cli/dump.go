@@ -661,7 +661,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						d = tree.MakeDTime(timeofday.FromTime(t))
 					case "TIMESTAMP":
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
-					case "TIMESTAMP WITH TIME ZONE":
+					case "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ":
 						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
