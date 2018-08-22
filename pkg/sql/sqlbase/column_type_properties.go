@@ -273,8 +273,6 @@ func (c *ColumnType) SQLString() string {
 			}
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
-	case ColumnType_TIMESTAMPTZ:
-		return "TIMESTAMP WITH TIME ZONE"
 	case ColumnType_ARRAY:
 		return c.elementColumnType().SQLString() + "[]"
 	}

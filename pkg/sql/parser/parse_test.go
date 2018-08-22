@@ -592,7 +592,7 @@ func TestParse(t *testing.T) {
 		{`SELECT DATE 'foo', 'foo'::DATE`},
 		{`SELECT TIME 'foo', 'foo'::TIME`},
 		{`SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP`},
-		{`SELECT TIMESTAMP WITH TIME ZONE 'foo', 'foo'::TIMESTAMP WITH TIME ZONE`},
+		{`SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ`},
 		{`SELECT JSONB 'foo', 'foo'::JSONB`},
 		{`SELECT SERIAL 'foo', 'foo'::SERIAL`},
 
@@ -1113,6 +1113,8 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b STRING)`},
 		{`CREATE TABLE a (b JSON)`,
 			`CREATE TABLE a (b JSONB)`},
+		{`CREATE TABLE a (b TIMESTAMP WITH TIME ZONE)`,
+			`CREATE TABLE a (b TIMESTAMPTZ)`},
 		{`CREATE TABLE a (b BYTES, c BYTEA, d BLOB)`,
 			`CREATE TABLE a (b BYTES, c BYTES, d BYTES)`},
 		{`CREATE TABLE a (b CHAR(1), c CHARACTER(1), d CHARACTER(3))`,

@@ -81,7 +81,7 @@ func positiveMod(x, y int64) int64 {
 // FromTime constructs a TimeOfDay from a time.Time, ignoring the date and time zone.
 func FromTime(t time.Time) TimeOfDay {
 	// Adjust for timezone offset so it won't affect the time. This is necessary
-	// at times, like when casting from a TIMESTAMP WITH TIME ZONE.
+	// at times, like when casting from a TIMESTAMPTZ.
 	_, offset := t.Zone()
 	unixSeconds := t.Unix() + int64(offset)
 
