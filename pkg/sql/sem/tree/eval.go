@@ -2937,14 +2937,16 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		}
 		switch c := t.(type) {
 		case *coltypes.TString:
-			// If the CHAR type specifies a limit we truncate to that limit:
+			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
-			if c.N > 0 && c.N < len(s) {
+			// This is true of all the string type variants.
+			if c.N > 0 && c.N < uint(len(s)) {
 				s = s[:c.N]
 			}
 			return NewDString(s), nil
 		case *coltypes.TCollatedString:
-			if c.N > 0 && c.N < len(s) {
+			// Ditto truncation like for TString.
+			if c.N > 0 && c.N < uint(len(s)) {
 				s = s[:c.N]
 			}
 			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
