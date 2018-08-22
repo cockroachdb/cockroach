@@ -335,6 +335,7 @@ CREATE TABLE alltypes (
   cint8 INT8,
   cinteger INTEGER,
   cinterval INTERVAL,
+  cjson JSONB,
   cnumeric NUMERIC,
   cnumeric1 NUMERIC(1),
   cnumeric21 NUMERIC(2,1),
@@ -382,6 +383,7 @@ cint64            BIGINT                    true         NULL            ·     
 cint8             BIGINT                    true         NULL            ·                      {}           false
 cinteger          INTEGER                   true         NULL            ·                      {}           false
 cinterval         INTERVAL                  true         NULL            ·                      {}           false
+cjson             JSONB                     true         NULL            ·                      {}           false
 cnumeric          DECIMAL                   true         NULL            ·                      {}           false
 cnumeric1         DECIMAL(1)                true         NULL            ·                      {}           false
 cnumeric21        DECIMAL(2,1)              true         NULL            ·                      {}           false

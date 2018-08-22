@@ -333,8 +333,6 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 		return "timestamp with time zone"
 	case ColumnType_BYTES:
 		return "bytea"
-	case ColumnType_JSON:
-		return "jsonb"
 	case ColumnType_NULL:
 		return "unknown"
 	case ColumnType_TUPLE:
@@ -510,7 +508,7 @@ func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 	case types.OidVector:
 		return ColumnType_OIDVECTOR, nil
 	case types.JSON:
-		return ColumnType_JSON, nil
+		return ColumnType_JSONB, nil
 	default:
 		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
@@ -556,7 +554,7 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 		return types.UUID
 	case ColumnType_INET:
 		return types.INet
-	case ColumnType_JSON:
+	case ColumnType_JSONB:
 		return types.JSON
 	case ColumnType_TUPLE:
 		return types.FamTuple

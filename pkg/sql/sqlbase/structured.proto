@@ -141,7 +141,7 @@ message ColumnType {
     ARRAY = 15;
     INET = 16;
     TIME = 17;
-    JSON = 18;
+    JSONB = 18;
     reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
 

@@ -218,7 +218,7 @@ func TestEncDatumCompare(t *testing.T) {
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
 		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR ||
-			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSON || kind == ColumnType_TUPLE {
+			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSONB || kind == ColumnType_TUPLE {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}
