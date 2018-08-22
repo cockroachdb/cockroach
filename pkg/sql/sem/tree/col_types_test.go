@@ -46,6 +46,7 @@ func TestParseColumnType(t *testing.T) {
 		{"UUID", &coltypes.TUUID{}},
 		{"INET", &coltypes.TIPAddr{}},
 		{"DATE", &coltypes.TDate{}},
+		{"JSONB", &coltypes.TJSON{}},
 		{"TIME", &coltypes.TTime{}},
 		{"TIMESTAMP", &coltypes.TTimestamp{}},
 		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},

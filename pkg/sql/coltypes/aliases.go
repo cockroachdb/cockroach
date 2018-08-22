@@ -99,9 +99,7 @@ var (
 	INet = &TIPAddr{}
 
 	// JSON is an immutable T instance.
-	JSON = &TJSON{Name: "JSON"}
-	// JSONB is an immutable T instance.
-	JSONB = &TJSON{Name: "JSONB"}
+	JSON = &TJSON{}
 
 	// Oid is an immutable T instance.
 	Oid = &TOid{Name: "OID"}

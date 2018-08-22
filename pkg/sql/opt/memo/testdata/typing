@@ -330,15 +330,14 @@ SELECT
 FROM b
 ----
 scalar-group-by
- ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int) count:10(int) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:23(jsonb)
+ ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int) count:10(int) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:22(jsonb)
  ├── project
- │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) column22:22(jsonb) x:1(string!null) z:2(decimal!null)
+ │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) x:1(string!null) z:2(decimal!null)
  │    ├── scan b
  │    │    └── columns: x:1(string!null) z:2(decimal!null)
  │    └── projections
  │         ├── z = 0 [type=bool]
  │         ├── x::INT [type=int]
- │         ├── x::JSON [type=jsonb]
  │         └── x::JSONB [type=jsonb]
  └── aggregations
       ├── array-agg [type=decimal[]]
@@ -373,7 +372,7 @@ scalar-group-by
       ├── json-agg [type=jsonb]
       │    └── variable: column20 [type=jsonb]
       └── jsonb-agg [type=jsonb]
-           └── variable: column22 [type=jsonb]
+           └── variable: column20 [type=jsonb]
 
 # ConstAgg internal aggregate function.
 opt
