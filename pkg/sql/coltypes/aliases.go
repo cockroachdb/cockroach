@@ -15,6 +15,10 @@
 package coltypes
 
 import (
+	"strings"
+
+	"github.com/lib/pq/oid"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -149,8 +153,8 @@ var typNameLiterals map[string]T
 
 func init() {
 	typNameLiterals = make(map[string]T)
-	for _, t := range types.OidToType {
-		name := types.PGDisplayName(t)
+	for o, t := range types.OidToType {
+		name := strings.ToLower(oid.TypeName[o])
 		if _, ok := typNameLiterals[name]; !ok {
 			colTyp, err := DatumTypeToColumnType(t)
 			if err != nil {
