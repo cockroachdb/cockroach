@@ -51,11 +51,13 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -107,6 +109,9 @@ const (
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
+
+	// defaultClientsInterval ...
+	defaultClientsInterval = 2 * time.Second
 
 	// NodeDescriptorInterval is the interval for gossiping the node descriptor.
 	// Note that increasing this duration may increase the likelihood of gossip
@@ -267,6 +272,9 @@ type Gossip struct {
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	localityTierMap map[string]struct{}
+
+	logCh            chan struct{}
+	lastConnectivity string
 }
 
 // New creates an instance of a gossip node.
@@ -308,6 +316,7 @@ func New(
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		localityTierMap:   map[string]struct{}{},
+		logCh:             make(chan struct{}, 1),
 	}
 
 	for _, loc := range locality.Tiers {
@@ -324,6 +333,18 @@ func New(
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
+	// Log gossip connectivity whenever we receive an update.
+	g.mu.is.registerCallback(MakePrefixPattern(KeyGossipClientsPrefix),
+		func(_ string, _ roachpb.Value) {
+			// Rather than logging here directly, we signal logCh which "debounces"
+			// frequent updates. This approach is used rather than something like
+			// log.Every because gossip connectivity is critical for correct
+			// operation and we want to make sure the most recent update is logged.
+			select {
+			case g.logCh <- struct{}{}:
+			default:
+			}
+		})
 	g.mu.Unlock()
 
 	if grpcServer != nil {
@@ -383,6 +404,7 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Errorf("node %d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
+	g.updateClients()
 	return nil
 }
 
@@ -535,8 +557,8 @@ func (g *Gossip) LogStatus() {
 
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(
-		ctx, "gossip status (%s, %d node%s)\n%s%s", status, n, util.Pluralize(int64(n)),
-		g.clientStatus(), g.server.status(),
+		ctx, "gossip status (%s, %d node%s)\n%s%s%s", status, n, util.Pluralize(int64(n)),
+		g.clientStatus(), g.server.status(), g.connectivity(),
 	)
 }
 
@@ -561,6 +583,53 @@ func (g *Gossip) clientStatus() ClientStatus {
 		})
 	}
 	return status
+}
+
+func (g *Gossip) connectivity() string {
+	ctx := g.AnnotateCtx(context.TODO())
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "gossip connectivity\n")
+
+	g.mu.RLock()
+
+	if i := g.mu.is.getInfo(KeySentinel); i != nil {
+		fmt.Fprintf(&buf, "  n%d [sentinel];\n", i.NodeID)
+	}
+
+	nodeIDs := make([]roachpb.NodeID, 0, len(g.nodeDescs))
+	for nodeID := range g.nodeDescs {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	sort.Slice(nodeIDs, func(i, j int) bool {
+		return nodeIDs[i] < nodeIDs[j]
+	})
+
+	fmt.Fprintf(&buf, " ")
+	for _, nodeID := range nodeIDs {
+		i := g.mu.is.getInfo(MakeGossipClientsKey(nodeID))
+		if i == nil {
+			continue
+		}
+
+		v, err := i.Value.GetBytes()
+		if err != nil {
+			log.Error(ctx, err)
+			continue
+		}
+		if len(v) == 0 {
+			continue
+		}
+
+		for _, id := range strings.Split(string(v), ",") {
+			fmt.Fprintf(&buf, " n%d -> n%s;", nodeID, id)
+		}
+	}
+
+	g.mu.RUnlock()
+
+	fmt.Fprintf(&buf, "\n")
+	return buf.String()
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
@@ -825,6 +894,39 @@ func (g *Gossip) getNodeIDForStoreIDLocked(storeID roachpb.StoreID) (roachpb.Nod
 		return nodeID, nil
 	}
 	return 0, errors.Errorf("unable to look up Node ID for store %d", storeID)
+}
+
+func (g *Gossip) updateClients() {
+	nodeID := g.NodeID.Get()
+	if nodeID == 0 {
+		return
+	}
+
+	var buf bytes.Buffer
+	var sep string
+
+	g.mu.RLock()
+	g.clientsMu.Lock()
+	for _, c := range g.clientsMu.clients {
+		if c.peerID != 0 {
+			fmt.Fprintf(&buf, "%s%d", sep, c.peerID)
+			sep = ","
+		}
+	}
+	g.clientsMu.Unlock()
+	g.mu.RUnlock()
+
+	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
+		log.Error(g.AnnotateCtx(context.Background()), err)
+	}
+}
+
+func (g *Gossip) logConnectivity() {
+	s := g.connectivity()
+	if g.lastConnectivity != s {
+		g.lastConnectivity = s
+		log.Infof(g.AnnotateCtx(context.Background()), "%s", s)
+	}
 }
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
@@ -1251,11 +1353,14 @@ func (g *Gossip) bootstrap() {
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
 	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
+		clientsTimer := timeutil.NewTimer()
 		cullTimer := timeutil.NewTimer()
 		stallTimer := timeutil.NewTimer()
+		defer clientsTimer.Stop()
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 
+		clientsTimer.Reset(defaultClientsInterval)
 		cullTimer.Reset(jitteredInterval(g.cullInterval))
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
@@ -1266,10 +1371,18 @@ func (g *Gossip) manage() {
 				g.doDisconnected(c)
 			case <-g.tighten:
 				g.tightenNetwork(ctx)
+			case <-g.logCh:
+				g.logConnectivity()
+			case <-clientsTimer.C:
+				clientsTimer.Read = true
+				g.updateClients()
+				// Log gossip connectivity (if it has changed) to account for the short
+				// TTLs on the connectivity keys.
+				g.logConnectivity()
+				clientsTimer.Reset(defaultClientsInterval)
 			case <-cullTimer.C:
 				cullTimer.Read = true
 				cullTimer.Reset(jitteredInterval(g.cullInterval))
-
 				func() {
 					g.mu.Lock()
 					if !g.outgoing.hasSpace() {
@@ -1341,6 +1454,8 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 }
 
 func (g *Gossip) doDisconnected(c *client) {
+	defer g.updateClients()
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.removeClientLocked(c)
