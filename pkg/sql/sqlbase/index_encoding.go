@@ -144,38 +144,6 @@ func (d directions) get(i int) (encoding.Direction, error) {
 	return encoding.Ascending, nil
 }
 
-// Return the value corresponding to the column. If the column isn't
-// present return a NULL value.
-func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Datum) tree.Datum {
-	if i, ok := colMap[column]; ok {
-		// TODO(pmattis): Need to convert the values[i] value to the type
-		// expected by the column.
-		return values[i]
-	}
-	return tree.DNull
-}
-
-func appendEncDatumsToKey(
-	key roachpb.Key,
-	types []ColumnType,
-	values EncDatumRow,
-	dirs []IndexDescriptor_Direction,
-	alloc *DatumAlloc,
-) (roachpb.Key, error) {
-	for i, val := range values {
-		encoding := DatumEncoding_ASCENDING_KEY
-		if dirs[i] == IndexDescriptor_DESC {
-			encoding = DatumEncoding_DESCENDING_KEY
-		}
-		var err error
-		key, err = val.Encode(&types[i], alloc, encoding, key)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return key, nil
-}
-
 // MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
 // encodings of the given EncDatum values. The values correspond to
 // index.ColumnIDs.
@@ -233,6 +201,40 @@ func MakeKeyFromEncDatums(
 		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
 	}
 	return appendEncDatumsToKey(key, types, values, dirs, alloc)
+}
+
+// findColumnValue returns the value corresponding to the column. If
+// the column isn't present return a NULL value.
+func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Datum) tree.Datum {
+	if i, ok := colMap[column]; ok {
+		// TODO(pmattis): Need to convert the values[i] value to the type
+		// expected by the column.
+		return values[i]
+	}
+	return tree.DNull
+}
+
+// appendEncDatumsToKey concatenates the encoded representations of
+// the datums at the end of the given roachpb.Key.
+func appendEncDatumsToKey(
+	key roachpb.Key,
+	types []ColumnType,
+	values EncDatumRow,
+	dirs []IndexDescriptor_Direction,
+	alloc *DatumAlloc,
+) (roachpb.Key, error) {
+	for i, val := range values {
+		encoding := DatumEncoding_ASCENDING_KEY
+		if dirs[i] == IndexDescriptor_DESC {
+			encoding = DatumEncoding_DESCENDING_KEY
+		}
+		var err error
+		key, err = val.Encode(&types[i], alloc, encoding, key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return key, nil
 }
 
 // MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix with
