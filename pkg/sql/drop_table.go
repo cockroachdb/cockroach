@@ -152,12 +152,8 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
-) (tableDesc *sqlbase.TableDescriptor, err error) {
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
-	})
+) (*MutableTableDescriptor, error) {
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}

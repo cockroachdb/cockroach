@@ -34,12 +34,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 		return nil, err
 	}
 
-	var seqDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		seqDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireSequenceDesc)
-	})
+	seqDesc, err := p.ResolveMutableTableDescriptor(ctx, tn, !n.IfExists, requireSequenceDesc)
 	if err != nil {
 		return nil, err
 	}

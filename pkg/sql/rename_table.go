@@ -48,12 +48,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = requireSequenceDesc
 	}
 
-	var tableDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, oldTn, !n.IfExists, toRequire)
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}
