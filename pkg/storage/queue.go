@@ -853,7 +853,6 @@ func (bq *baseQueue) addToPurgatoryLocked(
 					for _, id := range ranges {
 						repl, err := bq.store.GetReplica(id)
 						if err != nil {
-							log.Errorf(ctx, "range %s no longer exists on store: %s", id, err)
 							continue
 						}
 						annotatedCtx := repl.AnnotateCtx(ctx)

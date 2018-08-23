@@ -1047,6 +1047,7 @@ func RelocateRange(
 		return false
 	}
 
+	every := log.Every(time.Minute)
 	for len(addTargets) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -1060,7 +1061,9 @@ func RelocateRange(
 			if !canRetry(err) {
 				return returnErr
 			}
-			log.Warning(ctx, returnErr)
+			if every.ShouldLog() {
+				log.Warning(ctx, returnErr)
+			}
 			continue
 		}
 		addTargets = addTargets[1:]

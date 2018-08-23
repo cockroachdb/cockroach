@@ -460,6 +460,10 @@ type OutgoingSnapshot struct {
 	snapType       string
 }
 
+func (s *OutgoingSnapshot) String() string {
+	return fmt.Sprintf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+}
+
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
 	s.Iter.Close()
@@ -535,8 +539,6 @@ func snapshot(
 	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
-	log.Infof(ctx, "generated %s snapshot %s at index %d",
-		snapType, snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
