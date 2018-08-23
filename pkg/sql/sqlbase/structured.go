@@ -2127,13 +2127,6 @@ func ColumnsSelectors(cols []ColumnDescriptor, forUpdateOrDelete bool) tree.Sele
 	return exprs
 }
 
-// Equivalent checks whether a column type is equivalent to another, excluding
-// its VisibleType type alias, which doesn't effect equality.
-func (c *ColumnType) Equivalent(other ColumnType) bool {
-	other.VisibleType = c.VisibleType
-	return c.Equal(other)
-}
-
 // SetID implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
