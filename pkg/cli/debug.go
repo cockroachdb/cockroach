@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/debug"
 	"github.com/cockroachdb/cockroach/pkg/cli/synctest"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -42,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -139,33 +139,6 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
-func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
-
-	if debugCtx.sizes {
-		fmt.Printf("%d %d: ", len(kv.Key.Key), len(kv.Value))
-	}
-	decoders := []func(kv engine.MVCCKeyValue) (string, error){
-		tryRaftLogEntry,
-		tryRangeDescriptor,
-		tryMeta,
-		tryTxn,
-		tryRangeIDKey,
-		tryIntent,
-	}
-	for _, decoder := range decoders {
-		out, err := decoder(kv)
-		if err != nil {
-			continue
-		}
-		fmt.Println(out)
-		return false, nil
-	}
-	// No better idea, just print raw bytes and hope that folks use `less -S`.
-	fmt.Printf("%q\n\n", kv.Value)
-	return false, nil
-}
-
 func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -177,7 +150,10 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 
 	printer := printKey
 	if debugCtx.values {
-		printer = printKeyValue
+		printer = func(kv engine.MVCCKeyValue) (bool, error) {
+			debug.PrintKeyValue(kv, debugCtx.sizes)
+			return false, nil
+		}
 	}
 
 	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
@@ -276,12 +252,10 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		if _, err := printKeyValue(engine.MVCCKeyValue{
+		debug.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
-		}); err != nil {
-			return err
-		}
+		}, debugCtx.sizes)
 	}
 	return nil
 }
@@ -296,179 +270,6 @@ Prints all range descriptors in a store with a history of changes.
 	RunE: MaybeDecorateGRPCError(runDebugRangeDescriptors),
 }
 
-func descStr(desc roachpb.RangeDescriptor) string {
-	return fmt.Sprintf("[%s, %s)\n\tRaw:%s\n",
-		desc.StartKey, desc.EndKey, &desc)
-}
-
-func tryMeta(kv engine.MVCCKeyValue) (string, error) {
-	if !bytes.HasPrefix(kv.Key.Key, keys.Meta1Prefix) && !bytes.HasPrefix(kv.Key.Key, keys.Meta2Prefix) {
-		return "", errors.New("not a meta key")
-	}
-	value := roachpb.Value{
-		Timestamp: kv.Key.Timestamp,
-		RawBytes:  kv.Value,
-	}
-	var desc roachpb.RangeDescriptor
-	if err := value.GetProto(&desc); err != nil {
-		return "", err
-	}
-	return descStr(desc), nil
-}
-
-func maybeUnmarshalInline(v []byte, dest protoutil.Message) error {
-	var meta enginepb.MVCCMetadata
-	if err := protoutil.Unmarshal(v, &meta); err != nil {
-		return err
-	}
-	value := roachpb.Value{
-		RawBytes: meta.RawBytes,
-	}
-	return value.GetProto(dest)
-}
-
-func tryTxn(kv engine.MVCCKeyValue) (string, error) {
-	var txn roachpb.Transaction
-	if err := maybeUnmarshalInline(kv.Value, &txn); err != nil {
-		return "", err
-	}
-	return txn.String() + "\n", nil
-}
-
-func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
-	if kv.Key.Timestamp != (hlc.Timestamp{}) {
-		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
-	}
-	_, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key.Key)
-	if err != nil {
-		return "", err
-	}
-
-	// All range ID keys are stored inline on the metadata.
-	var meta enginepb.MVCCMetadata
-	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
-		return "", err
-	}
-	value := roachpb.Value{RawBytes: meta.RawBytes}
-
-	// Values encoded as protobufs set msg and continue outside the
-	// switch. Other types are handled inside the switch and return.
-	var msg protoutil.Message
-	switch {
-	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexLegacySuffix):
-		fallthrough
-	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
-		i, err := value.GetInt()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatInt(i, 10), nil
-
-	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
-		b, err := value.GetBool()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatBool(b), nil
-
-	case bytes.Equal(suffix, keys.LocalAbortSpanSuffix):
-		msg = &roachpb.AbortSpanEntry{}
-
-	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
-		msg = &hlc.Timestamp{}
-
-	case bytes.Equal(suffix, keys.LocalRaftTombstoneSuffix):
-		msg = &roachpb.RaftTombstone{}
-
-	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
-		msg = &roachpb.RaftTruncatedState{}
-
-	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
-		msg = &roachpb.Lease{}
-
-	case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
-		msg = &enginepb.RangeAppliedState{}
-
-	case bytes.Equal(suffix, keys.LocalRangeStatsLegacySuffix):
-		msg = &enginepb.MVCCStats{}
-
-	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
-		msg = &raftpb.HardState{}
-
-	case bytes.Equal(suffix, keys.LocalRaftLastIndexSuffix):
-		i, err := value.GetInt()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatInt(i, 10), nil
-
-	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffixDeprecated):
-		msg = &hlc.Timestamp{}
-
-	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
-		msg = &hlc.Timestamp{}
-
-	default:
-		return "", fmt.Errorf("unknown raft id key %s", suffix)
-	}
-
-	if err := value.GetProto(msg); err != nil {
-		return "", err
-	}
-	return msg.String(), nil
-}
-
-func checkRangeDescriptorKey(key engine.MVCCKey) error {
-	_, suffix, _, err := keys.DecodeRangeKey(key.Key)
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-		return fmt.Errorf("wrong suffix: %s", suffix)
-	}
-	return nil
-}
-
-func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
-	if err := checkRangeDescriptorKey(kv.Key); err != nil {
-		return "", err
-	}
-	var desc roachpb.RangeDescriptor
-	if err := getProtoValue(kv.Value, &desc); err != nil {
-		return "", err
-	}
-	return descStr(desc), nil
-}
-
-func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
-	if out, err := tryRangeDescriptor(kv); err == nil {
-		fmt.Printf("%s %q: %s\n", kv.Key.Timestamp, kv.Key.Key, out)
-	}
-	return false, nil
-}
-
-func tryIntent(kv engine.MVCCKeyValue) (string, error) {
-	if len(kv.Value) == 0 {
-		return "", errors.New("empty")
-	}
-	var meta enginepb.MVCCMetadata
-	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
-		return "", err
-	}
-	s := fmt.Sprintf("%+v", meta)
-	if meta.Txn != nil {
-		s = meta.Txn.Timestamp.String() + " " + s
-	}
-	return s, nil
-}
-
-func getProtoValue(data []byte, msg protoutil.Message) error {
-	value := roachpb.Value{
-		RawBytes: data,
-	}
-	return value.GetProto(msg)
-}
-
 func loadRangeDescriptor(
 	db engine.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
@@ -478,12 +279,12 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return false, nil
 		}
-		if err := checkRangeDescriptorKey(kv.Key); err != nil {
+		if err := debug.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return false, nil
 		}
-		if err := getProtoValue(kv.Value, &desc); err != nil {
+		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
 			return false, err
 		}
 		return desc.RangeID == rangeID, nil
@@ -515,7 +316,13 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
-	return db.Iterate(start, end, printRangeDescriptor)
+	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		if debug.IsRangeDescriptorKey(kv.Key) != nil {
+			return false, nil
+		}
+		debug.PrintKeyValue(kv, debugCtx.sizes)
+		return false, nil
+	})
 }
 
 var debugDecodeKeyCmd = &cobra.Command{
@@ -544,6 +351,46 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 	},
 }
 
+var debugDecodeValueCmd = &cobra.Command{
+	Use:   "decode-value",
+	Short: "decode-value <key> <value>",
+	Long: `
+Decode and print a hexadecimal-encoded key-value pair.
+
+	$ decode-value <TBD> <TBD>
+	<TBD>
+`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var bs [][]byte
+		for _, arg := range args {
+			b, err := hex.DecodeString(arg)
+			if err != nil {
+				return err
+			}
+			bs = append(bs, b)
+		}
+
+		k, err := engine.DecodeKey(bs[0])
+		if err != nil {
+			// Older versions of the consistency checker give you diffs with a raw_key that
+			// is already a roachpb.Key, so make a half-assed attempt to support both.
+			fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
+				"if the result below looks like garbage, then it likely is:\n\n", err)
+			k = engine.MVCCKey{
+				Key:       bs[0],
+				Timestamp: hlc.Timestamp{WallTime: 987654321},
+			}
+		}
+
+		debug.PrintKeyValue(engine.MVCCKeyValue{
+			Key:   k,
+			Value: bs[1],
+		}, debugCtx.sizes)
+		return nil
+	},
+}
+
 var debugRaftLogCmd = &cobra.Command{
 	Use:   "raft-log <directory> <range id>",
 	Short: "print the raft log for a range",
@@ -552,57 +399,6 @@ Prints all log entries in a store for the given range.
 `,
 	Args: cobra.ExactArgs(2),
 	RunE: MaybeDecorateGRPCError(runDebugRaftLog),
-}
-
-func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
-	var ent raftpb.Entry
-	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
-		return "", err
-	}
-	if ent.Type == raftpb.EntryNormal {
-		if len(ent.Data) > 0 {
-			_, cmdData := storage.DecodeRaftCommand(ent.Data)
-			var cmd storagebase.RaftCommand
-			if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
-				return "", err
-			}
-			ent.Data = nil
-			var leaseStr string
-			if l := cmd.DeprecatedProposerLease; l != nil {
-				// Use the full lease, if available.
-				leaseStr = l.String()
-			} else {
-				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
-			}
-			return fmt.Sprintf("%s by %s\n%s\n", &ent, leaseStr, &cmd), nil
-		}
-		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
-	} else if ent.Type == raftpb.EntryConfChange {
-		var cc raftpb.ConfChange
-		if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
-			return "", err
-		}
-		var ctx storage.ConfChangeContext
-		if err := protoutil.Unmarshal(cc.Context, &ctx); err != nil {
-			return "", err
-		}
-		var cmd storagebase.ReplicatedEvalResult
-		if err := protoutil.Unmarshal(ctx.Payload, &cmd); err != nil {
-			return "", err
-		}
-		ent.Data = nil
-		return fmt.Sprintf("%s\n%s\n", &ent, &cmd), nil
-	}
-	return "", fmt.Errorf("unknown log entry type: %s", &ent)
-}
-
-func printRaftLogEntry(kv engine.MVCCKeyValue) (bool, error) {
-	if out, err := tryRaftLogEntry(kv); err != nil {
-		fmt.Printf("%q: %v\n\n", kv.Key.Key, err)
-	} else {
-		fmt.Printf("%q: %s\n", kv.Key.Key, out)
-	}
-	return false, nil
 }
 
 func runDebugRaftLog(cmd *cobra.Command, args []string) error {
@@ -622,7 +418,10 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
 
-	return db.Iterate(start, end, printRaftLogEntry)
+	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		debug.PrintKeyValue(kv, debugCtx.sizes)
+		return false, nil
+	})
 }
 
 var debugGCCmd = &cobra.Command{
@@ -1409,6 +1208,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
 	debugDecodeKeyCmd,
+	debugDecodeValueCmd,
 	debugRocksDBCmd,
 	debugSSTDumpCmd,
 	debugGossipValuesCmd,
