@@ -39,14 +39,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	// don't exist and continue execution.
 	idxNames := make([]fullIndexName, 0, len(n.IndexList))
 	for _, index := range n.IndexList {
-		var tn *tree.TableName
-		var tableDesc *TableDescriptor
-		var err error
-		// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-		// TODO(vivek): check if the cache can be used.
-		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			tn, tableDesc, err = expandIndexName(ctx, p, index, !n.IfExists /* requireTable */)
-		})
+		tn, tableDesc, err := expandMutableIndexName(ctx, p, index, !n.IfExists /* requireTable */)
 		if err != nil {
 			// Error or table did not exist.
 			return nil, err
