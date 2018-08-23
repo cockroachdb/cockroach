@@ -16,6 +16,7 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -46,181 +47,70 @@ func (c *CustomFuncs) Init(e *explorer) {
 //
 // ----------------------------------------------------------------------
 
-// CanGenerateIndexScans returns true if new index Scan operators can be
-// generated, based on the given ScanOpDef. Index scans should only be generated
-// from the original unaltered primary index Scan operator (i.e. unconstrained
-// and not limited).
-func (c *CustomFuncs) CanGenerateIndexScans(def memo.PrivateID) bool {
+// IsCanonicalScan returns true if the given ScanOpDef is an original unaltered
+// primary index Scan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsCanonicalScan(def memo.PrivateID) bool {
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	return scanOpDef.Index == opt.PrimaryIndex &&
 		scanOpDef.Constraint == nil &&
 		scanOpDef.HardLimit == 0
 }
 
-// CanGenerateInvertedIndexScans returns true if new index Scan operators can
-// be generated on inverted indexes. Same as CanGenerateIndexScans, but with
-// the additional check that we have at least one inverted index on the table.
-func (c *CustomFuncs) CanGenerateInvertedIndexScans(def memo.PrivateID) bool {
-	if !c.CanGenerateIndexScans(def) {
-		return false
-	}
-
-	// Don't bother matching unless there's an inverted index.
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	md := c.e.mem.Metadata()
-	tab := md.Table(scanOpDef.Table)
-	// Index 0 is the primary index and is never inverted.
-	for i, n := 1, tab.IndexCount(); i < n; i++ {
-		if tab.Index(i).IsInverted() {
-			return true
-		}
-	}
-	return false
-}
-
-// GenerateIndexScans enumerates all indexes on the scan operator's table and
-// generates an alternate scan operator for each index that includes the set of
-// needed columns.
+// GenerateIndexScans enumerates all secondary indexes on the given Scan
+// operator's table and generates an alternate Scan operator for each index that
+// includes the set of needed columns specified in the ScanOpDef.
+//
+// NOTE: This does not generate index joins for non-covering indexes (except in
+//       case of ForceIndex). Index joins are usually only introduced "one level
+//       up", when the Scan operator is wrapped by an operator that constrains
+//       or limits scan output in some way (e.g. Select, Limit, InnerJoin).
+//       Index joins are only lower cost when their input does not include all
+//       rows from the table. See ConstrainScans and LimitScans for cases where
+//       index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 	c.e.exprs = c.e.exprs[:0]
 	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	md := c.e.mem.Metadata()
-	tab := md.Table(scanOpDef.Table)
 
-	// Iterate over all secondary indexes (index 0 is the primary index).
-	var pkCols opt.ColList
-	for i := 1; i < tab.IndexCount(); i++ {
-		if tab.Index(i).IsInverted() {
-			// Ignore inverted indexes.
-			continue
-		}
-		if scanOpDef.Flags.ForceIndex && scanOpDef.Flags.Index != i {
-			// If we are forcing a specific index, don't bother with the others.
+	// Iterate over all secondary indexes.
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanOpDef)
+	for iter.next() {
+		// Skip primary index.
+		if iter.index == opt.PrimaryIndex {
 			continue
 		}
 
-		indexCols := md.IndexColumns(scanOpDef.Table, i)
-
-		// If the alternate index includes the set of needed columns (def.Cols),
-		// then construct a new Scan operator using that index.
-		if scanOpDef.Cols.SubsetOf(indexCols) {
+		// If the secondary index includes the set of needed columns, then construct
+		// a new Scan operator using that index.
+		if iter.isCovering() {
 			newDef := *scanOpDef
-			newDef.Index = i
+			newDef.Index = iter.index
 			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
 			c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
-		} else if !scanOpDef.Flags.NoIndexJoin {
-			// The alternate index was missing columns, so in order to satisfy the
-			// requirements, we need to perform an index join with the primary index.
-			if pkCols == nil {
-				primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
-				pkCols = make(opt.ColList, primaryIndex.KeyColumnCount())
-				for i := range pkCols {
-					pkCols[i] = scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)
-				}
-			}
-
-			// We scan whatever columns we need which are available from the index,
-			// plus the PK columns. The main reason is to allow pushing of filters as
-			// much as possible.
-			scanCols := indexCols.Intersection(scanOpDef.Cols)
-			for _, c := range pkCols {
-				scanCols.Add(int(c))
-			}
-
-			indexScanOpDef := memo.ScanOpDef{
-				Table: scanOpDef.Table,
-				Index: i,
-				Cols:  scanCols,
-				Flags: scanOpDef.Flags,
-			}
-
-			input := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&indexScanOpDef))
-
-			def := memo.IndexJoinDef{
-				Table: scanOpDef.Table,
-				Cols:  scanOpDef.Cols,
-			}
-
-			private := c.e.mem.InternIndexJoinDef(&def)
-			indexJoin := memo.MakeIndexJoinExpr(input, private)
-			c.e.exprs = append(c.e.exprs, memo.Expr(indexJoin))
-		}
-	}
-
-	return c.e.exprs
-}
-
-// GenerateInvertedIndexScans enumerates all inverted indexes on the scan
-// operator's table and generates a scan for each inverted index that can
-// service the query.
-// The resulting scan operator is pre-constrained and may come with an index join.
-// The reason it's pre-constrained is that we cannot treat an inverted index in
-// the same way as a regular index, since it does not actually contain the
-// indexed column.
-func (c *CustomFuncs) GenerateInvertedIndexScans(
-	def memo.PrivateID, filter memo.GroupID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	md := c.e.mem.Metadata()
-	tab := md.Table(scanOpDef.Table)
-
-	primaryIndex := md.Table(scanOpDef.Table).Index(opt.PrimaryIndex)
-	var pkColSet opt.ColSet
-	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-		pkColSet.Add(int(scanOpDef.Table.ColumnID(primaryIndex.Column(i).Ordinal)))
-	}
-
-	// Iterate over all inverted indexes (index 0 is the primary index and is
-	// never inverted).
-	for i := 1; i < tab.IndexCount(); i++ {
-		if !tab.Index(i).IsInverted() {
-			continue
-		}
-		if scanOpDef.Flags.ForceIndex && scanOpDef.Flags.Index != i {
-			// If we are forcing a specific index, ignore the others.
 			continue
 		}
 
-		preDef := &memo.ScanOpDef{
-			Table: scanOpDef.Table,
-			Index: i,
-			// Though the index is marked as containing the JSONB column being
-			// indexed, it doesn't actually, and it's only valid to extract the
-			// primary key columns from it.
-			Cols:  pkColSet,
-			Flags: scanOpDef.Flags,
-		}
-
-		constrainedScan, remainingFilter, ok := c.constrainedScanOpDef(filter, c.e.mem.InternScanOpDef(preDef), true /* isInverted */)
-		if !ok {
+		// Otherwise, if the index must be forced, then construct an IndexJoin
+		// operator that provides the columns missing from the index. Note that
+		// if ForceIndex=true, scanIndexIter only returns the one index that is
+		// being forced, so no need to check that here.
+		if !scanOpDef.Flags.ForceIndex {
 			continue
 		}
 
-		// TODO(justin): We might not need to do an index join in order to get the
-		// correct columns, but it's difficult to tell at this point.
-		def := c.e.mem.InternIndexJoinDef(&memo.IndexJoinDef{
-			Table: scanOpDef.Table,
-			Cols:  scanOpDef.Cols,
-		})
-		scan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&constrainedScan))
+		var sb indexScanBuilder
+		sb.init(c, scanOpDef.Table)
 
-		if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
-			c.e.exprs = append(
-				c.e.exprs,
-				memo.Expr(memo.MakeIndexJoinExpr(scan, def)),
-			)
-		} else {
-			c.e.exprs = append(
-				c.e.exprs,
-				memo.Expr(
-					memo.MakeSelectExpr(
-						c.e.f.ConstructIndexJoin(scan, def),
-						remainingFilter,
-					),
-				),
-			)
-		}
+		// Scan whatever columns we need which are available from the index, plus
+		// the PK columns.
+		newDef := *scanOpDef
+		newDef.Index = iter.index
+		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
+		newDef.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+
+		sb.addIndexJoin(scanOpDef.Cols)
+		c.e.exprs = append(c.e.exprs, sb.build())
 	}
 
 	return c.e.exprs
@@ -233,26 +123,265 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 //
 // ----------------------------------------------------------------------
 
-// CanConstrainScan returns true if the scan could potentially have a constraint
-// applied to it from the given filter. This is only allowed when the scan
-//  - does not already have constraints, and
-//  - does not have a limit (which applies pre-filter).
-// The function also makes some fast checks on the filter and returns false if
-// it detects that the filter will not result in any index constraints.
-func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID, filter memo.GroupID) bool {
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	if scanOpDef.Constraint != nil || scanOpDef.HardLimit != 0 {
-		return false
+// GenerateConstrainedScans enumerates all secondary indexes on the Scan
+// operator's table and tries to push the given Select filter into new
+// constrained Scan operators using those indexes. Since this only needs to be
+// done once per table, GenerateConstrainedScans should only be called on the
+// original unaltered primary index Scan operator (i.e. not constrained or
+// limited).
+//
+// For each secondary index that "covers" the columns needed by the scan, there
+// are three cases:
+//
+//  - a filter that can be completely converted to a constraint over that index
+//    generates a single constrained Scan operator (to be added to the same
+//    group as the original Select operator):
+//
+//      (Scan $scanDef)
+//
+//  - a filter that can be partially converted to a constraint over that index
+//    generates a constrained Scan operator in a new memo group, wrapped in a
+//    Select operator having the remaining filter (to be added to the same group
+//    as the original Select operator):
+//
+//      (Select (Scan $scanDef) $filter)
+//
+//  - a filter that cannot be converted to a constraint generates nothing
+//
+// And for a secondary index that does not cover the needed columns:
+//
+//  - a filter that can be completely converted to a constraint over that index
+//    generates a single constrained Scan operator in a new memo group, wrapped
+//    in an IndexJoin operator that looks up the remaining needed columns (and
+//    is added to the same group as the original Select operator)
+//
+//      (IndexJoin (Scan $scanDef) $indexJoinDef)
+//
+//  - a filter that can be partially converted to a constraint over that index
+//    generates a constrained Scan operator in a new memo group, wrapped in an
+//    IndexJoin operator that looks up the remaining needed columns; the
+//    remaining filter is distributed above and/or below the IndexJoin,
+//    depending on which columns it references:
+//
+//      (IndexJoin
+//        (Select (Scan $scanDef) $filter)
+//        $indexJoinDef
+//      )
+//
+//      (Select
+//        (IndexJoin (Scan $scanDef) $indexJoinDef)
+//        $filter
+//      )
+//
+//      (Select
+//        (IndexJoin
+//          (Select (Scan $scanDef) $innerFilter)
+//          $indexJoinDef
+//        )
+//        $outerFilter
+//      )
+//
+func (c *CustomFuncs) GenerateConstrainedScans(
+	scanDef memo.PrivateID, filter memo.GroupID,
+) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
+	scanOpDef := c.e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
+
+	var sb indexScanBuilder
+	sb.init(c, scanOpDef.Table)
+
+	// Iterate over all indexes.
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanOpDef)
+	for iter.next() {
+		// Check whether the filter can constrain the index.
+		constraint, remaining, ok := c.tryConstrainIndex(
+			filter, scanOpDef.Table, iter.index, false /* isInverted */)
+		if !ok {
+			continue
+		}
+
+		// Construct new constrained ScanOpDef.
+		newDef := *scanOpDef
+		newDef.Index = iter.index
+		newDef.Constraint = constraint
+
+		// If the alternate index includes the set of needed columns, then construct
+		// a new Scan operator using that index.
+		if iter.isCovering() {
+			sb.setScan(c.e.f.InternScanOpDef(&newDef))
+
+			// If there is a remaining filter, then the constrained Scan operator
+			// will be created in a new group, and a Select operator will be added
+			// to the same group as the original operator.
+			sb.addSelect(remaining)
+			c.e.exprs = append(c.e.exprs, sb.build())
+			continue
+		}
+
+		// Otherwise, construct an IndexJoin operator that provides the columns
+		// missing from the index.
+		if scanOpDef.Flags.NoIndexJoin {
+			continue
+		}
+
+		// Scan whatever columns we need which are available from the index, plus
+		// the PK columns.
+		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
+		newDef.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+
+		// If remaining filter exists, split it into one part that can be pushed
+		// below the IndexJoin, and one part that needs to stay above.
+		remaining = sb.addSelectAfterSplit(remaining, newDef.Cols)
+		sb.addIndexJoin(scanOpDef.Cols)
+		sb.addSelect(remaining)
+
+		c.e.exprs = append(c.e.exprs, sb.build())
 	}
+
+	return c.e.exprs
+}
+
+// HasInvertedIndexes returns true if at least one inverted index is defined on
+// the Scan operator's table.
+func (c *CustomFuncs) HasInvertedIndexes(def memo.PrivateID) bool {
+	// Don't bother matching unless there's an inverted index.
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanOpDef)
+	return iter.nextInverted()
+}
+
+// GenerateInvertedIndexScans enumerates all inverted indexes on the Scan
+// operator's table and generates an alternate Scan operator for each inverted
+// index that can service the query.
+//
+// The resulting Scan operator is pre-constrained and requires an IndexJoin to
+// project columns other than the primary key columns. The reason it's pre-
+// constrained is that we cannot treat an inverted index in the same way as a
+// regular index, since it does not actually contain the indexed column.
+func (c *CustomFuncs) GenerateInvertedIndexScans(
+	def memo.PrivateID, filter memo.GroupID,
+) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+
+	var sb indexScanBuilder
+	sb.init(c, scanOpDef.Table)
+
+	// Iterate over all inverted indexes.
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanOpDef)
+	for iter.nextInverted() {
+		// Check whether the filter can constrain the index.
+		constraint, remaining, ok := c.tryConstrainIndex(
+			filter, scanOpDef.Table, iter.index, true /* isInverted */)
+		if !ok {
+			continue
+		}
+
+		// Construct new ScanOpDef with the new index and constraint.
+		newDef := *scanOpDef
+		newDef.Index = iter.index
+		newDef.Constraint = constraint
+
+		// Though the index is marked as containing the JSONB column being
+		// indexed, it doesn't actually, and it's only valid to extract the
+		// primary key columns from it.
+		newDef.Cols = sb.primaryKeyCols()
+
+		// The Scan operator always goes in a new group, since it's always nested
+		// underneath the IndexJoin. The IndexJoin may also go into its own group,
+		// if there's a remaining filter above it.
+		// TODO(justin): We might not need to do an index join in order to get the
+		// correct columns, but it's difficult to tell at this point.
+		sb.setScan(c.e.mem.InternScanOpDef(&newDef))
+
+		// If remaining filter exists, split it into one part that can be pushed
+		// below the IndexJoin, and one part that needs to stay above.
+		remaining = sb.addSelectAfterSplit(remaining, newDef.Cols)
+		sb.addIndexJoin(scanOpDef.Cols)
+		sb.addSelect(remaining)
+
+		c.e.exprs = append(c.e.exprs, sb.build())
+	}
+
+	return c.e.exprs
+}
+
+// tryConstrainIndex tries to derive a constraint for the given index from the
+// specified filter. If a constraint is derived, it is returned along with any
+// filter remaining after extracting the constraint. If no constraint can be
+// derived, then tryConstrainIndex returns ok = false.
+func (c *CustomFuncs) tryConstrainIndex(
+	filter memo.GroupID, tabID opt.TableID, indexOrd int, isInverted bool,
+) (constraint *constraint.Constraint, remainingFilter memo.GroupID, ok bool) {
+	// Start with fast check to rule out indexes that cannot be constrained.
+	if !isInverted && !c.canMaybeConstrainIndex(filter, tabID, indexOrd) {
+		return nil, 0, false
+	}
+
+	// Fill out data structures needed to initialize the idxconstraint library.
+	// Use LaxKeyColumnCount, since all columns <= LaxKeyColumnCount are
+	// guaranteed to be part of each row's key (i.e. not stored in row's value,
+	// which does not take part in an index scan). Note that the OrderingColumn
+	// slice cannot be reused, as Instance.Init can use it in the constraint.
 	md := c.e.mem.Metadata()
-	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
-	firstIndexCol := scanOpDef.Table.ColumnID(index.Column(0).Ordinal)
+	index := md.Table(tabID).Index(indexOrd)
+	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
+	var notNullCols opt.ColSet
+	for i := range columns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal)
+		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.Column.IsNullable() {
+			notNullCols.Add(int(colID))
+		}
+	}
+
+	// Generate index constraints.
+	var ic idxconstraint.Instance
+	ev := memo.MakeNormExprView(c.e.mem, filter)
+	ic.Init(ev, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
+	constraint = ic.Constraint()
+	if constraint.IsUnconstrained() {
+		return nil, 0, false
+	}
+
+	// Return 0 if no remaining filter.
+	remaining := ic.RemainingFilter()
+	if c.e.mem.NormOp(remaining) == opt.TrueOp {
+		remaining = 0
+	}
+
+	// Make copy of constraint so that idxconstraint instance is not referenced.
+	copy := *constraint
+	return &copy, remaining, true
+}
+
+// canMaybeConstrainIndex performs two checks that can quickly rule out the
+// possibility that the given index can be constrained by the specified filter:
+//
+//   1. If the filter does not reference the first index column, then no
+//      constraint can be generated.
+//   2. If none of the filter's constraints start with the first index column,
+//      then no constraint can be generated.
+//
+func (c *CustomFuncs) canMaybeConstrainIndex(
+	filter memo.GroupID, tabID opt.TableID, indexOrd int,
+) bool {
+	md := c.e.mem.Metadata()
+	index := md.Table(tabID).Index(indexOrd)
+
 	// If the filter does not involve the first index column, we won't be able to
 	// generate a constraint.
+	firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
 	filterProps := c.LookupLogical(filter).Scalar
 	if !filterProps.OuterCols.Contains(int(firstIndexCol)) {
 		return false
 	}
+
 	// If the constraints are tight, check if there is a constraint that starts
 	// with the first index column. If the constraints are not tight, it's
 	// possible that index constraints can still be generated (that code currently
@@ -271,130 +400,6 @@ func (c *CustomFuncs) CanConstrainScan(def memo.PrivateID, filter memo.GroupID) 
 	return true
 }
 
-// constrainedScanOpDef tries to push a filter into a scanOpDef as a
-// constraint. If it cannot push the filter down (i.e. the resulting constraint
-// is unconstrained), then it returns ok = false in the third return value.
-func (c *CustomFuncs) constrainedScanOpDef(
-	filterGroup memo.GroupID, scanDef memo.PrivateID, isInverted bool,
-) (newDef memo.ScanOpDef, remainingFilter memo.GroupID, ok bool) {
-	scanOpDef := c.e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
-
-	// Fill out data structures needed to initialize the idxconstraint library.
-	// Use LaxKeyColumnCount, since all columns <= LaxKeyColumnCount are
-	// guaranteed to be part of each row's key (i.e. not stored in row's value,
-	// which does not take part in an index scan).
-	md := c.e.mem.Metadata()
-	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
-	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
-	var notNullCols opt.ColSet
-	for i := range columns {
-		col := index.Column(i)
-		colID := scanOpDef.Table.ColumnID(col.Ordinal)
-		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.Column.IsNullable() {
-			notNullCols.Add(int(colID))
-		}
-	}
-
-	// Generate index constraints.
-	var ic idxconstraint.Instance
-	filter := memo.MakeNormExprView(c.e.mem, filterGroup)
-	ic.Init(filter, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
-	constraint := ic.Constraint()
-	if constraint.IsUnconstrained() {
-		return memo.ScanOpDef{}, 0, false
-	}
-	newDef = *scanOpDef
-	newDef.Constraint = constraint
-
-	remainingFilter = ic.RemainingFilter()
-	return newDef, remainingFilter, true
-}
-
-// ConstrainScan tries to push filters into Scan operations as constraints. It
-// is applied on a Select -> Scan pattern. The scan operation is assumed to have
-// no constraints.
-//
-// There are three cases:
-//
-//  - if the filter can be completely converted to constraints, we return a
-//    constrained scan expression (to be added to the same group as the select
-//    operator).
-//
-//  - if the filter can be partially converted to constraints, we construct the
-//    constrained scan and we return a select expression with the remaining
-//    filter (to be added to the same group as the select operator).
-//
-//  - if the filter cannot be converted to constraints, does and returns
-//    nothing.
-//
-func (c *CustomFuncs) ConstrainScan(filterGroup memo.GroupID, scanDef memo.PrivateID) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-
-	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef, false /* isInverted */)
-	if !ok {
-		return nil
-	}
-
-	if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
-		// No remaining filter. Add the constrained scan node to select's group.
-		constrainedScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
-		c.e.exprs = append(c.e.exprs, memo.Expr(constrainedScan))
-	} else {
-		// We have a remaining filter. We create the constrained scan in a new group
-		// and create a select node in the same group with the original select.
-		constrainedScan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&newDef))
-		newSelect := memo.MakeSelectExpr(constrainedScan, remainingFilter)
-		c.e.exprs = append(c.e.exprs, memo.Expr(newSelect))
-	}
-	return c.e.exprs
-}
-
-// ConstrainIndexJoinScan tries to push filters into Index Join index
-// scan operations as constraints. It is applied on a Select -> IndexJoin ->
-// Scan pattern. The scan operation is assumed to have no constraints.
-//
-// There are three cases, similar to ConstrainScan:
-//
-//  - if the filter can be completely converted to constraints, we return a
-//    constrained scan expression wrapped in a lookup join (to be added to the
-//    same group as the select operator).
-//
-//  - if the filter can be partially converted to constraints, we construct the
-//    constrained scan wrapped in a lookup join, and we return a select
-//    expression with the remaining filter (to be added to the same group as
-//    the select operator).
-//
-//  - if the filter cannot be converted to constraints, does and returns
-//    nothing.
-//
-func (c *CustomFuncs) ConstrainIndexJoinScan(
-	filterGroup memo.GroupID, scanDef, indexJoinDef memo.PrivateID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-
-	newDef, remainingFilter, ok := c.constrainedScanOpDef(filterGroup, scanDef, false /* isInverted */)
-	if !ok {
-		return nil
-	}
-	constrainedScan := c.e.f.ConstructScan(c.e.mem.InternScanOpDef(&newDef))
-
-	if c.e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
-		// No remaining filter. Add the constrained lookup join index scan node to
-		// select's group.
-		lookupJoin := memo.MakeIndexJoinExpr(constrainedScan, indexJoinDef)
-		c.e.exprs = append(c.e.exprs, memo.Expr(lookupJoin))
-	} else {
-		// We have a remaining filter. We create the constrained lookup join index
-		// scan in a new group and create a select node in the same group with the
-		// original select.
-		lookupJoin := c.e.f.ConstructIndexJoin(constrainedScan, indexJoinDef)
-		newSelect := memo.MakeSelectExpr(lookupJoin, remainingFilter)
-		c.e.exprs = append(c.e.exprs, memo.Expr(newSelect))
-	}
-	return c.e.exprs
-}
-
 // ----------------------------------------------------------------------
 //
 // Limit Rules
@@ -402,28 +407,10 @@ func (c *CustomFuncs) ConstrainIndexJoinScan(
 //
 // ----------------------------------------------------------------------
 
-// CanLimitScan returns true if the given expression can have its output row
-// count limited. This is only possible when there is no existing limit and
-// when the required ordering of the rows to be limited can be satisfied by the
-// scan operator.
-func (c *CustomFuncs) CanLimitScan(def, limit, ordering memo.PrivateID) bool {
+// IsPositiveLimit is true if the given limit value is greater than zero.
+func (c *CustomFuncs) IsPositiveLimit(limit memo.PrivateID) bool {
 	limitVal := int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
-	if limitVal <= 0 {
-		// Can't push limit into scan if it's zero or negative.
-		return false
-	}
-
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	if scanOpDef.HardLimit != 0 {
-		// Don't push limit into scan if scan is already limited. This should
-		// only happen when normalizations haven't run, as otherwise redundant
-		// Limit operators would be discarded.
-		return false
-	}
-
-	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
-	ok, _ := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
-	return ok
+	return limitVal > 0
 }
 
 // LimitScanDef constructs a new ScanOpDef private value that is based on the
@@ -439,6 +426,97 @@ func (c *CustomFuncs) LimitScanDef(def, limit, ordering memo.PrivateID) memo.Pri
 	defCopy := *scanOpDef
 	defCopy.HardLimit = memo.MakeScanLimit(int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt)), reverse)
 	return c.e.mem.InternScanOpDef(&defCopy)
+}
+
+// CanLimitConstrainedScan returns true if the given scan has already been
+// constrained and can have a row count limit installed as well. This is only
+// possible when the required ordering of the rows to be limited can be
+// satisfied by the Scan operator.
+//
+// NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
+//       since that can require IndexJoin operators to be generated.
+func (c *CustomFuncs) CanLimitConstrainedScan(def, ordering memo.PrivateID) bool {
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	if scanOpDef.HardLimit != 0 {
+		// Don't push limit into scan if scan is already limited. This would
+		// usually only happen when normalizations haven't run, as otherwise
+		// redundant Limit operators would be discarded.
+		return false
+	}
+
+	if scanOpDef.Constraint == nil {
+		// This is not a constrained scan, so skip it. The PushLimitIntoScan rule
+		// is responsible for limited unconstrained scans.
+		return false
+	}
+
+	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
+	ok, _ := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+	return ok
+}
+
+// GenerateLimitedScans enumerates all secondary indexes on the Scan operator's
+// table and tries to create new limited Scan operators from them. Since this
+// only needs to be done once per table, GenerateLimitedScans should only be
+// called on the original unaltered primary index Scan operator (i.e. not
+// constrained or limited).
+//
+// For a secondary index that "covers" the columns needed by the scan, a single
+// limited Scan operator is created. For a non-covering index, an IndexJoin is
+// constructed to add missing columns to the limited Scan.
+func (c *CustomFuncs) GenerateLimitedScans(def, limit, ordering memo.PrivateID) []memo.Expr {
+	c.e.exprs = c.e.exprs[:0]
+	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
+	limitVal := int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
+
+	var sb indexScanBuilder
+	sb.init(c, scanOpDef.Table)
+
+	// Iterate over all indexes, looking for those that can be limited.
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanOpDef)
+	for iter.next() {
+		newDef := *scanOpDef
+		newDef.Index = iter.index
+
+		// If the alternate index does not conform to the ordering, then skip it.
+		// If reverse=true, then the scan needs to be in reverse order to match
+		// the required ordering.
+		ok, reverse := newDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+		if !ok {
+			continue
+		}
+		newDef.HardLimit = memo.MakeScanLimit(limitVal, reverse)
+
+		// If the alternate index includes the set of needed columns, then construct
+		// a new Scan operator using that index.
+		if iter.isCovering() {
+			sb.setScan(c.e.f.InternScanOpDef(&newDef))
+			c.e.exprs = append(c.e.exprs, sb.build())
+			continue
+		}
+
+		// Otherwise, try to construct an IndexJoin operator that provides the
+		// columns missing from the index.
+		if scanOpDef.Flags.NoIndexJoin {
+			continue
+		}
+
+		// Scan whatever columns we need which are available from the index, plus
+		// the PK columns.
+		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
+		newDef.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+
+		// The Scan operator will go into its own group (because it projects a
+		// different set of columns), and the IndexJoin operator will be added to
+		// the same group as the original Limit operator.
+		sb.addIndexJoin(scanOpDef.Cols)
+		c.e.exprs = append(c.e.exprs, sb.build())
+	}
+
+	return c.e.exprs
 }
 
 // ----------------------------------------------------------------------
@@ -732,4 +810,90 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 		oc.AppendCol(c.ExtractColID(col), true /* descending */)
 	}
 	return c.e.f.InternOrderingChoice(&oc)
+}
+
+// scanIndexIter is a helper struct that supports iteration over the indexes
+// of a Scan operator table. For example:
+//
+//   var iter scanIndexIter
+//   iter.init(mem, scanOpDef)
+//   for iter.next() {
+//     doSomething(iter.index)
+//   }
+//
+type scanIndexIter struct {
+	mem       *memo.Memo
+	scanOpDef *memo.ScanOpDef
+	tab       opt.Table
+	index     int
+	cols      opt.ColSet
+}
+
+func (it *scanIndexIter) init(mem *memo.Memo, scanOpDef *memo.ScanOpDef) {
+	it.mem = mem
+	it.scanOpDef = scanOpDef
+	it.tab = mem.Metadata().Table(scanOpDef.Table)
+	it.index = -1
+}
+
+// next advances iteration to the next index of the Scan operator's table. This
+// is the primary index if it's the first time next is called, or a secondary
+// index thereafter. Inverted index are skipped. If the ForceIndex flag is set,
+// then all indexes except the forced index are skipped. When there are no more
+// indexes to enumerate, next returns false. The current index is accessible via
+// the iterator's "index" field.
+func (it *scanIndexIter) next() bool {
+	for {
+		it.index++
+		if it.index >= it.tab.IndexCount() {
+			return false
+		}
+
+		if it.tab.Index(it.index).IsInverted() {
+			continue
+		}
+		if it.scanOpDef.Flags.ForceIndex && it.scanOpDef.Flags.Index != it.index {
+			// If we are forcing a specific index, ignore the others.
+			continue
+		}
+		it.cols = opt.ColSet{}
+		return true
+	}
+}
+
+// nextInverted advances iteration to the next inverted index of the Scan
+// operator's table. It returns false when there are no more inverted indexes to
+// enumerate (or if there were none to begin with). The current index is
+// accessible via the iterator's "index" field.
+func (it *scanIndexIter) nextInverted() bool {
+	for {
+		it.index++
+		if it.index >= it.tab.IndexCount() {
+			return false
+		}
+
+		if !it.tab.Index(it.index).IsInverted() {
+			continue
+		}
+		if it.scanOpDef.Flags.ForceIndex && it.scanOpDef.Flags.Index != it.index {
+			// If we are forcing a specific index, ignore the others.
+			continue
+		}
+		it.cols = opt.ColSet{}
+		return true
+	}
+}
+
+// indexCols returns the set of columns contained in the current index.
+func (it *scanIndexIter) indexCols() opt.ColSet {
+	if it.cols.Empty() {
+		it.cols = it.mem.Metadata().IndexColumns(it.scanOpDef.Table, it.index)
+	}
+	return it.cols
+}
+
+// isCovering returns true if the current index contains all columns projected
+// by the Scan operator.
+func (it *scanIndexIter) isCovering() bool {
+	return it.scanOpDef.Cols.SubsetOf(it.indexCols())
 }

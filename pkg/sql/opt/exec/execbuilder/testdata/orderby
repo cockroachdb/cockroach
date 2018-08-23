@@ -769,6 +769,6 @@ filter           ·       ·                (x, y, z)              ·
  └── index-join  ·       ·                (x, y, z)              +x
       ├── scan   ·       ·                (y, z, rowid[hidden])  +y
       │          table   xyz@xyz_z_y_idx  ·                      ·
-      │          spans   /1-/2            ·                      ·
+      │          spans   /1/!NULL-/2      ·                      ·
       └── scan   ·       ·                (x, y, z)              ·
 ·                table   xyz@primary      ·                      ·

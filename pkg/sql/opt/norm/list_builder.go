@@ -80,10 +80,15 @@ func (b *ListBuilder) ensureItems() {
 	// Try to reuse scratch list stored in factory.
 	if b.items == nil {
 		b.items = b.cf.scratchItems
-		b.items = b.items[:0]
+		if b.items == nil {
+			// Start with 8 slots to prevent unnecessary resizing.
+			b.items = make([]memo.GroupID, 0, 8)
+		} else {
+			b.items = b.items[:0]
 
-		// Set the factory scratch list to nil so that recursive calls won't try
-		// to use it when it's already in use.
-		b.cf.scratchItems = nil
+			// Set the factory scratch list to nil so that recursive calls won't try
+			// to use it when it's already in use.
+			b.cf.scratchItems = nil
+		}
 	}
 }

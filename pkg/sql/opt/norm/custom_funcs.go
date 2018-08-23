@@ -73,7 +73,7 @@ func (c *CustomFuncs) ListOnlyHasNulls(list memo.ListID) bool {
 	}
 
 	for _, item := range c.mem.LookupList(list) {
-		if c.mem.NormExpr(item).Operator() != opt.NullOp {
+		if c.mem.NormOp(item) != opt.NullOp {
 			return false
 		}
 	}
@@ -224,7 +224,7 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.Group
 
 // Operator returns the type of the given group's normalized expression.
 func (c *CustomFuncs) Operator(group memo.GroupID) opt.Operator {
-	return c.mem.NormExpr(group).Operator()
+	return c.mem.NormOp(group)
 }
 
 // LookupLogical returns the given group's logical properties.
@@ -572,7 +572,7 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 // IsContradiction returns true if the given operation is False or a Filter with
 // a contradiction constraint.
 func (c *CustomFuncs) IsContradiction(filter memo.GroupID) bool {
-	if c.mem.NormExpr(filter).Operator() == opt.FalseOp {
+	if c.mem.NormOp(filter) == opt.FalseOp {
 		return true
 	}
 	return c.LookupLogical(filter).Scalar.Constraints == constraint.Contradiction

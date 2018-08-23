@@ -2,120 +2,27 @@
 # select.opt contains exploration rules for the Select operator.
 # =============================================================================
 
-# ConstrainScan matches a Select over an unconstrained Scan and tries to push
-# down the filter (or part of it) as index constraints. The result is either
-# a constrained Scan or a Select (with a remaining filter) on top of a
-# constrained Scan.
-[ConstrainScan, Explore]
+
+# GenerateConstrainedScans generates a set of constrained Scan expressions, one
+# for each matching index on the scanned table. The expressions consist of
+# either a standalone Scan operator (if no remaining filter), or else a Scan
+# wrapped by a Select (with a remaining filter). Or, if a secondary index cannot
+# provide all the output columns, an IndexJoin is introduced to supply them. See
+# the comment for the GenerateConstrainedScans custom method for more details
+# and examples.
+[GenerateConstrainedScans, Explore]
 (Select
-  (Scan $def:*)
-  $filter:* & (CanConstrainScan $def $filter)
+  (Scan $def:* & (IsCanonicalScan $def))
+  $filter:*
 )
 =>
-(ConstrainScan $filter $def)
-
-# PushFilterIntoIndexJoinNoRemainder matches a Select over an index join in
-# which the Select filter condition is fully bound by the input to the index
-# join. If this rule matches, it pushes the Select fully below the index join.
-#
-# Note that the below rule, PushFilterIntoIndexJoin, would cover this case if
-# its Filter match condition ^(IsBoundBy $filter $input) were removed. But the
-# problem is that PushFilterIntoIndexJoin would construct a Select with filter
-# condition True, which would not get normalized away (since exploration rules
-# don't re-construct the root node). We need two rules in order to avoid
-# constructing no-op Select operators.
-#
-# In addition, PushFilterIntoIndexJoinNoRemainder serves as an optimization:
-# if the filter is fully bound by the index join input, it is not necessary to
-# check each condition. In order to avoid checking each condition,
-# PushFilterIntoIndexJoin must be ordered after this rule.
-[PushFilterIntoIndexJoinNoRemainder, Explore]
-(Select
-  (IndexJoin
-    $input:*
-    $def:*
-  )
-  $filter:* & (IsBoundBy $filter (OutputCols $input))
-)
-=>
-(IndexJoin
-  (Select $input $filter)
-  $def
-)
-
-
-# PushFilterIntoIndexJoin matches a Select over a index join in which some of
-# the Select filter conditions are bound by the input to the index join, and
-# some are not. If this rule matches, it pushes the bound conditions below the
-# index join.
-[PushFilterIntoIndexJoin, Explore]
-(Select
-  (IndexJoin
-    $input:*
-    $def:*
-  )
-  $filter:(Filters $list:[
-      ...
-      $condition:* & (IsBoundBy $condition $inputCols:(OutputCols $input))
-      ...
-  ]) & ^(IsBoundBy $filter $inputCols)
-)
-=>
-(Select
-  (IndexJoin
-    (Select
-      $input
-      (Filters (ExtractBoundConditions $list $inputCols))
-    )
-    $def
-  )
-  (Filters (ExtractUnboundConditions $list $inputCols))
-)
-
-# ConstrainIndexJoinScan matches a Select over a index join with an
-# unconstrained Scan and tries to push down the filter (or part of it) as index
-# constraints. The result is either a index join with a constrained index Scan
-# or a Select (with a remaining filter) on top of a index join with a
-# constrained index Scan.
-#
-# This rule is needed in addition to the above two rules for the cases where
-# an index constraint can be inferred, but there is no conjunct in the filter
-# that is fully bound by the index scan. For example, consider the query:
-#
-#   SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10)
-#
-# in which there is a secondary index on (a, b). The best plan is an index join
-# using a constrained scan of the secondary index, with the constraint
-# (a, b) >= (1, 2) AND (a, b) <= (8, 9) pushed down to the scan, and the
-# original filter preserved above the index join:
-#
-#   (Select
-#     (IndexJoin abc
-#       (Scan abc@secondary, constraint: /a/b/rowid: [/1/2 - /8/9])
-#     )
-#     (Filter (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10))
-#   )
-#
-# Neither of the above two rules would find this plan.
-#
-# TODO(rytaft): try to find a mechanism for pushdown that is more powerful than
-# finding conjuncts that are fully bound.
-[ConstrainIndexJoinScan, Explore]
-(Select
-  (IndexJoin
-    (Scan $scanDef:*)
-    $indexJoinDef:*
-  )
-  $filter:* & (CanConstrainScan $scanDef $filter)
-)
-=>
-(ConstrainIndexJoinScan $filter $scanDef $indexJoinDef)
+(GenerateConstrainedScans $def $filter)
 
 # GenerateInvertedIndexScans creates alternate expressions for filters that can
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $def:* & (CanGenerateInvertedIndexScans $def))
+  (Scan $def:* & (IsCanonicalScan $def) & (HasInvertedIndexes $def))
   $filter:*
 )
 =>

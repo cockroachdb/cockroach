@@ -743,20 +743,12 @@ func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
 
 func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 	var err error
-	// If the index join child is a limit and/or sort operator then flip the order
-	// so that the sort/limit is on top of the index join.
+	// If the index join child is a sort operator then flip the order so that the
+	// sort is on top of the index join.
 	// TODO(radu): Remove this code once we have support for a more general
 	// lookup join execution path.
-	var limit tree.TypedExpr
 	var ordering *props.OrderingChoice
 	child := ev.Child(0)
-	if child.Operator() == opt.LimitOp {
-		limit, err = b.buildScalar(nil, child.Child(1))
-		if err != nil {
-			return execPlan{}, err
-		}
-		child = child.Child(0)
-	}
 	if child.Operator() == opt.SortOp {
 		ordering = &child.Physical().Ordering
 		child = child.Child(0)
@@ -793,13 +785,6 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 		}
 	}
 
-	if limit != nil {
-		var err error
-		res.root, err = b.factory.ConstructLimit(res.root, limit, nil)
-		if err != nil {
-			return execPlan{}, err
-		}
-	}
 	return res, nil
 }
 

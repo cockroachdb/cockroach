@@ -943,9 +943,9 @@ func (c *indexConstraintCtx) simplifyFilter(
 ) memo.GroupID {
 	// Special handling for AND and OR.
 	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp || ev.Operator() == opt.FiltersOp {
-		newChildren := make([]memo.GroupID, ev.ChildCount())
-		for i := range newChildren {
-			newChildren[i] = c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix)
+		lb := norm.MakeListBuilder(c.factory.CustomFuncs())
+		for i, cnt := 0, ev.ChildCount(); i < cnt; i++ {
+			lb.AddItem(c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix))
 		}
 
 		// Note: if nothing changed, the factory will detect that it's the same
@@ -953,11 +953,11 @@ func (c *indexConstraintCtx) simplifyFilter(
 		// the node (e.g. if children have been simplified to True).
 		switch ev.Operator() {
 		case opt.AndOp:
-			return c.factory.ConstructAnd(c.factory.InternList(newChildren))
+			return c.factory.ConstructAnd(lb.BuildList())
 		case opt.FiltersOp:
-			return c.factory.ConstructFilters(c.factory.InternList(newChildren))
+			return c.factory.ConstructFilters(lb.BuildList())
 		case opt.OrOp:
-			return c.factory.ConstructOr(c.factory.InternList(newChildren))
+			return c.factory.ConstructOr(lb.BuildList())
 		}
 	}
 

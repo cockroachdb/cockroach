@@ -366,7 +366,7 @@ func (c *CustomFuncs) EnsureCanaryCol(in, aggs memo.GroupID) opt.ColumnID {
 	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
 
 	for _, elem := range aggsElems {
-		if !opt.AggregateIgnoresNulls(c.f.mem.NormExpr(elem).Operator()) {
+		if !opt.AggregateIgnoresNulls(c.f.mem.NormOp(elem)) {
 			// Look for an existing not null column that is not projected by a
 			// passthrough aggregate like ConstAgg.
 			id, ok := c.LookupLogical(in).Relational.NotNullCols.Next(0)
