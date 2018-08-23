@@ -15,10 +15,12 @@
 package txnwait
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -118,5 +120,34 @@ func TestIsPushed(t *testing.T) {
 				t.Errorf("expected %t; got %t", test.isPushed, isPushed)
 			}
 		})
+	}
+}
+
+type mockRepl struct{}
+
+func (mockRepl) ContainsKey(_ roachpb.Key) bool { return true }
+
+// TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
+// queue and cancels its context. It then verifies that the query was cleaned
+// up. Regression test against #28849, before which the waiting query would
+// leak.
+func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	q := NewQueue(nil /* StoreInterface */)
+	q.Enable()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	waitingRes := make(chan *roachpb.Error)
+	go func() {
+		req := &roachpb.QueryTxnRequest{WaitForUpdate: true}
+		waitingRes <- q.MaybeWaitForQuery(ctx, mockRepl{}, req)
+	}()
+
+	cancel()
+	if pErr := <-waitingRes; !testutils.IsPError(pErr, "context canceled") {
+		t.Errorf("unexpected error %v", pErr)
+	}
+	if len(q.mu.queries) != 0 {
+		t.Errorf("expected no waiting queries, found %v", q.mu.queries)
 	}
 }
