@@ -232,7 +232,7 @@ scalar-group-by
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── cast: TEXT [type=string]
+ │         └── cast: STRING [type=string]
  │              └── null [type=unknown]
  └── aggregations
       └── array-agg [type=string[]]

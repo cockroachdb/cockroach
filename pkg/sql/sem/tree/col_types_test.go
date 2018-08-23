@@ -54,7 +54,6 @@ func TestParseColumnType(t *testing.T) {
 		{"CHAR", &coltypes.TString{Name: "CHAR"}},
 		{"VARCHAR", &coltypes.TString{Name: "VARCHAR"}},
 		{"CHAR(11)", &coltypes.TString{Name: "CHAR", N: 11}},
-		{"TEXT", &coltypes.TString{Name: "TEXT"}},
 		{"BYTES", &coltypes.TBytes{}},
 		{"STRING COLLATE da", &coltypes.TCollatedString{Name: "STRING", Locale: "da"}},
 		{"CHAR COLLATE de", &coltypes.TCollatedString{Name: "CHAR", Locale: "de"}},
