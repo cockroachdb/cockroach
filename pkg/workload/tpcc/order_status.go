@@ -109,12 +109,13 @@ func (o orderStatus) run(
 				if config.usePostgres {
 					indexStr = ""
 				}
-				rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
+				queryStr := fmt.Sprintf(`
 					SELECT c_id, c_balance, c_first, c_middle
 					FROM customer%[1]s
 					WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_last = '%[4]s'
-					ORDER BY c_first ASC`, indexStr,
-					wID, d.dID, d.cLast))
+					ORDER BY c_first ASC`,
+					indexStr, wID, d.dID, d.cLast)
+				rows, err := tx.QueryContext(ctx, queryStr)
 				if err != nil {
 					return errors.Wrap(err, "select by last name fail")
 				}
@@ -132,6 +133,9 @@ func (o orderStatus) run(
 					return err
 				}
 				rows.Close()
+				if len(customers) == 0 {
+					return fmt.Errorf("found no customers matching query: %s", queryStr)
+				}
 				cIdx := len(customers) / 2
 				if len(customers)%2 == 0 {
 					cIdx--
