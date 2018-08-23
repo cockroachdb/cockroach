@@ -812,3 +812,12 @@ func BenchmarkHeader(b *testing.B) {
 		logging.putBuffer(buf)
 	}
 }
+
+func BenchmarkVDepthWithVModule(b *testing.B) {
+	SetVModule("craigthecockroach=5")
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = VDepth(1, 1)
+		}
+	})
+}
