@@ -880,13 +880,13 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 	}
 	merged := make([]sqlbase.ColumnType, len(left))
 	for i := range left {
-		leftType, rightType := left[i], right[i]
+		leftType, rightType := &left[i], &right[i]
 		if rightType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = leftType
+			merged[i] = *leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = rightType
-		} else if leftType.Equivalent(rightType) {
-			merged[i] = leftType
+			merged[i] = *rightType
+		} else if leftType.Equivalent(*rightType) {
+			merged[i] = *leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
 		}
