@@ -150,6 +150,15 @@ func (r *Replica) AdminSplit(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 10
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// The replica may have been destroyed since the start of the retry loop. We
+		// need to explicitly check this condition. Having a valid lease, as we
+		// verify below, does not imply that the range still exists: even after a
+		// range has been merged into its left-hand neighbor, its final lease (i.e.,
+		// the lease we have in r.mu.state.Lease) can remain valid indefinitely.
+		if _, err := r.IsDestroyed(); err != nil {
+			return reply, roachpb.NewError(err)
+		}
+
 		// Admin commands always require the range lease to begin (see
 		// executeAdminBatch), but we may have lost it while in this retry loop.
 		// Without the lease, a replica's local descriptor can be arbitrarily
