@@ -2629,12 +2629,11 @@ func (s *Store) RemoveReplica(
 func (s *Store) removeReplicaImpl(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
-	log.Infof(ctx, "removing replica")
-
 	// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
 	// they can differ in cases when a replica's ID is increased due to an
 	// incoming raft message (see #14231 for background).
 	rep.mu.Lock()
+	replicaID := rep.mu.replicaID
 	if rep.mu.replicaID >= nextReplicaID {
 		rep.mu.Unlock()
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
@@ -2651,6 +2650,10 @@ func (s *Store) removeReplicaImpl(
 	if _, err := s.GetReplica(rep.RangeID); err != nil {
 		return err
 	}
+
+	// During merges, the context might have the subsuming range, so we explicitly
+	// log the replica to be removed.
+	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, replicaID)
 
 	s.mu.Lock()
 	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
