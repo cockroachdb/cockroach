@@ -724,7 +724,7 @@ type StoreTestingKnobs struct {
 	BadChecksumPanic func(roachpb.StoreIdent)
 	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
 	// checksum mismatch to report the diff between snapshots.
-	BadChecksumReportDiff func(roachpb.StoreIdent, []ReplicaSnapshotDiff)
+	BadChecksumReportDiff func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
 	// Disables the use of optional one phase commits. Even when enabled, requests
 	// that set the Require1PC flag are permitted to use one phase commits. This
 	// prevents wedging node liveness, which requires one phase commits during

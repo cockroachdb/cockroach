@@ -114,7 +114,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var diffTimestamp hlc.Timestamp
 	notifyReportDiff := make(chan struct{}, 1)
 	sc.TestingKnobs.BadChecksumReportDiff =
-		func(s roachpb.StoreIdent, diff []storage.ReplicaSnapshotDiff) {
+		func(s roachpb.StoreIdent, diff storage.ReplicaSnapshotDiffSlice) {
 			if s != *mtc.Store(0).Ident {
 				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %s)", s)
 				return
@@ -126,6 +126,23 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || diffTimestamp != d.Timestamp {
 				t.Errorf("diff = %v", d)
 			}
+
+			diff[0].Timestamp.Logical = 987 // mock this out for a consistent string below
+
+			act := diff.String()
+
+			exp := `--- leaseholder
++++ follower
++0.000000123,987 "e"
++    ts:1970-01-01 00:00:00.000000123 +0000 UTC
++    value:"\x00\x00\x00\x00\x01T"
++    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
+`
+			if act != exp {
+				// We already logged the actual one above.
+				t.Errorf("expected:\n%s\ngot:\n%s", exp, act)
+			}
+
 			notifyReportDiff <- struct{}{}
 		}
 	// Store 0 will panic.
