@@ -45,6 +45,9 @@ type (
 	// ObjectDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ObjectDescriptor = sqlbase.TableDescriptor
+	// MutableTableDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	MutableTableDescriptor = sqlbase.TableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = sqlbase.TableDescriptor

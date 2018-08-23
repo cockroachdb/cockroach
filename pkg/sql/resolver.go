@@ -141,6 +141,15 @@ type resolveFlags struct {
 	skipCache bool
 }
 
+func (p *planner) ResolveMutableTableDescriptor(
+	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
+) (table *MutableTableDescriptor, err error) {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		table, err = ResolveExistingObject(ctx, p, tn, required, requiredType)
+	})
+	return table, err
+}
+
 // ResolveTargetObject determines a valid target path for an object
 // that may not exist yet. It returns the descriptor for the database
 // where the target object lives.

@@ -72,12 +72,8 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		var tableDesc *TableDescriptor
-		var err error
-		params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			tableDesc, err = ResolveExistingObject(
-				ctx, params.p, index.tn, true /*required*/, requireTableDesc)
-		})
+		tableDesc, err := params.p.ResolveMutableTableDescriptor(
+			ctx, index.tn, true /*required*/, requireTableDesc)
 		if err != nil {
 			// Somehow the descriptor we had during newPlan() is not there
 			// any more.
