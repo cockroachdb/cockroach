@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -46,6 +47,10 @@ is omitted, dump all tables in the database.
 	RunE: MaybeDecorateGRPCError(runDump),
 }
 
+// runDumps performs a dump of a table or database.
+//
+// The approach here and its current flaws are summarized
+// in https://github.com/cockroachdb/cockroach/issues/28948.
 func runDump(cmd *cobra.Command, args []string) error {
 	conn, err := getPasswordAndMakeSQLClient("cockroach dump")
 	if err != nil {
@@ -187,7 +192,7 @@ type tableMetadata struct {
 	basicMetadata
 
 	columnNames string
-	columnTypes map[string]string
+	columnTypes map[string]coltypes.T
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
@@ -370,6 +375,8 @@ func extractArray(val interface{}) ([]string, error) {
 
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
+	//
+	// TODO(knz): this approach is flawed, see #28948.
 
 	makeQuery := func(colname string) string {
 		// This query is parameterized by the column name because of
@@ -414,7 +421,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		}
 	}
 	vals := make([]driver.Value, 2)
-	coltypes := make(map[string]string)
+	coltypes := make(map[string]coltypes.T)
 	colnames := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	defer colnames.Close()
 	for {
@@ -432,7 +439,16 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		if !ok {
 			return tableMetadata{}, fmt.Errorf("unexpected value: %T", typI)
 		}
-		coltypes[name] = typ
+
+		// Transform the type name to an internal coltype.
+		sql := fmt.Sprintf("ALTER TABLE woo ALTER COLUMN woo SET DATA TYPE %s", typ)
+		stmt, err := parser.ParseOne(sql)
+		if err != nil {
+			return tableMetadata{}, fmt.Errorf("type %s is not a valid CockroachDB type", typ)
+		}
+		coltyp := stmt.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAlterColumnType).ToType
+
+		coltypes[name] = coltyp
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
@@ -576,6 +592,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					f.WriteString(", ")
 				}
 				var d tree.Datum
+				// TODO(knz): this approach is brittle+flawed, see #28948.
 				switch t := sv.(type) {
 				case nil:
 					d = tree.DNull
@@ -588,25 +605,26 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				case string:
 					d = tree.NewDString(t)
 				case []byte:
+					// TODO(knz): this approach is brittle+flawed, see #28948.
 					switch ct := md.columnTypes[cols[si]]; ct {
-					case "INTERVAL":
+					case coltypes.Interval:
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
 							return err
 						}
-					case "BYTES":
+					case coltypes.Bytes:
 						d = tree.NewDBytes(tree.DBytes(t))
-					case "UUID":
+					case coltypes.UUID:
 						d, err = tree.ParseDUuidFromString(string(t))
 						if err != nil {
 							return err
 						}
-					case "INET":
+					case coltypes.INet:
 						d, err = tree.ParseDIPAddrFromINetString(string(t))
 						if err != nil {
 							return err
 						}
-					case "JSON":
+					case coltypes.JSON, coltypes.JSONB:
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
@@ -615,20 +633,16 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
 						// In addition, we can only observe ARRAY types by their [] suffix.
-						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
-							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
-							elemType, err := tree.ArrayElementTypeStringToColType(typ)
-							if err != nil {
-								return err
-							}
+						if arrayType, ok := ct.(*coltypes.TArray); ok {
+							elemType := arrayType.ParamType
 							d, err = tree.ParseDArrayFromString(
 								tree.NewTestingEvalContext(serverCfg.Settings), string(t), elemType)
 							if err != nil {
 								return err
 							}
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
+						} else if _, ok := ct.(*coltypes.TString); ok {
 							d = tree.NewDString(string(t))
-						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
+						} else if _, ok := ct.(*coltypes.TDecimal); ok {
 							d, err = tree.ParseDDecimal(string(t))
 							if err != nil {
 								return err
@@ -638,16 +652,15 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						}
 					}
 				case time.Time:
-					ct := md.columnTypes[cols[si]]
-					switch ct {
-					case "DATE":
+					switch ct := md.columnTypes[cols[si]]; ct {
+					case coltypes.Date:
 						d = tree.NewDDateFromTime(t, time.UTC)
-					case "TIME":
+					case coltypes.Time:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))
-					case "TIMESTAMP":
+					case coltypes.Timestamp:
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
-					case "TIMESTAMP WITH TIME ZONE":
+					case coltypes.TimestampWithTZ:
 						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
