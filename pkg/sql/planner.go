@@ -392,7 +392,9 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 func (p *planner) lookupFKTable(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
-	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID)
+	flags := ObjectLookupFlags{
+		CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
+	table, err := p.Tables().getTableVersionByID(ctx, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {
 			return sqlbase.TableLookup{IsAdding: true}, nil
