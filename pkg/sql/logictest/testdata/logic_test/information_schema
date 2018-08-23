@@ -826,20 +826,20 @@ DROP TABLE nullability
 statement ok
 CREATE TABLE data_types (a INT, b FLOAT, c DECIMAL, d STRING, e BYTES, f TIMESTAMP, g TIMESTAMPTZ)
 
-query TTT colnames
-SELECT table_name, column_name, data_type
+query TTTT colnames
+SELECT table_name, column_name, data_type, crdb_sql_type
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
-table_name  column_name  data_type
-data_types  a            INT
-data_types  b            FLOAT8
-data_types  c            DECIMAL
-data_types  d            STRING
-data_types  e            BYTES
-data_types  f            TIMESTAMP
-data_types  g            TIMESTAMP WITH TIME ZONE
-data_types  rowid        INT
+table_name  column_name  data_type                 crdb_sql_type
+data_types  a            integer                   INT
+data_types  b            double precision          FLOAT8
+data_types  c            numeric                   DECIMAL
+data_types  d            text                      STRING
+data_types  e            bytea                     BYTES
+data_types  f            timestamp                 TIMESTAMP
+data_types  g            timestamp with time zone  TIMESTAMP WITH TIME ZONE
+data_types  rowid        integer                   INT
 
 statement ok
 DROP TABLE data_types
@@ -1598,8 +1598,8 @@ query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences
 ----
 sequence_catalog  sequence_schema  sequence_name  data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
-test              public           test_seq       INT        64                 2                        0              1            1              9223372036854775807  1          NO
-test              public           test_seq_2     INT        64                 2                        0              15           5              1000                 -1         NO
+test              public           test_seq       integer    64                 2                        0              1            1              9223372036854775807  1          NO
+test              public           test_seq_2     integer    64                 2                        0              15           5              1000                 -1         NO
 
 statement ok
 CREATE DATABASE other_db

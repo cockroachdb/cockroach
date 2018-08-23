@@ -28,17 +28,17 @@ func (p *planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNod
 	const getColumnsQuery = `
 SELECT
   column_name AS column_name,
-  data_type AS data_type,
+  crdb_sql_type AS data_type,
   is_nullable::BOOL,
   column_default,
   generation_expression,
   IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS indices,
   is_hidden::BOOL
 FROM
-  (SELECT column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden,
+  (SELECT column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden,
           array_agg(index_name) AS inames
      FROM
-         (SELECT column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
+         (SELECT column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
             FROM %[4]s.information_schema.columns
            WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
          LEFT OUTER JOIN
@@ -46,7 +46,7 @@ FROM
             FROM %[4]s.information_schema.statistics
            WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
          USING(column_name)
-    GROUP BY column_name, data_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
+    GROUP BY column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
    )
 ORDER BY ordinal_position`
 	return p.showTableDetails(ctx, "SHOW COLUMNS", n.Table, getColumnsQuery)

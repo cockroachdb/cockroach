@@ -209,7 +209,7 @@ sort                                       ·            ·
  └── render                                ·            ·
       └── group                            ·            ·
            │                               aggregate 0  column_name
-           │                               aggregate 1  data_type
+           │                               aggregate 1  crdb_sql_type
            │                               aggregate 2  is_nullable
            │                               aggregate 3  column_default
            │                               aggregate 4  generation_expression
@@ -224,7 +224,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         19 columns, 910 rows
+                     │                     size         20 columns, 911 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
