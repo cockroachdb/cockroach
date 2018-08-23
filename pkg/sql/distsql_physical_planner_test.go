@@ -66,7 +66,7 @@ func SplitTable(
 	targetNodeIdx int,
 	vals ...interface{},
 ) {
-	pik, err := sqlbase.MakePrimaryIndexKey(desc, vals...)
+	pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, vals...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestPlanningDuringSplits(t *testing.T) {
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)
-				pik, err := sqlbase.MakePrimaryIndexKey(desc, val)
+				pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, val)
 				if err != nil {
 					panic(err)
 				}

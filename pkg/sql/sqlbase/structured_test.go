@@ -1317,7 +1317,7 @@ func TestDatumTypeToColumnSemanticType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, typ := range types.AnyNonArray {
-		_, err := DatumTypeToColumnSemanticType(typ)
+		_, err := datumTypeToColumnSemanticType(typ)
 		if err != nil {
 			t.Errorf("couldn't get semantic type: %s", err)
 		}

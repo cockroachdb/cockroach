@@ -137,7 +137,7 @@ func TestScatterResponse(t *testing.T) {
 			expectedKey = keys.MakeTablePrefix(uint32(tableDesc.ID))
 		} else {
 			var err error
-			expectedKey, err = sqlbase.MakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = sqlbase.TestingMakePrimaryIndexKey(tableDesc, i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

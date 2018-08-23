@@ -21,9 +21,13 @@ import (
 	"math/rand"
 	"unicode"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -306,4 +310,68 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []ColumnType) En
 		vals[i] = RandEncDatumRowOfTypes(rng, types)
 	}
 	return vals
+}
+
+// TestingMakePrimaryIndexKey creates a key prefix that corresponds to
+// a table row (in the primary index); it is intended for tests.
+//
+// It is exported because it is used by tests outside of this package.
+//
+// The value types must match the primary key columns (or a prefix of them);
+// supported types are: - Datum
+//  - bool (converts to DBool)
+//  - int (converts to DInt)
+//  - string (converts to DString)
+func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Key, error) {
+	index := &desc.PrimaryIndex
+	if len(vals) > len(index.ColumnIDs) {
+		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
+	}
+	datums := make([]tree.Datum, len(vals))
+	for i, v := range vals {
+		switch v := v.(type) {
+		case bool:
+			datums[i] = tree.MakeDBool(tree.DBool(v))
+		case int:
+			datums[i] = tree.NewDInt(tree.DInt(v))
+		case string:
+			datums[i] = tree.NewDString(v)
+		case tree.Datum:
+			datums[i] = v
+		default:
+			return nil, errors.Errorf("unexpected value type %T", v)
+		}
+		// Check that the value type matches.
+		colID := index.ColumnIDs[i]
+		for _, c := range desc.Columns {
+			if c.ID == colID {
+				colTyp, err := DatumTypeToColumnType(datums[i].ResolvedType())
+				if err != nil {
+					return nil, err
+				}
+				if t := colTyp.SemanticType; t != c.Type.SemanticType {
+					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType, t)
+				}
+				break
+			}
+		}
+	}
+	// Create the ColumnID to index in datums slice map needed by
+	// MakeIndexKeyPrefix.
+	colIDToRowIndex := make(map[ColumnID]int)
+	for i := range vals {
+		colIDToRowIndex[index.ColumnIDs[i]] = i
+	}
+
+	keyPrefix := MakeIndexKeyPrefix(desc, index.ID)
+	key, _, err := EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return roachpb.Key(key), nil
+}
+
+// TestingDatumTypeToColumnSemanticType is used in pgwire tests.
+func TestingDatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
+	return datumTypeToColumnSemanticType(ptyp)
 }
