@@ -595,22 +595,24 @@ func sendSnapshot(
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return errors.Errorf("%s: remote declined snapshot: %s", to, declinedMsg)
+			return errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: programming error: remote declined required snapshot: %s",
-			to, resp.Message)
+		return errors.Errorf("%s: programming error: remote declined required %s: %s",
+			to, snap, resp.Message)
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: remote couldn't accept snapshot with error: %s",
-			to, resp.Message)
+		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
+			to, snap, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: server sent an invalid status during negotiation: %s",
-			to, resp.Status)
+		return errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
+			to, snap, resp.Status)
 	}
+
+	log.Infof(ctx, "sending %s", snap)
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
