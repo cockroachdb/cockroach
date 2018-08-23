@@ -113,8 +113,16 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
-		if val, present := aliasToVisibleTypeMap[t.Name]; present {
-			base.VisibleType = val
+
+		// For 2.1 nodes only Width is sufficient, but we also populate
+		// VisibleType for compatibility with pre-2.1 nodes.
+		switch t.Width {
+		case 16:
+			base.VisibleType = ColumnType_SMALLINT
+		case 64:
+			base.VisibleType = ColumnType_BIGINT
+		case 32:
+			base.VisibleType = ColumnType_INTEGER
 		}
 
 	case *coltypes.TFloat:
@@ -176,22 +184,6 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	return base, nil
 }
 
-// aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
-// so that the alias is persisted. When adding new column type aliases or new
-// VisibleType variants, consider adding to this mapping as well.
-//
-// This is used by PopulateTypeAttrs when propagating a coltypes.T
-// specification to a ColumnType suitable in a descriptor.
-var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	coltypes.Int2.Name:     ColumnType_SMALLINT,
-	coltypes.Int4.Name:     ColumnType_INTEGER,
-	coltypes.Int8.Name:     ColumnType_BIGINT,
-	coltypes.Int64.Name:    ColumnType_BIGINT,
-	coltypes.Integer.Name:  ColumnType_INTEGER,
-	coltypes.SmallInt.Name: ColumnType_SMALLINT,
-	coltypes.BigInt.Name:   ColumnType_BIGINT,
-}
-
 // coltypeStringVariantToVisibleType encodes the visible type of a
 // coltypes.TString/TCollatedString variant.
 func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) ColumnType_VisibleType {
@@ -233,6 +225,10 @@ func (c *ColumnType) stringTypeName() string {
 // See also InformationSchemaVisibleType() below.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
+	case ColumnType_INT:
+		if name, ok := coltypes.IntegerTypeNames[int(c.Width)]; ok {
+			return name
+		}
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		typName := c.stringTypeName()
 		// In general, if there is a specified width we want to print it next
@@ -294,12 +290,18 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 		return "boolean"
 
 	case ColumnType_INT:
-		// TODO(knz): This is not exactly correct. See #28690 for a
-		// followup. This needs to use the type width instead.
-		if c.VisibleType == ColumnType_NONE {
+		switch c.Width {
+		case 16:
+			return "smallint"
+		case 64:
+			return "bigint"
+		default:
+			// We report "integer" both for int4 and int.  This is probably
+			// lying a bit, but it will appease clients that feed "int" into
+			// their CREATE TABLE and expect the pg "integer" name to come
+			// up in information_schema.
 			return "integer"
 		}
-		return c.VisibleType.String()
 
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		switch c.VisibleType {
@@ -393,7 +395,11 @@ func (c *ColumnType) MaxOctetLength() (int32, bool) {
 func (c *ColumnType) NumericPrecision() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
-		return 64, true
+		width := c.Width
+		if width == 0 {
+			width = 64
+		}
+		return width, true
 	case ColumnType_FLOAT:
 		_, prec := c.FloatProperties()
 		return prec, true
