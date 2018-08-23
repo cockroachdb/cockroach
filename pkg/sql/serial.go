@@ -112,10 +112,7 @@ func (p *planner) processSerialInColumnDef(
 		if i > 0 {
 			seqName.TableName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
-		var res *ObjectDescriptor
-		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			res, err = ResolveExistingObject(ctx, p, seqName, false /*required*/, anyDescType)
-		})
+		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, anyDescType)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
