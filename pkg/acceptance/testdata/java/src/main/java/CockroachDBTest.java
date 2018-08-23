@@ -33,7 +33,7 @@ public abstract class CockroachDBTest {
         if (System.getenv("PGSSLCERT") != null) {
             DBUrl += "?ssl=true";
             DBUrl += "&sslcert=" + System.getenv("PGSSLCERT");
-            DBUrl += "&sslkey=/certs/client.root.pk8";
+            DBUrl += "&sslkey=/certs/client.root.key.pk8";
             DBUrl += "&sslrootcert=/certs/ca.crt";
             DBUrl += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
         } else {
