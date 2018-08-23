@@ -75,15 +75,7 @@ type showZoneConfigRun struct {
 }
 
 func (n *showZoneConfigNode) startExec(params runParams) error {
-	var tblDesc *TableDescriptor
-	var err error
-	// We avoid the cache so that we can observe the zone configuration
-	// without taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tblDesc, err = params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
-	})
+	tblDesc, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
