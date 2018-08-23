@@ -174,7 +174,7 @@ func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
 ) (res *sqlbase.TableDescriptor, err error) {
 	if zs.TargetsIndex() {
-		_, res, err = expandIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
+		_, res, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
 	} else if zs.TargetsTable() {
 		tn, err := zs.TableOrIndex.Table.Normalize()
 		if err != nil {
