@@ -792,7 +792,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 	}
 	scratch = scratch[0:0]
 	unwrapped := types.UnwrapType(d.ParamTyp)
-	elementType, err := parserTypeToEncodingType(unwrapped)
+	elementType, err := datumTypeToArrayElementEncodingType(unwrapped)
 
 	if err != nil {
 		return nil, err
@@ -932,7 +932,7 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
-func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
+func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 	switch t {
 	case types.Int:
 		return encoding.Int, nil
