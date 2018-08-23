@@ -165,7 +165,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			dep.ID = desc.ID
 			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
 		}
-		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, &backrefDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
