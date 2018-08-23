@@ -346,6 +346,8 @@ func init() {
 		IntFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
 		BoolFlag(f, &overwriteFiles, cliflags.OverwriteFiles, false)
 	}
+	// PKCS8 key format is only available for the client cert command.
+	BoolFlag(createClientCertCmd.Flags(), &generatePKCS8Key, cliflags.GeneratePKCS8Key, false)
 
 	BoolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
 

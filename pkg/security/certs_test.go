@@ -170,7 +170,7 @@ func generateBaseCerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, time.Hour*48, true, security.RootUser,
+		512, time.Hour*48, true, security.RootUser, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
@@ -208,14 +208,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		512, time.Hour*48, true, security.NodeUser,
+		512, time.Hour*48, true, security.NodeUser, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		512, time.Hour*48, true, security.RootUser,
+		512, time.Hour*48, true, security.RootUser, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
 	}
