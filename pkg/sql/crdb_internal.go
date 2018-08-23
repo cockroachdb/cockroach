@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,6 +66,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalGossipNodesTable,
 		crdbInternalGossipAlertsTable,
 		crdbInternalGossipLivenessTable,
+		crdbInternalGossipNetworkTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
 		crdbInternalKVNodeStatusTable,
@@ -1926,7 +1928,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts	"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts"); err != nil {
 			return err
 		}
 
@@ -1969,6 +1971,74 @@ CREATE TABLE crdb_internal.gossip_alerts (
 					tree.NewDString(strings.ToLower(alert.Category.String())),
 					tree.NewDString(alert.Description),
 					tree.NewDFloat(tree.DFloat(alert.Value)),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNetwork TODO(peter)
+var crdbInternalGossipNetworkTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_network (
+  source_id       INT NOT NULL,    -- source node of a gossip connection
+  target_id       INT NOT NULL     -- target node of a gossip connection
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_network"); err != nil {
+			return err
+		}
+
+		g := p.ExecCfg().Gossip
+
+		var ids []roachpb.NodeID
+		nodes := make(map[roachpb.NodeID][]roachpb.NodeID)
+		if err := g.IterateInfos(gossip.KeyGossipClientsPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+			if len(bytes) == 0 {
+				return nil
+			}
+
+			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyGossipClientsPrefix)
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse node ID from key %q", key)
+			}
+			ids = append(ids, nodeID)
+
+			var targets []roachpb.NodeID
+			for _, part := range strings.Split(string(bytes), ",") {
+				id, err := strconv.ParseInt(part, 10 /* base */, 64 /* bitSize */)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse node ID from value %q", bytes)
+				}
+				targets = append(targets, roachpb.NodeID(id))
+			}
+
+			nodes[nodeID] = targets
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i] < ids[j]
+		})
+		for _, id := range ids {
+			targets := nodes[id]
+			sort.Slice(targets, func(i, j int) bool {
+				return targets[i] < targets[j]
+			})
+			for _, target := range targets {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(id)),
+					tree.NewDInt(tree.DInt(target)),
 				); err != nil {
 					return err
 				}
