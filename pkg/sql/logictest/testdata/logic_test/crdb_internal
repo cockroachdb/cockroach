@@ -21,6 +21,7 @@ create_statements
 forward_dependencies
 gossip_alerts
 gossip_liveness
+gossip_network
 gossip_nodes
 index_columns
 jobs
