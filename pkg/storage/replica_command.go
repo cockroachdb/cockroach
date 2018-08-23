@@ -1048,6 +1048,7 @@ func RelocateRange(
 	}
 
 	every := log.Every(time.Minute)
+	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
 	for len(addTargets) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -1064,6 +1065,7 @@ func RelocateRange(
 			if every.ShouldLog() {
 				log.Warning(ctx, returnErr)
 			}
+			re.Next()
 			continue
 		}
 		addTargets = addTargets[1:]
@@ -1101,6 +1103,7 @@ func RelocateRange(
 		}
 	}
 
+	re.Reset()
 	for len(removeTargets) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -1115,6 +1118,7 @@ func RelocateRange(
 			if !canRetry(err) {
 				return err
 			}
+			re.Next()
 			continue
 		}
 		removeTargets = removeTargets[1:]
