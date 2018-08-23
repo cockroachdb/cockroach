@@ -35,9 +35,16 @@ import (
 // types to either index keys or to store in the value part of column
 // families.
 
-// EncodeTableKey encodes `val` into `b` and returns the new buffer. The
-// encoded value is guaranteed to be lexicographically sortable, but not
-// guaranteed to be round-trippable during decoding.
+// EncodeTableKey encodes `val` into `b` and returns the new buffer.
+// This is suitable to generate index/lookup keys in KV.
+//
+// The encoded value is guaranteed to be lexicographically sortable,
+// but not guaranteed to be round-trippable during decoding: some
+// values like decimals or collated strings have composite encoding
+// where part of their value lies in the value part of the key/value
+// pair.
+//
+// See also: docs/tech-notes/encoding.md, EncodeTableValue().
 func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, errors.Errorf("invalid direction: %d", dir)
@@ -155,7 +162,7 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
 
-// DecodeTableKey decodes a table key/value.
+// DecodeTableKey decodes a value encoded by EncodeTableKey.
 func DecodeTableKey(
 	a *DatumAlloc, valType types.T, key []byte, dir encoding.Direction,
 ) (tree.Datum, []byte, error) {
@@ -318,9 +325,16 @@ func DecodeTableKey(
 }
 
 // EncodeTableValue encodes `val` into `appendTo` using DatumEncoding_VALUE
-// and returns the new buffer. The encoded value is guaranteed to round
+// and returns the new buffer.
+//
+// This is suitable for generating the value part of individual columns
+// in a column family.
+//
+// The encoded value is guaranteed to round
 // trip and decode exactly to its input, but is not guaranteed to be
 // lexicographically sortable.
+//
+// See also: docs/tech-notes/encoding.md, EncodeTableKey().
 func EncodeTableValue(
 	appendTo []byte, colID ColumnID, val tree.Datum, scratch []byte,
 ) ([]byte, error) {
@@ -393,9 +407,11 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 	return decodeUntaggedDatum(a, valType, b)
 }
 
-// decodeUntaggedDatum is used to decode a Datum whose type is known, and which
-// doesn't have a value tag (either due to it having been consumed already or
-// not having one in the first place).
+// decodeUntaggedDatum is used to decode a Datum whose type is known,
+// and which doesn't have a value tag (either due to it having been
+// consumed already or not having one in the first place).
+//
+// This is used to decode datums encoded using value encoding.
 //
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
@@ -509,9 +525,11 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	}
 }
 
-// MarshalColumnValue returns a Go primitive value equivalent of val, of the
-// type expected by col. If val's type is incompatible with col, or if
-// col's type is not yet implemented, an error is returned.
+// MarshalColumnValue produces the value encoding of the given datum,
+// constrained by the given column type, into a roachpb.Value.
+//
+// If val's type is incompatible with col, or if col's type is not yet
+// implemented by this function, an error is returned.
 func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
@@ -643,8 +661,10 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		val.ResolvedType(), col.Type.SemanticType, col.Name)
 }
 
-// UnmarshalColumnValue decodes the value from a key-value pair using the type
-// expected by the column. An error is returned if the value's type does not
+// UnmarshalColumnValue is the counterpart to MarshalColumnValues.
+//
+// It decodes the value from a roachpb.Value using the type expected
+// by the column. An error is returned if the value's type does not
 // match the column's type.
 func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (tree.Datum, error) {
 	if value.RawBytes == nil {
@@ -763,6 +783,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 	}
 }
 
+// encodeTuple produces the value encoding for a tuple.
 func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
 	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
@@ -777,6 +798,8 @@ func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) 
 	return appendTo, nil
 }
 
+// decodeTuple decodes a tuple from its value encoding. It is the
+// counterpart of encodeTuple().
 func decodeTuple(a *DatumAlloc, elementTypes types.TTuple, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
@@ -798,6 +821,7 @@ func decodeTuple(a *DatumAlloc, elementTypes types.TTuple, b []byte) (tree.Datum
 	return a.NewDTuple(result), b, nil
 }
 
+// encodeArray produces the value encoding for an array.
 func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 	if err := d.Validate(); err != nil {
 		return scratch, err
@@ -842,6 +866,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 	return scratch, nil
 }
 
+// decodeArray decodes the value encoding for an array.
 func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
@@ -871,14 +896,27 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 	return &result, b, nil
 }
 
+// arrayHeader is a parameter passing struct between
+// encodeArray/decodeArray and encodeArrayHeader/decodeArrayHeader.
+//
+// It describes the important properties of an array that are useful
+// for an efficient value encoding.
 type arrayHeader struct {
-	hasNulls      bool
+	// hasNulls is set if the array contains any NULL values.
+	hasNulls bool
+	// numDimensions is the number of dimensions in the array.
 	numDimensions int
-	elementType   encoding.Type
-	length        uint64
-	nullBitmap    []byte
+	// elementType is the encoding type of the array elements.
+	elementType encoding.Type
+	// length is the total number of elements encoded.
+	length uint64
+	// nullBitmap is a compact representation of which array indexes
+	// have NULL values.
+	nullBitmap []byte
 }
 
+// isNull returns true iff the array element at the given index is
+// NULL.
 func (h arrayHeader) isNull(i uint64) bool {
 	return h.hasNulls && ((h.nullBitmap[i/8]>>(i%8))&1) == 1
 }
@@ -889,10 +927,16 @@ func setBit(bitmap []byte, idx int) {
 	bitmap[idx/8] = bitmap[idx/8] | (1 << uint(idx%8))
 }
 
+// numBytesInBitArray returns the minimum number of bytes necessary to
+// store the given number of bits.
 func numBytesInBitArray(numBits int) int {
 	return (numBits + 7) / 8
 }
 
+// makeBitVec carves a bitmap (byte array intended to store bits) for
+// the given number of bits out of its first argument. It returns the
+// remainder of the first argument after the bitmap has been reserved
+// into it.
 func makeBitVec(src []byte, length int) (b, bitVec []byte) {
 	nullBitmapNumBytes := numBytesInBitArray(length)
 	return src[nullBitmapNumBytes:], src[:nullBitmapNumBytes]
@@ -900,6 +944,8 @@ func makeBitVec(src []byte, length int) (b, bitVec []byte) {
 
 const hasNullFlag = 1 << 4
 
+// encodeArrayHeader is used by encodeArray to encode the header
+// at the beginning of the value encoding.
 func encodeArrayHeader(h arrayHeader, buf []byte) ([]byte, error) {
 	// The header byte we append here is formatted as follows:
 	// * The low 4 bits encode the number of dimensions in the array.
@@ -915,6 +961,8 @@ func encodeArrayHeader(h arrayHeader, buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
+// decodeArrayHeader is used by decodeArray to decode the header at
+// the beginning of the value encoding.
 func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	if len(b) < 2 {
 		return arrayHeader{}, b, errors.Errorf("buffer too small")
@@ -944,6 +992,9 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
+// datumTypeToArrayElementEncodingType decides an encoding type to
+// place in the array header given a datum type. The element encoding
+// type is then used to encode/decode array elements.
 func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 	switch t {
 	case types.Int:
@@ -979,6 +1030,8 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 	}
 }
 
+// encodeArrayElement appends the encoded form of one array element to
+// the target byte buffer.
 func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	switch t := d.(type) {
 	case *tree.DInt:
