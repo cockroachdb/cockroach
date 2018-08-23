@@ -171,7 +171,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	for _, updated := range affected {
-		if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
@@ -706,13 +706,6 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 	return s.String()
 }
 
-func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.TableDescriptor) error {
-	if err := td.ValidateTable(p.EvalContext().Settings); err != nil {
-		return err
-	}
-	return p.writeSchemaChange(ctx, td, sqlbase.InvalidMutationID)
-}
-
 func (p *planner) addInterleave(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
@@ -846,14 +839,14 @@ func (p *planner) finalizeInterleave(
 	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
 		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
-	if err := p.saveNonmutationAndNotify(ctx, ancestorTable); err != nil {
+	if err := p.writeSchemaChange(ctx, ancestorTable, sqlbase.InvalidMutationID); err != nil {
 		return err
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
 		desc.State = sqlbase.TableDescriptor_PUBLIC
 
-		if err := p.saveNonmutationAndNotify(ctx, desc); err != nil {
+		if err := p.writeSchemaChange(ctx, desc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
