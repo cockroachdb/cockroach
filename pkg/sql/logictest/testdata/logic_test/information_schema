@@ -220,6 +220,7 @@ crdb_internal       create_statements
 crdb_internal       forward_dependencies
 crdb_internal       gossip_alerts
 crdb_internal       gossip_liveness
+crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       jobs
@@ -343,6 +344,7 @@ create_statements
 forward_dependencies
 gossip_alerts
 gossip_liveness
+gossip_network
 gossip_nodes
 index_columns
 jobs
@@ -473,6 +475,7 @@ system         crdb_internal       create_statements                  SYSTEM VIE
 system         crdb_internal       forward_dependencies               SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                      SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_liveness                    SYSTEM VIEW  NO                  1
+system         crdb_internal       gossip_network                     SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                       SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                      SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                               SYSTEM VIEW  NO                  1
@@ -1034,6 +1037,7 @@ NULL     public   system         crdb_internal       create_statements          
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_liveness                    SELECT          NULL          NULL
+NULL     public   system         crdb_internal       gossip_network                     SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_nodes                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       index_columns                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       jobs                               SELECT          NULL          NULL
@@ -1255,6 +1259,7 @@ NULL     public   system         crdb_internal       create_statements          
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_liveness                    SELECT          NULL          NULL
+NULL     public   system         crdb_internal       gossip_network                     SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_nodes                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       index_columns                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       jobs                               SELECT          NULL          NULL
