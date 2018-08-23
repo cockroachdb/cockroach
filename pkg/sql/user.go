@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
@@ -81,5 +82,5 @@ func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.saveNonmutationAndNotify(ctx, tableDesc)
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }

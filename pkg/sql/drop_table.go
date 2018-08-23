@@ -221,7 +221,7 @@ func (p *planner) removeFK(
 		return err
 	}
 	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
@@ -238,7 +238,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
@@ -386,7 +386,7 @@ func (p *planner) removeFKBackReference(
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(ctx, t)
+	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleaveBackReference(
@@ -420,7 +420,7 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		return p.saveNonmutationAndNotify(ctx, t)
+		return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 	}
 	return nil
 }
