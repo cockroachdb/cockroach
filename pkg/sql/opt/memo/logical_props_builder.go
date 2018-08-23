@@ -181,7 +181,7 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, md, &b.kb)
+	b.sb.init(b.evalCtx, md)
 	b.sb.buildScan(ev, relational)
 
 	return logical
@@ -217,7 +217,7 @@ func (b *logicalPropsBuilder) buildVirtualScanProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildVirtualScan(ev, relational)
 
 	return logical
@@ -279,7 +279,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildSelect(ev, relational)
 
 	return logical
@@ -369,7 +369,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildProject(ev, relational)
 
 	return logical
@@ -530,7 +530,7 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildJoin(ev, relational)
 
 	return logical
@@ -575,7 +575,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, md, &b.kb)
+	b.sb.init(b.evalCtx, md)
 	b.sb.buildIndexJoin(ev, relational)
 
 	return logical
@@ -638,7 +638,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildGroupBy(ev, relational)
 
 	return logical
@@ -696,7 +696,7 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildSetOp(ev, relational)
 
 	return logical
@@ -737,7 +737,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildValues(ev, relational)
 
 	return logical
@@ -868,7 +868,7 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildLimit(ev, relational)
 
 	return logical
@@ -923,7 +923,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildOffset(ev, relational)
 
 	return logical
@@ -962,7 +962,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildMax1Row(ev, relational)
 
 	return logical
@@ -1011,7 +1011,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildRowNumber(ev, relational)
 
 	return logical
@@ -1048,7 +1048,7 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 
 	// Statistics
 	// ----------
-	b.sb.init(b.evalCtx, ev.Metadata(), &b.kb)
+	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildZip(ev, relational)
 
 	return logical
