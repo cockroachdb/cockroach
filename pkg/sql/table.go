@@ -218,7 +218,7 @@ func (tc *TableCollection) getTableVersion(
 
 	// We don't go through the normal lease mechanism for system tables
 	// that are not the role members table.
-	if testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
+	if flags.avoidCached || testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
 		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
 		// TODO(vivek): Ideally we'd avoid caching for only the
 		// system.descriptor and system.lease tables, because they are
@@ -302,12 +302,12 @@ func (tc *TableCollection) getTableVersion(
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
+	ctx context.Context, tableID sqlbase.ID, flags ObjectLookupFlags,
 ) (*sqlbase.TableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
-	if testDisableTableLeases {
-		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+	if flags.avoidCached || testDisableTableLeases {
+		table, err := sqlbase.GetTableDescFromID(ctx, flags.txn, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	origTimestamp := txn.OrigTimestamp()
+	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
@@ -361,7 +361,7 @@ func (tc *TableCollection) getTableVersionByID(
 	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
 	// so we need to set a deadline on the transaction to prevent it from committing
 	// beyond the table version expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
+	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 

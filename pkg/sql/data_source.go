@@ -210,24 +210,14 @@ func (p *planner) QualifyWithDatabase(
 	return tn, nil
 }
 
-func (p *planner) getTableDescByID(
-	ctx context.Context, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, error) {
-	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
-	descFunc := p.Tables().getTableVersionByID
-	if p.avoidCachedDescriptors {
-		descFunc = sqlbase.GetTableDescFromID
-	}
-	return descFunc(ctx, p.txn, tableID)
-}
-
 func (p *planner) getTableScanByRef(
 	ctx context.Context,
 	tref *tree.TableRef,
 	indexFlags *tree.IndexFlags,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
+	flags := ObjectLookupFlags{CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
+	desc, err := p.Tables().getTableVersionByID(ctx, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
 	}
