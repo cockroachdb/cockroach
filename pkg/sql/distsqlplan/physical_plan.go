@@ -885,13 +885,22 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 			merged[i] = *leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
 			merged[i] = *rightType
-		} else if leftType.Equivalent(*rightType) {
+		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
 		}
 	}
 	return merged, nil
+}
+
+// equivalentType checks whether a column type is equivalent to
+// another for the purpose of UNION. This excludes its VisibleType
+// type alias, which doesn't effect the merging of values.
+func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	rhs := *other
+	rhs.VisibleType = c.VisibleType
+	return c.Equal(rhs)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires
