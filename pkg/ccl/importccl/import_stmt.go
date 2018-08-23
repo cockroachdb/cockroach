@@ -519,7 +519,7 @@ func importPlanHook(
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
-			dbDesc, err := sql.ResolveDatabase(ctx, p, p.SessionData().Database, true /*required*/)
+			dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, p.SessionData().Database, true /*required*/)
 			if err != nil {
 				return errors.Wrap(err, "could not resolve current database")
 			}
