@@ -129,12 +129,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				var changedSeqDescs []*TableDescriptor
-				// DDL statements use uncached descriptors, and can view newly added things.
-				// TODO(vivek): check if the cache can be used.
-				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					changedSeqDescs, err = maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
-				})
+				changedSeqDescs, err := maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
 				if err != nil {
 					return err
 				}
@@ -742,13 +737,7 @@ func applyColumnMutation(
 			col.DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
-
-			// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-			// TODO(vivek): check if the cache can be used.
-			var changedSeqDescs []*TableDescriptor
-			params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-				changedSeqDescs, err = maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
-			})
+			changedSeqDescs, err := maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
 			if err != nil {
 				return err
 			}
