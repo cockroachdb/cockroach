@@ -809,7 +809,7 @@ func (g *ruleGen) genConstruct(construct *lang.FuncExpr) {
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
 		g.w.nest("%s.DynamicConstruct(\n", g.factoryVar)
-		g.w.writeIndent("%s.mem.NormExpr(%s).Operator(),\n", g.thisVar, ref.Label)
+		g.w.writeIndent("%s.mem.NormOp(%s),\n", g.thisVar, ref.Label)
 		g.w.nestIndent("memo.DynamicOperands{\n")
 		for _, arg := range construct.Args {
 			g.w.writeIndent("memo.DynamicID(")

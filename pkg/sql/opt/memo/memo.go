@@ -148,7 +148,7 @@ func New() *Memo {
 	// for lists are all reserved.
 	m := &Memo{
 		exprMap: make(map[Fingerprint]GroupID),
-		groups:  make([]group, 1, 8),
+		groups:  make([]group, 1, 12),
 	}
 
 	m.privateStorage.init()
@@ -250,6 +250,12 @@ func (m *Memo) Expr(eid ExprID) *Expr {
 // until the final normal state has been reached.
 func (m *Memo) NormExpr(group GroupID) *Expr {
 	return m.groups[group].expr(normExprOrdinal)
+}
+
+// NormOp returns the operator type of NormExpr. See that method's comment for
+// more details.
+func (m *Memo) NormOp(group GroupID) opt.Operator {
+	return m.groups[group].expr(normExprOrdinal).op
 }
 
 // MemoizeNormExpr enters a normalized expression into the memo. This requires

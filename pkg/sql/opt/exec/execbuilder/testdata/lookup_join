@@ -302,24 +302,22 @@ render            ·         ·              (a, c)     ·
 ·                 table     large@bc       ·          ·
 
 # Lookup join on non-covering secondary index
+# TODO(radu): index-join fixup needed
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
 ----
-render                 ·         ·              (a, d)        ·
- │                     render 0  a              ·             ·
- │                     render 1  d              ·             ·
- └── lookup-join       ·         ·              (a, a, b, d)  ·
-      │                type      inner          ·             ·
-      ├── lookup-join  ·         ·              (a, a, b)     ·
-      │    │           type      inner          ·             ·
-      │    │           pred      @1 = @3        ·             ·
-      │    ├── scan    ·         ·              (a)           ·
-      │    │           table     small@primary  ·             ·
-      │    │           spans     ALL            ·             ·
-      │    └── scan    ·         ·              (a, b)        ·
-      │                table     large@bc       ·             ·
-      └── scan         ·         ·              (d)           ·
-·                      table     large@primary  ·             ·
+render          ·         ·              (a, d)     ·
+ │              render 0  a              ·          ·
+ │              render 1  d              ·          ·
+ └── join       ·         ·              (b, d, a)  ·
+      │         type      inner          ·          ·
+      │         equality  (b) = (a)      ·          ·
+      ├── scan  ·         ·              (b, d)     ·
+      │         table     large@primary  ·          ·
+      │         spans     ALL            ·          ·
+      └── scan  ·         ·              (a)        ·
+·               table     small@primary  ·          ·
+·               spans     ALL            ·          ·
 
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
@@ -355,24 +353,22 @@ render            ·         ·              (c, c)     ·
 ·                 table     large@bc       ·          ·
 
 # Left join against non-covering secondary index
+# TODO(radu): index-join fixup needed
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
 ----
-render                 ·         ·              (c, d)        ·
- │                     render 0  c              ·             ·
- │                     render 1  d              ·             ·
- └── lookup-join       ·         ·              (c, a, b, d)  ·
-      │                type      left outer     ·             ·
-      ├── lookup-join  ·         ·              (c, a, b)     ·
-      │    │           type      left outer     ·             ·
-      │    │           pred      @1 = @3        ·             ·
-      │    ├── scan    ·         ·              (c)           ·
-      │    │           table     small@primary  ·             ·
-      │    │           spans     ALL            ·             ·
-      │    └── scan    ·         ·              (a, b)        ·
-      │                table     large@bc       ·             ·
-      └── scan         ·         ·              (d)           ·
-·                      table     large@primary  ·             ·
+render          ·         ·              (c, d)     ·
+ │              render 0  c              ·          ·
+ │              render 1  d              ·          ·
+ └── join       ·         ·              (b, d, c)  ·
+      │         type      right outer    ·          ·
+      │         equality  (b) = (c)      ·          ·
+      ├── scan  ·         ·              (b, d)     ·
+      │         table     large@primary  ·          ·
+      │         spans     ALL            ·          ·
+      └── scan  ·         ·              (c)        ·
+·               table     small@primary  ·          ·
+·               spans     ALL            ·          ·
 
 # Left join with ON filter on covering index
 query TTTTT
