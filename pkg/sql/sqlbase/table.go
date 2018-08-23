@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"unicode/utf8"
 
 	"github.com/pkg/errors"
 
@@ -35,19 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
-
-// aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
-// so that the alias is persisted. When adding new column type aliases or new
-// VisibleType variants, consider adding to this mapping as well.
-var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	coltypes.Int2.Name:     ColumnType_SMALLINT,
-	coltypes.Int4.Name:     ColumnType_INTEGER,
-	coltypes.Int8.Name:     ColumnType_BIGINT,
-	coltypes.Int64.Name:    ColumnType_BIGINT,
-	coltypes.Integer.Name:  ColumnType_INTEGER,
-	coltypes.SmallInt.Name: ColumnType_SMALLINT,
-	coltypes.BigInt.Name:   ColumnType_BIGINT,
-}
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
@@ -90,68 +76,6 @@ func SanitizeVarFreeExpr(
 			context, expectedType, expr, actualType)
 	}
 	return typedExpr, nil
-}
-
-// PopulateTypeAttrs set other attributes of col.Type and performs type-specific verification.
-func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
-	switch t := typ.(type) {
-	case *coltypes.TBool:
-	case *coltypes.TInt:
-		base.Width = int32(t.Width)
-		if val, present := aliasToVisibleTypeMap[t.Name]; present {
-			base.VisibleType = val
-		}
-
-	case *coltypes.TFloat:
-		base.VisibleType = ColumnType_NONE
-		if t.Short {
-			base.VisibleType = ColumnType_REAL
-		}
-
-	case *coltypes.TDecimal:
-		base.Width = int32(t.Scale)
-		base.Precision = int32(t.Prec)
-
-		switch {
-		case base.Precision == 0 && base.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return ColumnType{}, errors.New("invalid NUMERIC precision 0")
-		case base.Precision < base.Width:
-			return ColumnType{}, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				base.Width, base.Precision)
-		}
-	case *coltypes.TDate:
-	case *coltypes.TTime:
-	case *coltypes.TTimestamp:
-	case *coltypes.TTimestampTZ:
-	case *coltypes.TInterval:
-	case *coltypes.TUUID:
-	case *coltypes.TIPAddr:
-	case *coltypes.TJSON:
-	case *coltypes.TString:
-		base.Width = int32(t.N)
-	case *coltypes.TName:
-	case *coltypes.TBytes:
-	case *coltypes.TCollatedString:
-		base.Width = int32(t.N)
-	case *coltypes.TArray:
-		base.ArrayDimensions = t.Bounds
-		var err error
-		base, err = PopulateTypeAttrs(base, t.ParamType)
-		if err != nil {
-			return ColumnType{}, err
-		}
-	case *coltypes.TVector:
-		switch t.ParamType.(type) {
-		case *coltypes.TInt, *coltypes.TOid:
-		default:
-			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
-		}
-	case *coltypes.TOid:
-	default:
-		return ColumnType{}, errors.Errorf("unexpected type %T", t)
-	}
-	return base, nil
 }
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
@@ -895,30 +819,6 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	}
 }
 
-// CheckColumnType verifies that a given value is compatible
-// with the type requested by the column. If the value is a
-// placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo) error {
-	if typ == types.Unknown {
-		return nil
-	}
-
-	// If the value is a placeholder, then the column check above has
-	// populated 'colTyp' with a type to assign to it.
-	colTyp := col.Type.ToDatumType()
-	if p, pok := typ.(types.TPlaceholder); pok {
-		if err := pmap.SetType(p.Name, colTyp); err != nil {
-			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
-				p.Name, col.Name, err)
-		}
-	} else if !typ.Equivalent(colTyp) {
-		// Not a placeholder; check that the value cast has succeeded.
-		return fmt.Errorf("value type %s doesn't match type %s of column %q",
-			typ, col.Type.SemanticType, col.Name)
-	}
-	return nil
-}
-
 func checkElementType(paramType types.T, columnType ColumnType) error {
 	semanticType, err := DatumTypeToColumnSemanticType(paramType)
 	if err != nil {
@@ -1319,50 +1219,6 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType)
 	}
-}
-
-// CheckValueWidth checks that the width (for strings, byte arrays, and
-// bit string) and scale (for decimals) of the value fits the specified
-// column type. Used by INSERT and UPDATE.
-func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
-	switch typ.SemanticType {
-	case ColumnType_STRING:
-		if v, ok := tree.AsDString(val); ok {
-			if typ.Width > 0 && utf8.RuneCountInString(string(v)) > int(typ.Width) {
-				return fmt.Errorf("value too long for type %s (column %q)",
-					typ.SQLString(), name)
-			}
-		}
-	case ColumnType_INT:
-		if v, ok := tree.AsDInt(val); ok {
-			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
-				// Width is defined in bits.
-				width := uint(typ.Width - 1)
-
-				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
-				shifted := v >> width
-				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
-				}
-			}
-		}
-	case ColumnType_DECIMAL:
-		if v, ok := val.(*tree.DDecimal); ok {
-			if err := tree.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)", typ.SQLString(), name)
-			}
-		}
-	case ColumnType_ARRAY:
-		if v, ok := val.(*tree.DArray); ok {
-			elementType := *typ.elementColumnType()
-			for i := range v.Array {
-				if err := CheckValueWidth(elementType, v.Array[i], name); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // ConstraintType is used to identify the type of a constraint.
