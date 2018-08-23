@@ -47,15 +47,15 @@ func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 	return key
 }
 
-// EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
-// the columns in the index.
+// EncodeIndexKey creates a key by concatenating keyPrefix with the
+// encodings of the columns in the index, and returns the key and
+// whether any of the encoded values were NULLs.
 //
-// If a table or index is interleaved, `encoding.interleavedSentinel` is used
-// in place of the family id (a varint) to signal the next component of the
-// key.  An example of one level of interleaving (a parent):
+// If a table or index is interleaved, `encoding.interleavedSentinel`
+// is used in place of the family id (a varint) to signal the next
+// component of the key.  An example of one level of interleaving (a
+// parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
-//
-// Returns the key and whether any of the encoded values were NULLs.
 //
 // Note that ExtraColumnIDs are not encoded, so the result isn't always a
 // full index key.
@@ -237,15 +237,15 @@ func appendEncDatumsToKey(
 	return key, nil
 }
 
-// MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix with
-// the encodings of the explicit EncDatum values followed by the encodings of
-// the implicit datum values. These values correspond to index.ColumnIDs and
-// index.ExtraColumnIDs respectively.
+// MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix
+// with the encodings of the explicit EncDatum values followed by the
+// encodings of the implicit datum values. These values correspond to
+// index.ColumnIDs and index.ExtraColumnIDs respectively.
 //
-// MakeKeyFromEncDatums (see above) does not allow you to create a key
-// specifying the ExtraColumnIDs, so the result may not be a full key. This
-// function allows you to create a key by specifying the values for the
-// ExtraColumnID values as the implicitValues.
+// Note: MakeKeyFromEncDatums does not allow you to create a key
+// specifying the ExtraColumnIDs, so the result may not be a full
+// key. This function allows you to create a key by specifying the
+// values for the ExtraColumnID values as the implicitValues.
 func MakeFullKeyFromEncDatums(
 	explicitTypes []ColumnType,
 	explicitValues EncDatumRow,
@@ -607,10 +607,10 @@ func (a byID) Len() int           { return len(a) }
 func (a byID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 
-// EncodeInvertedIndexKeys creates a list of inverted index keys
-// by concatenating keyPrefix with the encodings of the column in the index.
-//
-// Returns the key and whether any of the encoded values were NULLs.
+// EncodeInvertedIndexKeys creates a list of inverted index keys by
+// concatenating keyPrefix with the encodings of the column in the
+// index. Returns the key and whether any of the encoded values were
+// NULLs.
 func EncodeInvertedIndexKeys(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -633,9 +633,10 @@ func EncodeInvertedIndexKeys(
 	return EncodeInvertedIndexTableKeys(val, keyPrefix)
 }
 
-// EncodeInvertedIndexTableKeys encodes the paths in a JSON `val` and concatenates it with `inKey`and returns
-// a list of buffers per path. The encoded values is guaranteed to be lexicographically sortable, but not
-// guaranteed to be round-trippable during decoding.
+// EncodeInvertedIndexTableKeys encodes the paths in a JSON `val` and
+// concatenates it with `inKey`and returns a list of buffers per
+// path. The encoded values is guaranteed to be lexicographically
+// sortable, but not guaranteed to be round-trippable during decoding.
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
@@ -647,9 +648,10 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to apply inverted index to non JSON type")
 }
 
-// EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
-// ColumnIDs to indices in `values`. This returns a slice of IndexEntry. Forward
-// indexes will return one value, while inverted indicies can return multiple values.
+// EncodeSecondaryIndex encodes key/values for a secondary
+// index. colMap maps ColumnIDs to indices in `values`. This returns a
+// slice of IndexEntry. Forward indexes will return one value, while
+// inverted indicies can return multiple values.
 func EncodeSecondaryIndex(
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
@@ -773,39 +775,58 @@ func EncodeSecondaryIndexes(
 	return secondaryIndexEntries, nil
 }
 
-// IndexKeyEquivSignature parses an index key if and only if the index key
-// belongs to a table where its equivalence signature and all its interleave
-// ancestors' signatures can be found in validEquivSignatures.
-// validEquivSignatures: a map containing equivalence signatures of valid
-// ancestors of the desired table and of the desired table itself.
-// IndexKeyEquivSignature returns whether or not the index key satisfies the
-// above condition, the value mapped to by the desired table (could be a table index),
-// and the rest of the key that's not part of the signature.
-// It also requires two []byte buffers: one for the signature (signatureBuf)
-// and one for the rest of the key (keyRestBuf).
-// The equivalence signature defines the equivalence classes for the signature
-// of potentially interleaved tables. For example, the equivalence signatures
-// for the following interleaved indexes
+// IndexKeyEquivSignature parses an index key if and only if the index
+// key belongs to a table where its equivalence signature and all its
+// interleave ancestors' signatures can be found in
+// validEquivSignatures.
+//
+// Its validEquivSignatures argument is a map containing equivalence
+// signatures of valid ancestors of the desired table and of the
+// desired table itself.
+//
+// IndexKeyEquivSignature returns whether or not the index key
+// satisfies the above condition, the value mapped to by the desired
+// table (could be a table index), and the rest of the key that's not
+// part of the signature.
+//
+// It also requires two []byte buffers: one for the signature
+// (signatureBuf) and one for the rest of the key (keyRestBuf).
+//
+// The equivalence signature defines the equivalence classes for the
+// signature of potentially interleaved tables. For example, the
+// equivalence signatures for the following interleaved indexes:
+//
 //    <parent@primary>
-//	<child@secondary>
+//    <child@secondary>
+//
 // and index keys
 //    <parent index key>:   /<parent table id>/<parent index id>/<val 1>/<val 2>
 //    <child index key>:    /<parent table id>/<parent index id>/<val 1>/<val 2>/#/<child table id>/child index id>/<val 3>/<val 4>
+//
 // correspond to the equivalence signatures
-//    <parent@primary>:	    /<parent table id>/<parent index id>
+//    <parent@primary>:     /<parent table id>/<parent index id>
 //    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
-// Equivalence signatures allow us to associate an index key with its table
-// without having to invoke DecodeIndexKey multiple times.
-// IndexKeyEquivSignature will return false if the a table's ancestor's
-// signature or the table's signature (table which the index key belongs to) is
-// not mapped in validEquivSignatures.
+//
+// Equivalence signatures allow us to associate an index key with its
+// table without having to invoke DecodeIndexKey multiple times.
+//
+// IndexKeyEquivSignature will return false if the a table's
+// ancestor's signature or the table's signature (table which the
+// index key belongs to) is not mapped in validEquivSignatures.
+//
 // For example, suppose the given key is
+//
 //    /<t2 table id>/<t2 index id>/<val t2>/#/<t3 table id>/<t3 table id>/<val t3>
+//
 // and validEquivSignatures contains
+//
 //    /<t1 table id>/t1 index id>
-//    /<t1 table id>/t1 index id>/#/<t4 table id>/<t4 index id
+//    /<t1 table id>/t1 index id>/#/<t4 table id>/<t4 index id>
+//
 // IndexKeyEquivSignature will short-circuit and return false once
+//
 //    /<t2 table id>/<t2 index id>
+//
 // is processed since t2's signature is not specified in validEquivSignatures.
 func IndexKeyEquivSignature(
 	key []byte, validEquivSignatures map[string]int, signatureBuf []byte, restBuf []byte,
@@ -925,7 +946,7 @@ func TableEquivSignatures(
 //
 //    /table/index/<parent-pk1>/.../<parent-pkX>
 //
-// We return the maximum number of <tokens> in this prefix.
+// This returns the maximum number of <tokens> in this prefix.
 func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 	nTables := len(index.Interleave.Ancestors) + 1
 	nKeyCols := len(index.ColumnIDs)
