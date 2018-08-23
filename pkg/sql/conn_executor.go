@@ -1834,8 +1834,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		implicitTxn = os.ImplicitTxn.Get()
 	}
 
-	ctx := withStatement(ex.Ctx(), ex.curStmt)
-	err := ex.machine.ApplyWithPayload(ctx, ev, payload)
+	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmt), ev, payload)
 	if err != nil {
 		if _, ok := err.(fsm.TransitionNotFoundError); ok {
 			panic(err)
@@ -1872,7 +1871,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.tables.waitForCacheToDropDatabases(ctx)
+		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
 
 		fallthrough
 	case txnRestart, txnAborted:
