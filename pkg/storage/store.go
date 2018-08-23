@@ -1601,7 +1601,7 @@ func (s *Store) startGossip() {
 				return repl.maybeGossipFirstRange(ctx).GoError()
 			},
 			description: "first range descriptor",
-			interval:    sentinelGossipInterval,
+			interval:    s.cfg.SentinelGossipTTL() / 2,
 		},
 		{
 			key:         keys.SystemConfigSpan.Key,
