@@ -71,7 +71,7 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 		ctyp.Locale = &t.Locale
 	case types.TArray:
 		ctyp.SemanticType = ColumnType_ARRAY
-		contents, err := DatumTypeToColumnSemanticType(t.Typ)
+		contents, err := datumTypeToColumnSemanticType(t.Typ)
 		if err != nil {
 			return ColumnType{}, err
 		}
@@ -93,7 +93,7 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 		ctyp.TupleLabels = t.Labels
 		return ctyp, nil
 	default:
-		semanticType, err := DatumTypeToColumnSemanticType(ptyp)
+		semanticType, err := datumTypeToColumnSemanticType(ptyp)
 		if err != nil {
 			return ColumnType{}, err
 		}
@@ -364,15 +364,12 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
-//
-// This function is for internal use in this package and only exported
-// for testing in pgwire. Avoid using directly!
+// datumTypeToColumnSemanticType converts a types.T to a SemanticType.
 //
 // This is mainly used by DatumTypeToColumnType() above; it is also
 // used to derive the semantic type of array elements and the
 // determination of DatumTypeHasCompositeKeyEncoding().
-func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
+func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
 	case types.Bool:
 		return ColumnType_BOOL, nil
@@ -420,7 +417,7 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 			return ColumnType_TUPLE, nil
 		}
 		if wrapper, ok := ptyp.(types.TOidWrapper); ok {
-			return DatumTypeToColumnSemanticType(wrapper.T)
+			return datumTypeToColumnSemanticType(wrapper.T)
 		}
 		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s, %T, %+v", ptyp, ptyp, ptyp)
 	}
