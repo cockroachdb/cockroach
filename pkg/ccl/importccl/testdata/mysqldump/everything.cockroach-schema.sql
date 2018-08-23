@@ -1,5 +1,5 @@
 CREATE TABLE everything (
-  i     INT PRIMARY KEY,
+  i     INT4 PRIMARY KEY,
 
   c     CHAR(10) NOT NULL,
   s     VARCHAR(100),
@@ -21,11 +21,11 @@ CREATE TABLE everything (
   nu    NUMERIC(10, 0),
   d53   DECIMAL(5,3),
 
-  iw    INT NOT NULL,
-  iz    INT,
+  iw    INT4 NOT NULL,
+  iz    INT4,
   ti    SMALLINT,
   si    SMALLINT,
-  mi    INT,
+  mi    INT4,
   bi    BIGINT,
 
   fl    FLOAT4 NOT NULL,

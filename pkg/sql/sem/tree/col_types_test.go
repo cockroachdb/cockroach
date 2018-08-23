@@ -30,14 +30,10 @@ func TestParseColumnType(t *testing.T) {
 		expectedType coltypes.T
 	}{
 		{"BOOL", &coltypes.TBool{}},
-		{"SMALLINT", &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}},
-		{"BIGINT", &coltypes.TInt{Name: "BIGINT"}},
-		{"INTEGER", &coltypes.TInt{Name: "INTEGER"}},
-		{"INT", &coltypes.TInt{Name: "INT"}},
-		{"INT2", &coltypes.TInt{Name: "INT2", Width: 16, ImplicitWidth: true}},
-		{"INT4", &coltypes.TInt{Name: "INT4", Width: 32, ImplicitWidth: true}},
-		{"INT8", &coltypes.TInt{Name: "INT8"}},
-		{"INT64", &coltypes.TInt{Name: "INT64"}},
+		{"INT", &coltypes.TInt{}},
+		{"INT2", &coltypes.TInt{Width: 16}},
+		{"INT4", &coltypes.TInt{Width: 32}},
+		{"INT8", &coltypes.TInt{Width: 64}},
 		{"FLOAT4", &coltypes.TFloat{Short: true}},
 		{"FLOAT8", &coltypes.TFloat{}},
 		{"DECIMAL", &coltypes.TDecimal{}},

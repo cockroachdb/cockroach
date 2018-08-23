@@ -565,9 +565,9 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-    b SMALLINT[] NULL,
-    FAMILY "primary" (b, rowid)
-  )
+   b INT2[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement error integer out of range for type SMALLINT \(column "b"\)
 INSERT INTO a VALUES (ARRAY[100000])

@@ -241,8 +241,8 @@ query TT
 SHOW CREATE TABLE smallbig
 ----
 smallbig  CREATE TABLE smallbig (
-          a SMALLINT NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
-          b BIGINT NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
+          a INT2 NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
+          b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
           c INT NULL,
           FAMILY "primary" (a, b, c, rowid)
 )
@@ -259,9 +259,9 @@ query TT
 SHOW CREATE TABLE serials
 ----
 serials  CREATE TABLE serials (
-         a SMALLINT NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
-         b INTEGER NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
-         c BIGINT NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
+         a INT2 NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
+         b INT4 NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
+         c INT8 NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
          d INT NULL,
          FAMILY "primary" (a, b, c, d, rowid)
 )

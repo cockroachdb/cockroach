@@ -111,7 +111,7 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
-a            INTEGER    true         NULL            ·                      {}           false
+a            INT        true         NULL            ·                      {}           false
 rowid        INT        false        unique_rowid()  ·                      {"primary"}  true
 
 statement ok
