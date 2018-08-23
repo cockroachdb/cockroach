@@ -410,6 +410,20 @@ func (b *Builder) buildScalarHelper(
 		}
 	}
 
+	// In case we ended up normalizing to a raw variable expression within a
+	// projection, attempt to make that expression a passthrough column rather
+	// than a synthesized column.
+	if !inGroupingContext && outScope != nil {
+		if v := b.factory.Memo().NormExpr(out).AsVariable(); v != nil {
+			return b.finishBuildScalarRef(
+				inScope.getColumn(b.factory.Memo().LookupPrivate(v.Col()).(opt.ColumnID)),
+				label,
+				inScope,
+				outScope,
+			)
+		}
+	}
+
 	return b.finishBuildScalar(scalar, out, label, inScope, outScope)
 }
 

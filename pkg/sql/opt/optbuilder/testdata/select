@@ -1045,13 +1045,8 @@ scan a
 build
 SELECT @1 AS r, @2 AS s FROM a
 ----
-project
- ├── columns: r:3(int) s:4(float)
- ├── scan a
- │    └── columns: x:1(int!null) y:2(float)
- └── projections
-      ├── variable: x [type=int]
-      └── variable: y [type=float]
+scan a
+ └── columns: r:1(int!null) s:2(float)
 
 build
 SELECT * FROM a WHERE (x > 10)::bool

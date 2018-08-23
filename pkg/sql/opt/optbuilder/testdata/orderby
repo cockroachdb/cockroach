@@ -563,13 +563,11 @@ SELECT b, c FROM t ORDER BY @2
 ----
 sort
  ├── columns: b:2(int) c:3(bool)
- ├── ordering: +4
+ ├── ordering: +2
  └── project
-      ├── columns: column4:4(int) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── variable: b [type=int]
+      ├── columns: b:2(int) c:3(bool)
+      └── scan t
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT b, c FROM t ORDER BY @4
