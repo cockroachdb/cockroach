@@ -820,7 +820,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 }
 
 func checkElementType(paramType types.T, columnType ColumnType) error {
-	semanticType, err := DatumTypeToColumnSemanticType(paramType)
+	semanticType, err := datumTypeToColumnSemanticType(paramType)
 	if err != nil {
 		return err
 	}
