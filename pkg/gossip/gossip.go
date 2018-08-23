@@ -99,7 +99,7 @@ const (
 	// defaultStallInterval is the default interval for checking whether
 	// the incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
-	defaultStallInterval = 30 * time.Second
+	defaultStallInterval = 2 * time.Second
 
 	// defaultBootstrapInterval is the minimum time between successive
 	// bootstrapping attempts to avoid busy-looping trying to find the
