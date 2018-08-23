@@ -56,12 +56,15 @@ type LogicalSchema interface {
 
 var _ LogicalSchema = &planner{}
 
-// ResolveDatabase looks up a database name.
-func ResolveDatabase(
-	ctx context.Context, sc SchemaResolver, dbName string, required bool,
-) (res *DatabaseDescriptor, err error) {
-	return sc.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
-		sc.CommonLookupFlags(ctx, required))
+// ResolveUncachedDatabaseByName looks up a database name from the store.
+func (p *planner) ResolveUncachedDatabaseByName(
+	ctx context.Context, dbName string, required bool,
+) (res *UncachedDatabaseDescriptor, err error) {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		res, err = p.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
+			p.CommonLookupFlags(ctx, required))
+	})
+	return res, err
 }
 
 // GetObjectNames retrieves the names of all objects in the target database/schema.
@@ -251,7 +254,7 @@ func (p *planner) ObjectLookupFlags(ctx context.Context, required bool) ObjectLo
 
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
 func getDescriptorsFromTargetList(
-	ctx context.Context, sc SchemaResolver, targets tree.TargetList,
+	ctx context.Context, p *planner, targets tree.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -259,7 +262,7 @@ func getDescriptorsFromTargetList(
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := ResolveDatabase(ctx, sc, string(database), true /*required*/)
+			descriptor, err := p.ResolveUncachedDatabaseByName(ctx, string(database), true /*required*/)
 			if err != nil {
 				return nil, err
 			}
@@ -280,13 +283,13 @@ func getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tableNames, err := expandTableGlob(ctx, sc, tableGlob)
+		tableNames, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
 		for i := range tableNames {
-			descriptor, _, err := sc.LogicalSchemaAccessor().GetObjectDesc(&tableNames[i],
-				sc.ObjectLookupFlags(ctx, true /*required*/))
+			descriptor, _, err := p.LogicalSchemaAccessor().GetObjectDesc(&tableNames[i],
+				p.ObjectLookupFlags(ctx, true /*required*/))
 			if err != nil {
 				return nil, err
 			}
