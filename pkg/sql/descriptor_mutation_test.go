@@ -172,7 +172,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// Add an index so that we test adding a column when a table has an index.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE TABLE t.test (k VARCHAR PRIMARY KEY, v VARCHAR, i VARCHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
 CREATE INDEX allidx ON t.test (k, v);
 `); err != nil {
 		t.Fatal(err)
@@ -728,7 +728,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
+CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 `); err != nil {
 		t.Fatal(err)
 	}

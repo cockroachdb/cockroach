@@ -654,7 +654,7 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON || semanticType == ColumnType_TUPLE
+	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSONB || semanticType == ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1117,7 +1117,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.HasBeenInitialized() {
 		if !st.Version.IsMinSupported(cluster.Version2_0) {
 			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_JSON {
+				if def.Type.SemanticType == ColumnType_JSONB {
 					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
 				}
 				if def.ComputeExpr != nil {
@@ -1551,7 +1551,7 @@ func columnTypeIsIndexable(t ColumnType) bool {
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func columnTypeIsInvertedIndexable(t ColumnType) bool {
-	return t.SemanticType == ColumnType_JSON
+	return t.SemanticType == ColumnType_JSONB
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {

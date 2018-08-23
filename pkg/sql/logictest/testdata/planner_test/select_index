@@ -3,9 +3,9 @@
 statement ok
 CREATE TABLE t (
   a INT,
-  b CHAR,
+  b VARCHAR,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b),
   INDEX bc (b, c),
   INDEX dc (d, c),

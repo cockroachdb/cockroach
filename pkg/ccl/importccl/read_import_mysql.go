@@ -599,7 +599,7 @@ func strOpt(in *coltypes.TString, i int) coltypes.T {
 		return in
 	}
 	res := *in
-	res.N = i
+	res.N = uint(i)
 	return &res
 }
 

@@ -16,12 +16,12 @@ ALTER TABLE t ALTER s TYPE BYTES, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTA
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type                 is_nullable  column_default  generation_expression  indices      is_hidden
-s            BYTES                     true         NULL            ·                      {}           false
-sl           STRING(6)                 true         NULL            ·                      {}           false
-t            TIME                      true         NULL            ·                      {}           false
-ts           TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}           false
-rowid        INT                       false        unique_rowid()  ·                      {"primary"}  true
+column_name  data_type    is_nullable  column_default  generation_expression  indices      is_hidden
+s            BYTES        true         NULL            ·                      {}           false
+sl           STRING(6)    true         NULL            ·                      {}           false
+t            TIME         true         NULL            ·                      {}           false
+ts           TIMESTAMPTZ  true         NULL            ·                      {}           false
+rowid        INT          false        unique_rowid()  ·                      {"primary"}  true
 
 query TTTT
 SELECT * FROM t

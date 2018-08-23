@@ -231,7 +231,9 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE a (b STRING COLLATE "DE")`},
+		{`CREATE TABLE a (b STRING(3) COLLATE "DE")`},
 		{`CREATE TABLE a (b STRING[] COLLATE "DE")`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE "DE")`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
@@ -553,8 +555,6 @@ func TestParse(t *testing.T) {
 		{`SELECT a#>>'{x}'`},
 		{`SELECT (a->'x')->'y'`},
 		{`SELECT (a->'x')->>'y'`},
-		{`SELECT ''::JSON`},
-		{`SELECT ''::JSONB`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
@@ -583,32 +583,20 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
 		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
-		{`SELECT BOOL 'foo'`},
-		{`SELECT INT 'foo'`},
-		{`SELECT FLOAT4 'foo'`},
-		{`SELECT DECIMAL 'foo'`},
-		{`SELECT CHAR 'foo'`},
-		{`SELECT VARCHAR 'foo'`},
-		{`SELECT STRING 'foo'`},
-		{`SELECT BYTES 'foo'`},
-		{`SELECT DATE 'foo'`},
-		{`SELECT TIME 'foo'`},
-		{`SELECT TIMESTAMP 'foo'`},
-		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
-
-		{`SELECT '1'::INT`},
-		{`SELECT '1'::SERIAL`},
-		{`SELECT '1':::INT`},
-		{`SELECT '1':::SERIAL`},
-		{`SELECT INT '1'`},
-		{`SELECT SERIAL '1'`},
-
-		{`SELECT 'foo'::JSON`},
-		{`SELECT 'foo'::JSONB`},
-		{`SELECT 'foo':::JSON`},
-		{`SELECT 'foo':::JSONB`},
-		{`SELECT JSON 'foo'`},
-		{`SELECT JSONB 'foo'`},
+		{`SELECT BOOL 'foo', 'foo'::BOOL`},
+		{`SELECT INT 'foo', 'foo'::INT`},
+		{`SELECT FLOAT4 'foo', 'foo'::FLOAT4`},
+		{`SELECT DECIMAL 'foo', 'foo'::DECIMAL`},
+		{`SELECT CHAR 'foo', 'foo'::CHAR`},
+		{`SELECT VARCHAR 'foo', 'foo'::VARCHAR`},
+		{`SELECT STRING 'foo', 'foo'::STRING`},
+		{`SELECT BYTES 'foo', 'foo'::BYTES`},
+		{`SELECT DATE 'foo', 'foo'::DATE`},
+		{`SELECT TIME 'foo', 'foo'::TIME`},
+		{`SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP`},
+		{`SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ`},
+		{`SELECT JSONB 'foo', 'foo'::JSONB`},
+		{`SELECT SERIAL 'foo', 'foo'::SERIAL`},
 
 		{`SELECT '192.168.0.1'::INET`},
 		{`SELECT '192.168.0.1':::INET`},
@@ -1125,8 +1113,16 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b BOOL)`},
 		{`CREATE TABLE a (b TEXT)`,
 			`CREATE TABLE a (b STRING)`},
+		{`CREATE TABLE a (b JSON)`,
+			`CREATE TABLE a (b JSONB)`},
+		{`CREATE TABLE a (b TIMESTAMP WITH TIME ZONE)`,
+			`CREATE TABLE a (b TIMESTAMPTZ)`},
 		{`CREATE TABLE a (b BYTES, c BYTEA, d BLOB)`,
 			`CREATE TABLE a (b BYTES, c BYTES, d BYTES)`},
+		{`CREATE TABLE a (b CHAR(1), c CHARACTER(1), d CHARACTER(3))`,
+			`CREATE TABLE a (b CHAR, c CHAR, d CHAR(3))`},
+		{`CREATE TABLE a (b CHAR VARYING, c CHARACTER VARYING(3))`,
+			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
@@ -2148,6 +2144,13 @@ SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
 CREATE TABLE foo(a BIT)
                       ^
 HINT: See: https://github.com/cockroachdb/cockroach/issues/20991`,
+		},
+		{
+			`CREATE TABLE foo(a CHAR(0))`,
+			`length for type CHAR must be at least 1 at or near ")"
+CREATE TABLE foo(a CHAR(0))
+                         ^
+`,
 		},
 	}
 	for _, d := range testData {

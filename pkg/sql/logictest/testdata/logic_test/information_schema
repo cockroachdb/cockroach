@@ -824,7 +824,22 @@ statement ok
 DROP TABLE nullability
 
 statement ok
-CREATE TABLE data_types (a INT, b FLOAT, c DECIMAL, d STRING, e BYTES, f TIMESTAMP, g TIMESTAMPTZ)
+CREATE TABLE data_types (
+  a   INT,
+  b   FLOAT,
+  br  REAL,
+  c   DECIMAL,
+  cp  DECIMAL(3,2),
+  d   STRING,
+  dc  CHAR,
+  dc2 CHAR(2),
+  dv  VARCHAR,
+  dv2 VARCHAR(2),
+  dq  "char",
+  e   BYTES,
+  f   TIMESTAMP,
+  g   TIMESTAMPTZ
+  )
 
 query TTTT colnames
 SELECT table_name, column_name, data_type, crdb_sql_type
@@ -834,18 +849,32 @@ WHERE table_schema = 'public' AND table_name = 'data_types'
 table_name  column_name  data_type                 crdb_sql_type
 data_types  a            integer                   INT
 data_types  b            double precision          FLOAT8
+data_types  br           real                      FLOAT4
 data_types  c            numeric                   DECIMAL
+data_types  cp           numeric                   DECIMAL(3,2)
 data_types  d            text                      STRING
+data_types  dc           character                 CHAR
+data_types  dc2          character                 CHAR(2)
+data_types  dv           character varying         VARCHAR
+data_types  dv2          character varying         VARCHAR(2)
+data_types  dq           char                      "char"
 data_types  e            bytea                     BYTES
 data_types  f            timestamp                 TIMESTAMP
-data_types  g            timestamp with time zone  TIMESTAMP WITH TIME ZONE
+data_types  g            timestamp with time zone  TIMESTAMPTZ
 data_types  rowid        integer                   INT
 
 statement ok
 DROP TABLE data_types
 
 statement ok
-CREATE TABLE char_len (a INT, b INT2, c INT4, d STRING, e STRING(12), f FLOAT)
+CREATE TABLE char_len (
+  a INT, b INT2, c INT4,
+  d STRING, e STRING(12),
+  dc CHAR, ec CHAR(12),
+  dv VARCHAR, ev VARCHAR(12),
+  dq "char",
+  f FLOAT
+  )
 
 query TTII colnames
 SELECT table_name, column_name, character_maximum_length, character_octet_length
@@ -858,6 +887,11 @@ char_len    b            16                        NULL
 char_len    c            32                        NULL
 char_len    d            NULL                      NULL
 char_len    e            12                        48
+char_len    dc           1                         4
+char_len    ec           12                        48
+char_len    dv           NULL                      NULL
+char_len    ev           12                        48
+char_len    dq           NULL                      NULL
 char_len    f            NULL                      NULL
 char_len    rowid        NULL                      NULL
 
@@ -1638,88 +1672,88 @@ is_grantable    STRING     true         NULL            ·                      
 query TTBTTTB colnames
 SHOW COLUMNS FROM information_schema.routines
 ----
-column_name                          data_type                 is_nullable  column_default  generation_expression  indices  is_hidden
-specific_catalog                     STRING                    true         NULL            ·                      {}       false
-specific_schema                      STRING                    true         NULL            ·                      {}       false
-specific_name                        STRING                    true         NULL            ·                      {}       false
-routine_catalog                      STRING                    true         NULL            ·                      {}       false
-routine_schema                       STRING                    true         NULL            ·                      {}       false
-routine_name                         STRING                    true         NULL            ·                      {}       false
-routine_type                         STRING                    true         NULL            ·                      {}       false
-module_catalog                       STRING                    true         NULL            ·                      {}       false
-module_schema                        STRING                    true         NULL            ·                      {}       false
-module_name                          STRING                    true         NULL            ·                      {}       false
-udt_catalog                          STRING                    true         NULL            ·                      {}       false
-udt_schema                           STRING                    true         NULL            ·                      {}       false
-udt_name                             STRING                    true         NULL            ·                      {}       false
-data_type                            STRING                    true         NULL            ·                      {}       false
-character_maximum_length             INT                       true         NULL            ·                      {}       false
-character_octet_length               INT                       true         NULL            ·                      {}       false
-character_set_catalog                STRING                    true         NULL            ·                      {}       false
-character_set_schema                 STRING                    true         NULL            ·                      {}       false
-character_set_name                   STRING                    true         NULL            ·                      {}       false
-collation_catalog                    STRING                    true         NULL            ·                      {}       false
-collation_schema                     STRING                    true         NULL            ·                      {}       false
-collation_name                       STRING                    true         NULL            ·                      {}       false
-numeric_precision                    INT                       true         NULL            ·                      {}       false
-numeric_precision_radix              INT                       true         NULL            ·                      {}       false
-numeric_scale                        INT                       true         NULL            ·                      {}       false
-datetime_precision                   INT                       true         NULL            ·                      {}       false
-interval_type                        STRING                    true         NULL            ·                      {}       false
-interval_precision                   STRING                    true         NULL            ·                      {}       false
-type_udt_catalog                     STRING                    true         NULL            ·                      {}       false
-type_udt_schema                      STRING                    true         NULL            ·                      {}       false
-type_udt_name                        STRING                    true         NULL            ·                      {}       false
-scope_catalog                        STRING                    true         NULL            ·                      {}       false
-scope_name                           STRING                    true         NULL            ·                      {}       false
-maximum_cardinality                  INT                       true         NULL            ·                      {}       false
-dtd_identifier                       STRING                    true         NULL            ·                      {}       false
-routine_body                         STRING                    true         NULL            ·                      {}       false
-routine_definition                   STRING                    true         NULL            ·                      {}       false
-external_name                        STRING                    true         NULL            ·                      {}       false
-external_language                    STRING                    true         NULL            ·                      {}       false
-parameter_style                      STRING                    true         NULL            ·                      {}       false
-is_deterministic                     STRING                    true         NULL            ·                      {}       false
-sql_data_access                      STRING                    true         NULL            ·                      {}       false
-is_null_call                         STRING                    true         NULL            ·                      {}       false
-sql_path                             STRING                    true         NULL            ·                      {}       false
-schema_level_routine                 STRING                    true         NULL            ·                      {}       false
-max_dynamic_result_sets              INT                       true         NULL            ·                      {}       false
-is_user_defined_cast                 STRING                    true         NULL            ·                      {}       false
-is_implicitly_invocable              STRING                    true         NULL            ·                      {}       false
-security_type                        STRING                    true         NULL            ·                      {}       false
-to_sql_specific_catalog              STRING                    true         NULL            ·                      {}       false
-to_sql_specific_schema               STRING                    true         NULL            ·                      {}       false
-to_sql_specific_name                 STRING                    true         NULL            ·                      {}       false
-as_locator                           STRING                    true         NULL            ·                      {}       false
-created                              TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
-last_altered                         TIMESTAMP WITH TIME ZONE  true         NULL            ·                      {}       false
-new_savepoint_level                  STRING                    true         NULL            ·                      {}       false
-is_udt_dependent                     STRING                    true         NULL            ·                      {}       false
-result_cast_from_data_type           STRING                    true         NULL            ·                      {}       false
-result_cast_as_locator               STRING                    true         NULL            ·                      {}       false
-result_cast_char_max_length          INT                       true         NULL            ·                      {}       false
-result_cast_char_octet_length        STRING                    true         NULL            ·                      {}       false
-result_cast_char_set_catalog         STRING                    true         NULL            ·                      {}       false
-result_cast_char_set_schema          STRING                    true         NULL            ·                      {}       false
-result_cast_char_set_name            STRING                    true         NULL            ·                      {}       false
-result_cast_collation_catalog        STRING                    true         NULL            ·                      {}       false
-result_cast_collation_schema         STRING                    true         NULL            ·                      {}       false
-result_cast_collation_name           STRING                    true         NULL            ·                      {}       false
-result_cast_numeric_precision        INT                       true         NULL            ·                      {}       false
-result_cast_numeric_precision_radix  INT                       true         NULL            ·                      {}       false
-result_cast_numeric_scale            INT                       true         NULL            ·                      {}       false
-result_cast_datetime_precision       STRING                    true         NULL            ·                      {}       false
-result_cast_interval_type            STRING                    true         NULL            ·                      {}       false
-result_cast_interval_precision       INT                       true         NULL            ·                      {}       false
-result_cast_type_udt_catalog         STRING                    true         NULL            ·                      {}       false
-result_cast_type_udt_schema          STRING                    true         NULL            ·                      {}       false
-result_cast_type_udt_name            STRING                    true         NULL            ·                      {}       false
-result_cast_scope_catalog            STRING                    true         NULL            ·                      {}       false
-result_cast_scope_schema             STRING                    true         NULL            ·                      {}       false
-result_cast_scope_name               STRING                    true         NULL            ·                      {}       false
-result_cast_maximum_cardinality      INT                       true         NULL            ·                      {}       false
-result_cast_dtd_identifier           STRING                    true         NULL            ·                      {}       false
+column_name                          data_type    is_nullable  column_default  generation_expression  indices  is_hidden
+specific_catalog                     STRING       true         NULL            ·                      {}       false
+specific_schema                      STRING       true         NULL            ·                      {}       false
+specific_name                        STRING       true         NULL            ·                      {}       false
+routine_catalog                      STRING       true         NULL            ·                      {}       false
+routine_schema                       STRING       true         NULL            ·                      {}       false
+routine_name                         STRING       true         NULL            ·                      {}       false
+routine_type                         STRING       true         NULL            ·                      {}       false
+module_catalog                       STRING       true         NULL            ·                      {}       false
+module_schema                        STRING       true         NULL            ·                      {}       false
+module_name                          STRING       true         NULL            ·                      {}       false
+udt_catalog                          STRING       true         NULL            ·                      {}       false
+udt_schema                           STRING       true         NULL            ·                      {}       false
+udt_name                             STRING       true         NULL            ·                      {}       false
+data_type                            STRING       true         NULL            ·                      {}       false
+character_maximum_length             INT          true         NULL            ·                      {}       false
+character_octet_length               INT          true         NULL            ·                      {}       false
+character_set_catalog                STRING       true         NULL            ·                      {}       false
+character_set_schema                 STRING       true         NULL            ·                      {}       false
+character_set_name                   STRING       true         NULL            ·                      {}       false
+collation_catalog                    STRING       true         NULL            ·                      {}       false
+collation_schema                     STRING       true         NULL            ·                      {}       false
+collation_name                       STRING       true         NULL            ·                      {}       false
+numeric_precision                    INT          true         NULL            ·                      {}       false
+numeric_precision_radix              INT          true         NULL            ·                      {}       false
+numeric_scale                        INT          true         NULL            ·                      {}       false
+datetime_precision                   INT          true         NULL            ·                      {}       false
+interval_type                        STRING       true         NULL            ·                      {}       false
+interval_precision                   STRING       true         NULL            ·                      {}       false
+type_udt_catalog                     STRING       true         NULL            ·                      {}       false
+type_udt_schema                      STRING       true         NULL            ·                      {}       false
+type_udt_name                        STRING       true         NULL            ·                      {}       false
+scope_catalog                        STRING       true         NULL            ·                      {}       false
+scope_name                           STRING       true         NULL            ·                      {}       false
+maximum_cardinality                  INT          true         NULL            ·                      {}       false
+dtd_identifier                       STRING       true         NULL            ·                      {}       false
+routine_body                         STRING       true         NULL            ·                      {}       false
+routine_definition                   STRING       true         NULL            ·                      {}       false
+external_name                        STRING       true         NULL            ·                      {}       false
+external_language                    STRING       true         NULL            ·                      {}       false
+parameter_style                      STRING       true         NULL            ·                      {}       false
+is_deterministic                     STRING       true         NULL            ·                      {}       false
+sql_data_access                      STRING       true         NULL            ·                      {}       false
+is_null_call                         STRING       true         NULL            ·                      {}       false
+sql_path                             STRING       true         NULL            ·                      {}       false
+schema_level_routine                 STRING       true         NULL            ·                      {}       false
+max_dynamic_result_sets              INT          true         NULL            ·                      {}       false
+is_user_defined_cast                 STRING       true         NULL            ·                      {}       false
+is_implicitly_invocable              STRING       true         NULL            ·                      {}       false
+security_type                        STRING       true         NULL            ·                      {}       false
+to_sql_specific_catalog              STRING       true         NULL            ·                      {}       false
+to_sql_specific_schema               STRING       true         NULL            ·                      {}       false
+to_sql_specific_name                 STRING       true         NULL            ·                      {}       false
+as_locator                           STRING       true         NULL            ·                      {}       false
+created                              TIMESTAMPTZ  true         NULL            ·                      {}       false
+last_altered                         TIMESTAMPTZ  true         NULL            ·                      {}       false
+new_savepoint_level                  STRING       true         NULL            ·                      {}       false
+is_udt_dependent                     STRING       true         NULL            ·                      {}       false
+result_cast_from_data_type           STRING       true         NULL            ·                      {}       false
+result_cast_as_locator               STRING       true         NULL            ·                      {}       false
+result_cast_char_max_length          INT          true         NULL            ·                      {}       false
+result_cast_char_octet_length        STRING       true         NULL            ·                      {}       false
+result_cast_char_set_catalog         STRING       true         NULL            ·                      {}       false
+result_cast_char_set_schema          STRING       true         NULL            ·                      {}       false
+result_cast_char_set_name            STRING       true         NULL            ·                      {}       false
+result_cast_collation_catalog        STRING       true         NULL            ·                      {}       false
+result_cast_collation_schema         STRING       true         NULL            ·                      {}       false
+result_cast_collation_name           STRING       true         NULL            ·                      {}       false
+result_cast_numeric_precision        INT          true         NULL            ·                      {}       false
+result_cast_numeric_precision_radix  INT          true         NULL            ·                      {}       false
+result_cast_numeric_scale            INT          true         NULL            ·                      {}       false
+result_cast_datetime_precision       STRING       true         NULL            ·                      {}       false
+result_cast_interval_type            STRING       true         NULL            ·                      {}       false
+result_cast_interval_precision       INT          true         NULL            ·                      {}       false
+result_cast_type_udt_catalog         STRING       true         NULL            ·                      {}       false
+result_cast_type_udt_schema          STRING       true         NULL            ·                      {}       false
+result_cast_type_udt_name            STRING       true         NULL            ·                      {}       false
+result_cast_scope_catalog            STRING       true         NULL            ·                      {}       false
+result_cast_scope_schema             STRING       true         NULL            ·                      {}       false
+result_cast_scope_name               STRING       true         NULL            ·                      {}       false
+result_cast_maximum_cardinality      INT          true         NULL            ·                      {}       false
+result_cast_dtd_identifier           STRING       true         NULL            ·                      {}       false
 
 query TTTTTTTTTTTTTTIITTTTTTIIIITTTTTTTITTTTTTTTTTTITTTTTTTTTTTTTITTTTTTTIIITTITTTTTTIT colnames
 SELECT * FROM information_schema.routines
