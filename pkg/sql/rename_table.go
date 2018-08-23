@@ -74,20 +74,14 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
 	}
 
-	var prevDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		prevDbDesc, err = ResolveDatabase(ctx, p, oldTn.Catalog(), true /*required*/)
-	})
+	prevDbDesc, err := p.ResolveUncachedDatabase(ctx, oldTn)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if target database exists.
 	// We also look at uncached descriptors here.
-	var targetDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		targetDbDesc, err = ResolveTargetObject(ctx, p, newTn)
-	})
+	targetDbDesc, err := p.ResolveUncachedDatabase(ctx, newTn)
 	if err != nil {
 		return nil, err
 	}
