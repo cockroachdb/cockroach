@@ -51,16 +51,10 @@ type Statistics struct {
 	// a true row count they would be pretty much the same thing.
 	RowCount float64
 
-	// ColStats contains statistics that pertain to individual columns
-	// in an expression or table. It is keyed by column ID, and it is separated
-	// from the MultiColStats to minimize serialization costs and to efficiently
-	// iterate through all single-column stats.
-	ColStats map[opt.ColumnID]*ColumnStatistic
-
-	// MultiColStats contains statistics that pertain to multi-column subsets
-	// of the columns in an expression or table. It is keyed by the column set,
-	// which has been serialized to a string to make it a legal map key.
-	MultiColStats map[string]*ColumnStatistic
+	// ColStats is a collection of statistics that pertain to columns in an
+	// expression or table. It is keyed by a set of one or more columns over which
+	// the statistic is defined.
+	ColStats ColStatsMap
 
 	// Selectivity is a value between 0 and 1 representing the estimated
 	// reduction in number of rows for the top-level operator in this
@@ -68,30 +62,8 @@ type Statistics struct {
 	Selectivity float64
 }
 
-func (s *Statistics) String() string {
-	var buf bytes.Buffer
-
-	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
-	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
-	for _, colStat := range s.ColStats {
-		colStats = append(colStats, *colStat)
-	}
-	for _, colStat := range s.MultiColStats {
-		colStats = append(colStats, *colStat)
-	}
-	sort.Sort(colStats)
-	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
-	}
-	buf.WriteString("]")
-
-	return buf.String()
-}
-
 // Init initializes the data members of Statistics.
 func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
-	s.ColStats = make(map[opt.ColumnID]*ColumnStatistic)
-	s.MultiColStats = make(map[string]*ColumnStatistic)
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = 0
@@ -108,11 +80,8 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 func (s *Statistics) ApplySelectivity(selectivity float64) {
 	if selectivity == 0 {
 		s.RowCount = 0
-		for i := range s.ColStats {
-			s.ColStats[i].DistinctCount = 0
-		}
-		for i := range s.MultiColStats {
-			s.MultiColStats[i].DistinctCount = 0
+		for i, n := 0, s.ColStats.Count(); i < n; i++ {
+			s.ColStats.Get(i).DistinctCount = 0
 		}
 		return
 	}
@@ -121,16 +90,29 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 	s.Selectivity *= selectivity
 
 	// Make sure none of the distinct counts are larger than the row count.
-	for _, colStat := range s.ColStats {
+	for i, n := 0, s.ColStats.Count(); i < n; i++ {
+		colStat := s.ColStats.Get(i)
 		if colStat.DistinctCount > s.RowCount {
 			colStat.DistinctCount = s.RowCount
 		}
 	}
-	for _, colStat := range s.MultiColStats {
-		if colStat.DistinctCount > s.RowCount {
-			colStat.DistinctCount = s.RowCount
-		}
+}
+
+func (s *Statistics) String() string {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	colStats := make(ColumnStatistics, s.ColStats.Count())
+	for i := 0; i < s.ColStats.Count(); i++ {
+		colStats[i] = s.ColStats.Get(i)
 	}
+	sort.Sort(colStats)
+	for _, col := range colStats {
+		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
+	}
+	buf.WriteString("]")
+
+	return buf.String()
 }
 
 // ColumnStatistic is a collection of statistics that applies to a particular
@@ -171,8 +153,8 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
 }
 
-// ColumnStatistics is a slice of ColumnStatistic values.
-type ColumnStatistics []ColumnStatistic
+// ColumnStatistics is a slice of pointers to ColumnStatistic values.
+type ColumnStatistics []*ColumnStatistic
 
 // Len returns the number of ColumnStatistic values.
 func (c ColumnStatistics) Len() int { return len(c) }
