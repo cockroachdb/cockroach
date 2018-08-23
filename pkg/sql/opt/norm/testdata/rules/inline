@@ -207,25 +207,24 @@ project
                 │    ├── when [type=int, outer=(1,2), side-effects]
                 │    │    ├── c1 IS NOT NULL [type=bool, outer=(2)]
                 │    │    └── function: extract [type=int, outer=(1), side-effects]
-                │    │         ├── cast: TEXT [type=string, outer=(1)]
-                │    │         │    └── case [type=string, outer=(1)]
-                │    │         │         ├── true [type=bool]
-                │    │         │         ├── when [type=string, outer=(1)]
-                │    │         │         │    ├── exists [type=bool, outer=(1)]
-                │    │         │         │    │    └── limit
-                │    │         │         │    │         ├── columns: config_yaml:5(bytes!null)
-                │    │         │         │    │         ├── outer: (1)
-                │    │         │         │    │         ├── cardinality: [0 - 52]
-                │    │         │         │    │         ├── select
-                │    │         │         │    │         │    ├── columns: config_yaml:5(bytes!null)
-                │    │         │         │    │         │    ├── outer: (1)
-                │    │         │         │    │         │    ├── scan zones
-                │    │         │         │    │         │    │    └── columns: config_yaml:5(bytes!null)
-                │    │         │         │    │         │    └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-                │    │         │         │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-                │    │         │         │    │         └── const: 52 [type=int]
-                │    │         │         │    └── function: version [type=string]
-                │    │         │         └── function: version [type=string]
+                │    │         ├── case [type=string, outer=(1)]
+                │    │         │    ├── true [type=bool]
+                │    │         │    ├── when [type=string, outer=(1)]
+                │    │         │    │    ├── exists [type=bool, outer=(1)]
+                │    │         │    │    │    └── limit
+                │    │         │    │    │         ├── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         ├── outer: (1)
+                │    │         │    │    │         ├── cardinality: [0 - 52]
+                │    │         │    │    │         ├── select
+                │    │         │    │    │         │    ├── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         │    ├── outer: (1)
+                │    │         │    │    │         │    ├── scan zones
+                │    │         │    │    │         │    │    └── columns: config_yaml:5(bytes!null)
+                │    │         │    │    │         │    └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │    │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │    │    │         └── const: 52 [type=int]
+                │    │         │    │    └── function: version [type=string]
+                │    │         │    └── function: version [type=string]
                 │    │         └── function: current_date [type=date, side-effects]
                 │    └── const: 1 [type=int]
                 └── const: 1 [type=int]

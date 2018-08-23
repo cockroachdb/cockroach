@@ -884,7 +884,7 @@ inner-join
  │    │    ├── fd: ()-->(1)
  │    │    └── (1.0,) [type=tuple{decimal}]
  │    └── filters [type=bool, outer=(1)]
- │         └── column1::TEXT = '1.0' [type=bool, outer=(1)]
+ │         └── column1::STRING = '1.0' [type=bool, outer=(1)]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── column1 = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
 
