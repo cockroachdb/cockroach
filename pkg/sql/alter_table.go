@@ -265,7 +265,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
+					if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 						return err
 					}
 				}
