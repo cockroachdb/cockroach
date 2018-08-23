@@ -625,12 +625,12 @@ COPY t (a, b, c) FROM stdin;
 
 const (
 	testPgdumpCreateCities = `CREATE TABLE cities (
-	city STRING(80) NOT NULL,
+	city VARCHAR(80) NOT NULL,
 	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
 	FAMILY "primary" (city)
 )`
 	testPgdumpCreateWeather = `CREATE TABLE weather (
-	city STRING(80) NULL,
+	city VARCHAR(80) NULL,
 	temp_lo INTEGER NULL,
 	temp_hi INTEGER NULL,
 	prcp FLOAT4 NULL,

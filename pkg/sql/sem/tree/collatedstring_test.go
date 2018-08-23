@@ -30,9 +30,9 @@ func TestCastToCollatedString(t *testing.T) {
 	}{
 		{coltypes.TCollatedString{Locale: "de"}, "test"},
 		{coltypes.TCollatedString{Locale: "en"}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 5}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 4}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 3}, "tes"},
+		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 5}}, "test"},
+		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 4}}, "test"},
+		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 3}}, "tes"},
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {

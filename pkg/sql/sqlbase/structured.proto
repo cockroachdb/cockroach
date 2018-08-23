@@ -47,6 +47,11 @@ import "gogoproto/gogo.proto";
 // |                                |                |                  |           |       |                   |
 // | STRING                         | STRING         | NONE             | 0         | 0     |                   |
 // | STRING(N)                      | STRING         | NONE             | 0         | N     |                   |
+// | VARCHAR                        | STRING         | VARCHAR          | 0         | 0     |                   |
+// | VARCHAR(N)                     | STRING         | VARCHAR          | 0         | N     |                   |
+// | CHAR                           | STRING         | CHAR             | 0         | 1     |                   |
+// | CHAR(N)                        | STRING         | CHAR             | 0         | N     |                   |
+// | "char"                         | STRING         | QCHAR            | 0         | 0     |                   |
 // |                                |                |                  |           |       |                   |
 // | COLLATEDSTRING                 | COLLATEDSTRING | NONE             | 0         | 0     | also uses Locale  |
 // | COLLATEDSTRING(N)              | COLLATEDSTRING | NONE             | 0         | N     | also uses Locale  |
@@ -136,7 +141,7 @@ message ColumnType {
     ARRAY = 15;
     INET = 16;
     TIME = 17;
-    JSON = 18;
+    JSONB = 18;
     reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
 
@@ -152,6 +157,9 @@ message ColumnType {
     reserved 4;
     REAL = 5;
     DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+    VARCHAR = 7;
+    CHAR = 8;
+    QCHAR = 9;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];

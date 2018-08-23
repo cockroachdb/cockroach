@@ -137,9 +137,11 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 
 	case *coltypes.TString:
 		base.Width = int32(t.N)
+		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
 
 	case *coltypes.TCollatedString:
 		base.Width = int32(t.N)
+		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
 
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
@@ -190,6 +192,37 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.BigInt.Name:   ColumnType_BIGINT,
 }
 
+// coltypeStringVariantToVisibleType encodes the visible type of a
+// coltypes.TString/TCollatedString variant.
+func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) ColumnType_VisibleType {
+	switch c {
+	case coltypes.TStringVariantVARCHAR:
+		return ColumnType_VARCHAR
+	case coltypes.TStringVariantCHAR:
+		return ColumnType_CHAR
+	case coltypes.TStringVariantQCHAR:
+		return ColumnType_QCHAR
+	default:
+		return ColumnType_NONE
+	}
+}
+
+// stringTypeName returns the visible type name for the given
+// STRING/COLLATEDSTRING column type.
+func (c *ColumnType) stringTypeName() string {
+	typName := "STRING"
+	switch c.VisibleType {
+	case ColumnType_VARCHAR:
+		typName = "VARCHAR"
+	case ColumnType_CHAR:
+		typName = "CHAR"
+	case ColumnType_QCHAR:
+		// Yes, that's the name. The ways of PostgreSQL are inscrutable.
+		typName = `"char"`
+	}
+	return typName
+}
+
 // SQLString returns the CockroachDB native SQL string that can be
 // used to reproduce the ColumnType (via parsing -> coltypes.T ->
 // CastTargetToColumnType -> PopulateAttrs).
@@ -200,10 +233,21 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 // See also InformationSchemaVisibleType() below.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
-	case ColumnType_STRING:
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+		typName := c.stringTypeName()
+		// In general, if there is a specified width we want to print it next
+		// to the type. However, in the specific case of CHAR, the default
+		// is 1 and the width should be omitted in that case.
+		if c.Width > 0 && !(c.VisibleType == ColumnType_CHAR && c.Width == 1) {
+			typName = fmt.Sprintf("%s(%d)", typName, c.Width)
 		}
+		if c.SemanticType == ColumnType_COLLATEDSTRING {
+			if c.Locale == nil {
+				panic("locale is required for COLLATEDSTRING")
+			}
+			typName = fmt.Sprintf("%s COLLATE %s", typName, *c.Locale)
+		}
+		return typName
 	case ColumnType_FLOAT:
 		const realName = "FLOAT4"
 		const doubleName = "FLOAT8"
@@ -229,16 +273,6 @@ func (c *ColumnType) SQLString() string {
 			}
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
-	case ColumnType_TIMESTAMPTZ:
-		return "TIMESTAMP WITH TIME ZONE"
-	case ColumnType_COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
-		}
-		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_ARRAY:
 		return c.elementColumnType().SQLString() + "[]"
 	}
@@ -268,8 +302,15 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 		return c.VisibleType.String()
 
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
-		// TODO(knz): this misses the distinction between text, varchar,
-		// char and "char".
+		switch c.VisibleType {
+		case ColumnType_VARCHAR:
+			return "character varying"
+		case ColumnType_CHAR:
+			return "character"
+		case ColumnType_QCHAR:
+			// Not the same as "character". Beware.
+			return "char"
+		}
 		return "text"
 
 	case ColumnType_FLOAT:
@@ -290,8 +331,6 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 		return "timestamp with time zone"
 	case ColumnType_BYTES:
 		return "bytea"
-	case ColumnType_JSON:
-		return "jsonb"
 	case ColumnType_NULL:
 		return "unknown"
 	case ColumnType_TUPLE:
@@ -467,7 +506,7 @@ func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 	case types.OidVector:
 		return ColumnType_OIDVECTOR, nil
 	case types.JSON:
-		return ColumnType_JSON, nil
+		return ColumnType_JSONB, nil
 	default:
 		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
@@ -513,7 +552,7 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 		return types.UUID
 	case ColumnType_INET:
 		return types.INet
-	case ColumnType_JSON:
+	case ColumnType_JSONB:
 		return types.JSON
 	case ColumnType_TUPLE:
 		return types.FamTuple
@@ -573,12 +612,17 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 // specified column type. Used by INSERT and UPDATE.
 func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 	switch typ.SemanticType {
-	case ColumnType_STRING:
+	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+		var sv string
 		if v, ok := tree.AsDString(val); ok {
-			if typ.Width > 0 && utf8.RuneCountInString(string(v)) > int(typ.Width) {
-				return fmt.Errorf("value too long for type %s (column %q)",
-					typ.SQLString(), name)
-			}
+			sv = string(v)
+		} else if v, ok := val.(*tree.DCollatedString); ok {
+			sv = v.Contents
+		}
+
+		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
+			return fmt.Errorf("value too long for type %s (column %q)",
+				typ.SQLString(), name)
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {

@@ -109,7 +109,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	case ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
-	case ColumnType_JSON:
+	case ColumnType_JSONB:
 		j, err := json.Random(20, rng)
 		if err != nil {
 			return nil
