@@ -175,6 +175,15 @@ func ResolveTargetObject(
 	return descI.(*DatabaseDescriptor), nil
 }
 
+func (p *planner) ResolveUncachedDatabase(
+	ctx context.Context, tn *ObjectName,
+) (res *UncachedDatabaseDescriptor, err error) {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		res, err = ResolveTargetObject(ctx, p, tn)
+	})
+	return res, err
+}
+
 // requiredType can be passed to the ResolveExistingObject function to
 // require the returned descriptor to be of a specific type.
 type requiredType int

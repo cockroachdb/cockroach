@@ -53,10 +53,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		return nil, err
 	}
 
-	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveTargetObject(ctx, p, tn)
-	})
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, tn)
 	if err != nil {
 		return nil, err
 	}
