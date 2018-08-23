@@ -84,8 +84,8 @@ func InitFlags(
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
-	flag.Var(verbosity, VerbosityName, "log level for V logs")
-	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging")
+	flag.Var(verbosity, VerbosityName, "log level for V logs (significantly increases log output)")
+	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging (significantly hurts performance)")
 	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
