@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
@@ -188,26 +187,6 @@ func EncodeColumns(
 		}
 	}
 	return key, containsNull, nil
-}
-
-// EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
-func EncodeDatum(b []byte, d tree.Datum) ([]byte, error) {
-	if values, ok := d.(*tree.DTuple); ok {
-		return EncodeDatums(b, values.D)
-	}
-	return EncodeTableKey(b, d, encoding.Ascending)
-}
-
-// EncodeDatums encodes a Datums (order-preserving).
-func EncodeDatums(b []byte, d tree.Datums) ([]byte, error) {
-	for _, val := range d {
-		var err error
-		b, err = EncodeDatum(b, val)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return b, nil
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.

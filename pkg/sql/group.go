@@ -344,7 +344,7 @@ func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
 	bucket := n.run.scratch
 	for _, idx := range n.groupCols {
 		var err error
-		bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
+		bucket, err = sqlbase.EncodeDatumKeyAscending(bucket, values[idx])
 		if err != nil {
 			return err
 		}
@@ -860,7 +860,7 @@ func (a *aggregateFuncHolder) add(
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
 	if a.run.seen != nil {
-		encoded, err := sqlbase.EncodeDatum(bucket, d)
+		encoded, err := sqlbase.EncodeDatumKeyAscending(bucket, d)
 		if err != nil {
 			return err
 		}
