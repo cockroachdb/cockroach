@@ -103,8 +103,8 @@ func init() {
 }
 
 var profileTime = flag.Duration("profile-time", 10*time.Second, "duration of profiling run")
-var profileType = flag.String("profile-type", "ExecOpt", "Parse, OptBuild, Normalize, Explore, ExecPlan, ExecOpt")
-var profileQuery = flag.String("profile-query", "kv-test", "name of query to run")
+var profileType = flag.String("profile-type", "Explore", "Parse, OptBuild, Normalize, Explore, ExecPlan, ExecOpt")
+var profileQuery = flag.String("profile-query", "kv-read", "name of query to run")
 
 // TestCPUProfile executes the configured profileQuery in a loop in order to
 // profile its CPU usage. Rather than allow the Go testing infrastructure to
