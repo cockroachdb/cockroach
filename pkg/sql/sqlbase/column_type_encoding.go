@@ -554,6 +554,9 @@ func EncodeDatumsKeyAscending(b []byte, d tree.Datums) ([]byte, error) {
 // MarshalColumnValue produces the value encoding of the given datum,
 // constrained by the given column type, into a roachpb.Value.
 //
+// This is used when when the table format does not use column
+// families, such as pre-2.0 tables and some system tables.
+//
 // If val's type is incompatible with col, or if col's type is not yet
 // implemented by this function, an error is returned.
 func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
