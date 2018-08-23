@@ -38,14 +38,9 @@ func (p *planner) showTableDetails(
 		return nil, err
 	}
 
-	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
-	})
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, tn, true /*required*/, anyDescType)
 	if err != nil {
 		return nil, err
 	}
