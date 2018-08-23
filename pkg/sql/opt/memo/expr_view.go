@@ -238,7 +238,7 @@ func (ev ExprView) FormatString(flags ExprFmtFlags) string {
 // This is used for testing.
 func (ev ExprView) RequestColStat(evalCtx *tree.EvalContext, cols opt.ColSet) {
 	var sb statisticsBuilder
-	sb.init(evalCtx, ev.Metadata(), &keyBuffer{})
+	sb.init(evalCtx, ev.Metadata())
 	sb.colStat(cols, ev)
 }
 
