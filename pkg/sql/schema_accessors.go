@@ -42,6 +42,9 @@ type (
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	DatabaseDescriptor = sqlbase.DatabaseDescriptor
+	// UncachedDatabaseDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	UncachedDatabaseDescriptor = sqlbase.DatabaseDescriptor
 	// ObjectDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ObjectDescriptor = sqlbase.TableDescriptor
