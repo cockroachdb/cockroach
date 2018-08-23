@@ -438,6 +438,10 @@ func (r *Replica) GetSnapshot(
 	return &snapData, nil
 }
 
+func (snap *OutgoingSnapshot) String() string {
+	return fmt.Sprintf("%s snapshot %s at applied index %d", snap.snapType, snap.SnapUUID.Short(), snap.State.RaftAppliedIndex)
+}
+
 // OutgoingSnapshot contains the data required to stream a snapshot to a
 // recipient. Once one is created, it needs to be closed via Close() to prevent
 // resource leakage.
@@ -535,8 +539,6 @@ func snapshot(
 	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
-	log.Infof(ctx, "generated %s snapshot %s at index %d",
-		snapType, snapUUID.Short(), appliedIndex)
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
