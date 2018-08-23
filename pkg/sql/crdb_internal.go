@@ -65,6 +65,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalGossipNodesTable,
 		crdbInternalGossipAlertsTable,
 		crdbInternalGossipLivenessTable,
+		crdbInternalGossipNetworkTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
 		crdbInternalKVNodeStatusTable,
@@ -1926,7 +1927,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts	"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts"); err != nil {
 			return err
 		}
 
@@ -1972,6 +1973,33 @@ CREATE TABLE crdb_internal.gossip_alerts (
 				); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNetwork exposes the local view of the gossip network (i.e
+// the gossip client connections from source_id node to target_id node).
+var crdbInternalGossipNetworkTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_network (
+  source_id       INT NOT NULL,    -- source node of a gossip connection
+  target_id       INT NOT NULL     -- target node of a gossip connection
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_network"); err != nil {
+			return err
+		}
+
+		c := p.ExecCfg().Gossip.Connectivity()
+		for _, conn := range c.ClientConns {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(conn.SourceID)),
+				tree.NewDInt(tree.DInt(conn.TargetID)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil
