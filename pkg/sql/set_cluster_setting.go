@@ -103,8 +103,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		}
 		reportedValue = "DEFAULT"
 	} else {
+		value, err := n.value.Eval(params.p.EvalContext())
+		if err != nil {
+			return err
+		}
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := params.p.toSettingString(params.ctx, n.st, n.name, n.setting, n.value)
+		encoded, err := params.p.toSettingString(params.ctx, n.st, n.name, n.setting, value)
 		if err != nil {
 			return err
 		}
@@ -115,7 +119,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
+		reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 	}
 
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
@@ -133,17 +137,8 @@ func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
 func (p *planner) toSettingString(
-	ctx context.Context,
-	st *cluster.Settings,
-	name string,
-	setting settings.Setting,
-	val tree.TypedExpr,
+	ctx context.Context, st *cluster.Settings, name string, setting settings.Setting, d tree.Datum,
 ) (string, error) {
-	d, err := val.Eval(p.EvalContext())
-	if err != nil {
-		return "", err
-	}
-
 	switch setting := setting.(type) {
 	case *settings.StringSetting:
 		if s, ok := d.(*tree.DString); ok {
