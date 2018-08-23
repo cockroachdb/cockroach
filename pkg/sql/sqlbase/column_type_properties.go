@@ -51,7 +51,18 @@ import (
 // for example the final required precision for DECIMAL values.
 //
 
-// DatumTypeToColumnType converts a parser Type to a ColumnType.
+// DatumTypeToColumnType converts a types.T (datum type) to a
+// ColumnType.
+//
+// When working from a coltypes.T (i.e. a type in CREATE/ALTER TABLE)
+// this must be used in combination with PopulateTypeAttrs() below.
+// For example:
+//
+//	coltyp := <coltypes.T>
+//	colDatumType := coltypes.CastTargetToDatumType(coltyp)
+//	columnTyp, _ := DatumTypeToColumnType(colDatumType)
+//	columnTyp, _ = PopulateTypeAttrs(columnTyp, coltyp)
+//
 func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 	var ctyp ColumnType
 	switch t := ptyp.(type) {
@@ -91,10 +102,14 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 	return ctyp, nil
 }
 
-// PopulateTypeAttrs set other attributes of col.Type and performs type-specific verification.
+// PopulateTypeAttrs set other attributes of the ColumnType from a
+// coltypes.T and performs type-specific verifications.
+//
+// This must be used on ColumnTypes produced from
+// DatumTypeToColumnType if the origin of the type was a coltypes.T
+// (e.g. via CastTargetToDatumType).
 func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
-	case *coltypes.TBool:
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
 		if val, present := aliasToVisibleTypeMap[t.Name]; present {
@@ -110,7 +125,6 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	case *coltypes.TDecimal:
 		base.Width = int32(t.Scale)
 		base.Precision = int32(t.Prec)
-
 		switch {
 		case base.Precision == 0 && base.Width > 0:
 			// TODO (seif): Find right range for error message.
@@ -119,20 +133,13 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 			return ColumnType{}, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
 				base.Width, base.Precision)
 		}
-	case *coltypes.TDate:
-	case *coltypes.TTime:
-	case *coltypes.TTimestamp:
-	case *coltypes.TTimestampTZ:
-	case *coltypes.TInterval:
-	case *coltypes.TUUID:
-	case *coltypes.TIPAddr:
-	case *coltypes.TJSON:
+
 	case *coltypes.TString:
 		base.Width = int32(t.N)
-	case *coltypes.TName:
-	case *coltypes.TBytes:
+
 	case *coltypes.TCollatedString:
 		base.Width = int32(t.N)
+
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
@@ -140,13 +147,26 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		if err != nil {
 			return ColumnType{}, err
 		}
+
 	case *coltypes.TVector:
 		switch t.ParamType.(type) {
 		case *coltypes.TInt, *coltypes.TOid:
 		default:
 			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}
+
+	case *coltypes.TBool:
+	case *coltypes.TBytes:
+	case *coltypes.TDate:
+	case *coltypes.TIPAddr:
+	case *coltypes.TInterval:
+	case *coltypes.TJSON:
+	case *coltypes.TName:
 	case *coltypes.TOid:
+	case *coltypes.TTime:
+	case *coltypes.TTimestamp:
+	case *coltypes.TTimestampTZ:
+	case *coltypes.TUUID:
 	default:
 		return ColumnType{}, errors.Errorf("unexpected type %T", t)
 	}
@@ -156,6 +176,9 @@ func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 // aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
 // so that the alias is persisted. When adding new column type aliases or new
 // VisibleType variants, consider adding to this mapping as well.
+//
+// This is used by PopulateTypeAttrs when propagating a coltypes.T
+// specification to a ColumnType suitable in a descriptor.
 var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.Int2.Name:     ColumnType_SMALLINT,
 	coltypes.Int4.Name:     ColumnType_INTEGER,
@@ -166,7 +189,19 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.BigInt.Name:   ColumnType_BIGINT,
 }
 
-// SQLString returns the SQL string corresponding to the type.
+// SQLString returns the CockroachDB native SQL string that can be
+// used to reproduce the ColumnType (via parsing -> coltypes.T ->
+// CastTargetToColumnType -> PopulateAttrs).
+//
+// Is is used in error messages and also to produce the output
+// of SHOW CREATE.
+//
+// TODO(knz): This is currently also used for
+// information_schema.columns and produces invalid/incompatible values
+// in that context. Either the standard names of the strings produced
+// by SQLString() here must become those expected by users of
+// information_schema.columns, or another function must be provided
+// for the information schema instead.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
 	case ColumnType_STRING:
@@ -217,9 +252,15 @@ func (c *ColumnType) SQLString() string {
 	return c.SemanticType.String()
 }
 
-// MaxCharacterLength returns the declared maximum length of characters if the
-// ColumnType is a character or bit string data type. Returns false if the data
-// type is not a character or bit string, or if the string's length is not bounded.
+// MaxCharacterLength returns the declared maximum length of
+// characters if the ColumnType is a character or bit string data
+// type. Returns false if the data type is not a character or bit
+// string, or if the string's length is not bounded.
+//
+// This is used to populate information_schema.columns.character_maximum_length;
+// do not modify this function unless you also check that the values
+// generated in information_schema are compatible with client
+// expectations.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
@@ -230,9 +271,15 @@ func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	return 0, false
 }
 
-// MaxOctetLength returns the maximum the maximum possible length in octets of a
-// datum if the ColumnType is a character string. Returns false if the data type
-// is not a character string, or if the string's length is not bounded.
+// MaxOctetLength returns the maximum possible length in
+// octets of a datum if the ColumnType is a character string. Returns
+// false if the data type is not a character string, or if the
+// string's length is not bounded.
+//
+// This is used to populate information_schema.columns.character_octet_length;
+// do not modify this function unless you also check that the values
+// generated in information_schema are compatible with client
+// expectations.
 func (c *ColumnType) MaxOctetLength() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
@@ -246,6 +293,11 @@ func (c *ColumnType) MaxOctetLength() (int32, bool) {
 // NumericPrecision returns the declared or implicit precision of numeric
 // data types. Returns false if the data type is not numeric, or if the precision
 // of the numeric type is not bounded.
+//
+// This is used to populate information_schema.columns.numeric_precision;
+// do not modify this function unless you also check that the values
+// generated in information_schema are compatible with client
+// expectations.
 func (c *ColumnType) NumericPrecision() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
@@ -273,8 +325,13 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 	return 0, false
 }
 
-// NumericPrecisionRadix returns implicit precision radix of numeric
-// data types. Returns false if the data type is not numeric.
+// NumericPrecisionRadix returns the implicit precision radix of
+// numeric data types. Returns false if the data type is not numeric.
+//
+// This is used to populate information_schema.columns.numeric_precision_radix;
+// do not modify this function unless you also check that the values
+// generated in information_schema are compatible with client
+// expectations.
 func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
@@ -290,6 +347,11 @@ func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 // NumericScale returns the declared or implicit precision of exact numeric
 // data types. Returns false if the data type is not an exact numeric, or if the
 // scale of the exact numeric type is not bounded.
+//
+// This is used to populate information_schema.columns.numeric_scale;
+// do not modify this function unless you also check that the values
+// generated in information_schema are compatible with client
+// expectations.
 func (c *ColumnType) NumericScale() (int32, bool) {
 	switch c.SemanticType {
 	case ColumnType_INT:
@@ -303,6 +365,13 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 }
 
 // DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
+//
+// This function is for internal use in this package and only exported
+// for testing in pgwire. Avoid using directly!
+//
+// This is mainly used by DatumTypeToColumnType() above; it is also
+// used to derive the semantic type of array elements and the
+// determination of DatumTypeHasCompositeKeyEncoding().
 func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
 	case types.Bool:
@@ -357,6 +426,9 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 	}
 }
 
+// columnSemanticTypeToDatumType determines a types.T that can be used
+// to instantiate an in-memory representation of values for the given
+// column type.
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
 	case ColumnType_BOOL:
@@ -408,8 +480,10 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 	return nil
 }
 
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
+// ToDatumType converts the ColumnType to a types.T (type of in-memory
+// representations). It returns nil if there is no such type.
+//
+// This is a lossy conversion: some type attributes are not preserved.
 func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
@@ -438,9 +512,9 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 	return res
 }
 
-// CheckValueWidth checks that the width (for strings, byte arrays, and
-// bit string) and scale (for decimals) of the value fits the specified
-// column type. Used by INSERT and UPDATE.
+// CheckValueWidth checks that the width (for strings, byte arrays,
+// and bit strings) and scale (for decimals) of the value fits the
+// specified column type. Used by INSERT and UPDATE.
 func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 	switch typ.SemanticType {
 	case ColumnType_STRING:
@@ -482,6 +556,12 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 	return nil
 }
 
+// elementColumnType works on a ColumnType with semantic type ARRAY
+// and retrieves the ColumnType of the elements of the array.
+//
+// This is used by CheckValueWidth() and SQLType().
+//
+// TODO(knz): make this return a bool and avoid a heap allocation.
 func (c *ColumnType) elementColumnType() *ColumnType {
 	if c.SemanticType != ColumnType_ARRAY {
 		return nil
