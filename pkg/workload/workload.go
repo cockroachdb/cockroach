@@ -27,11 +27,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -374,72 +374,70 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	type pair struct {
 		lo, hi int
 	}
-	splitCh := make(chan pair, concurrency)
-	splitCh <- pair{0, len(splitPoints)}
-	doneCh := make(chan struct{})
-	errCh := make(chan error)
+	partCh := make(chan pair, len(splitPoints)/2+1)
+	partCh <- pair{0, len(splitPoints)}
+	splitCh := make(chan string)
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
-	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(splitCh)
+		for count := 1; len(partCh) > 0; count++ {
+			p := <-partCh
+			m := (p.lo + p.hi) / 2
+			split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
-		var buf bytes.Buffer
-		go func() {
-			defer wg.Done()
-			for {
-				var p pair
-				select {
-				case p = <-splitCh:
-				case <-doneCh:
-					return
+			select {
+			case splitCh <- split:
+				if count%1000 == 0 {
+					log.Infof(ctx, "performing split %d of %d", count, len(splitPoints))
 				}
-				m := (p.lo + p.hi) / 2
-				split := strings.Join(StringTuple(splitPoints[m]), `,`)
-
-				buf.Reset()
-				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
-				if _, err := db.Exec(buf.String()); err != nil {
-					errCh <- errors.Wrap(err, buf.String())
-					return
-				}
-
-				buf.Reset()
-				fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
-					table.Name, split, split)
-				if _, err := db.Exec(buf.String()); err != nil {
-					// SCATTER can collide with normal replicate queue
-					// operations and fail spuriously, so only print the
-					// error.
-					log.Warningf(ctx, `%s: %s`, buf.String(), err)
-				}
-
-				errCh <- nil
-				go func() {
-					if p.lo < m {
-						splitCh <- pair{p.lo, m}
-					}
-					if m+1 < p.hi {
-						splitCh <- pair{m + 1, p.hi}
-					}
-				}()
+			case <-ctx.Done():
+				return ctx.Err()
 			}
-		}()
-	}
 
-	defer func() {
-		close(doneCh)
-		wg.Wait()
-	}()
-	for finished := 1; finished <= len(splitPoints); finished++ {
-		if err := <-errCh; err != nil {
-			return err
+			if p.lo < m {
+				partCh <- pair{p.lo, m}
+			}
+			if m+1 < p.hi {
+				partCh <- pair{m + 1, p.hi}
+			}
 		}
-		if finished%1000 == 0 {
-			log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
-		}
+		return nil
+	})
+	for i := 0; i < concurrency; i++ {
+		g.GoCtx(func(ctx context.Context) error {
+			var buf bytes.Buffer
+			for {
+				select {
+				case split, ok := <-splitCh:
+					if !ok {
+						return nil
+					}
+
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						return errors.Wrap(err, buf.String())
+					}
+
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
+						table.Name, split, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						// SCATTER can collide with normal replicate queue
+						// operations and fail spuriously, so only print the
+						// error.
+						log.Warningf(ctx, `%s: %s`, buf.String(), err)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+			}
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 // StringTuple returns the given datums as strings suitable for use in directly
