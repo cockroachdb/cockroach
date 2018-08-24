@@ -9,22 +9,6 @@
 [EliminateSelect, Normalize]
 (Select $input:* (True)) => $input
 
-# EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
-# Filters operator. This allows other rules to rely upon the presence of the
-# Filters when matching. See comment at top of bool.opt for more details. This
-# rule is a special-case of the EnsureSelectFilters rule, for performance
-# reasons (no need to construct a new conditions list) in a common case.
-[EnsureSelectFiltersAnd, Normalize]
-(Select
-    $input:*
-    (And $conditions:*)
-)
-=>
-(Select
-    $input
-    (Filters $conditions)
-)
-
 # EnsureSelectFilters adds a Filters operator to a Select's filter condition
 # if it does not already exist. This allows other rules to rely upon the
 # presence of the Filters when matching. See comment at top of bool.opt for
