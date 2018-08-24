@@ -17,6 +17,7 @@ package testutils
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"sort"
 	"strconv"
@@ -43,6 +44,14 @@ import (
 
 // RuleSet efficiently stores an unordered set of RuleNames.
 type RuleSet = util.FastIntSet
+
+var (
+	ruleProfile = flag.Bool(
+		"ruleprofile", false,
+		"print out a line containing the name of the matched rule every time a rule "+
+			"is matched.",
+	)
+)
 
 // OptTester is a helper for testing the various optimizer components. It
 // contains the boiler-plate code for the following useful tasks:
@@ -457,6 +466,13 @@ func (ot *OptTester) OptBuild() (memo.ExprView, error) {
 	return ot.optimizeExpr(o)
 }
 
+func ruleMatched(ruleName opt.RuleName) {
+	flag.Parse()
+	if *ruleProfile {
+		fmt.Printf("Rule matched: %s\n", ruleName)
+	}
+}
+
 // OptNorm constructs an opt expression tree for the SQL query, with all
 // normalization transformations applied to it. The normalized output of the
 // optbuilder is the final expression tree.
@@ -470,6 +486,7 @@ func (ot *OptTester) OptNorm() (memo.ExprView, error) {
 			return false
 		}
 		ot.seenRules.Add(int(ruleName))
+		ruleMatched(ruleName)
 		return true
 	})
 	return ot.optimizeExpr(o)
@@ -485,6 +502,7 @@ func (ot *OptTester) Optimize() (memo.ExprView, error) {
 			return false
 		}
 		ot.seenRules.Add(int(ruleName))
+		ruleMatched(ruleName)
 		return true
 	})
 	return ot.optimizeExpr(o)
@@ -499,6 +517,10 @@ func (ot *OptTester) Memo() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		ruleMatched(ruleName)
+		return true
+	})
 	o.Optimize(root, required)
 	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
 }
