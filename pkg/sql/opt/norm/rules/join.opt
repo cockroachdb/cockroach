@@ -3,40 +3,6 @@
 # =============================================================================
 
 
-# EnsureJoinFiltersAnd replaces an And operator in a Join's On condition with
-# the Filters operator. This allows other rules to rely upon the presence of
-# the Filters when matching. See comment at top of bool.opt for more details.
-# This rule is a special-case of the EnsureJoinFilters rule, for performance
-# reasons (no need to construct a new conditions list) in a common case.
-[EnsureJoinFiltersAnd, Normalize]
-(Join
-    $left:*
-    $right:*
-    (And $conditions:*)
-)
-=>
-((OpName)
-    $left
-    $right
-    (Filters $conditions)
-)
-
-# EnsureJoinFilters adds a Filters operator to a Join's On condition if it does
-# not already exist. This allows other rules to rely upon the presence of the
-# Filters when matching. See comment at top of bool.opt for more details.
-[EnsureJoinFilters, Normalize]
-(Join
-    $left:*
-    $right:*
-    $filter:^(Filters | And | True | False)
-)
-=>
-((OpName)
-    $left
-    $right
-    (Filters [ $filter ])
-)
-
 # PushFilterIntoJoinLeftAndRight pushes a filter into both the left and right
 # sides of an InnerJoin or SemiJoin if it can be mapped to use the columns of
 # both sides. For example, consider this query:

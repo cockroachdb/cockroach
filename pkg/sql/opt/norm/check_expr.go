@@ -82,6 +82,24 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 				panic(fmt.Sprintf("group-by contains %s", childOp))
 			}
 		}
+
+	case opt.SelectOp:
+		filter := ev.Child(1)
+		switch filter.Operator() {
+		case opt.FiltersOp, opt.TrueOp:
+		default:
+			panic(fmt.Sprintf("select contains %s", filter.Operator()))
+		}
+
+	default:
+		if ev.IsJoin() {
+			on := ev.Child(2)
+			switch on.Operator() {
+			case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
+			default:
+				panic(fmt.Sprintf("join contains %s", on.Operator()))
+			}
+		}
 	}
 
 	f.checkExprOrdering(ev)
