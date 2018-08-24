@@ -501,7 +501,7 @@ func mysqlColToCockroach(
 	case mysqltypes.VarChar:
 		def.Type = strOpt(coltypes.VarChar, length)
 	case mysqltypes.Text:
-		def.Type = strOpt(coltypes.Text, length)
+		def.Type = strOpt(coltypes.String, length)
 
 	case mysqltypes.Blob:
 		def.Type = coltypes.Bytes
@@ -511,25 +511,25 @@ func mysqlColToCockroach(
 		def.Type = coltypes.Bytes
 
 	case mysqltypes.Int8:
-		def.Type = coltypes.SmallInt
+		def.Type = coltypes.Int2
 	case mysqltypes.Uint8:
-		def.Type = coltypes.SmallInt
+		def.Type = coltypes.Int2
 	case mysqltypes.Int16:
-		def.Type = coltypes.SmallInt
+		def.Type = coltypes.Int2
 	case mysqltypes.Uint16:
-		def.Type = coltypes.SmallInt
+		def.Type = coltypes.Int2
 	case mysqltypes.Int24:
-		def.Type = coltypes.Int
+		def.Type = coltypes.Int4
 	case mysqltypes.Uint24:
-		def.Type = coltypes.Int
+		def.Type = coltypes.Int4
 	case mysqltypes.Int32:
-		def.Type = coltypes.Int
+		def.Type = coltypes.Int4
 	case mysqltypes.Uint32:
-		def.Type = coltypes.Int
+		def.Type = coltypes.Int4
 	case mysqltypes.Int64:
-		def.Type = coltypes.BigInt
+		def.Type = coltypes.Int8
 	case mysqltypes.Uint64:
-		def.Type = coltypes.BigInt
+		def.Type = coltypes.Int8
 
 	case mysqltypes.Float32:
 		def.Type = coltypes.Float4
@@ -548,7 +548,7 @@ func mysqlColToCockroach(
 	case mysqltypes.Datetime:
 		def.Type = coltypes.TimestampWithTZ
 	case mysqltypes.Year:
-		def.Type = coltypes.SmallInt
+		def.Type = coltypes.Int2
 
 	case mysqltypes.Enum:
 		def.Type = coltypes.String
@@ -599,7 +599,7 @@ func strOpt(in *coltypes.TString, i int) coltypes.T {
 		return in
 	}
 	res := *in
-	res.N = i
+	res.N = uint(i)
 	return &res
 }
 

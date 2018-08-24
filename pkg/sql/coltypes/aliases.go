@@ -15,6 +15,10 @@
 package coltypes
 
 import (
+	"strings"
+
+	"github.com/lib/pq/oid"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -24,29 +28,22 @@ var (
 	Bool = &TBool{}
 
 	// Int is an immutable T instance.
-	Int = &TInt{Name: "INT"}
+	Int = &TInt{}
 	// Int2 is an immutable T instance.
-	Int2 = &TInt{Name: "INT2", Width: 16, ImplicitWidth: true}
+	Int2 = &TInt{Width: 16}
 	// Int4 is an immutable T instance.
-	Int4 = &TInt{Name: "INT4", Width: 32, ImplicitWidth: true}
+	Int4 = &TInt{Width: 32}
 	// Int8 is an immutable T instance.
-	Int8 = &TInt{Name: "INT8"}
-	// Int64 is an immutable T instance.
-	Int64 = &TInt{Name: "INT64"}
-	// Integer is an immutable T instance.
-	Integer = &TInt{Name: "INTEGER"}
-	// SmallInt is an immutable T instance.
-	SmallInt = &TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	// BigInt is an immutable T instance.
-	BigInt = &TInt{Name: "BIGINT"}
+	Int8 = &TInt{Width: 64}
+
 	// Serial is an immutable T instance.
-	Serial = &TSerial{IntType: Int}
+	Serial = &TSerial{TInt: Int}
 	// Serial2 is an immutable T instance.
-	Serial2 = &TSerial{IntType: Int2}
+	Serial2 = &TSerial{TInt: Int2}
 	// Serial4 is an immutable T instance.
-	Serial4 = &TSerial{IntType: Int4}
+	Serial4 = &TSerial{TInt: Int4}
 	// Serial8 is an immutable T instance.
-	Serial8 = &TSerial{IntType: Int8}
+	Serial8 = &TSerial{TInt: Int8}
 
 	// Float4 is an immutable T instance.
 	Float4 = &TFloat{Short: true}
@@ -70,16 +67,14 @@ var (
 	// Interval is an immutable T instance.
 	Interval = &TInterval{}
 
-	// Char is an immutable T instance.
-	Char = &TString{Name: "CHAR"}
-	// VarChar is an immutable T instance.
-	VarChar = &TString{Name: "VARCHAR"}
-	// String is an immutable T instance.
-	String = &TString{Name: "STRING"}
-	// Text is an immutable T instance.
-	Text = &TString{Name: "TEXT"}
-	// QChar is an immutable T instance.
-	QChar = &TString{Name: `"char"`}
+	// Char is an immutable T instance. See strings.go for details.
+	Char = &TString{Variant: TStringVariantCHAR, N: 1}
+	// VarChar is an immutable T instance. See strings.go for details.
+	VarChar = &TString{Variant: TStringVariantVARCHAR}
+	// String is an immutable T instance. See strings.go for details.
+	String = &TString{Variant: TStringVariantSTRING}
+	// QChar is an immutable T instance. See strings.go for details.
+	QChar = &TString{Variant: TStringVariantQCHAR}
 
 	// Name is an immutable T instance.
 	Name = &TName{}
@@ -97,9 +92,7 @@ var (
 	INet = &TIPAddr{}
 
 	// JSON is an immutable T instance.
-	JSON = &TJSON{Name: "JSON"}
-	// JSONB is an immutable T instance.
-	JSONB = &TJSON{Name: "JSONB"}
+	JSON = &TJSON{}
 
 	// Oid is an immutable T instance.
 	Oid = &TOid{Name: "OID"}
@@ -142,15 +135,15 @@ func ArrayOf(colType T, bounds []int32) (T, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
-	return &TArray{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
+	return &TArray{ParamType: colType, Bounds: bounds}, nil
 }
 
 var typNameLiterals map[string]T
 
 func init() {
 	typNameLiterals = make(map[string]T)
-	for _, t := range types.OidToType {
-		name := types.PGDisplayName(t)
+	for o, t := range types.OidToType {
+		name := strings.ToLower(oid.TypeName[o])
 		if _, ok := typNameLiterals[name]; !ok {
 			colTyp, err := DatumTypeToColumnType(t)
 			if err != nil {

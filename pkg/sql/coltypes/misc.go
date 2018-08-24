@@ -49,16 +49,14 @@ func (node *TIPAddr) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 }
 
 // TJSON represents the JSON column type.
-type TJSON struct {
-	Name string
-}
+type TJSON struct{}
 
 // TypeName implements the ColTypeFormatter interface.
-func (node *TJSON) TypeName() string { return node.Name }
+func (node *TJSON) TypeName() string { return "JSONB" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TJSON) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
-	buf.WriteString(node.Name)
+	buf.WriteString(node.TypeName())
 }
 
 // TOid represents an OID type, which is the type of system object

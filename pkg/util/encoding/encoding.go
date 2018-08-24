@@ -213,8 +213,7 @@ func DecodeUint64Descending(b []byte) ([]byte, uint64, error) {
 }
 
 const (
-	maxVarintSize        = 9
-	maxBinaryUvarintSize = binary.MaxVarintLen64
+	maxVarintSize = 9
 )
 
 // EncodeVarintAscending encodes the int64 value using a variable length
@@ -2012,38 +2011,6 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return 0, errors.Errorf("got invalid INET IP family: %d", family)
 	default:
 		return 0, errors.Errorf("unknown type %s", typ)
-	}
-}
-
-// UpperBoundValueEncodingSize returns the maximum encoded size of the given
-// datum type using the "value" encoding, including the tag. If the size is
-// unbounded, false is returned.
-func UpperBoundValueEncodingSize(colID uint32, typ Type, size int) (int, bool) {
-	encodedTag := EncodeValueTag(nil, colID, typ)
-	switch typ {
-	case Null, True, False:
-		// The data is encoded in the type.
-		return len(encodedTag), true
-	case Int:
-		return len(encodedTag) + maxVarintSize, true
-	case Float:
-		return len(encodedTag) + uint64AscendingEncodedLength, true
-	case Bytes:
-		if size > 0 {
-			return len(encodedTag) + maxVarintSize + size, true
-		}
-		return 0, false
-	case Decimal:
-		if size > 0 {
-			return len(encodedTag) + maxBinaryUvarintSize + upperBoundNonsortingDecimalUnscaledSize(size), true
-		}
-		return 0, false
-	case Time:
-		return len(encodedTag) + 2*maxVarintSize, true
-	case Duration:
-		return len(encodedTag) + 3*maxVarintSize, true
-	default:
-		panic(fmt.Errorf("unknown type: %s", typ))
 	}
 }
 

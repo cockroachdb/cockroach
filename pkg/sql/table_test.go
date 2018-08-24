@@ -45,27 +45,27 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"INT2",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16, VisibleType: sqlbase.ColumnType_SMALLINT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_SMALLINT, Width: 16},
 			true,
 		},
 		{
 			"INT4",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 32, VisibleType: sqlbase.ColumnType_INTEGER},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_INTEGER, Width: 32},
 			true,
 		},
 		{
 			"INT8",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 		{
 			"INT64",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 		{
 			"BIGINT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
 			true,
 		},
 		{
@@ -105,12 +105,32 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"CHAR",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 1},
+			true,
+		},
+		{
+			"CHAR(3)",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 3},
+			true,
+		},
+		{
+			"VARCHAR",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 0},
+			true,
+		},
+		{
+			"VARCHAR(3)",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 3},
 			true,
 		},
 		{
 			"TEXT",
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+			true,
+		},
+		{
+			`"char"`,
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_QCHAR},
 			true,
 		},
 		{

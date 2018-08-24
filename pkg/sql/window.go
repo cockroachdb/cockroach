@@ -770,7 +770,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					scratchDatum[i] = row[idx]
 				}
 
-				encoded, err := sqlbase.EncodeDatums(scratchBytes, scratchDatum)
+				encoded, err := sqlbase.EncodeDatumsKeyAscending(scratchBytes, scratchDatum)
 				if err != nil {
 					return err
 				}

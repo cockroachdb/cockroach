@@ -16,8 +16,8 @@ dump d t
 ----
 ----
 CREATE TABLE t (
-	a JSON NULL,
-	b JSON NULL,
+	a JSONB NULL,
+	b JSONB NULL,
 	INVERTED INDEX idx (a),
 	INVERTED INDEX idx2 (b),
 	FAMILY "primary" (a, b, rowid)
