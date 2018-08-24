@@ -34,7 +34,7 @@ TABLE c
 
 
 # --------------------------------------------------
-# EliminateEmptyAnd
+# EliminateEmptyFilters
 # --------------------------------------------------
 opt
 SELECT * FROM a WHERE True AND True
@@ -458,18 +458,15 @@ select
 # EliminateNot
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE NOT(NOT(j = '{}'))
+SELECT * FROM c WHERE NOT(NOT(a))
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb!null)
- ├── key: (1)
- ├── fd: ()-->(5), (1)-->(2-4)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(5), constraints=(/5: [/'{}' - /'{}']; tight), fd=()-->(5)]
-      └── j = '{}' [type=bool, outer=(5), constraints=(/5: [/'{}' - /'{}']; tight)]
+ ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── fd: ()-->(1)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ └── filters [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight)]
 
 # --------------------------------------------------
 # NegateAnd + NegateComparison
