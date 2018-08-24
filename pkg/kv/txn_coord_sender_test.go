@@ -2477,3 +2477,38 @@ func TestCommitTurnedToRollback(t *testing.T) {
 		t.Fatalf("didn't find trace message: %s", turningCommitToRollbackMsg)
 	}
 }
+
+// Test that a leaf txn returns a raw error when "rejecting a client" (a client
+// sending something after the txn is known to be aborted), not a
+// HandledRetryableError. This is important as leaves are not supposed to create
+// "handled" errors; instead the DistSQL infra knows to recognize raw retryable
+// errors and feed them to the root txn.
+func TestLeafTxnClientRejectError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	ctx := context.Background()
+	rootTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+
+	// New create a second, leaf coordinator.
+	leafTxn := client.NewTxnWithCoordMeta(
+		ctx, s.DB, 0 /* gatewayNodeID */, client.LeafTxn, rootTxn.GetTxnCoordMeta(ctx))
+
+	// Poison the leaf. This can happen, for example, if the leaf is used
+	// concurrently by multiple requests, where the first one gets a
+	// TransactionAbortedError.
+	meta := rootTxn.GetTxnCoordMeta(ctx)
+	meta.Txn.Status = roachpb.ABORTED
+	leafTxn.AugmentTxnCoordMeta(ctx, meta)
+
+	// Now use the leaf and check the error. At the TxnCoordSender level, the
+	// pErr will be TransactionAbortedError. When pErr.GoError() is called, that's
+	// transformed into an UnhandledRetryableError. For our purposes, what this
+	// test is interested in demonstrating is that it's not a
+	// HandledRetryableError.
+	_, err := leafTxn.Get(ctx, roachpb.Key("a"))
+	if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
+		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)
+	}
+}

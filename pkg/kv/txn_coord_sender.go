@@ -728,6 +728,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	if tc.mu.txn.Status == roachpb.ABORTED {
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
+		if tc.typ == client.LeafTxn {
+			// Leaf txns return raw retriable errors (which get handled by the
+			// root) rather than HandledRetryableTxnError.
+			return abortedErr
+		}
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr,
 			// priority is not used for aborted errors
