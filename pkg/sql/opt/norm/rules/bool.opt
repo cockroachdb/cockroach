@@ -22,21 +22,13 @@
 # =============================================================================
 
 
-# EliminateEmptyAnd maps an empty And or Filters list to True.
-[EliminateEmptyAnd, Normalize]
-(And | Filters
+# EliminateEmptyFilters maps an empty Filters list to True.
+[EliminateEmptyFilters, Normalize]
+(Filters
     $conditions:[]
 )
 =>
 (True)
-
-# EliminateEmptyOr maps an empty Or list to False.
-[EliminateEmptyOr, Normalize]
-(Or
-    $conditions:[]
-)
-=>
-(False)
 
 # EliminateSingletonAndOr discards an And or Or operator that has only one
 # condition.
