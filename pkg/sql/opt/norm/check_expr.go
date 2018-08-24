@@ -97,6 +97,24 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 		if def.LookupCols.Empty() {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
+
+	case opt.SelectOp:
+		filter := ev.Child(1)
+		switch filter.Operator() {
+		case opt.FiltersOp:
+		default:
+			panic(fmt.Sprintf("select contains %s", filter.Operator()))
+		}
+
+	default:
+		if ev.IsJoin() {
+			on := ev.Child(2)
+			switch on.Operator() {
+			case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
+			default:
+				panic(fmt.Sprintf("join contains %s", on.Operator()))
+			}
+		}
 	}
 
 	f.checkExprOrdering(ev)
