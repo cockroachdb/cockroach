@@ -69,6 +69,12 @@ func newForcingOptimizer(
 		lastMatched: opt.InvalidRuleName,
 	}
 	fo.o.Init(&tester.evalCtx)
+	// If we could possibly produce expressions that are not fully
+	// normalized, they won't necessarily pass the sanity check
+	// validations.
+	if !ignoreNormRules {
+		fo.o.Factory().SkipSanityChecks()
+	}
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if ignoreNormRules && ruleName.IsNormalize() {
