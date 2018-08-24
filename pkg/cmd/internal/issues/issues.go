@@ -250,13 +250,26 @@ func (p *poster) post(
 
 Parameters:%[2]s
 
+To repro, try:
+
+` + "```" + `
+# Don't forget to check out a clean suitable branch and experiment with the
+# stress invocation until the desired results present themselves. For example,
+# using stressrace instead of stress and passing the '-p' stressflag which
+# controls concurrency.
+./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
+cd ~/go/src/github.com/cockroachdb/cockroach && \
+make stress TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-stderr=false -maxtime 20m -timeout 10m'
+` + "```" + `
+
 Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
 	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
+		trimmedPkgName := strings.TrimPrefix(packageName, cockroachPkgPrefix)
 		title := fmt.Sprintf("%s: %s failed%s",
-			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName, detail)
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL()) + messageTemplate
+			trimmedPkgName, testName, detail)
+		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName) + messageTemplate
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
 		// can calculate the maximum amount of error text we can include in the
@@ -273,8 +286,8 @@ Failed test: %[3]s`
 		}
 	}
 
-	newIssueComment := func(testName string) *github.IssueComment {
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL())
+	newIssueComment := func(packageName, testName string) *github.IssueComment {
+		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName)
 		return &github.IssueComment{Body: &body}
 	}
 
@@ -313,7 +326,7 @@ Failed test: %[3]s`
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(testName)
+		comment := newIssueComment(packageName, testName)
 		if _, _, err := p.createComment(
 			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",

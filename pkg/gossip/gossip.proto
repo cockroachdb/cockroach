@@ -69,9 +69,56 @@ message Response {
   map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
+message ConnStatus {
+  option (gogoproto.goproto_stringer) = false;
+
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  string address = 2;
+  int64 age_nanos = 3;
+}
+
+message MetricSnap {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 bytes_received = 2;
+  int64 bytes_sent = 3;
+  int64 infos_received = 4;
+  int64 infos_sent = 5;
+  int64 conns_refused = 6;
+}
+
+message OutgoingConnStatus {
+  option (gogoproto.goproto_stringer) = false;
+
+  ConnStatus conn_status = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+  MetricSnap metrics = 2 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+}
+
+message ClientStatus {
+  option (gogoproto.goproto_stringer) = false;
+
+  repeated OutgoingConnStatus conn_status = 1 [(gogoproto.nullable) = false];
+  int32 max_conns = 2;
+}
+
+message ServerStatus {
+	// TODO(peter): Report per connection sent/received statistics. The
+	// structure of server.Gossip and server.gossipReceiver makes this
+	// irritating to track.
+
+  option (gogoproto.goproto_stringer) = false;
+
+  repeated ConnStatus conn_status = 1 [(gogoproto.nullable) = false];
+  int32 max_conns = 2;
+  MetricSnap metrics = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // InfoStatus contains information about the current status of the infoStore.
 message InfoStatus {
   map<string, Info> infos = 1 [(gogoproto.nullable) = false];
+  ClientStatus client = 2 [(gogoproto.nullable) = false];
+  ServerStatus server = 3 [(gogoproto.nullable) = false];
 }
 
 // Info is the basic unit of information traded over the
