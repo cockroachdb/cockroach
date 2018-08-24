@@ -33,6 +33,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -582,6 +583,11 @@ func init() {
 	logging.stderrThreshold = Severity_INFO
 	logging.fileThreshold = Severity_INFO
 
+	logging.pcsPool = sync.Pool{
+		New: func() interface{} {
+			return [1]uintptr{}
+		},
+	}
 	logging.prefix = program
 	logging.setVState(0, nil, false)
 	logging.gcNotify = make(chan struct{}, 1)
@@ -673,8 +679,9 @@ type loggingT struct {
 	file flushSyncWriter
 	// syncWrites if true calls file.Flush and file.Sync on every log write.
 	syncWrites bool
-	// pcs is used in V to avoid an allocation when computing the caller's PC.
-	pcs [1]uintptr
+	// pcsPool maintains a set of [1]uintptr buffers to be used in V to avoid
+	// allocating every time we compute the caller's PC.
+	pcsPool sync.Pool
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
 	// It is wiped whenever the vmodule flag changes state.
 	vmap map[uintptr]level
@@ -1388,27 +1395,30 @@ func VDepth(l int32, depth int) bool {
 		return true
 	}
 
-	// It's off globally but it vmodule may still be set.
+	// It's off globally but vmodule may still be set.
 	// Here is another cheap but safe test to see if vmodule is enabled.
 	if atomic.LoadInt32(&logging.filterLength) > 0 {
-		// Now we need a proper lock to use the logging structure. The pcs field
-		// is shared so we must lock before accessing it. This is fairly expensive,
-		// but if V logging is enabled we're slow anyway.
-		logging.mu.Lock()
+		// Grab a buffer to use for reading the program counter. Keeping the
+		// interface{} version around to Put back into the pool rather than
+		// Put-ting the array saves an interface allocation.
+		poolObj := logging.pcsPool.Get()
+		pcs := poolObj.([1]uintptr)
 		// We prefer not to use a defer in this function, which can be used in hot
 		// paths, because a defer anywhere in the body of a function causes a call
-		// to runtime.deferreturn at the end of that function. This call has a
+		// to runtime.deferreturn at the end of that function, which has a
 		// measurable performance penalty when in a very hot path.
-		// defer logging.mu.Unlock()
-		if runtime.Callers(2+depth, logging.pcs[:]) == 0 {
-			logging.mu.Unlock()
+		// defer logging.pcsPool.Put(pcs)
+		if runtime.Callers(2+depth, pcs[:]) == 0 {
+			logging.pcsPool.Put(poolObj)
 			return false
 		}
-		v, ok := logging.vmap[logging.pcs[0]]
+		logging.mu.Lock()
+		v, ok := logging.vmap[pcs[0]]
 		if !ok {
-			v = logging.setV(logging.pcs[0])
+			v = logging.setV(pcs[0])
 		}
 		logging.mu.Unlock()
+		logging.pcsPool.Put(poolObj)
 		return v >= level(l)
 	}
 	return false
