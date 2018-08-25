@@ -100,10 +100,10 @@ func (qp *quotaPool) add(v int64) {
 
 func logSlowQuota(ctx context.Context, v int64, start time.Time) func() {
 	log.Warningf(ctx, "have been waiting %s attempting to acquire %s of proposal quota",
-		humanizeutil.IBytes(v),
-		timeutil.Since(start))
+		timeutil.Since(start), humanizeutil.IBytes(v))
 	return func() {
-		log.Infof(ctx, "acquiring %v of proposal quota after %s resulted in %v", v, humanizeutil.IBytes(v), timeutil.Since(start))
+		log.Infof(ctx, "acquired %s of proposal quota after %s",
+			humanizeutil.IBytes(v), timeutil.Since(start))
 	}
 }
 
