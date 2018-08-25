@@ -362,19 +362,20 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 // This method should be called periodically by a higher level system in order
 // to keep runtime statistics current.
 func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
-	// Record memory and call stats from the runtime package.
-	// TODO(mrtracy): memory statistics will not include usage from RocksDB.
-	// Determine an appropriate way to compute total memory usage.
-	numCgoCall := runtime.NumCgoCall()
-	numGoroutine := runtime.NumGoroutine()
-
-	// It might be useful to call ReadMemStats() more often, but it stops the
-	// world while collecting stats so shouldn't be called too often.
+	// Record memory and call stats from the runtime package. It might be useful
+	// to call ReadMemStats() more often, but it stops the world while collecting
+	// stats so shouldn't be called too often. For a similar reason, we want this
+	// call to come first because ReadMemStats() needs to wait for an existing GC
+	// to finish which can take multiple seconds on large heaps.
+	//
 	// NOTE: the MemStats fields do not get decremented when memory is released,
-	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased for
-	// current memory reserved.
+	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased
+	// for current memory reserved.
 	ms := runtime.MemStats{}
 	runtime.ReadMemStats(&ms)
+
+	numCgoCall := runtime.NumCgoCall()
+	numGoroutine := runtime.NumGoroutine()
 
 	// Retrieve Mem and CPU statistics.
 	pid := os.Getpid()
