@@ -244,7 +244,7 @@ func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return nil, ps.DrainHelper()
 		}
 		if newValAvail {
-			if outRow := ps.processRowHelper(ps.rowBuffer); outRow != nil {
+			if outRow := ps.ProcessRowHelper(ps.rowBuffer); outRow != nil {
 				return outRow, nil
 			}
 		} else {

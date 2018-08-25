@@ -109,7 +109,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetada
 			irj.runningState, row, meta = irj.nextRow()
 		case irjUnmatchedChild:
 			rendered := irj.renderUnmatchedRow(irj.unmatchedChild, irj.descendantJoinSide)
-			row = irj.processRowHelper(rendered)
+			row = irj.ProcessRowHelper(rendered)
 			irj.unmatchedChild = nil
 			irj.runningState = irjReading
 		default:
@@ -236,7 +236,7 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 		if renderedRow != nil {
 			irj.ancestorJoined = true
 		}
-		return irjReading, irj.processRowHelper(renderedRow), nil
+		return irjReading, irj.ProcessRowHelper(renderedRow), nil
 	}
 
 	// Child does not match previous ancestorRow.
@@ -444,7 +444,7 @@ func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow
 		}
 
 		rendered := irj.renderUnmatchedRow(irj.ancestorRow, irj.ancestorJoinSide)
-		return irj.processRowHelper(rendered)
+		return irj.ProcessRowHelper(rendered)
 	}
 	return nil
 }

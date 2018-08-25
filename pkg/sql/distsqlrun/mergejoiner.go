@@ -136,7 +136,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			break
 		}
 
-		if outRow := m.processRowHelper(row); outRow != nil {
+		if outRow := m.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
