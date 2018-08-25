@@ -148,7 +148,7 @@ type Server struct {
 	node               *Node
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
-	runtime            status.RuntimeStatSampler
+	runtime            *status.RuntimeStatSampler
 	admin              *adminServer
 	status             *statusServer
 	authentication     *authenticationServer
@@ -454,7 +454,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip, st)
 	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
 
-	s.runtime = status.MakeRuntimeStatSampler(ctx, s.clock)
+	s.runtime = status.NewRuntimeStatSampler(ctx, s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
 	s.node = NewNode(
