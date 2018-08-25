@@ -677,7 +677,7 @@ func (p *planner) delegateQuery(
 	initialCheck func(ctx context.Context) error,
 	desiredTypes []types.T,
 ) (planNode, error) {
-	// log.VEventf(ctx, 2, "delegated query: %q", sql)
+	log.VEventf(ctx, 2, "delegated query: %q", sql)
 
 	// Prepare the sub-plan.
 	stmt, err := parser.ParseOne(sql)

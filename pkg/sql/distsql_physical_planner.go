@@ -494,12 +494,20 @@ type PlanningCtx struct {
 	planDepth int
 }
 
+var _ distsqlplan.ExprContext = &PlanningCtx{}
+
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
 func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 	if p.ExtendedEvalCtx == nil {
 		return nil
 	}
 	return &p.ExtendedEvalCtx.EvalContext
+}
+
+// IsLocal returns true if this PlanningCtx is being used to plan a query that
+// has no remote flows.
+func (p *PlanningCtx) IsLocal() bool {
+	return p.isLocal
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two
@@ -839,7 +847,7 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, evalCtx *tree.EvalContext, indexVarMap []int,
+	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:      *n.desc,
@@ -860,7 +868,7 @@ func initTableReaderSpec(
 		return s, distsqlrun.PostProcessSpec{}, nil
 	}
 
-	filter, err := distsqlplan.MakeExpression(n.filter, evalCtx, indexVarMap)
+	filter, err := distsqlplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
 		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 	}
@@ -1041,7 +1049,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 ) (PhysicalPlan, error) {
 
 	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
-	spec, post, err := initTableReaderSpec(n, planCtx.EvalContext(), scanNodeToTableOrdinalMap)
+	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -1164,7 +1172,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
 func (dsp *DistSQLPlanner) selectRenders(
-	p *PhysicalPlan, n *renderNode, evalCtx *tree.EvalContext,
+	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
@@ -1180,7 +1188,7 @@ func (dsp *DistSQLPlanner) selectRenders(
 	if err != nil {
 		return err
 	}
-	err = p.AddRendering(renders, evalCtx, p.PlanToStreamColMap, types)
+	err = p.AddRendering(renders, planCtx, p.PlanToStreamColMap, types)
 	if err != nil {
 		return err
 	}
@@ -1277,7 +1285,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		aggregationsColumnTypes[i] = make([]sqlbase.ColumnType, len(fholder.arguments))
 		for j, argument := range fholder.arguments {
 			var err error
-			aggregations[i].Arguments[j], err = distsqlplan.MakeExpression(argument, planCtx.EvalContext(), nil)
+			aggregations[i].Arguments[j], err = distsqlplan.MakeExpression(argument, planCtx, nil)
 			if err != nil {
 				return err
 			}
@@ -1656,8 +1664,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					mappedIdx := int(finalIdxMap[finalIdx])
 					var err error
 					renderExprs[i], err = distsqlplan.MakeExpression(
-						h.IndexedVar(mappedIdx), planCtx.EvalContext(),
-						nil /* indexVarMap */)
+						h.IndexedVar(mappedIdx), planCtx, nil /* indexVarMap */)
 					if err != nil {
 						return err
 					}
@@ -1677,7 +1684,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 						return err
 					}
 					renderExprs[i], err = distsqlplan.MakeExpression(
-						expr, planCtx.EvalContext(),
+						expr, planCtx,
 						nil /* indexVarMap */)
 					if err != nil {
 						return err
@@ -1808,7 +1815,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	filter, err := distsqlplan.MakeExpression(
-		n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */)
+		n.table.filter, planCtx, nil /* indexVarMap */)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -1926,7 +1933,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 		var err error
 		joinReaderSpec.OnExpr, err = distsqlplan.MakeExpression(
-			n.onCond, planCtx.EvalContext(), indexVarMap,
+			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return PhysicalPlan{}, err
@@ -2114,7 +2121,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	}
 
 	post, joinToStreamColMap := joinOutColumns(n, leftPlan.PlanToStreamColMap, rightMap)
-	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, leftPlan.PlanToStreamColMap, rightMap)
+	onExpr, err := remapOnExpr(planCtx, n, leftPlan.PlanToStreamColMap, rightMap)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -2153,7 +2160,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		var indexFilterExpr distsqlrun.Expression
 		if lookupJoinScan.origFilter != nil {
 			var err error
-			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx.EvalContext(), nil)
+			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx, nil)
 			if err != nil {
 				return PhysicalPlan{}, err
 			}
@@ -2303,7 +2310,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		err = dsp.selectRenders(&plan, n, planCtx.EvalContext())
+		err = dsp.selectRenders(&plan, n, planCtx)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -2332,7 +2339,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return PhysicalPlan{}, err
 		}
 
-		if err := plan.AddFilter(n.filter, planCtx.EvalContext(), plan.PlanToStreamColMap); err != nil {
+		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
 			return PhysicalPlan{}, err
 		}
 
@@ -2344,7 +2351,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
 			return PhysicalPlan{}, err
 		}
-		if err := plan.AddLimit(n.count, n.offset, planCtx.EvalContext(), dsp.nodeDesc.NodeID); err != nil {
+		if err := plan.AddLimit(n.count, n.offset, planCtx, dsp.nodeDesc.NodeID); err != nil {
 			return PhysicalPlan{}, err
 		}
 
@@ -2713,7 +2720,7 @@ func createProjectSetSpec(
 	}
 	for i, expr := range n.exprs {
 		var err error
-		spec.Exprs[i], err = distsqlplan.MakeExpression(expr, &planCtx.ExtendedEvalCtx.EvalContext, indexVarMap)
+		spec.Exprs[i], err = distsqlplan.MakeExpression(expr, planCtx, indexVarMap)
 		if err != nil {
 			return nil, err
 		}
@@ -3079,7 +3086,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	}
 
 	numWindowFuncProcessed := 0
-	windowPlanState := createWindowPlanState(n, planCtx.EvalContext(), &plan)
+	windowPlanState := createWindowPlanState(n, planCtx, &plan)
 	// Each iteration of this loop adds a new stage of windowers. The steps taken:
 	// 1. find a set of unprocessed window functions that have the same PARTITION BY
 	//    clause. All of these will be computed using the single stage of windowers.
@@ -3253,7 +3260,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 // NewPlanningCtx returns a new PlanningCtx.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
-) PlanningCtx {
+) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
@@ -3265,8 +3272,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 // used when the caller knows plans will only be run on one node.
 func (dsp *DistSQLPlanner) newLocalPlanningCtx(
 	ctx context.Context, evalCtx *extendedEvalContext,
-) PlanningCtx {
-	return PlanningCtx{
+) *PlanningCtx {
+	return &PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
 	}

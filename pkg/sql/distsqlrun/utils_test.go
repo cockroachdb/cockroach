@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -374,4 +375,18 @@ type rowsAccessor interface {
 
 func (s *sorterBase) getRows() *diskBackedRowContainer {
 	return s.rows.(*diskBackedRowContainer)
+}
+
+// fakeExprContext is a fake implementation of ExprContext that always behaves
+// as if it were part of a non-local query.
+type fakeExprContext struct{}
+
+var _ distsqlplan.ExprContext = fakeExprContext{}
+
+func (fakeExprContext) EvalContext() *tree.EvalContext {
+	return &tree.EvalContext{}
+}
+
+func (fakeExprContext) IsLocal() bool {
+	return false
 }

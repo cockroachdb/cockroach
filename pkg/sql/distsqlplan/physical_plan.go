@@ -422,10 +422,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr,
-	evalCtx *tree.EvalContext,
-	indexVarMap []int,
-	outTypes []sqlbase.ColumnType,
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []sqlbase.ColumnType,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -481,7 +478,7 @@ func (p *PhysicalPlan) AddRendering(
 	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
 	for i, e := range exprs {
 		var err error
-		post.RenderExprs[i], err = MakeExpression(e, evalCtx, compositeMap)
+		post.RenderExprs[i], err = MakeExpression(e, exprCtx, compositeMap)
 		if err != nil {
 			return err
 		}
@@ -508,7 +505,7 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, exprCtx, nil)
 				if err != nil {
 					return err
 				}
@@ -592,7 +589,7 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
-	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
+	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
 ) error {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
@@ -616,12 +613,19 @@ func (p *PhysicalPlan) AddFilter(
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	filter, err := MakeExpression(expr, evalCtx, compositeMap)
+	filter, err := MakeExpression(expr, exprCtx, compositeMap)
 	if err != nil {
 		return err
 	}
-	if post.Filter.Expr != "" {
-		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+	if !post.Filter.Empty() {
+		if filter.Expr != "" {
+			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+		} else if filter.LocalExpr != nil {
+			filter.LocalExpr = tree.NewTypedAndExpr(
+				post.Filter.LocalExpr,
+				filter.LocalExpr,
+			)
+		}
 	}
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post.Filter = filter
@@ -659,7 +663,7 @@ func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
 //
 // For no limit, count should be MaxInt64.
 func (p *PhysicalPlan) AddLimit(
-	count int64, offset int64, evalCtx *tree.EvalContext, node roachpb.NodeID,
+	count int64, offset int64, exprCtx ExprContext, node roachpb.NodeID,
 ) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
@@ -713,7 +717,7 @@ func (p *PhysicalPlan) AddLimit(
 		}
 		p.SetLastStagePost(post, p.ResultTypes)
 		if limitZero {
-			if err := p.AddFilter(tree.DBoolFalse, evalCtx, nil); err != nil {
+			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
 				return err
 			}
 		}
@@ -747,7 +751,7 @@ func (p *PhysicalPlan) AddLimit(
 		p.ResultTypes,
 	)
 	if limitZero {
-		if err := p.AddFilter(tree.DBoolFalse, evalCtx, nil); err != nil {
+		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
 			return err
 		}
 	}

@@ -119,7 +119,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	defer plan.Close(ctx)
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, plan)
+	physPlan, err := scrubPlanDistSQL(ctx, planCtx, plan)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		return errors.Errorf("could not find MergeJoinerSpec in plan")
 	}
 
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
