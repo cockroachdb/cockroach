@@ -160,7 +160,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
-			t.Status("decommissioning node %s", id)
+			t.Status("decommissioning node", id)
 			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --host=:"+port+" "+id)
 		}
 
