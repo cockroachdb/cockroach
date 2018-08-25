@@ -48,6 +48,8 @@ message Expression {
   // SQL expressions are passed as a string, with ordinal references
   // (@1, @2, @3 ..) used for "input" variables.
   optional string expr = 2 [(gogoproto.nullable) = false];
+
+  optional uint32 local_expr_idx = 3 [(gogoproto.nullable) = false];
 }
 
 // Ordering defines an order - specifically a list of column indices and

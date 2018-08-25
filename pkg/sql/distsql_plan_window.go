@@ -28,12 +28,12 @@ type windowPlanState struct {
 	// they appear in n.funcs.
 	infos   []*windowFuncInfo
 	n       *windowNode
-	evalCtx *tree.EvalContext
+	planCtx *PlanningCtx
 	plan    *PhysicalPlan
 }
 
 func createWindowPlanState(
-	n *windowNode, evalCtx *tree.EvalContext, plan *PhysicalPlan,
+	n *windowNode, planCtx *PlanningCtx, plan *PhysicalPlan,
 ) *windowPlanState {
 	infos := make([]*windowFuncInfo, 0, len(n.funcs))
 	for _, holder := range n.funcs {
@@ -42,7 +42,7 @@ func createWindowPlanState(
 	return &windowPlanState{
 		infos:   infos,
 		n:       n,
-		evalCtx: evalCtx,
+		planCtx: planCtx,
 		plan:    plan,
 	}
 }
@@ -240,7 +240,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	if s.n.run.windowFrames[funcInProgress.funcIdx] != nil {
 		// funcInProgress has a custom window frame.
 		frameSpec := distsqlrun.WindowerSpec_Frame{}
-		if err := frameSpec.InitFromAST(s.n.run.windowFrames[funcInProgress.funcIdx], s.evalCtx); err != nil {
+		if err := frameSpec.InitFromAST(s.n.run.windowFrames[funcInProgress.funcIdx], s.planCtx.EvalContext()); err != nil {
 			return distsqlrun.WindowerSpec_WindowFn{}, outputType, err
 		}
 		funcInProgressSpec.Frame = &frameSpec
@@ -325,7 +325,7 @@ func (s *windowPlanState) addRenderingIfNecessary() error {
 		}
 		renderTypes = append(renderTypes, outputType)
 	}
-	if err := s.plan.AddRendering(renderExprs, s.evalCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {
+	if err := s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {
 		return err
 	}
 	s.plan.PlanToStreamColMap = identityMap(s.plan.PlanToStreamColMap, len(renderTypes))

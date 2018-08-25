@@ -295,7 +295,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr distsqlrun.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = MakeExpression(renderExpr, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

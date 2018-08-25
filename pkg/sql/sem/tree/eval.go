@@ -2455,7 +2455,7 @@ type EvalContext struct {
 
 	// InternalExecutor gives access to an executor to be used for running
 	// "internal" statements. It may seem bizarre that "expression evaluation" may
-	// need to run a statement, and yet many builting function do it.
+	// need to run a statement, and yet many builtin functions do it.
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
 	InternalExecutor SessionBoundInternalExecutor
@@ -2489,6 +2489,11 @@ type EvalContext struct {
 	// evaluation. It can change over the course of evaluation, such as on a
 	// per-row basis.
 	ActiveMemAcc *mon.BoundAccount
+
+	// LocalExprs contains the list of typed expressions that DistSQL Expressions
+	// can index into when running on the gateway. See distsqlrun.Expression and
+	// its LocalExprIdx field.
+	LocalExprs *[]TypedExpr
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

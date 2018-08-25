@@ -44,6 +44,22 @@ func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
 	return fmtCtx
 }
 
+type LocalExprState struct {
+	expressions []tree.TypedExpr
+}
+
+// ExprContext is an interface containing objects necessary for creating
+// distsqlrun.Expressions.
+type ExprContext interface {
+	// EvalContext returns the tree.EvalContext for planning.
+	EvalContext() *tree.EvalContext
+
+	// MaybeAddLocalExpr adds an expression to the list of local expressions if
+	// the current plan is local, returning the index of the expression in the
+	// list if so. Returns -1 if the current plan isn't local.
+	MaybeAddLocalExpr(expr tree.TypedExpr, indexVarMap []int) int
+}
+
 // MakeExpression creates a distsqlrun.Expression.
 //
 // The distsqlrun.Expression uses the placeholder syntax (@1, @2, @3..) to refer
@@ -53,12 +69,20 @@ func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
 func MakeExpression(
-	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
+	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
 ) (distsqlrun.Expression, error) {
 	if expr == nil {
 		return distsqlrun.Expression{}, nil
 	}
 
+	if idx := ctx.MaybeAddLocalExpr(expr, indexVarMap); idx != -1 {
+		log.VEventf(ctx.EvalContext().Context, 1, "added local expr %v %d", expr, idx)
+		return distsqlrun.Expression{
+			LocalExprIdx: uint32(idx + 1),
+		}, nil
+	}
+
+	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}

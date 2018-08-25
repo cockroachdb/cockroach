@@ -146,11 +146,31 @@ func (eh *exprHelper) init(
 	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
 	eh.evalCtx = evalCtx
-	if expr.Expr == "" {
+	if expr.Expr == "" && evalCtx.LocalExprs == nil {
 		return nil
 	}
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+
+	if expr.LocalExprIdx != 0 {
+		// Bind IndexedVars to our eh.vars.
+		/*
+			v := ivarBinder{h: &eh.vars, err: nil}
+			newExpr, _ := tree.WalkExpr(&v, evalCtx.LocalExprs[expr.LocalExprIdx])
+			eh.expr = newExpr
+			if v.err != nil {
+				return nil, v.err
+			}
+		*/
+		//fmt.Println(expr.LocalExprIdx, len(*evalCtx.LocalExprs))
+		eh.expr = (*evalCtx.LocalExprs)[expr.LocalExprIdx-1]
+		eh.vars.Rebind(eh.expr, true, false)
+		if eh.expr == nil {
+			fmt.Println("Fail", evalCtx.LocalExprs, expr)
+			panic("fail")
+		}
+		return nil
+	}
 	var err error
 	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
 	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)
