@@ -208,7 +208,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 			continue
 		}
 
-		// We don't use ProcessorBase.processRowHelper() here because we need
+		// We don't use ProcessorBase.ProcessRowHelper() here because we need
 		// special handling for errors: this proc never starts draining in order for
 		// it to be as unintrusive as possible.
 		outRow, ok, err := mtr.out.ProcessRow(mtr.Ctx, row)
