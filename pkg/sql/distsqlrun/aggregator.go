@@ -580,7 +580,7 @@ func (ag *aggregatorBase) getAggResults(
 	}
 	bucket.close(ag.Ctx)
 
-	if outRow := ag.processRowHelper(ag.row); outRow != nil {
+	if outRow := ag.ProcessRowHelper(ag.row); outRow != nil {
 		return aggEmittingRows, outRow, nil
 	}
 	// We might have switched to draining, we might not have. In case we

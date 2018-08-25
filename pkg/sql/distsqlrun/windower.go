@@ -392,7 +392,7 @@ func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetad
 		}
 
 		if w.populateNextOutputRow() {
-			return windowerEmittingRows, w.processRowHelper(w.outputRow), nil
+			return windowerEmittingRows, w.ProcessRowHelper(w.outputRow), nil
 		}
 
 		w.MoveToDraining(nil /* err */)

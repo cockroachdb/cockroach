@@ -469,7 +469,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 //         continue
 //       }
 //
-//       if outRow := p.processRowHelper(row); outRow != nil {
+//       if outRow := p.ProcessRowHelper(row); outRow != nil {
 //         return outRow, nil
 //       }
 //     }
@@ -691,8 +691,10 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	}
 
 	pb.State = stateTrailingMeta
-	if trace := getTraceData(pb.Ctx); trace != nil {
-		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{TraceData: trace})
+	if pb.span != nil {
+		if trace := getTraceData(pb.Ctx); trace != nil {
+			pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{TraceData: trace})
+		}
 	}
 	// trailingMetaCallback is called after reading the tracing data because it
 	// generally calls InternalClose, indirectly, which switches the context and
@@ -704,7 +706,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	}
 }
 
-// processRowHelper is a wrapper on top of ProcOutputHelper.ProcessRow(). It
+// ProcessRowHelper is a wrapper on top of ProcOutputHelper.ProcessRow(). It
 // takes care of handling errors and drain requests by moving the processor to
 // stateDraining.
 //
@@ -712,7 +714,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 // nil, in which case the caller shouldn't return anything to its consumer; it
 // should continue processing other rows, with the awareness that the processor
 // might have been transitioned to the draining phase.
-func (pb *ProcessorBase) processRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
+func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
 	outRow, ok, err := pb.out.ProcessRow(pb.Ctx, row)
 	if err != nil {
 		pb.MoveToDraining(err)
@@ -766,14 +768,42 @@ func (pb *ProcessorBase) Init(
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
+	return pb.InitWithEvalCtx(
+		self, post, types, flowCtx, flowCtx.NewEvalCtx(), processorID, output, memMonitor, opts,
+	)
+}
+
+func (pb *ProcessorBase) InitWithEvalCtx(
+	self RowSource,
+	post *PostProcessSpec,
+	types []sqlbase.ColumnType,
+	flowCtx *FlowCtx,
+	evalCtx *tree.EvalContext,
+	processorID int32,
+	output RowReceiver,
+	memMonitor *mon.BytesMonitor,
+	opts ProcStateOpts,
+) error {
 	pb.self = self
 	pb.flowCtx = flowCtx
+	pb.evalCtx = evalCtx
 	pb.processorID = processorID
 	pb.MemMonitor = memMonitor
-	pb.evalCtx = flowCtx.NewEvalCtx()
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	pb.inputsToDrain = opts.InputsToDrain
 	return pb.out.Init(post, types, pb.evalCtx, output)
+}
+
+// AddInputToDrain adds an input to drain when moving the processor to a
+// draining state.
+func (pb *ProcessorBase) AddInputToDrain(input RowSource) {
+	pb.inputsToDrain = append(pb.inputsToDrain, input)
+}
+
+// AppendTrailingMeta appends metadata to the trailing metadata without changing
+// the state to draining (as opposed to MoveToDraining).
+func (pb *ProcessorBase) AppendTrailingMeta(meta ProducerMetadata) {
+	pb.trailingMeta = append(pb.trailingMeta, meta)
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
@@ -1052,6 +1082,9 @@ func newProcessor(
 			return nil, err
 		}
 		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
+		if err := processor.InitWithOutput(post, outputs[0]); err != nil {
+			return nil, err
+		}
 		if numInputs == 1 {
 			if err := processor.SetInput(ctx, inputs[0]); err != nil {
 				return nil, err
@@ -1059,8 +1092,7 @@ func newProcessor(
 		} else if numInputs > 1 {
 			return nil, errors.Errorf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
 		}
-		err := processor.InitWithOutput(post, outputs[0])
-		return processor, err
+		return processor, nil
 	}
 	if core.ChangeAggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {

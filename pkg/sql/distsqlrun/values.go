@@ -122,7 +122,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			continue
 		}
 
-		if outRow := v.processRowHelper(row); outRow != nil {
+		if outRow := v.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}

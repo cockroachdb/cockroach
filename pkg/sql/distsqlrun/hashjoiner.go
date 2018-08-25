@@ -259,7 +259,7 @@ func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if meta != nil {
 			return nil, meta
 		}
-		if outRow := h.processRowHelper(row); outRow != nil {
+		if outRow := h.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}

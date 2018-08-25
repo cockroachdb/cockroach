@@ -258,7 +258,7 @@ func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			break
 		}
 
-		if outRow := tr.processRowHelper(row); outRow != nil {
+		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}

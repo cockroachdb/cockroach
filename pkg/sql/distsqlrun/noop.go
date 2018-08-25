@@ -75,7 +75,7 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			break
 		}
 
-		if outRow := n.processRowHelper(row); outRow != nil {
+		if outRow := n.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
