@@ -446,7 +446,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(ms.goAllocated), humanize.IBytes(ms.goIdle), humanize.IBytes(ms.goTotal),
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
-		cgoRate, uPerc, sPerc, gcPausePercent, gc.NumGC-rsr.last.gcCount)
+		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount)
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
 
