@@ -267,7 +267,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			d.seen[s] = struct{}{}
 		}
 
-		if outRow := d.processRowHelper(row); outRow != nil {
+		if outRow := d.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
@@ -300,7 +300,7 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		d.haveLastGroupKey = true
 		copy(d.lastGroupKey, row)
 
-		if outRow := d.processRowHelper(row); outRow != nil {
+		if outRow := d.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
