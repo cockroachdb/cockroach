@@ -102,6 +102,16 @@ func runTestFlow(
 	return res
 }
 
+type fakeExprContext struct{}
+
+func (fakeExprContext) EvalContext() *tree.EvalContext {
+	return &tree.EvalContext{}
+}
+
+func (fakeExprContext) MaybeAddLocalExpr(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
+	return 0, false
+}
+
 // checkDistAggregationInfo tests that a flow with multiple local stages and a
 // final stage (in accordance with per DistAggregationInfo) gets the same result
 // with a naive aggregation flow that has a single non-distributed stage.
@@ -295,7 +305,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		var expr distsqlrun.Expression
-		expr, err = MakeExpression(renderExpr, nil, nil)
+		expr, err = MakeExpression(renderExpr, &fakeExprContext{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -146,11 +146,21 @@ func (eh *exprHelper) init(
 	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
 	eh.evalCtx = evalCtx
-	if expr.Expr == "" {
+	if expr.Expr == "" && evalCtx.LocalExprs == nil {
 		return nil
 	}
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+
+	if expr.LocalExprIdx != 0 {
+		eh.expr = (*evalCtx.LocalExprs)[expr.LocalExprIdx-1]
+		if eh.expr == nil {
+			return errors.Errorf("programming error: local expr %d was not available in slice %v", expr.LocalExprIdx-1, evalCtx.LocalExprs)
+		}
+		// Bind IndexedVars to our eh.vars.
+		eh.vars.Rebind(eh.expr, true /* alsoReset */, false /* normalizeToNonNil */)
+		return nil
+	}
 	var err error
 	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
 	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)

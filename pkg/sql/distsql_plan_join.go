@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	joinType := n.joinType
 
 	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
-	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
+	onExpr, err := remapOnExpr(planCtx, n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
 	if err != nil {
 		return PhysicalPlan{}, false, err
 	}
@@ -288,7 +288,7 @@ func joinOutColumns(
 // join columns as described above) to values that make sense in the joiner (0
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
 func remapOnExpr(
-	evalCtx *tree.EvalContext, n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
+	planCtx *PlanningCtx, n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
 ) (distsqlrun.Expression, error) {
 	if n.pred.onCond == nil {
 		return distsqlrun.Expression{}, nil
@@ -309,7 +309,7 @@ func remapOnExpr(
 		idx++
 	}
 
-	return distsqlplan.MakeExpression(n.pred.onCond, evalCtx, joinColMap)
+	return distsqlplan.MakeExpression(n.pred.onCond, planCtx, joinColMap)
 }
 
 // eqCols produces a slice of ordinal references for the plan columns specified
