@@ -1251,10 +1251,13 @@ func (g *Gossip) bootstrap() {
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
 	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
-		cullTicker := time.NewTicker(g.jitteredInterval(g.cullInterval))
-		stallTicker := time.NewTicker(g.jitteredInterval(g.stallInterval))
-		defer cullTicker.Stop()
-		defer stallTicker.Stop()
+		cullTimer := timeutil.NewTimer()
+		stallTimer := timeutil.NewTimer()
+		defer cullTimer.Stop()
+		defer stallTimer.Stop()
+
+		cullTimer.Reset(jitteredInterval(g.cullInterval))
+		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
 			select {
 			case <-g.server.stopper.ShouldStop():
@@ -1263,7 +1266,10 @@ func (g *Gossip) manage() {
 				g.doDisconnected(c)
 			case <-g.tighten:
 				g.tightenNetwork(ctx)
-			case <-cullTicker.C:
+			case <-cullTimer.C:
+				cullTimer.Read = true
+				cullTimer.Reset(jitteredInterval(g.cullInterval))
+
 				func() {
 					g.mu.Lock()
 					if !g.outgoing.hasSpace() {
@@ -1292,7 +1298,10 @@ func (g *Gossip) manage() {
 					}
 					g.mu.Unlock()
 				}()
-			case <-stallTicker.C:
+			case <-stallTimer.C:
+				stallTimer.Read = true
+				stallTimer.Reset(jitteredInterval(g.stallInterval))
+
 				g.mu.Lock()
 				g.maybeSignalStatusChangeLocked()
 				g.mu.Unlock()
@@ -1303,7 +1312,7 @@ func (g *Gossip) manage() {
 
 // jitteredInterval returns a randomly jittered (+/-25%) duration
 // from checkInterval.
-func (g *Gossip) jitteredInterval(interval time.Duration) time.Duration {
+func jitteredInterval(interval time.Duration) time.Duration {
 	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
 
