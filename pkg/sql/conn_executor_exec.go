@@ -956,7 +956,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	)
 
 	evalCtx := planner.ExtendedEvalContext()
-	var planCtx PlanningCtx
+	var planCtx *PlanningCtx
 	if distribute {
 		planCtx = ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn)
 	} else {
@@ -981,7 +981,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, &planCtx, planner.txn, planner.curPlan.plan, recv)
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
 	return recv.commErr
 }
 

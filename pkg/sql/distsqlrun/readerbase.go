@@ -54,7 +54,7 @@ func limitHint(specLimitHint int64, post *PostProcessSpec) (limitHint int64) {
 		limitHint = specLimitHint + rowChannelBufSize + 1
 	}
 
-	if post.Filter.Expr != "" {
+	if !post.Filter.Empty() {
 		// We have a filter so we will likely need to read more rows.
 		limitHint *= 2
 	}
