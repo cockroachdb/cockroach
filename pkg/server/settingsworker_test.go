@@ -206,50 +206,35 @@ func TestSettingsSetAndShow(t *testing.T) {
 	showQ := `SHOW CLUSTER SETTING "%s"`
 
 	db.Exec(t, fmt.Sprintf(setQ, strKey, "'via-set'"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "via-set", db.QueryStr(t, fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := "via-set", db.QueryStr(t, fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	db.Exec(t, fmt.Sprintf(setQ, intKey, "5"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "5", db.QueryStr(t, fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := "5", db.QueryStr(t, fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	db.Exec(t, fmt.Sprintf(setQ, durationKey, "'2h'"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := time.Hour*2, durationA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := "2h", db.QueryStr(t, fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := time.Hour*2, durationA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "2h", db.QueryStr(t, fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	db.Exec(t, fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(1500000000), byteSizeA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := int64(1500000000), byteSizeA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	db.Exec(t, fmt.Sprintf(setQ, byteSizeKey, "'1450MB'"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
 		err, `could not parse "a-str" as type int`,
@@ -258,26 +243,20 @@ func TestSettingsSetAndShow(t *testing.T) {
 	}
 
 	db.Exec(t, fmt.Sprintf(setQ, enumKey, "2"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := "2", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "2", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	db.Exec(t, fmt.Sprintf(setQ, enumKey, "'foo'"))
-	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		if expected, actual := "1", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+	if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "1", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
 
 	if _, err := db.DB.Exec(fmt.Sprintf(setQ, enumKey, "'unknown'")); !testutils.IsError(err,
 		`invalid string value 'unknown' for enum setting`,
