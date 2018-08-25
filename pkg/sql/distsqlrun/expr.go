@@ -145,12 +145,19 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func (eh *exprHelper) init(
 	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
-	eh.evalCtx = evalCtx
-	if expr.Expr == "" {
+	if expr.Empty() {
 		return nil
 	}
+	eh.evalCtx = evalCtx
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
+
+	if expr.LocalExpr != nil {
+		eh.expr = expr.LocalExpr
+		// Bind IndexedVars to our eh.vars.
+		eh.vars.Rebind(eh.expr, true /* alsoReset */, false /* normalizeToNonNil */)
+		return nil
+	}
 	var err error
 	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
 	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)

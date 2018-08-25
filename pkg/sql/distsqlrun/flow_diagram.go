@@ -151,16 +151,16 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.LookupColumns != nil {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
 	}
-	if jr.IndexFilterExpr.Expr != "" {
+	if !jr.IndexFilterExpr.Empty() {
 		// Note: The displayed IndexFilter is a bit confusing because its
 		// IndexedVars refer to only the index column indices. This means they don't
 		// line up with other column indices like the output columns, which refer to
 		// the columns from both sides of the join.
 		details = append(
-			details, fmt.Sprintf("IndexFilter: %s (right side only)", jr.IndexFilterExpr.Expr))
+			details, fmt.Sprintf("IndexFilter: %s (right side only)", jr.IndexFilterExpr))
 	}
-	if jr.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr.Expr))
+	if !jr.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
 	}
 	return "JoinReader", details
 }
@@ -191,8 +191,8 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 			colListStr(hj.LeftEqColumns), colListStr(hj.RightEqColumns),
 		))
 	}
-	if hj.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	if !hj.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr))
 	}
 	if hj.MergedColumns {
 		details = append(details, fmt.Sprintf("Merged columns: %d", len(hj.LeftEqColumns)))
@@ -213,8 +213,8 @@ func orderedJoinDetails(
 		"left(%s)=right(%s)", left.diagramString(), right.diagramString(),
 	))
 
-	if onExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", onExpr.Expr))
+	if !onExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", onExpr))
 	}
 
 	return details
@@ -289,7 +289,7 @@ func (d *DistinctSpec) summary() (string, []string) {
 func (d *ProjectSetSpec) summary() (string, []string) {
 	var details []string
 	for _, expr := range d.Exprs {
-		details = append(details, expr.Expr)
+		details = append(details, expr.String())
 	}
 	return "ProjectSet", details
 }
@@ -362,8 +362,8 @@ func (post *PostProcessSpec) summary() []string {
 // (namely InterleavedReaderJoiner) that have multiple PostProcessors.
 func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
-	if post.Filter.Expr != "" {
-		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter.Expr))
+	if !post.Filter.Empty() {
+		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter))
 	}
 	if post.Projection {
 		outputColumns := "None"
@@ -381,7 +381,7 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 			}
 			// Remove any spaces in the expression (makes things more compact
 			// and it's easier to visually separate expressions).
-			buf.WriteString(strings.Replace(expr.Expr, " ", "", -1))
+			buf.WriteString(strings.Replace(expr.String(), " ", "", -1))
 		}
 		res = append(res, buf.String())
 	}

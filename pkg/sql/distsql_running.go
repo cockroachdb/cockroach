@@ -617,7 +617,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 
 		evalCtx.ActiveMemAcc = &subqueryMemAccount
 
-		var subqueryPlanCtx PlanningCtx
+		var subqueryPlanCtx *PlanningCtx
 		var distributeSubquery bool
 		if maybeDistribute {
 			distributeSubquery = shouldDistributePlan(
@@ -637,12 +637,12 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		// that.
 		subqueryPlanCtx.ignoreClose = true
 
-		subqueryPhysPlan, err := dsp.createPlanForNode(&subqueryPlanCtx, subqueryPlan.plan)
+		subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
 		if err != nil {
 			recv.SetError(err)
 			return false
 		}
-		dsp.FinalizePlan(&subqueryPlanCtx, &subqueryPhysPlan)
+		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
 
 		// TODO(arjun): #28264: We set up a row container, wrap it in a row
 		// receiver, and use it and serialize the results of the subquery. The type
@@ -660,7 +660,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryRowReceiver := NewRowResultWriter(rows)
 		subqueryRecv.resultWriter = subqueryRowReceiver
 		subqueryPlans[planIdx].started = true
-		dsp.Run(&subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 		if subqueryRecv.commErr != nil {
 			recv.SetError(subqueryRecv.commErr)
 			return false

@@ -792,7 +792,7 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.PartitionSpans(&planCtx, spans)
+			partitions, err := dsp.PartitionSpans(planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -963,7 +963,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-			partitions, err := dsp.PartitionSpans(&planCtx, roachpb.Spans{span})
+			partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1054,7 +1054,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	}
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-	partitions, err := dsp.PartitionSpans(&planCtx, roachpb.Spans{span})
+	partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)
 	}
