@@ -283,8 +283,8 @@ type RuntimeStatSampler struct {
 	BuildTimestamp *metric.Gauge
 }
 
-// MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSampler {
+// NewRuntimeStatSampler constructs a new RuntimeStatSampler object.
+func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSampler {
 	// Construct the build info metric. It is constant.
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
@@ -316,7 +316,7 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
 
-	return RuntimeStatSampler{
+	return &RuntimeStatSampler{
 		clock:                  clock,
 		startTimeNanos:         clock.PhysicalNow(),
 		initialNetCounters:     netCounters,
