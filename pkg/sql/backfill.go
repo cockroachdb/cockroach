@@ -440,13 +440,13 @@ func (sc *SchemaChanger) distBackfill(
 			)
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, readAsOf,
+				planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, readAsOf,
 			)
 			if err != nil {
 				return err
 			}
 			sc.distSQLPlanner.Run(
-				&planCtx,
+				planCtx,
 				nil, /* txn - the processors manage their own transactions */
 				&plan, recv, evalCtx,
 				nil, /* finishedSetupFn */

@@ -42,6 +42,10 @@ message Error {
 }
 
 message Expression {
+  // Don't generate a typedecl, so we can add the LocalExpr field.
+  option (gogoproto.typedecl) = false;
+  option (gogoproto.goproto_stringer) = false;
+
   // TODO(radu): TBD how this will be used
   optional string version = 1 [(gogoproto.nullable) = false];
 
