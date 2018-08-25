@@ -1797,15 +1797,41 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
-	systemMemory, err := status.GetTotalMemory(ctx)
-	if err != nil {
-		log.Warningf(ctx, "Could not compute system memory due to: %s", err)
-		return
+	var heapProfiler *heapprofiler.HeapProfiler
+
+	{
+		systemMemory, err := status.GetTotalMemory(ctx)
+		if err != nil {
+			log.Warningf(ctx, "Could not compute system memory due to: %s", err)
+		} else {
+			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
+			if err != nil {
+				log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
+			}
+		}
 	}
-	heapProfiler, err := heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
-	if err != nil {
-		log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
-	}
+
+	// We run two separate sampling loops, one for memory stats (via
+	// ReadMemStats) and one for all other runtime stats. This is necessary
+	// because as of go1.11, runtime.ReadMemStats() "stops the world" and
+	// requires waiting for any current GC run to finish. With a large heap, a
+	// single GC run may take longer than the default sampling period (10s).
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(frequency)
+		for {
+			select {
+			case <-timer.C:
+				timer.Read = true
+				s.runtime.SampleMemStats(ctx)
+				timer.Reset(frequency)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
