@@ -38,6 +38,16 @@ func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (i *IntSetting) Encoded(sv *Values) string {
+	return i.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (i *IntSetting) EncodedDefault() string {
+	return EncodeInt(i.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*IntSetting) Typ() string {
 	return "i"

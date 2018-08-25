@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -99,10 +101,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	}
 
 	execCfg := params.extendedEvalCtx.ExecCfg
-	return execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
+	var expectedEncodedValue string
+	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
 		var reportedValue string
 		if n.value == nil {
 			reportedValue = "DEFAULT"
+			expectedEncodedValue = n.setting.EncodedDefault()
 			if _, err := execCfg.InternalExecutor.Exec(
 				ctx, "reset-setting", txn,
 				"DELETE FROM system.settings WHERE name = $1", n.name,
@@ -133,6 +137,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				prev = datums[0]
 			}
 			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value, prev)
+			expectedEncodedValue = encoded
 			if err != nil {
 				return err
 			}
@@ -153,7 +158,31 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			int32(params.extendedEvalCtx.NodeID),
 			EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
 		)
+	}); err != nil {
+		return err
+	}
+
+	if _, ok := n.setting.(*settings.StateMachineSetting); ok && n.value == nil {
+		// The "version" setting doesn't have a well defined "default" since it is
+		// set in a startup migration.
+		return nil
+	}
+	errNotReady := errors.New("setting updated but timed out waiting to read new value")
+	var observed string
+	err := retry.ForDuration(1*time.Second, func() error {
+		observed = n.setting.Encoded(&execCfg.Settings.SV)
+		if observed != expectedEncodedValue {
+			return errNotReady
+		}
+		return nil
 	})
+	if err != nil {
+		log.Warningf(
+			params.ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
+			n.name, expectedEncodedValue, observed,
+		)
+	}
+	return err
 }
 
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }

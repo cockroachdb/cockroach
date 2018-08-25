@@ -40,6 +40,16 @@ func (f *FloatSetting) String(sv *Values) string {
 	return EncodeFloat(f.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (f *FloatSetting) Encoded(sv *Values) string {
+	return f.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (f *FloatSetting) EncodedDefault() string {
+	return EncodeFloat(f.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*FloatSetting) Typ() string {
 	return "f"
