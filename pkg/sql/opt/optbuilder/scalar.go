@@ -286,6 +286,25 @@ func (b *Builder) buildScalar(
 		}
 		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
 
+	case *tree.IfExpr:
+		cond := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		tru := b.buildScalar(t.True.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		els := b.buildScalar(t.Else.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		whens := []memo.GroupID{
+			b.factory.ConstructWhen(b.factory.ConstructTrue(), tru),
+			els,
+		}
+		out = b.factory.ConstructCase(cond, b.factory.InternList(whens))
+
+	case *tree.NullIfExpr:
+		e1 := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		e2 := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		whens := []memo.GroupID{
+			b.factory.ConstructWhen(e2, b.buildDatum(tree.DNull)),
+			e1,
+		}
+		out = b.factory.ConstructCase(e1, b.factory.InternList(whens))
+
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
