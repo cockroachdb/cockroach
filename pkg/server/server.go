@@ -1778,15 +1778,18 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 		log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
 	}
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
-		ticker := time.NewTicker(frequency)
-		defer ticker.Stop()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(frequency)
 		for {
 			select {
-			case <-ticker.C:
+			case <-timer.C:
+				timer.Read = true
 				s.runtime.SampleEnvironment(ctx)
 				if heapProfiler != nil {
 					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.Rss.Value())
 				}
+				timer.Reset(frequency)
 			case <-s.stopper.ShouldStop():
 				return
 			}
