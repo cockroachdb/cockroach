@@ -471,6 +471,11 @@ a public network without combining it with --listen-addr.`,
 		Description: `Certificate and key files are overwritten if they exist.`,
 	}
 
+	GeneratePKCS8Key = FlagInfo{
+		Name:        "also-generate-pkcs8-key",
+		Description: `Also write the key in pkcs8 format to <certs-dir>/client.<username>.key.pk8.`,
+	}
+
 	Password = FlagInfo{
 		Name:        "password",
 		Description: `Prompt for the new user's password.`,

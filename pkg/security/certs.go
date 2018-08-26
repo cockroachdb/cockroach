@@ -69,6 +69,15 @@ func writeKeyToFile(keyFilePath string, key crypto.PrivateKey, overwrite bool) e
 	return WritePEMToFile(keyFilePath, keyFileMode, overwrite, keyBlock)
 }
 
+func writePKCS8KeyToFile(keyFilePath string, key crypto.PrivateKey, overwrite bool) error {
+	keyBytes, err := PrivateKeyToPKCS8(key)
+	if err != nil {
+		return err
+	}
+
+	return SafeWriteToFile(keyFilePath, keyFileMode, overwrite, keyBytes)
+}
+
 // CreateCAPair creates a general CA certificate and associated key.
 func CreateCAPair(
 	certsDir, caKeyPath string,
@@ -339,8 +348,14 @@ func CreateUIPair(
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
 // If a client CA exists, this is used instead.
+// If wantPKCS8Key is true, the private key in PKCS#8 encoding is written as well.
 func CreateClientPair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, user string,
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	user string,
+	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
@@ -396,6 +411,14 @@ func CreateClientPair(
 		return errors.Errorf("error writing client key to %s: %v", keyPath, err)
 	}
 	log.Infof(context.Background(), "Generated client key: %s", keyPath)
+
+	if wantPKCS8Key {
+		pkcs8KeyPath := keyPath + ".pk8"
+		if err := writePKCS8KeyToFile(pkcs8KeyPath, clientKey, overwrite); err != nil {
+			return errors.Errorf("error writing client PKCS8 key to %s: %v", pkcs8KeyPath, err)
+		}
+		log.Infof(context.Background(), "Generated PKCS8 client key: %s", pkcs8KeyPath)
+	}
 
 	return nil
 }
