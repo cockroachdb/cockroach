@@ -508,7 +508,7 @@ Merges are more interesting since the leaseholders of the RHS and the LHS are
 not necessarily colocated. If the RHS's store has closed a higher timestamp, say
 1000, while the LHS's store is only at 500, after the merge commands might be
 accepted on the combined range under the closed timestamp 500 that violate the
-closed timestamp 1000. To counteract this, the `GetSnapshotForMerge` operation
+closed timestamp 1000. To counteract this, the `Subsume` operation
 returns the closed timestamp on the origin store and the merging replica
 takes it into account. Initially, the split trigger will populate the
 timestamp cache for the right side of the merge; if this has too big an impact

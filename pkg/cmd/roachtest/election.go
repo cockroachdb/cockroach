@@ -36,6 +36,8 @@ func registerElectionAfterRestart(r *registry) {
 			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
         CREATE DATABASE IF NOT EXISTS test;
         CREATE TABLE test.kv (k INT PRIMARY KEY, v INT);
+        -- Prevent the merge queue from immediately discarding our splits.
+        SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
         ALTER TABLE test.kv SPLIT AT SELECT generate_series(0, 10000, 100)"`)
 
 			start := timeutil.Now()

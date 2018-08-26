@@ -5,6 +5,10 @@
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 query TTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----

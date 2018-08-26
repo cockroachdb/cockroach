@@ -13,6 +13,10 @@ INSERT INTO NumToSquare SELECT i, i*i FROM generate_series(1, 100) AS g(i)
 statement ok
 CREATE TABLE NumToStr (y INT PRIMARY KEY, str STRING)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split into five parts.
 statement ok
 ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)

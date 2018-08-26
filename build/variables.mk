@@ -152,7 +152,6 @@ define VALID_VARS
   bindir
   bins
   build-mode
-  build-output
   cmake-flags
   configure-flags
   cyan
@@ -176,6 +175,7 @@ define VALID_VARS
   optgen-package
   optgen-xform-rules
   prefix
+  settings-doc-gen
   sig
   space
   sse
