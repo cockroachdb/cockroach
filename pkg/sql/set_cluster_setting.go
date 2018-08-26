@@ -21,11 +21,14 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -93,53 +96,103 @@ func (p *planner) SetClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
-	var reportedValue string
-	if n.value == nil {
-		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-			params.ctx, "reset-setting", params.p.txn,
-			"DELETE FROM system.settings WHERE name = $1", n.name,
-		); err != nil {
-			return err
-		}
-		reportedValue = "DEFAULT"
-	} else {
-		value, err := n.value.Eval(params.p.EvalContext())
-		if err != nil {
-			return err
-		}
-		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := params.p.toSettingString(params.ctx, n.st, n.name, n.setting, value)
-		if err != nil {
-			return err
-		}
-		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-			params.ctx, "update-setting", params.p.txn,
-			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-			n.name, encoded, n.setting.Typ(),
-		); err != nil {
-			return err
-		}
-		reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
+	if !params.p.ExtendedEvalContext().TxnImplicit {
+		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
 	}
 
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogSetClusterSetting,
-		0, /* no target */
-		int32(params.extendedEvalCtx.NodeID),
-		EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
-	)
+	execCfg := params.extendedEvalCtx.ExecCfg
+	var expectedEncodedValue string
+	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
+		var reportedValue string
+		if n.value == nil {
+			reportedValue = "DEFAULT"
+			expectedEncodedValue = n.setting.EncodedDefault()
+			if _, err := execCfg.InternalExecutor.Exec(
+				ctx, "reset-setting", txn,
+				"DELETE FROM system.settings WHERE name = $1", n.name,
+			); err != nil {
+				return err
+			}
+		} else {
+			value, err := n.value.Eval(params.p.EvalContext())
+			if err != nil {
+				return err
+			}
+			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
+			var prev tree.Datum
+			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
+				datums, err := execCfg.InternalExecutor.QueryRow(
+					ctx, "retrieve-prev-setting", txn, "SELECT value FROM system.settings WHERE name = $1", n.name,
+				)
+				if err != nil {
+					return err
+				}
+				if len(datums) == 0 {
+					// There is a SQL migration which adds this value. If it
+					// hasn't run yet, we can't update the version as we don't
+					// have good enough information about the current cluster
+					// version.
+					return errors.New("no persisted cluster version found, please retry later")
+				}
+				prev = datums[0]
+			}
+			encoded, err := toSettingString(ctx, n.st, n.name, n.setting, value, prev)
+			expectedEncodedValue = encoded
+			if err != nil {
+				return err
+			}
+			if _, err = execCfg.InternalExecutor.Exec(
+				ctx, "update-setting", txn,
+				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+				n.name, encoded, n.setting.Typ(),
+			); err != nil {
+				return err
+			}
+		}
+
+		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			ctx,
+			txn,
+			EventLogSetClusterSetting,
+			0, /* no target */
+			int32(params.extendedEvalCtx.NodeID),
+			EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
+		)
+	}); err != nil {
+		return err
+	}
+
+	if _, ok := n.setting.(*settings.StateMachineSetting); ok && n.value == nil {
+		// The "version" setting doesn't have a well defined "default" since it is
+		// set in a startup migration.
+		return nil
+	}
+	errNotReady := errors.New("setting updated but timed out waiting to read new value")
+	var observed string
+	err := retry.ForDuration(1*time.Second, func() error {
+		observed = n.setting.Encoded(&execCfg.Settings.SV)
+		if observed != expectedEncodedValue {
+			return errNotReady
+		}
+		return nil
+	})
+	if err != nil {
+		log.Warningf(
+			params.ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
+			n.name, expectedEncodedValue, observed,
+		)
+	}
+	return err
 }
 
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
-func (p *planner) toSettingString(
-	ctx context.Context, st *cluster.Settings, name string, setting settings.Setting, d tree.Datum,
+func toSettingString(
+	ctx context.Context, st *cluster.Settings, name string, s settings.Setting, d, prev tree.Datum,
 ) (string, error) {
-	switch setting := setting.(type) {
+	switch setting := s.(type) {
 	case *settings.StringSetting:
 		if s, ok := d.(*tree.DString); ok {
 			if err := setting.Validate(&st.SV, string(*s)); err != nil {
@@ -150,23 +203,7 @@ func (p *planner) toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.StateMachineSetting:
 		if s, ok := d.(*tree.DString); ok {
-			datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
-				ctx, "retrieve-prev-setting",
-				p.txn,
-				"SELECT value FROM system.settings WHERE name = $1", name,
-			)
-			if err != nil {
-				return "", err
-			}
-			if len(datums) == 0 {
-				// There is a SQL migration which adds this value. If it
-				// hasn't run yet, we can't update the version as we don't
-				// have good enough information about the current cluster
-				// version.
-				return "", errors.New("no persisted cluster version found, please retry later")
-			}
-
-			dStr, ok := datums[0].(*tree.DString)
+			dStr, ok := prev.(*tree.DString)
 			if !ok {
 				return "", errors.New("the existing value is not a string")
 			}
