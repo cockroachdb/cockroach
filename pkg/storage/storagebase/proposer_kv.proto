@@ -16,7 +16,6 @@ syntax = "proto3";
 package cockroach.storage.storagebase;
 option go_package = "storagebase";
 
-import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/engine/enginepb/mvcc.proto";
@@ -60,6 +59,25 @@ message ChangeReplicas {
 
   roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
+}
+
+// ComputeChecksum is emitted when a ComputeChecksum request is evaluated. It
+// instructs the replica to compute a checksum at the time the command is
+// applied.
+message ComputeChecksum {
+  option (gogoproto.equal) = true;
+
+  // ChecksumID is a handle by which the checksum can be retrieved in a later
+  // CollectChecksum request.
+  bytes checksum_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ChecksumID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // SaveSnapshot indicates that the snapshot used to compute the checksum
+  // should be saved so that a diff of divergent replicas can later be computed.
+  bool save_snapshot = 2;
 }
 
 // Compaction holds core details about a suggested compaction.
@@ -106,7 +124,8 @@ message ReplicatedEvalResult {
   storage.storagebase.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
-  roachpb.ComputeChecksumRequest compute_checksum = 5;
+  reserved 5;
+  ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
   reserved 7;
   // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
