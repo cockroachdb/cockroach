@@ -182,7 +182,7 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 }
 
 // GetLease returns the Replica's current and next lease (if any).
-func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 	)
