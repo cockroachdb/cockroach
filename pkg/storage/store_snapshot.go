@@ -437,7 +437,7 @@ func (s *Store) canApplySnapshotLocked(
 				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
-					(pendingLease == nil || !r.IsLeaseValid(*pendingLease, now))
+					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC

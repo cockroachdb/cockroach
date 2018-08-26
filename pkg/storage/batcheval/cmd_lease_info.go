@@ -40,10 +40,10 @@ func LeaseInfo(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.LeaseInfoResponse)
 	lease, nextLease := cArgs.EvalCtx.GetLease()
-	if nextLease != nil {
+	if nextLease != (roachpb.Lease{}) {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
-		reply.Lease = *nextLease
+		reply.Lease = nextLease
 	} else {
 		reply.Lease = lease
 	}
