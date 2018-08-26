@@ -115,6 +115,8 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 	})
 }
 
+const testProcessorEventCCap = 16
+
 func newTestProcessorWithTxnPusher(
 	rtsIter engine.SimpleIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
@@ -133,7 +135,7 @@ func newTestProcessorWithTxnPusher(
 		TxnPusher:            txnPusher,
 		PushTxnsInterval:     pushTxnInterval,
 		PushTxnsAge:          pushTxnAge,
-		EventChanCap:         16,
+		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
 	p.Start(stopper, rtsIter)
@@ -368,6 +370,83 @@ func TestNilProcessor(t *testing.T) {
 	// to call on a nil Processor.
 	require.Panics(t, func() { p.Start(stop.NewStopper(), nil) })
 	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, nil, nil) })
+}
+
+func TestProcessorSlowConsumer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	p, stopper := newTestProcessor(nil /* rtsIter */)
+	defer stopper.Stop(context.Background())
+
+	// Set the Processor's eventC timeout.
+	p.EventChanTimeout = 30 * time.Millisecond
+
+	// Add a registration.
+	r1Stream := newTestStream()
+	r1ErrC := make(chan *roachpb.Error, 1)
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		nil, /* catchUpIter */
+		r1Stream,
+		r1ErrC,
+	)
+	require.Equal(t, 1, p.Len())
+	require.Equal(t,
+		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			hlc.Timestamp{WallTime: 0},
+		)},
+		r1Stream.Events(),
+	)
+
+	// Block its Send method and fill up the processor's input channel.
+	unblock := r1Stream.BlockSend()
+	fillEventC := func() {
+		// Need one more message to fill the channel because the first one
+		// will be Sent to the stream and block the processor goroutine.
+		toFill := testProcessorEventCCap + 1
+		for i := 0; i < toFill; i++ {
+			ts := hlc.Timestamp{WallTime: int64(i + 2)}
+			p.ConsumeLogicalOps(
+				writeValueOpWithKV(roachpb.Key("k"), ts, []byte("val")),
+			)
+		}
+	}
+	fillEventC()
+
+	// Consume one more event. Should block.
+	consumedC := make(chan struct{})
+	go func() {
+		p.ConsumeLogicalOps(
+			writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 15}, []byte("val")),
+		)
+		close(consumedC)
+	}()
+	select {
+	case <-consumedC:
+		t.Errorf("ConsumeLogicalOps should have blocked")
+	case <-time.After(p.EventChanTimeout / 2):
+	}
+
+	// Unblock the send channel. The events should quickly be consumed.
+	unblock()
+	<-consumedC
+	p.syncEventC()
+	require.Equal(t, testProcessorEventCCap+2, len(r1Stream.Events()))
+
+	// Block the Send method again and fill up the processor's input channel.
+	unblock = r1Stream.BlockSend()
+	fillEventC()
+
+	// Consume one more event. Should tear down processor after timeout.
+	sent := p.ConsumeLogicalOps(
+		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 15}, []byte("val")),
+	)
+	require.False(t, sent)
+
+	// Registration should be rejected with error.
+	unblock()
+	require.Equal(t, newErrBufferCapacityExceeded().Message, (<-r1ErrC).Message)
 }
 
 // TestProcessorInitializeResolvedTimestamp tests that when a Processor is given
