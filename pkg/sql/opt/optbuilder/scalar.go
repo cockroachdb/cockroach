@@ -281,6 +281,25 @@ func (b *Builder) buildScalarHelper(
 		}
 		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
 
+	case *tree.IfExpr:
+		cond := b.buildScalarHelper(t.Cond.(tree.TypedExpr), "", inScope, nil)
+		tru := b.buildScalarHelper(t.True.(tree.TypedExpr), "", inScope, nil)
+		els := b.buildScalarHelper(t.Else.(tree.TypedExpr), "", inScope, nil)
+		whens := []memo.GroupID{
+			b.factory.ConstructWhen(b.factory.ConstructTrue(), tru),
+			els,
+		}
+		out = b.factory.ConstructCase(cond, b.factory.InternList(whens))
+
+	case *tree.NullIfExpr:
+		e1 := b.buildScalarHelper(t.Expr1.(tree.TypedExpr), "", inScope, nil)
+		e2 := b.buildScalarHelper(t.Expr2.(tree.TypedExpr), "", inScope, nil)
+		whens := []memo.GroupID{
+			b.factory.ConstructWhen(e2, b.buildDatum(tree.DNull)),
+			e1,
+		}
+		out = b.factory.ConstructCase(e1, b.factory.InternList(whens))
+
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalarHelper(texpr, "", inScope, nil)
