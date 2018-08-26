@@ -150,5 +150,8 @@ func (lj *lookupJoinNode) Values() tree.Datums {
 func (lj *lookupJoinNode) Close(ctx context.Context) {
 	if lj.run.n != nil {
 		lj.run.n.Close(ctx)
+	} else {
+		lj.input.Close(ctx)
+		lj.table.Close(ctx)
 	}
 }
