@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -185,11 +186,12 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	desc := r.mu.state.Desc
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
-		AmbientContext: r.AmbientContext,
-		Clock:          r.Clock(),
-		Span:           desc.RSpan(),
-		TxnPusher:      &tp,
-		EventChanCap:   128,
+		AmbientContext:   r.AmbientContext,
+		Clock:            r.Clock(),
+		Span:             desc.RSpan(),
+		TxnPusher:        &tp,
+		EventChanCap:     512,
+		EventChanTimeout: 50 * time.Millisecond,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
 
@@ -316,5 +318,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
+	if !r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...) {
+		// Consumption failed and the rangefeed was stopped.
+		r.raftMu.rangefeed = nil
+	}
 }
