@@ -113,6 +113,7 @@ func (a *appStats) recordStatement(
 	if t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
+	now := timeutil.Now()
 
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
@@ -128,6 +129,10 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s := a.getStatsForStmt(key)
+
+	// Make sure to add statement recording to the overhead latency! The above
+	// FormatNode call is particularly expensive.
+	ovhLat += timeutil.Now().Sub(now).Seconds()
 
 	// Collect the per-statement statistics.
 	s.Lock()
