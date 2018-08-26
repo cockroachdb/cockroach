@@ -32,11 +32,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -101,7 +104,75 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
 	}
+}
 
+// TestCheckConsistencyReplay verifies that two ComputeChecksum requests with
+// the same checksum ID are not committed to the Raft log, even if DistSender
+// retries the request.
+func TestCheckConsistencyReplay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type applyKey struct {
+		checksumID uuid.UUID
+		storeID    roachpb.StoreID
+	}
+	var state struct {
+		syncutil.Mutex
+		forcedRetry bool
+		applies     map[applyKey]int
+	}
+	state.applies = map[applyKey]int{}
+
+	var mtc *multiTestContext
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil /* clock */)
+
+	// Arrange to count the number of times each checksum command applies to each
+	// store.
+	storeCfg.TestingKnobs.TestingApplyFilter = func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+		state.Lock()
+		defer state.Unlock()
+		if ccr := args.ComputeChecksum; ccr != nil {
+			state.applies[applyKey{ccr.ChecksumID, args.StoreID}]++
+		}
+		return nil
+	}
+
+	// Arrange to trigger a retry when a ComputeChecksum request arrives.
+	storeCfg.TestingKnobs.TestingResponseFilter = func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		state.Lock()
+		defer state.Unlock()
+		if ba.IsSingleComputeChecksumRequest() && !state.forcedRetry {
+			state.forcedRetry = true
+			return roachpb.NewError(roachpb.NewSendError("injected failure"))
+		}
+		return nil
+	}
+
+	mtc = &multiTestContext{storeConfig: &storeCfg}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1)
+
+	checkArgs := roachpb.CheckConsistencyRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    []byte("a"),
+			EndKey: []byte("b"),
+		},
+	}
+	if _, err := client.SendWrapped(ctx, mtc.Store(0).TestSender(), &checkArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	state.Lock()
+	defer state.Unlock()
+	for applyKey, count := range state.applies {
+		if count != 1 {
+			t.Errorf("checksum %s was applied %d times to s%d (expected once)",
+				applyKey.checksumID, count, applyKey.storeID)
+		}
+	}
 }
 
 func TestCheckConsistencyInconsistent(t *testing.T) {

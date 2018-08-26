@@ -141,30 +141,26 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	}
 }
 
-func (r *Replica) computeChecksumPostApply(
-	ctx context.Context, args roachpb.ComputeChecksumRequest,
-) {
+func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagebase.ComputeChecksum) {
 	stopper := r.store.Stopper()
-	id := args.ChecksumID
 	now := timeutil.Now()
 	r.mu.Lock()
 	var notify chan struct{}
-	if c, ok := r.mu.checksums[id]; !ok {
+	if c, ok := r.mu.checksums[cc.ChecksumID]; !ok {
 		// There is no record of this ID. Make a new notification.
 		notify = make(chan struct{})
 	} else if !c.started {
 		// A CollectChecksumRequest is waiting on the existing notification.
 		notify = c.notify
 	} else {
-		// A previous attempt was made to compute the checksum.
-		r.mu.Unlock()
-		return
+		log.Fatalf(ctx, "attempted to apply ComputeChecksum command with duplicated checksum ID %s",
+			cc.ChecksumID)
 	}
 
 	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = ReplicaChecksum{started: true, notify: notify}
+	r.mu.checksums[cc.ChecksumID] = ReplicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	// Caller is holding raftMu, so an engine snapshot is automatically
@@ -175,7 +171,7 @@ func (r *Replica) computeChecksumPostApply(
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {
 		defer snap.Close()
 		var snapshot *roachpb.RaftSnapshotData
-		if args.Snapshot {
+		if cc.SaveSnapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
 		}
 		result, err := r.sha512(ctx, desc, snap, snapshot)
@@ -183,12 +179,12 @@ func (r *Replica) computeChecksumPostApply(
 			log.Errorf(ctx, "%v", err)
 			result = nil
 		}
-		r.computeChecksumDone(ctx, id, result, snapshot)
+		r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
 	}); err != nil {
 		defer snap.Close()
-		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
+		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", cc.ChecksumID))
 		// Set checksum to nil.
-		r.computeChecksumDone(ctx, id, nil, nil)
+		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
 	}
 }
 

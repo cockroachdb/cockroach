@@ -991,11 +991,7 @@ message ComputeChecksumRequest {
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   uint32 version = 2;
-  // A unique identifier to match a future storage.CollectChecksumRequest with
-  // this request.
-  bytes checksum_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  reserved 3;
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
   bool snapshot = 4;
@@ -1004,6 +1000,12 @@ message ComputeChecksumRequest {
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 message ComputeChecksumResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // ChecksumID is the unique identifier that can be used to get the computed
+  // checksum in a future storage.CollectChecksumRequest.
+  bytes checksum_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 enum ExportStorageProvider {
