@@ -38,6 +38,7 @@ var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
+var generatePKCS8Key bool
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
@@ -187,7 +188,8 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			keySize,
 			certificateLifetime,
 			overwriteFiles,
-			username),
+			username,
+			generatePKCS8Key),
 		"failed to generate client certificate and key")
 }
 
