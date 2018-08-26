@@ -22,6 +22,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1409,19 +1413,57 @@ func TestEval(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			t.Logf("Type checked expression: %s", typedExpr)
-			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
-				t.Fatalf("%s: %v", d.expr, err)
+
+			checkExpr := func(e tree.TypedExpr) {
+				r, err := e.Eval(ctx)
+				if err != nil {
+					t.Fatalf("%s: %v", e, err)
+				}
+				if s := r.String(); d.expected != s {
+					t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+				}
 			}
-			t.Logf("Normalized expression:   %s", typedExpr)
-			r, err := typedExpr.Eval(ctx)
-			if err != nil {
-				t.Fatalf("%s: %v", d.expr, err)
-			}
-			if s := r.String(); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-			}
+
+			t.Run("opt", func(t *testing.T) {
+				expr, err := optBuildScalar(ctx, typedExpr)
+				if err != nil {
+					t.Fatalf("%s: %v", typedExpr, err)
+				}
+
+				checkExpr(expr)
+			})
+
+			t.Run("no-opt", func(t *testing.T) {
+				if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				t.Logf("Normalized expression:   %s", typedExpr)
+
+				checkExpr(typedExpr)
+			})
 		})
 	}
+}
+
+func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr, error) {
+	var o xform.Optimizer
+	o.Init(evalCtx)
+	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
+	b.AllowUnsupportedExpr = true
+	group, err := b.Build(e)
+	if err != nil {
+		return nil, err
+	}
+	ev := o.Optimize(group, &props.Physical{})
+
+	bld := execbuilder.New(nil /* factory */, ev)
+	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
+
+	expr, err := bld.BuildScalar(&ivh)
+	if err != nil {
+		return nil, err
+	}
+	return expr, nil
 }
 
 func TestTimeConversion(t *testing.T) {
