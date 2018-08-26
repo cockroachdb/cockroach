@@ -67,16 +67,14 @@ func (r *Replica) CheckConsistency(
 		key = keys.LocalMax
 	}
 	endKey := desc.EndKey.AsRawKey()
-	id := uuid.MakeV4()
 
 	checkArgs := roachpb.ComputeChecksumRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    key,
 			EndKey: endKey,
 		},
-		Version:    batcheval.ReplicaChecksumVersion,
-		ChecksumID: id,
-		Snapshot:   args.WithDiff,
+		Version:  batcheval.ReplicaChecksumVersion,
+		Snapshot: args.WithDiff,
 	}
 
 	results, err := r.RunConsistencyCheck(ctx, checkArgs)
@@ -205,14 +203,11 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	{
-		var b client.Batch
-		b.AddRawRequest(&req)
-
-		if err := r.store.db.Run(ctx, &b); err != nil {
-			return nil, err
-		}
+	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
+	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
 	var orderedReplicas []roachpb.ReplicaDescriptor
 	{
@@ -249,7 +244,7 @@ func (r *Replica) RunConsistencyCheck(
 				if len(results) > 0 {
 					masterChecksum = results[0].Response.Checksum
 				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, req.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,

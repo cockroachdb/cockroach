@@ -21,17 +21,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
 	RegisterCommand(roachpb.ComputeChecksum, DefaultDeclareKeys, ComputeChecksum)
 }
 
-// Version numbers for Replica checksum computation. Requests fail unless the
-// versions are compatible.
+// Version numbers for Replica checksum computation. Requests silently no-op
+// unless the versions are compatible.
 const (
-	ReplicaChecksumVersion    = 2
+	ReplicaChecksumVersion    = 3
 	ReplicaChecksumGCInterval = time.Hour
 )
 
@@ -44,10 +46,18 @@ func ComputeChecksum(
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 
 	if args.Version != ReplicaChecksumVersion {
-		log.Errorf(ctx, "Incompatible versions: e=%d, v=%d", ReplicaChecksumVersion, args.Version)
+		log.Infof(ctx, "incompatible ComputeChecksum versions (server: %d, requested: %d)",
+			ReplicaChecksumVersion, args.Version)
 		return result.Result{}, nil
 	}
+
+	reply := resp.(*roachpb.ComputeChecksumResponse)
+	reply.ChecksumID = uuid.MakeV4()
+
 	var pd result.Result
-	pd.Replicated.ComputeChecksum = args
+	pd.Replicated.ComputeChecksum = &storagebase.ComputeChecksum{
+		ChecksumID:   reply.ChecksumID,
+		SaveSnapshot: args.Snapshot,
+	}
 	return pd, nil
 }
