@@ -100,13 +100,13 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 
 		// If this is an intent, inform the Processor.
 		if meta.Txn != nil {
-			var op enginepb.MVCCLogicalOp
-			op.SetValue(&enginepb.MVCCWriteIntentOp{
+			var ops [1]enginepb.MVCCLogicalOp
+			ops[0].SetValue(&enginepb.MVCCWriteIntentOp{
 				TxnID:     meta.Txn.ID,
 				TxnKey:    meta.Txn.Key,
 				Timestamp: meta.Txn.Timestamp,
 			})
-			s.p.ConsumeLogicalOps(op)
+			s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
 		}
 	}
 	return nil
@@ -337,7 +337,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	}
 
 	// Inform the processor of all logical ops.
-	a.p.ConsumeLogicalOps(ops...)
+	a.p.sendEvent(event{ops: ops}, 0 /* timeout */)
 
 	// Clean up txns, if necessary,
 	return a.p.TxnPusher.CleanupTxnIntentsAsync(ctx, toCleanup)

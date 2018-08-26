@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -38,7 +39,7 @@ import (
 var RangefeedEnabled = settings.RegisterBoolSetting(
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
-	false,
+	true,
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
@@ -193,11 +194,12 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	desc := r.mu.state.Desc
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
-		AmbientContext: r.AmbientContext,
-		Clock:          r.Clock(),
-		Span:           desc.RSpan(),
-		TxnPusher:      &tp,
-		EventChanCap:   512,
+		AmbientContext:   r.AmbientContext,
+		Clock:            r.Clock(),
+		Span:             desc.RSpan(),
+		TxnPusher:        &tp,
+		EventChanCap:     512,
+		EventChanTimeout: 500 * time.Millisecond,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
 	r.store.addReplicaWithRangefeed(r.RangeID)
@@ -337,10 +339,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 // leaseCompatibleWithRangeFeeds returns an error if the lease is not compatbile
 // with rangefeeds.
 func leaseCompatibleWithRangeFeeds(lease roachpb.Lease) *roachpb.Error {
-	if lease.Type() != roachpb.LeaseEpoch {
-		return roachpb.NewErrorf("replica lease %v (type=%s) incompatible with rangefeeds",
-			lease, lease.Type())
-	}
+	// if lease.Type() != roachpb.LeaseEpoch {
+	// 	return roachpb.NewErrorf("replica lease %v (type=%s) incompatible with rangefeeds",
+	// 		lease, lease.Type())
+	// }
 	return nil
 }
 

@@ -30,7 +30,7 @@ type buffer struct {
 }
 
 func makeBuffer() *buffer {
-	return &buffer{entriesCh: make(chan bufferEntry)}
+	return &buffer{entriesCh: make(chan bufferEntry, 4096)}
 }
 
 // AddKV inserts a changed kv into the buffer.

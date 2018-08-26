@@ -387,15 +387,25 @@ func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
 	case e := <-a.eventC:
 		return e, nil
 	case err := <-a.errC:
-		return nil, err
+		// Prioritize eventC.
+		select {
+		case e := <-a.eventC:
+			a.errC <- err
+			return e, nil
+		default:
+			return nil, err
+		}
 	}
 }
 
 // roachpb.Internal_RangeFeedServer methods.
 func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
-	// TODO(nvanbenschoten): should we return an error instead of blocking?
-	a.eventC <- e
-	return nil
+	select {
+	case a.eventC <- e:
+		return nil
+	case <-a.ctx.Done():
+		return a.ctx.Err()
+	}
 }
 
 // grpc.ClientStream methods.
@@ -419,6 +429,7 @@ var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	rfAdapter := rangeFeedClientAdapter{
 		ctx:    ctx,
 		eventC: make(chan *roachpb.RangeFeedEvent, 128),
@@ -426,6 +437,7 @@ func (a internalClientAdapter) RangeFeed(
 	}
 
 	go func() {
+		defer cancel()
 		err := a.InternalServer.RangeFeed(args, rfAdapter)
 		if err == nil {
 			err = io.EOF

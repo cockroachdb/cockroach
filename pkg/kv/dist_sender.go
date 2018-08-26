@@ -1582,7 +1582,11 @@ func (ds *DistSender) singleRangeFeed(
 			case *roachpb.RangeFeedError:
 				return argsCopy.Timestamp, &t.Error
 			}
-			eventCh <- event
+			select {
+			case eventCh <- event:
+			case <-ctx.Done():
+				return argsCopy.Timestamp, roachpb.NewError(ctx.Err())
+			}
 		}
 	}
 }

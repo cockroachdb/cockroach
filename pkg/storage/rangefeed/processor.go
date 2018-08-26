@@ -37,7 +37,7 @@ const (
 	defaultPushTxnsAge = 10 * time.Second
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
-	defaultCheckStreamsInterval = 100 * time.Millisecond
+	defaultCheckStreamsInterval = 1 * time.Second
 )
 
 // errBufferCapacityExceeded is an error that is returned to subscribers if
@@ -58,11 +58,25 @@ type Config struct {
 	Clock *hlc.Clock
 	Span  roachpb.RSpan
 
-	TxnPusher        TxnPusher
+	TxnPusher TxnPusher
+	// PushTxnsInterval specifies the interval at which a Processor will push
+	// all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
 	PushTxnsInterval time.Duration
-	PushTxnsAge      time.Duration
+	// PushTxnsAge specifies the age at which a Processor will begin to consider
+	// a transaction old enough to push.
+	PushTxnsAge time.Duration
 
-	EventChanCap         int
+	// EventChanCap specifies the capacity to give to the Processor's input
+	// channel.
+	EventChanCap int
+	// EventChanTimeout specifies the maximum duration that methods will
+	// wait to send on the Processor's input channel before giving up and
+	// shutting down the Processor. 0 for no timeout.
+	EventChanTimeout time.Duration
+
+	// CheckStreamsInterval specifies interval at which a Processor will check
+	// all streams to make sure they have not been canceled.
 	CheckStreamsInterval time.Duration
 }
 
@@ -395,7 +409,7 @@ func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) {
 	if len(ops) == 0 {
 		return
 	}
-	p.sendEvent(true /* wait */, event{ops: ops})
+	p.sendEvent(event{ops: ops}, p.EventChanTimeout)
 }
 
 // ConsumeLogicalOpsWithoutBlocking is like ConsumeLogicalOps, but it will never
@@ -410,7 +424,7 @@ func (p *Processor) ConsumeLogicalOpsWithoutBlocking(ops ...enginepb.MVCCLogical
 	if len(ops) == 0 {
 		return true
 	}
-	return p.sendEvent(false /* wait */, event{ops: ops})
+	return p.sendEvent(event{ops: ops}, p.EventChanTimeout)
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
@@ -423,7 +437,7 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) {
 	if closedTS == (hlc.Timestamp{}) {
 		return
 	}
-	p.sendEvent(true /* wait */, event{ct: closedTS})
+	p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
 }
 
 // ForwardClosedTSWithoutBlocking is like ForwardClosedTS, but it will never
@@ -438,11 +452,12 @@ func (p *Processor) ForwardClosedTSWithoutBlocking(closedTS hlc.Timestamp) bool 
 	if closedTS == (hlc.Timestamp{}) {
 		return true
 	}
-	return p.sendEvent(false /* wait */, event{ct: closedTS})
+	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
 }
 
-func (p *Processor) sendEvent(wait bool, e event) bool {
-	if wait {
+// 0 for no timeout.
+func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
+	if timeout == 0 {
 		select {
 		case p.eventC <- e:
 		case <-p.stoppedC:
@@ -454,10 +469,16 @@ func (p *Processor) sendEvent(wait bool, e event) bool {
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		default:
-			// Sending on the eventC channel would have blocked.
-			// Instead, tear down the processor and return immediately.
-			p.sendStop(errBufferCapacityExceeded)
-			return false
+			select {
+			case p.eventC <- e:
+			case <-p.stoppedC:
+				// Already stopped. Do nothing.
+			case <-time.After(timeout):
+				// Sending on the eventC channel would have blocked.
+				// Instead, tear down the processor and return immediately.
+				p.sendStop(errBufferCapacityExceeded)
+				return false
+			}
 		}
 	}
 	return true
