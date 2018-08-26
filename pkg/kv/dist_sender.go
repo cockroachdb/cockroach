@@ -1278,7 +1278,9 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	curReplica := transport.NextReplica()
-	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, ba.Summary(), curReplica)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, ba.Summary(), curReplica)
+	}
 	br, err := transport.SendNext(ctx, ba)
 
 	// This loop will retry operations that fail with errors that reflect

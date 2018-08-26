@@ -114,7 +114,7 @@ func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
 func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")
 }
-func (m *mockEvalCtx) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (m *mockEvalCtx) GetLease() (roachpb.Lease, roachpb.Lease) {
 	panic("unimplemented")
 }
 
