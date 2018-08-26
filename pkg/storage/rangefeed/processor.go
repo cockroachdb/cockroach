@@ -40,6 +40,18 @@ const (
 	defaultCheckStreamsInterval = 100 * time.Millisecond
 )
 
+// errBufferCapacityExceeded is an error that is returned to subscribers if
+// the rangefeed processor is not able to keep up with the flow of incoming
+// events and is forced to drop events in order to not block. The error is
+// usually associated with a slow consumer.
+// TODO(nvanbenschoten): currently a single slow consumer can cause all
+// rangefeeds on a Range to be shut down with this error. We should work
+// on isolating buffering for individual consumers so that a slow consumer
+// only affects itself. One idea for this is to replace Stream.Send with
+// Stream.SendAsync and give each stream its own individual buffer. If
+// an individual stream is unable to keep up, to should fail on its own.
+var errBufferCapacityExceeded = roachpb.NewErrorf("rangefeed: buffer capacity exceeded")
+
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
@@ -129,7 +141,7 @@ func NewProcessor(cfg Config) *Processor {
 		lenReqC:  make(chan struct{}),
 		lenResC:  make(chan int),
 		eventC:   make(chan event, cfg.EventChanCap),
-		stopC:    make(chan *roachpb.Error),
+		stopC:    make(chan *roachpb.Error, 1),
 		stoppedC: make(chan struct{}),
 	}
 }
@@ -291,12 +303,15 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	}
 	// Flush any remaining events before stopping.
 	p.syncEventC()
-	// Send on the channel instead of closing it. This ensures synchronous
-	// communication so that when this method returns the caller can be sure
-	// that the Processor goroutine is canceling all registrations and shutting
-	// down.
+	// Send the processor a stop signal.
+	p.sendStop(pErr)
+}
+
+func (p *Processor) sendStop(pErr *roachpb.Error) {
 	select {
 	case p.stopC <- pErr:
+		// stopC has non-zero capacity so this should not block unless
+		// multiple callers attempt to stop the Processor concurrently.
 	case <-p.stoppedC:
 		// Already stopped. Do nothing.
 	}
@@ -380,12 +395,22 @@ func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) {
 	if len(ops) == 0 {
 		return
 	}
-	// TODO(nvanbenschoten): backpressure or disconnect on blocking call.
-	select {
-	case p.eventC <- event{ops: ops}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+	p.sendEvent(true /* wait */, event{ops: ops})
+}
+
+// ConsumeLogicalOpsWithoutBlocking is like ConsumeLogicalOps, but it will never
+// block on the processor's input channel. Instead, the method returns false if
+// it would have blocked on a full channel and gave up consuming the operations
+// instead. If the method returns false, the processor will have been stopped,
+// so calling Stop is not necessary. Safe to call on nil Processor.
+func (p *Processor) ConsumeLogicalOpsWithoutBlocking(ops ...enginepb.MVCCLogicalOp) bool {
+	if p == nil {
+		return true
 	}
+	if len(ops) == 0 {
+		return true
+	}
+	return p.sendEvent(false /* wait */, event{ops: ops})
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
@@ -398,11 +423,44 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) {
 	if closedTS == (hlc.Timestamp{}) {
 		return
 	}
-	select {
-	case p.eventC <- event{ct: closedTS}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+	p.sendEvent(true /* wait */, event{ct: closedTS})
+}
+
+// ForwardClosedTSWithoutBlocking is like ForwardClosedTS, but it will never
+// block on the processor's input channel. Instead, the method returns false if
+// it would have blocked on a full channel and gave up consuming the operations
+// instead. If the method returns false, the processor will have been stopped,
+// so calling Stop is not necessary. Safe to call on nil Processor.
+func (p *Processor) ForwardClosedTSWithoutBlocking(closedTS hlc.Timestamp) bool {
+	if p == nil {
+		return true
 	}
+	if closedTS == (hlc.Timestamp{}) {
+		return true
+	}
+	return p.sendEvent(false /* wait */, event{ct: closedTS})
+}
+
+func (p *Processor) sendEvent(wait bool, e event) bool {
+	if wait {
+		select {
+		case p.eventC <- e:
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		}
+	} else {
+		select {
+		case p.eventC <- e:
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		default:
+			// Sending on the eventC channel would have blocked.
+			// Instead, tear down the processor and return immediately.
+			p.sendStop(errBufferCapacityExceeded)
+			return false
+		}
+	}
+	return true
 }
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has

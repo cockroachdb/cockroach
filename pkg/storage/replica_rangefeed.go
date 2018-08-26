@@ -197,7 +197,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		Clock:          r.Clock(),
 		Span:           desc.RSpan(),
 		TxnPusher:      &tp,
-		EventChanCap:   128,
+		EventChanCap:   512,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
 	r.store.addReplicaWithRangefeed(r.RangeID)
@@ -328,7 +328,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
+	if !r.raftMu.rangefeed.ConsumeLogicalOpsWithoutBlocking(ops.Ops...) {
+		// Consumption failed and the rangefeed was stopped.
+		r.raftMu.rangefeed = nil
+	}
 }
 
 // leaseCompatibleWithRangeFeeds returns an error if the lease is not compatbile
