@@ -1117,7 +1117,7 @@ func (s *Store) SetDraining(drain bool) {
 						var llHandle *leaseRequestHandle
 						r.mu.Lock()
 						lease, nextLease := r.getLeaseRLocked()
-						if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
+						if nextLease != (roachpb.Lease{}) && nextLease.OwnedBy(s.StoreID()) {
 							llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 						}
 						r.mu.Unlock()

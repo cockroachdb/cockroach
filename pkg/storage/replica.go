@@ -1265,17 +1265,17 @@ func (r *Replica) IsDestroyed() (DestroyReason, error) {
 }
 
 // GetLease returns the lease and, if available, the proposed next lease.
-func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getLeaseRLocked()
 }
 
-func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return *r.mu.state.Lease, &nextLease
+		return *r.mu.state.Lease, nextLease
 	}
-	return *r.mu.state.Lease, nil
+	return *r.mu.state.Lease, roachpb.Lease{}
 }
 
 // OwnsValidLease returns whether this replica is the current valid
