@@ -100,6 +100,11 @@ func (s *testStream) Events() []*roachpb.RangeFeedEvent {
 	return es
 }
 
+func (s *testStream) BlockSend() func() {
+	s.mu.Lock()
+	return s.mu.Unlock
+}
+
 type testRegistration struct {
 	registration
 	stream *testStream
