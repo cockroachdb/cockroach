@@ -22,14 +22,12 @@ SELECT * FROM xy WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -44,25 +42,21 @@ SELECT xy.x + 1 = length('foo') + xy.y AS a, uv.rowid * xy.x AS b FROM xy, uv
 ----
 project
  ├── columns: a:6(bool) b:7(int)
- ├── stats: [rows=1000000]
  ├── prune: (6,7)
  ├── inner-join
  │    ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
- │    ├── stats: [rows=1000000]
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2), (5)-->(3,4)
  │    ├── prune: (1-5)
  │    ├── interesting orderings: (+1) (+5)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    ├── stats: [rows=1000]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
  │    │    └── interesting orderings: (+1)
  │    ├── scan uv
  │    │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(3,4)
  │    │    ├── prune: (3-5)
@@ -86,14 +80,12 @@ SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -103,20 +95,17 @@ select
            └── project
                 ├── columns: u:3(int!null) v:4(int!null)
                 ├── outer: (1)
-                ├── stats: [rows=1.42857143]
                 ├── fd: ()-->(3)
                 ├── prune: (3,4)
                 └── select
                      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
                      ├── outer: (1)
-                     ├── stats: [rows=1.42857143, distinct(1)=1, distinct(3)=1]
                      ├── key: (5)
                      ├── fd: ()-->(3), (5)-->(4)
                      ├── prune: (4,5)
                      ├── interesting orderings: (+5)
                      ├── scan uv
                      │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-                     │    ├── stats: [rows=1000, distinct(3)=700]
                      │    ├── key: (5)
                      │    ├── fd: (5)-->(3,4)
                      │    ├── prune: (3-5)
@@ -131,13 +120,11 @@ SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -147,19 +134,16 @@ select
            ├── project
            │    ├── columns: v:4(int!null)
            │    ├── outer: (1)
-           │    ├── stats: [rows=1.42857143]
            │    ├── prune: (4)
            │    └── select
            │         ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
            │         ├── outer: (1)
-           │         ├── stats: [rows=1.42857143, distinct(1)=1, distinct(3)=1]
            │         ├── key: (5)
            │         ├── fd: ()-->(3), (5)-->(4)
            │         ├── prune: (4,5)
            │         ├── interesting orderings: (+5)
            │         ├── scan uv
            │         │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │         │    ├── stats: [rows=1000, distinct(3)=700]
            │         │    ├── key: (5)
            │         │    ├── fd: (5)-->(3,4)
            │         │    ├── prune: (3-5)
@@ -182,35 +166,30 @@ group-by
  ├── columns: sum:7(decimal) div:3(decimal)
  ├── grouping columns: div:3(decimal)
  ├── side-effects
- ├── stats: [rows=283.588181, distinct(3)=283.588181]
  ├── key: (3)
  ├── fd: (3)-->(7)
  ├── prune: (7)
  ├── project
  │    ├── columns: x:1(int!null) div:3(decimal)
  │    ├── side-effects
- │    ├── stats: [rows=333.333333, distinct(3)=283.588181]
  │    ├── fd: (1)-->(3)
  │    ├── prune: (1,3)
  │    ├── interesting orderings: (+1)
  │    └── inner-join
  │         ├── columns: x:1(int!null) y:2(int) div:3(decimal) u:4(int!null) v:5(int!null)
  │         ├── side-effects
- │         ├── stats: [rows=333.333333, distinct(1)=307.771544, distinct(3)=283.588181, distinct(4)=307.771544]
  │         ├── fd: (1)-->(2,3), (1)==(4), (4)==(1)
  │         ├── prune: (2,3,5)
  │         ├── interesting orderings: (+1)
  │         ├── project
  │         │    ├── columns: div:3(decimal) x:1(int!null) y:2(int)
  │         │    ├── side-effects
- │         │    ├── stats: [rows=1000, distinct(1)=1000, distinct(3)=1000]
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2,3)
  │         │    ├── prune: (1-3)
  │         │    ├── interesting orderings: (+1)
  │         │    ├── scan xy
  │         │    │    ├── columns: x:1(int!null) y:2(int)
- │         │    │    ├── stats: [rows=1000, distinct(1)=1000, distinct(1,2)=1000]
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(2)
  │         │    │    ├── prune: (1,2)
@@ -222,19 +201,16 @@ group-by
  │         ├── project
  │         │    ├── columns: u:4(int) v:5(int!null)
  │         │    ├── side-effects
- │         │    ├── stats: [rows=333.333333, distinct(4)=307.771544]
  │         │    ├── prune: (4,5)
  │         │    └── select
  │         │         ├── columns: u:4(int) v:5(int!null) rowid:6(int!null)
  │         │         ├── side-effects
- │         │         ├── stats: [rows=333.333333, distinct(4)=307.771544]
  │         │         ├── key: (6)
  │         │         ├── fd: (6)-->(4,5)
  │         │         ├── prune: (4-6)
  │         │         ├── interesting orderings: (+6)
  │         │         ├── scan uv
  │         │         │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null)
- │         │         │    ├── stats: [rows=1000, distinct(4)=700]
  │         │         │    ├── key: (6)
  │         │         │    ├── fd: (6)-->(4,5)
  │         │         │    ├── prune: (4-6)

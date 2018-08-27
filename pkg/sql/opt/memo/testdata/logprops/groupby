@@ -28,7 +28,6 @@ SELECT y, sum(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
  ├── columns: y:2(int) sum:5(float) x:1(int!null) bool:6(bool!null)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: ()-->(6), (1)-->(2,5)
  ├── prune: (1,2,5,6)
@@ -36,21 +35,18 @@ project
  ├── group-by
  │    ├── columns: x:1(int!null) y:2(int) sum:5(float)
  │    ├── grouping columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,5)
  │    ├── prune: (5)
  │    ├── interesting orderings: (+1)
  │    ├── project
  │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
- │    │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
  │    │    ├── prune: (1-3)
  │    │    ├── interesting orderings: (+1)
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=1000, distinct(1,2)=1000]
  │    │         ├── key: (1)
  │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │         ├── prune: (1-4)
@@ -68,20 +64,17 @@ SELECT sum(x), max(y) FROM xyzs
 scalar-group-by
  ├── columns: sum:5(decimal) max:6(int)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── prune: (5,6)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xyzs
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │         ├── stats: [rows=1000]
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── prune: (1-4)
@@ -98,23 +91,19 @@ SELECT s FROM xyzs GROUP BY z, s
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=1000]
  ├── prune: (4)
  ├── interesting orderings: (-4)
  └── group-by
       ├── columns: z:3(float!null) s:4(string)
       ├── grouping columns: z:3(float!null) s:4(string)
-      ├── stats: [rows=1000, distinct(3,4)=1000]
       ├── key: (3,4)
       ├── interesting orderings: (-4,+3)
       └── project
            ├── columns: z:3(float!null) s:4(string)
-           ├── stats: [rows=1000, distinct(3,4)=1000]
            ├── prune: (3,4)
            ├── interesting orderings: (-4,+3)
            └── scan xyzs
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-                ├── stats: [rows=1000, distinct(3,4)=1000]
                 ├── key: (1)
                 ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
                 ├── prune: (1-4)
@@ -126,22 +115,18 @@ SELECT y, sum(z) FROM xyzs GROUP BY z, y
 ----
 project
  ├── columns: y:2(int) sum:5(float)
- ├── stats: [rows=1000]
  ├── prune: (2,5)
  └── group-by
       ├── columns: y:2(int) z:3(float!null) sum:5(float)
       ├── grouping columns: y:2(int) z:3(float!null)
-      ├── stats: [rows=1000, distinct(2,3)=1000]
       ├── key: (2,3)
       ├── fd: (2,3)-->(5)
       ├── prune: (5)
       ├── project
       │    ├── columns: y:2(int) z:3(float!null)
-      │    ├── stats: [rows=1000, distinct(2,3)=1000]
       │    ├── prune: (2,3)
       │    └── scan xyzs
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=1000, distinct(2,3)=1000]
       │         ├── key: (1)
       │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │         ├── prune: (1-4)
@@ -157,18 +142,15 @@ SELECT z, max(s) FROM xyzs GROUP BY z
 group-by
  ├── columns: z:3(float!null) max:5(string)
  ├── grouping columns: z:3(float!null)
- ├── stats: [rows=700, distinct(3)=700]
  ├── key: (3)
  ├── fd: (3)-->(5)
  ├── prune: (5)
  ├── project
  │    ├── columns: z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000, distinct(3)=700]
  │    ├── prune: (3,4)
  │    ├── interesting orderings: (-4,+3)
  │    └── scan xyzs
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │         ├── stats: [rows=1000, distinct(3)=700]
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── prune: (1-4)
@@ -183,19 +165,16 @@ SELECT s FROM xyzs GROUP BY xyzs.*
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=1000]
  ├── prune: (4)
  ├── interesting orderings: (-4)
  └── group-by
       ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── grouping columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      ├── stats: [rows=1000, distinct(1-4)=1000]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── interesting orderings: (+1) (-4,+3,+1)
       └── scan xyzs
            ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-           ├── stats: [rows=1000, distinct(1-4)=1000]
            ├── key: (1)
            ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
            ├── prune: (1-4)
@@ -207,14 +186,12 @@ SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) 
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (3,4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -226,37 +203,31 @@ select
            │         ├── columns: sum:10(decimal)
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
-           │         ├── stats: [rows=1]
            │         ├── key: ()
            │         ├── fd: ()-->(10)
            │         └── project
            │              ├── columns: sum:10(decimal)
            │              ├── outer: (1,2)
-           │              ├── stats: [rows=700]
            │              ├── prune: (10)
            │              └── group-by
            │                   ├── columns: u:6(float) sum:10(decimal)
            │                   ├── grouping columns: u:6(float)
            │                   ├── outer: (1,2)
-           │                   ├── stats: [rows=700, distinct(6)=700]
            │                   ├── key: (6)
            │                   ├── fd: (6)-->(10)
            │                   ├── prune: (10)
            │                   ├── project
            │                   │    ├── columns: x:9(int) u:6(float)
            │                   │    ├── outer: (1,2)
-           │                   │    ├── stats: [rows=1000, distinct(6)=700]
            │                   │    ├── fd: ()-->(9)
            │                   │    ├── prune: (6,9)
            │                   │    ├── project
            │                   │    │    ├── columns: y:8(int) u:6(float)
            │                   │    │    ├── outer: (2)
-           │                   │    │    ├── stats: [rows=1000, distinct(6)=700]
            │                   │    │    ├── fd: ()-->(8)
            │                   │    │    ├── prune: (6,8)
            │                   │    │    ├── scan kuv
            │                   │    │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │                   │    │    │    ├── stats: [rows=1000, distinct(6)=700]
            │                   │    │    │    ├── key: (5)
            │                   │    │    │    ├── fd: (5)-->(6,7)
            │                   │    │    │    ├── prune: (5-7)
@@ -278,12 +249,10 @@ group-by
  ├── columns: column1:1(int)
  ├── grouping columns: column1:1(int)
  ├── cardinality: [1 - 4]
- ├── stats: [rows=3, distinct(1)=3]
  ├── key: (1)
  └── values
       ├── columns: column1:1(int)
       ├── cardinality: [4 - 4]
-      ├── stats: [rows=4, distinct(1)=3]
       ├── prune: (1)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
@@ -301,7 +270,6 @@ SELECT x, count(z) FROM xyzs GROUP BY x HAVING x=1
 group-by
  ├── columns: x:1(int) count:5(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,5)
  ├── prune: (1,5)
@@ -309,7 +277,6 @@ group-by
  │    ├── columns: x:1(int!null) z:3(float!null)
  │    ├── constraint: /1: [/1 - /1]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,3)
  │    ├── prune: (3)

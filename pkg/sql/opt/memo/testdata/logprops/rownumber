@@ -12,13 +12,11 @@ SELECT * FROM xy WITH ORDINALITY
 ----
 row-number
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
  ├── prune: (1,2)
  └── scan xy
       ├── columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=1000]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
