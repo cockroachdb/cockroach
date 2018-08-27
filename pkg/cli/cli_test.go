@@ -2295,6 +2295,7 @@ writing ` + os.DevNull + `
   debug/liveness
   debug/settings
   debug/gossip/liveness
+  debug/gossip/network
   debug/gossip/nodes
   debug/metrics
   debug/alerts

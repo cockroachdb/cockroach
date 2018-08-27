@@ -100,18 +100,19 @@ func (z *zipper) createError(name string, e error) error {
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
-		base          = "debug"
-		eventsName    = base + "/events"
-		gossipLName   = base + "/gossip/liveness"
-		gossipNName   = base + "/gossip/nodes"
-		alertsName    = base + "/alerts"
-		livenessName  = base + "/liveness"
-		metricsName   = base + "/metrics"
-		nodesPrefix   = base + "/nodes"
-		rangelogName  = base + "/rangelog"
-		reportsPrefix = base + "/reports"
-		schemaPrefix  = base + "/schema"
-		settingsName  = base + "/settings"
+		base               = "debug"
+		eventsName         = base + "/events"
+		gossipLivenessName = base + "/gossip/liveness"
+		gossipNetworkName  = base + "/gossip/network"
+		gossipNodesName    = base + "/gossip/nodes"
+		alertsName         = base + "/alerts"
+		livenessName       = base + "/liveness"
+		metricsName        = base + "/metrics"
+		nodesPrefix        = base + "/nodes"
+		rangelogName       = base + "/rangelog"
+		reportsPrefix      = base + "/reports"
+		schemaPrefix       = base + "/schema"
+		settingsName       = base + "/settings"
 	)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -209,8 +210,9 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	for _, item := range []struct {
 		query, name string
 	}{
-		{"SELECT * FROM crdb_internal.gossip_liveness;", gossipLName},
-		{"SELECT * FROM crdb_internal.gossip_nodes;", gossipNName},
+		{"SELECT * FROM crdb_internal.gossip_liveness;", gossipLivenessName},
+		{"SELECT * FROM crdb_internal.gossip_network;", gossipNetworkName},
+		{"SELECT * FROM crdb_internal.gossip_nodes;", gossipNodesName},
 		{"SELECT * FROM crdb_internal.node_metrics;", metricsName},
 		{"SELECT * FROM crdb_internal.gossip_alerts;", alertsName},
 	} {
