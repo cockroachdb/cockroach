@@ -22,7 +22,7 @@ TABLE b
 # --------------------------------------------------
 # EliminateMax1Row
 # --------------------------------------------------
-opt
+opt expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
 project
@@ -44,7 +44,7 @@ project
            │         └── fd: ()-->(2)
            └── const: 5 [type=int]
 
-opt
+opt expect=EliminateMax1Row
 SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
 project
@@ -69,7 +69,7 @@ project
            │              └── count-rows [type=int]
            └── const: 100 [type=int]
 
-opt
+opt expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
 project
@@ -95,7 +95,7 @@ project
            └── const: 5 [type=int]
 
 # Don't remove the Max1Row operator.
-opt
+opt expect-not=EliminateMax1Row
 SELECT (SELECT i FROM a) > 5 AS r
 ----
 project
