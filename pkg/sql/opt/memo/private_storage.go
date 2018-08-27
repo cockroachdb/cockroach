@@ -315,7 +315,9 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.JoinType))
 	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeUvarint(uint64(def.Index))
 	ps.keyBuf.writeColList(def.KeyCols)
 	// Add a separator between the list and the set. Note that the column IDs
 	// cannot be 0.
