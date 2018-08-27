@@ -360,10 +360,21 @@ func Setup(
 	return size, nil
 }
 
+func maybeDisableMergeQueue(db *gosql.DB) error {
+	var ok bool
+	if err := db.QueryRow(
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] WHERE variable = 'kv.range_merge.queue_enabled'`,
+	).Scan(&ok); err != nil || !ok {
+		return err
+	}
+	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	return err
+}
+
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
 	// Prevent the merge queue from immediately discarding our splits.
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+	if err := maybeDisableMergeQueue(db); err != nil {
 		return err
 	}
 

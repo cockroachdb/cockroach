@@ -160,11 +160,22 @@ const (
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
 
+func maybeDisableMergeQueue(db *gosql.DB) error {
+	var ok bool
+	if err := db.QueryRow(
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] WHERE variable = 'kv.range_merge.queue_enabled'`,
+	).Scan(&ok); err != nil || !ok {
+		return err
+	}
+	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	return err
+}
+
 // NB: Since we always split at the same points (specific warehouse IDs and
 // item IDs), splitting is idempotent.
 func splitTables(db *gosql.DB, warehouses int) {
 	// Prevent the merge queue from immediately discarding our splits.
-	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+	if err := maybeDisableMergeQueue(db); err != nil {
 		panic(err)
 	}
 
