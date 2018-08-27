@@ -1135,3 +1135,23 @@ CREATE TABLE x (a STRING[], b INT[])
 
 statement ok
 UPDATE x SET a = ARRAY[], b = ARRAY[]
+
+
+# Github Issue 24175: Regression test for error when using ANY with UUID array.
+statement ok
+CREATE TABLE documents (shared_users UUID[]);
+
+statement ok
+INSERT INTO documents
+VALUES
+    (ARRAY[]),
+    (ARRAY['3ae3560e-d771-4b63-affb-47e8d7853680'::UUID,
+           '6CC1B5C1-FE4F-417D-96BD-AFD1FEEEC34F'::UUID]),
+    (ARRAY['C6F8286C-3A41-4D7E-A4F4-3234B7A57BA9'::UUID])
+
+query T
+SELECT *
+FROM documents
+WHERE '3ae3560e-d771-4b63-affb-47e8d7853680'::UUID = ANY (documents.shared_users);
+----
+{3ae3560e-d771-4b63-affb-47e8d7853680,6cc1b5c1-fe4f-417d-96bd-afd1feeec34f}

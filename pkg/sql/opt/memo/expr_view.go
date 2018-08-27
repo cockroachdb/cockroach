@@ -220,9 +220,10 @@ func (ev ExprView) bestExprID() BestExprID {
 // --------------------------------------------------------------------
 
 // String returns a string representation of this expression for testing and
-// debugging. The output shows all properties of the expression.
+// debugging. The output shows all properties of the expression, except for
+// fully qualified names (when there are no ambiguities).
 func (ev ExprView) String() string {
-	return ev.FormatString(ExprFmtShowAll)
+	return ev.FormatString(ExprFmtHideQualifications)
 }
 
 // FormatString returns a string representation of this expression for testing
