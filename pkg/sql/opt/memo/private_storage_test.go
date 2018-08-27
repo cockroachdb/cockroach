@@ -153,6 +153,370 @@ func TestInternScanOpDef(t *testing.T) {
 	test(scanDef9, scanDef10, false)
 }
 
+func TestVirtualScanOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *VirtualScanOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internVirtualScanOpDef(left)
+		rightID := ps.internVirtualScanOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *VirtualScanOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *VirtualScanOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &VirtualScanOpDef{Table: 0, Cols: util.MakeFastIntSet(1, 2)}
+	def2 := &VirtualScanOpDef{Table: 0, Cols: util.MakeFastIntSet(1, 2, 3)}
+	def3 := &VirtualScanOpDef{Table: 1, Cols: util.MakeFastIntSet(1, 2)}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def2, def3)
+}
+
+func TestIndexJoinDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *IndexJoinDef, expected bool) {
+		t.Helper()
+		leftID := ps.internIndexJoinDef(left)
+		rightID := ps.internIndexJoinDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *IndexJoinDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *IndexJoinDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &IndexJoinDef{Table: 0, Cols: util.MakeFastIntSet(1, 2)}
+	def2 := &IndexJoinDef{Table: 0, Cols: util.MakeFastIntSet(1, 2, 3)}
+	def3 := &IndexJoinDef{Table: 1, Cols: util.MakeFastIntSet(1, 2)}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def2, def3)
+}
+
+func TestLookupJoinDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+	test := func(left, right *LookupJoinDef, expected bool) {
+		t.Helper()
+		leftID := ps.internLookupJoinDef(left)
+		rightID := ps.internLookupJoinDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *LookupJoinDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *LookupJoinDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &LookupJoinDef{
+		JoinType:   opt.InnerJoinOp,
+		Table:      0,
+		Index:      0,
+		KeyCols:    opt.ColList{10, 11},
+		LookupCols: util.MakeFastIntSet(1, 2),
+	}
+	def2 := &LookupJoinDef{
+		JoinType:   opt.LeftJoinOp,
+		Table:      0,
+		Index:      0,
+		KeyCols:    opt.ColList{10, 11},
+		LookupCols: util.MakeFastIntSet(1, 2),
+	}
+	def3 := &LookupJoinDef{
+		JoinType:   opt.InnerJoinOp,
+		Table:      1,
+		Index:      0,
+		KeyCols:    opt.ColList{10, 11},
+		LookupCols: util.MakeFastIntSet(1, 2),
+	}
+	def4 := &LookupJoinDef{
+		JoinType:   opt.InnerJoinOp,
+		Table:      0,
+		Index:      1,
+		KeyCols:    opt.ColList{10, 11},
+		LookupCols: util.MakeFastIntSet(1, 2),
+	}
+	def5 := &LookupJoinDef{
+		JoinType:   opt.InnerJoinOp,
+		Table:      0,
+		Index:      0,
+		KeyCols:    opt.ColList{10},
+		LookupCols: util.MakeFastIntSet(1, 2),
+	}
+	def6 := &LookupJoinDef{
+		JoinType:   opt.InnerJoinOp,
+		Table:      0,
+		Index:      0,
+		KeyCols:    opt.ColList{10, 11},
+		LookupCols: util.MakeFastIntSet(1, 2, 3),
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestExplainOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *ExplainOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internExplainOpDef(left)
+		rightID := ps.internExplainOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *ExplainOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *ExplainOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def2 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode: tree.ExplainPlan,
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def3 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainOpt,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def4 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2, 3},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def5 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "x", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def6 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+1,+3 opt(4,5)"),
+		},
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestShowTraceOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *ShowTraceOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internShowTraceOpDef(left)
+		rightID := ps.internShowTraceOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *ShowTraceOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *ShowTraceOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: false, ColList: opt.ColList{1, 2}}
+	def2 := &ShowTraceOpDef{Type: tree.ShowTraceReplica, Compact: false, ColList: opt.ColList{1, 2}}
+	def3 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: true, ColList: opt.ColList{1, 2}}
+	def4 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: false, ColList: opt.ColList{1}}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+}
+
+func TestMergeOnDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *MergeOnDef, expected bool) {
+		t.Helper()
+		leftID := ps.internMergeOnDef(left)
+		rightID := ps.internMergeOnDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *MergeOnDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *MergeOnDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def2 := &MergeOnDef{
+		JoinType:      opt.LeftJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def3 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, +2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def4 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def5 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-2"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def6 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("+4,-5"),
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestRowNumberDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *RowNumberDef, expected bool) {
+		t.Helper()
+		leftID := ps.internRowNumberDef(left)
+		rightID := ps.internRowNumberDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *RowNumberDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *RowNumberDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+2"),
+		ColID:    1,
+	}
+	def2 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+(2|3)"),
+		ColID:    1,
+	}
+	def3 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+2"),
+		ColID:    2,
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+}
+
 func TestInternGroupByDef(t *testing.T) {
 	var ps privateStorage
 	ps.init()
