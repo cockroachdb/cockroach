@@ -363,3 +363,46 @@ SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND larg
 24  NULL
 27  NULL
 30  NULL
+
+# Lookup joins against interleaved tables. Regression test for #28981.
+# This is now tested more thoroughly by joinreader_test.go.
+
+statement ok
+CREATE TABLE parent (a INT, b INT, PRIMARY KEY(a, b))
+
+statement ok
+CREATE TABLE child (a INT, b INT, c INT, PRIMARY KEY(a, b, c)) INTERLEAVE IN PARENT parent(a, b)
+
+statement ok
+CREATE TABLE source (a INT)
+
+statement ok
+ALTER TABLE source INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE child INJECT STATISTICS '[
+  {
+    "columns": ["a", "b", "c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+INSERT INTO child VALUES(1, 2, 3)
+
+statement ok
+INSERT INTO source VALUES(1)
+
+query IIII
+SELECT * FROM source JOIN child ON source.a = child.a
+----
+1 1 2 3
