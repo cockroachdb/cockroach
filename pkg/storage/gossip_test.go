@@ -52,6 +52,8 @@ func TestGossipFirstRange(t *testing.T) {
 				descs <- &desc
 			}
 		},
+		// Redundant callbacks are required by this test.
+		gossip.Redundant,
 	)
 	// Unregister the callback before attempting to stop the stopper to prevent
 	// deadlock. This is still flaky in theory since a callback can fire between
