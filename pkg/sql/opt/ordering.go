@@ -67,15 +67,6 @@ func (c OrderingColumn) Format(buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%d", c.ID())
 }
 
-// ColListToSet converts a column id list to a column id set.
-func ColListToSet(colList ColList) ColSet {
-	var r ColSet
-	for _, col := range colList {
-		r.Add(int(col))
-	}
-	return r
-}
-
 // Ordering defines the order of rows provided or required by an operator. A
 // negative value indicates descending order on the column id "-(value)".
 type Ordering []OrderingColumn
