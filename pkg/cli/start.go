@@ -1083,6 +1083,9 @@ func checkNodeRunning(ctx context.Context, c serverpb.AdminClient) error {
 	// and that's all that this function is interested in.
 	for {
 		if _, err := stream.Recv(); err != nil {
+			if server.IsWaitingForInit(err) {
+				return err
+			}
 			if err != io.EOF {
 				log.Warningf(ctx, "unexpected error from no-op Drain request: %s", err)
 			}
@@ -1103,6 +1106,9 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 	// out, or perhaps drops the connection while waiting). To that end, we first
 	// run a noop DrainRequest. If that fails, we give up.
 	if err := checkNodeRunning(ctx, c); err != nil {
+		if server.IsWaitingForInit(err) {
+			return fmt.Errorf("node cannot be shut down before it has been initialized")
+		}
 		if grpcutil.IsClosedConnection(err) {
 			return nil
 		}
