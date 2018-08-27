@@ -54,21 +54,18 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=0.476190476, distinct(3)=0.476190476]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2), (2,3)~~>(1,4)
  ├── prune: (4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  ├── index-join a
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1.42857143]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1), (3,4)~~>(1,2), (2,3)~~>(1,4)
  │    ├── interesting orderings: (+1) (-3,+4,+1)
  │    └── scan a@secondary
  │         ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
  │         ├── constraint: /-3/4: [/'foo' - /'foo']
- │         ├── stats: [rows=1.42857143, distinct(3)=1]
  │         ├── key: (1)
  │         ├── fd: ()-->(3), (1)-->(4), (4)-->(1)
  │         ├── prune: (1,3,4)
@@ -85,24 +82,20 @@ SELECT y FROM a WHERE s = 'foo' AND x + y = 10
 ----
 project
  ├── columns: y:2(int)
- ├── stats: [rows=0.476190476]
  ├── prune: (2)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string!null)
-      ├── stats: [rows=0.476190476, distinct(3)=0.476190476]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2), (2,3)~~>(1)
       ├── interesting orderings: (+1) (-3)
       ├── index-join a
       │    ├── columns: x:1(int!null) y:2(int) s:3(string)
-      │    ├── stats: [rows=1.42857143]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(2), (2,3)~~>(1)
       │    ├── interesting orderings: (+1) (-3)
       │    └── scan a@secondary
       │         ├── columns: x:1(int!null) s:3(string!null)
       │         ├── constraint: /-3/4: [/'foo' - /'foo']
-      │         ├── stats: [rows=1.42857143, distinct(3)=1]
       │         ├── key: (1)
       │         ├── fd: ()-->(3)
       │         ├── prune: (1,3)
@@ -121,19 +114,16 @@ SELECT b, c, d FROM abc WHERE c=1 AND d=2
 ----
 select
  ├── columns: b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=0.00204081633, distinct(3)=0.00204081633, distinct(4)=0.00204081633]
  ├── fd: ()-->(3,4)
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+3,+1,+2)
  ├── index-join abc
  │    ├── columns: b:2(int!null) c:3(int) d:4(int)
- │    ├── stats: [rows=1.42857143]
  │    ├── fd: ()-->(3)
  │    ├── interesting orderings: (+1,+2) (+3,+1,+2)
  │    └── scan abc@secondary
  │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │         ├── constraint: /3/1/2: [/1 - /1]
- │         ├── stats: [rows=1.42857143, distinct(3)=1]
  │         ├── key: (1,2)
  │         ├── fd: ()-->(3)
  │         ├── prune: (1-3)
