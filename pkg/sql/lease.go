@@ -1174,6 +1174,10 @@ type LeaseManagerTestingKnobs struct {
 	// A callback called after the leases are refreshed as a result of a gossip update.
 	TestingLeasesRefreshedEvent func(config.SystemConfig)
 
+	// LeaseInitCompletionEvent is called after the lease initialization
+	// is complete.
+	LeaseInitCompletionEvent func()
+
 	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
 
@@ -1751,4 +1755,80 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 		}
 	}
 	wg.Wait()
+}
+
+// initTableLeasesLimit is the upper-limit on the number of table leases
+// that are created at startup.
+var initTableLeasesLimit = settings.RegisterIntSetting(
+	"sql.tablecache.lease.init_limit",
+	"maximum number of table leases to be created at startup",
+	1000,
+)
+
+// InitTableLeases initializes the table cache with some table leases
+// so that when traffic hits the node, the traffic is not blocked on
+// lease acquisition.
+// TODO(vivek): Figure out how to guarantee that traffic will not be
+// sent to this node before this method has acquired all leases.
+func (m *LeaseManager) InitTableLeases() {
+	limit := initTableLeasesLimit.Get(&m.execCfg.Settings.SV)
+	if limit <= 0 {
+		return
+	}
+
+	// Run async task so that startup is not blocked on this.
+	if err := m.stopper.RunAsyncTask(
+		context.Background(), "init table leases", func(ctx context.Context) {
+			if fn := m.testingKnobs.LeaseInitCompletionEvent; fn != nil {
+				defer fn()
+			}
+
+			// The internal executor cannot function without the
+			// version initialization.
+			retryOptions := base.DefaultRetryOptions()
+			retryOptions.Closer = m.stopper.ShouldQuiesce()
+			for r := retry.Start(retryOptions); r.Next(); {
+				if m.execCfg.Settings.Version.HasBeenInitialized() {
+					break
+				}
+			}
+
+			// Get a list of a limited number of table ids in descending
+			// order so that newer ids are given preference.
+			res, _, err := m.LeaseStore.execCfg.InternalExecutor.Query(
+				ctx, "list-tables", nil, /*txn*/
+				`SELECT id FROM system.namespace WHERE id > $1 ORDER BY id DESC LIMIT $2`,
+				keys.MaxReservedDescID,
+				limit,
+			)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "init list-tables failed"))
+				return
+			}
+			log.VEventf(ctx, 2, "init leasing %d tables", len(res))
+			// Limit the number of concurrent lease acquisitions.
+			sem := make(chan struct{}, 20)
+			var wg sync.WaitGroup
+			for _, cols := range res {
+				wg.Add(1)
+				id := sqlbase.ID(tree.MustBeDInt(cols[0]))
+				if err := m.stopper.RunLimitedAsyncTask(
+					ctx, fmt.Sprintf("init table:%d lease", id), sem, true /*wait*/, func(ctx context.Context) {
+						defer wg.Done()
+						table, _, err := m.Acquire(ctx, m.execCfg.Clock.Now(), id)
+						if err != nil {
+							return
+						}
+						if err := m.Release(table); err != nil {
+							log.Warning(ctx, errors.Wrapf(err, "failed to release table %d", id))
+						}
+					}); err != nil {
+					log.Error(context.TODO(), errors.Wrapf(err, "didnt init table lease"))
+					wg.Done()
+				}
+			}
+			wg.Wait()
+		}); err != nil {
+		log.Error(context.TODO(), errors.Wrapf(err, "init table leases failed"))
+	}
 }

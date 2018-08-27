@@ -1677,3 +1677,76 @@ CREATE TABLE t.test2 ();
 		t.Fatalf("expected lease acquisition to not block, but blockCount is: %d", blockCount)
 	}
 }
+
+// This test makes sure leases are created at startup.
+func TestInitTableLeases(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	var testAcquiredCount int32
+
+	var initNotify chan struct{}
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and renewed.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.ID > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquiredCount, 1)
+					}
+				},
+			},
+			LeaseInitCompletionEvent: func() {
+				if notify := initNotify; notify != nil {
+					initNotify = nil
+					close(notify)
+				}
+
+			},
+		},
+	}
+
+	ctx := context.Background()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.test2 ();
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
+	dbID := test2Desc.ParentID
+
+	initNotify = make(chan struct{})
+	notify := initNotify
+	t.node(1).InitTableLeases()
+	<-notify
+
+	atomic.StoreInt32(&testAcquiredCount, 0)
+
+	// Acquire a lease on test1 by name.
+	ts1, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Acquire a lease on test2 by ID.
+	ts2, _, err := t.node(1).Acquire(ctx, t.server.Clock().Now(), test2Desc.ID)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that no new leases were acquired.
+	if count := atomic.LoadInt32(&testAcquiredCount); count != 0 {
+		t.Fatalf("expected 0 leases to be acquired, but acquired %d times",
+			count)
+	}
+}
