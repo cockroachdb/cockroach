@@ -28,14 +28,12 @@ SELECT y, x+1 AS a, 1 AS b, x FROM xysd
 ----
 project
  ├── columns: y:2(int) a:5(int) b:6(int!null) x:1(int!null)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: ()-->(6), (1)-->(2,5)
  ├── prune: (1,2,5,6)
  ├── interesting orderings: (+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -51,12 +49,10 @@ SELECT s FROM xysd
 ----
 project
  ├── columns: s:3(string)
- ├── stats: [rows=1000]
  ├── prune: (3)
  ├── interesting orderings: (-3)
  └── scan xysd
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      ├── stats: [rows=1000]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (1-4)
@@ -68,14 +64,12 @@ SELECT * FROM xysd WHERE (SELECT (SELECT y) FROM kuv WHERE k=x) > 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (3,4)
  ├── interesting orderings: (+1) (-3,+4,+1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -87,14 +81,12 @@ select
            │         ├── columns: y:9(int)
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
-           │         ├── stats: [rows=1]
            │         ├── key: ()
            │         ├── fd: ()-->(9)
            │         └── project
            │              ├── columns: y:9(int)
            │              ├── outer: (1,2)
            │              ├── cardinality: [0 - 1]
-           │              ├── stats: [rows=1]
            │              ├── key: ()
            │              ├── fd: ()-->(9)
            │              ├── prune: (9)
@@ -102,14 +94,12 @@ select
            │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
            │              │    ├── outer: (1)
            │              │    ├── cardinality: [0 - 1]
-           │              │    ├── stats: [rows=1, distinct(1)=1, distinct(5)=1]
            │              │    ├── key: ()
            │              │    ├── fd: ()-->(5-7)
            │              │    ├── prune: (6,7)
            │              │    ├── interesting orderings: (+5)
            │              │    ├── scan kuv
            │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │              │    │    ├── stats: [rows=1000, distinct(5)=1000]
            │              │    │    ├── key: (5)
            │              │    │    ├── fd: (5)-->(6,7)
            │              │    │    ├── prune: (5-7)
@@ -124,20 +114,17 @@ select
            │                             ├── columns: y:8(int)
            │                             ├── outer: (2)
            │                             ├── cardinality: [1 - 1]
-           │                             ├── stats: [rows=1]
            │                             ├── key: ()
            │                             ├── fd: ()-->(8)
            │                             └── project
            │                                  ├── columns: y:8(int)
            │                                  ├── outer: (2)
            │                                  ├── cardinality: [1 - 1]
-           │                                  ├── stats: [rows=1]
            │                                  ├── key: ()
            │                                  ├── fd: ()-->(8)
            │                                  ├── prune: (8)
            │                                  ├── values
            │                                  │    ├── cardinality: [1 - 1]
-           │                                  │    ├── stats: [rows=1]
            │                                  │    ├── key: ()
            │                                  │    └── tuple [type=tuple]
            │                                  └── projections [outer=(2)]
@@ -151,7 +138,6 @@ SELECT x, y FROM (SELECT * FROM xysd LIMIT 10)
 project
  ├── columns: x:1(int!null) y:2(int)
  ├── cardinality: [0 - 10]
- ├── stats: [rows=10]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1,2)
@@ -159,14 +145,12 @@ project
  └── limit
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       ├── cardinality: [0 - 10]
-      ├── stats: [rows=10]
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (1-4)
       ├── interesting orderings: (+1) (-3,+4,+1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=1000]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    ├── prune: (1-4)
@@ -179,12 +163,10 @@ SELECT 1 AS a, 'foo' AS b, NULL AS c, 1::decimal + NULL AS d, NULL::STRING AS e 
 ----
 project
  ├── columns: a:5(int!null) b:6(string!null) c:7(unknown) d:7(unknown) e:8(string)
- ├── stats: [rows=1000]
  ├── fd: ()-->(5-8)
  ├── prune: (5-8)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -203,11 +185,9 @@ SELECT 1 FROM (SELECT x FROM xysd)
 ----
 project
  ├── columns: "?column?":5(int!null)
- ├── stats: [rows=1000]
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── scan xysd@secondary
- │    └── stats: [rows=1000]
  └── projections
       └── const: 1 [type=int]
 
@@ -217,14 +197,12 @@ SELECT k, (SELECT y FROM xysd WHERE x=k) FROM kuv
 ----
 project
  ├── columns: k:1(int!null) y:8(int)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(8)
  ├── prune: (1,8)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
@@ -235,14 +213,12 @@ project
                 ├── columns: xysd.y:5(int)
                 ├── outer: (1)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(5)
                 └── project
                      ├── columns: xysd.y:5(int)
                      ├── outer: (1)
                      ├── cardinality: [0 - 1]
-                     ├── stats: [rows=1]
                      ├── key: ()
                      ├── fd: ()-->(5)
                      ├── prune: (5)
@@ -250,14 +226,12 @@ project
                           ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
                           ├── outer: (1)
                           ├── cardinality: [0 - 1]
-                          ├── stats: [rows=1, distinct(1)=1, distinct(4)=1]
                           ├── key: ()
                           ├── fd: ()-->(4-7)
                           ├── prune: (5-7)
                           ├── interesting orderings: (+4) (-6,+7,+4)
                           ├── scan xysd
                           │    ├── columns: x:4(int!null) xysd.y:5(int) s:6(string) d:7(decimal!null)
-                          │    ├── stats: [rows=1000, distinct(4)=1000]
                           │    ├── key: (4)
                           │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                           │    ├── prune: (4-7)
@@ -273,14 +247,12 @@ SELECT k, EXISTS(SELECT EXISTS(SELECT y FROM xysd WHERE x=k) FROM xysd) FROM kuv
 ----
 project
  ├── columns: k:1(int!null) exists:13(bool)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(13)
  ├── prune: (1,13)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
@@ -290,12 +262,10 @@ project
            └── project
                 ├── columns: exists:12(bool)
                 ├── outer: (1)
-                ├── stats: [rows=1000]
                 ├── fd: ()-->(12)
                 ├── prune: (12)
                 ├── scan xysd
                 │    ├── columns: xysd.x:4(int!null) xysd.y:5(int) xysd.s:6(string) xysd.d:7(decimal!null)
-                │    ├── stats: [rows=1000]
                 │    ├── key: (4)
                 │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                 │    ├── prune: (4-7)
@@ -306,7 +276,6 @@ project
                                ├── columns: xysd.y:9(int)
                                ├── outer: (1)
                                ├── cardinality: [0 - 1]
-                               ├── stats: [rows=1]
                                ├── key: ()
                                ├── fd: ()-->(9)
                                ├── prune: (9)
@@ -314,14 +283,12 @@ project
                                     ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
                                     ├── outer: (1)
                                     ├── cardinality: [0 - 1]
-                                    ├── stats: [rows=1, distinct(1)=1, distinct(8)=1]
                                     ├── key: ()
                                     ├── fd: ()-->(8-11)
                                     ├── prune: (9-11)
                                     ├── interesting orderings: (+8) (-10,+11,+8)
                                     ├── scan xysd
                                     │    ├── columns: xysd.x:8(int!null) xysd.y:9(int) xysd.s:10(string) xysd.d:11(decimal!null)
-                                    │    ├── stats: [rows=1000, distinct(8)=1000]
                                     │    ├── key: (8)
                                     │    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
                                     │    ├── prune: (8-11)
@@ -337,12 +304,10 @@ SELECT y, y::TEXT FROM xysd
 ----
 project
  ├── columns: y:2(int) y:5(string)
- ├── stats: [rows=1000]
  ├── fd: (2)-->(5)
  ├── prune: (2,5)
  ├── scan xysd
  │    ├── columns: x:1(int!null) xysd.y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -358,11 +323,9 @@ SELECT d, d::TEXT FROM xysd
 ----
 project
  ├── columns: d:4(decimal!null) d:5(string)
- ├── stats: [rows=1000]
  ├── prune: (4,5)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) xysd.d:4(decimal!null)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
