@@ -1,5 +1,6 @@
 import d3 from "d3";
 import _ from "lodash";
+import Long from "long";
 import React from "react";
 
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -12,7 +13,7 @@ import * as protos from "src/js/protos";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
-const longToInt = (d: number | Long) => FixLong(d).toInt();
+const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;
 
 const countBars = [
@@ -41,8 +42,30 @@ function bar(name: string, value: (d: StatementStatistics) => number) {
   return { name, value };
 }
 
+function renderNumericStatLegend(count: number | Long, stat: number, sd: number, formatter: (d: number) => string) {
+  return (
+    <table className="numeric-stat-legend">
+      <tbody>
+        <tr>
+          <th>
+            <div className="numeric-stat-legend__bar numeric-stat-legend__bar--mean" />
+            Mean
+          </th>
+          <td>{ formatter(stat) }</td>
+        </tr>
+        <tr>
+          <th>
+            <div className="numeric-stat-legend__bar numeric-stat-legend__bar--dev" />
+            Standard Deviation
+          </th>
+          <td>{ longToInt(count) < 2 ? "-" : sd ? formatter(sd) : "0" }</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 function makeBarChart(
-  title: string,
   accessors: { name: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
   stdDevAccessor?: { name: string, value: (d: StatementStatistics) => number },
@@ -100,23 +123,27 @@ function makeBarChart(
         );
       }
 
-      let titleText = title + ": " + formatter(sum);
       if (stdDevAccessor) {
         const sd = stdDevAccessor.value(d);
-        if (sd) {
-          titleText += " Std. Dev.: " + formatter(sd);
-        }
-      }
+        const titleText = renderNumericStatLegend(rows.length, sum, sd, formatter);
 
-      return (
-        <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
-          <ToolTipWrapper text={ titleText } short>
+        return (
+          <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
+            <ToolTipWrapper text={ titleText } short>
+              <div className="label">{ formatter(getTotal(d)) }</div>
+              { bars }
+              { renderStdDev() }
+            </ToolTipWrapper>
+          </div>
+        );
+      } else {
+        return (
+          <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
             <div className="label">{ formatter(getTotal(d)) }</div>
             { bars }
-            { renderStdDev() }
-          </ToolTipWrapper>
-        </div>
-      );
+          </div>
+        );
+      }
     };
   };
 }
@@ -138,10 +165,10 @@ export function approximify(value: number) {
   return "" + Math.round(value);
 }
 
-export const countBarChart = makeBarChart("Execution Count", countBars, approximify);
-export const retryBarChart = makeBarChart("Retry Count", retryBars, approximify);
-export const rowsBarChart = makeBarChart("Rows Affected.  Mean", rowsBars, approximify, rowsStdDev);
-export const latencyBarChart = makeBarChart("Latency.  Mean", latencyBars, v => Duration(v * 1e9), latencyStdDev);
+export const countBarChart = makeBarChart(countBars, approximify);
+export const retryBarChart = makeBarChart(retryBars, approximify);
+export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev);
+export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
   const count = longToInt(s.stats.count);
@@ -210,7 +237,7 @@ export function rowsBreakdown(s: StatementStatistics) {
       const width = scale(clamp(mean - sd));
       const right = scale(mean);
       const spread = scale(sd + (sd > mean ? mean : sd));
-      const title = "Row Count.  Mean: " + format(mean) + " Std.Dev.: " + format(sd);
+      const title = renderNumericStatLegend(s.stats.count, mean, sd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
@@ -264,7 +291,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(parseMean - parseSd));
       const right = scale(parseMean);
       const spread = scale(parseSd + (parseSd > parseMean ? parseMean : parseSd));
-      const title = "Parse Latency.  Mean: " + format(parseMean) + " Std. Dev.: " + format(parseSd);
+      const title = renderNumericStatLegend(s.stats.count, parseMean, parseSd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
@@ -286,7 +313,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(planMean - planSd));
       const right = scale(planMean);
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
-      const title = "Plan Latency.  Mean: " + format(planMean) + " Std. Dev.: " + format(planSd);
+      const title = renderNumericStatLegend(s.stats.count, planMean, planSd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
@@ -308,7 +335,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(runMean - runSd));
       const right = scale(runMean);
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
-      const title = "Run Latency.  Mean: " + format(runMean) + " Std. Dev.: " + format(runSd);
+      const title = renderNumericStatLegend(s.stats.count, runMean, runSd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
@@ -330,7 +357,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(overheadMean - overheadSd));
       const right = scale(overheadMean);
       const spread = scale(overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd));
-      const title = "Overhead Latency.  Mean: " + format(overheadMean) + " Std. Dev.: " + format(overheadSd);
+      const title = renderNumericStatLegend(s.stats.count, overheadMean, overheadSd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
@@ -354,7 +381,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const overhead = scale(overheadMean);
       const width = scale(clamp(overallMean - overallSd));
       const spread = scale(overallSd + (overallSd > overallMean ? overallMean : overallSd));
-      const title = "Overall Latency.  Mean: " + format(overallMean) + " Std. Dev.: " + format(overallSd);
+      const title = renderNumericStatLegend(s.stats.count, overallMean, overallSd, format);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
