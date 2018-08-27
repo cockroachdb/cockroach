@@ -7606,8 +7606,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 
 	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
 		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
-			ChecksumID: uuid.MakeV4(),
-			Version:    batcheval.ReplicaChecksumVersion,
+			Version: batcheval.ReplicaChecksumVersion,
 		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum == nil {
 		t.Error("right checksum version: expected post-commit trigger")
@@ -7615,8 +7614,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 
 	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
 		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
-			ChecksumID: uuid.MakeV4(),
-			Version:    batcheval.ReplicaChecksumVersion + 1,
+			Version: batcheval.ReplicaChecksumVersion + 1,
 		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum != nil {
 		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.Replicated.ComputeChecksum)

@@ -1727,6 +1727,7 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 	store0, store2 := mtc.Store(0), mtc.Store(2)
+	distSender := mtc.distSenders[0]
 
 	// Create two ranges on all nodes.
 	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
@@ -1735,16 +1736,26 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Wait for store2 to hear about the split.
-	var lhsRepl2, rhsRepl2 *storage.Replica
-	testutils.SucceedsSoon(t, func() error {
-		lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
-		if err != nil {
-			return err
+	// Wait for all stores to have fully processed the split.
+	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")} {
+		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+			t.Fatal(pErr)
 		}
-		rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID)
-		return err
-	})
+		mtc.waitForValues(key, []int64{1, 1, 1})
+	}
+
+	lhsRepl0, err := store0.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Abandon the two ranges on store2, but do not GC them.
 	mtc.unreplicateRange(lhsDesc.RangeID, 2)
@@ -1755,13 +1766,6 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-
-	// Attempt to re-add the merged range to store2. The operation should fail
-	// because store2's LHS and RHS replicas intersect the merged range.
-	lhsRepl0, err := store0.GetReplica(lhsDesc.RangeID)
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	addLHSRepl2 := func() error {
@@ -1778,6 +1782,8 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 		return nil
 	}
 
+	// Attempt to re-add the merged range to store2. The operation should fail
+	// because store2's LHS and RHS replicas intersect the merged range.
 	err = addLHSRepl2()
 	if exp := "cannot apply snapshot: snapshot intersects existing range"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %v", exp, err)
@@ -1903,10 +1909,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Create three fully-caught-up, adjacent ranges on all three stores.
 	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
-	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
-	for _, key := range splitKeys {
-		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
-			t.Fatal(pErr)
+	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
+	for i, key := range splitKeys {
+		if i != len(splitKeys)-1 {
+			// We'll split the last range off later.
+			if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+				t.Fatal(pErr)
+			}
 		}
 		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
 			t.Fatal(pErr)
@@ -1914,11 +1923,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		mtc.waitForValues(key, []int64{1, 1, 1})
 	}
 
-	lhsRepl0 := store0.LookupReplica(roachpb.RKey("a"))
+	aRepl0 := store0.LookupReplica(roachpb.RKey("a"))
 
 	// Start dropping all Raft traffic to the first range on store1.
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            lhsRepl0.RangeID,
+		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
 	})
 
@@ -1927,6 +1936,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if _, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 			t.Fatal(pErr)
 		}
+	}
+
+	// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft snapshot
+	// will span both a merge and a split.
+	lastSplitKey := splitKeys[len(splitKeys)-1]
+	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(lastSplitKey)); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Truncate the logs of the LHS.
@@ -1970,10 +1986,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Verify that the sets of keys in store0 and store2 are identical.
 	storeKeys0 := getEngineKeySet(t, store0.Engine())
 	storeKeys2 := getEngineKeySet(t, store2.Engine())
+	dRepl0 := store0.LookupReplica(roachpb.RKey("d"))
 	ignoreKey := func(k string) bool {
-		// Unreplicated keys for the two remaining ranges are allowed to differ.
-		return strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(roachpb.RangeID(1)))) ||
-			strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(lhsRepl0.RangeID)))
+		// Unreplicated keys for the remaining ranges are allowed to differ.
+		for _, id := range []roachpb.RangeID{1, aRepl0.RangeID, dRepl0.RangeID} {
+			if strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(id))) {
+				return true
+			}
+		}
+		return false
 	}
 	for k := range storeKeys0 {
 		if ignoreKey(k) {

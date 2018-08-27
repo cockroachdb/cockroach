@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -60,23 +59,12 @@ const (
 func (r *Replica) CheckConsistency(
 	ctx context.Context, args roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	desc := r.Desc()
-	key := desc.StartKey.AsRawKey()
-	// Keep the request from crossing the local->global boundary.
-	if bytes.Compare(key, keys.LocalMax) < 0 {
-		key = keys.LocalMax
-	}
-	endKey := desc.EndKey.AsRawKey()
-	id := uuid.MakeV4()
+	startKey := r.Desc().StartKey.AsRawKey()
 
 	checkArgs := roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		Version:    batcheval.ReplicaChecksumVersion,
-		ChecksumID: id,
-		Snapshot:   args.WithDiff,
+		RequestHeader: roachpb.RequestHeader{Key: startKey},
+		Version:       batcheval.ReplicaChecksumVersion,
+		Snapshot:      args.WithDiff,
 	}
 
 	results, err := r.RunConsistencyCheck(ctx, checkArgs)
@@ -129,7 +117,7 @@ func (r *Replica) CheckConsistency(
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+			RequestHeader: roachpb.RequestHeader{Key: startKey},
 		}
 
 		var b client.Batch
@@ -159,8 +147,9 @@ func (r *Replica) CheckConsistency(
 	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
-	if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
+	args.WithDiff = true
+	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
 	// Not reached except in tests.
@@ -205,14 +194,11 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	{
-		var b client.Batch
-		b.AddRawRequest(&req)
-
-		if err := r.store.db.Run(ctx, &b); err != nil {
-			return nil, err
-		}
+	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
+	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
 	var orderedReplicas []roachpb.ReplicaDescriptor
 	{
@@ -249,7 +235,7 @@ func (r *Replica) RunConsistencyCheck(
 				if len(results) > 0 {
 					masterChecksum = results[0].Response.Checksum
 				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, req.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
