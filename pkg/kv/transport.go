@@ -73,6 +73,12 @@ type Transport interface {
 	// any) into the local trace.
 	SendNext(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
+	// NextInternalClient returns the InternalClient to use for making RPC
+	// calls. Returns a context.Context which should be used when making RPC
+	// calls on the returned server (This context is annotated to mark this
+	// request as in-process and bypass ctx.Peer checks).
+	NextInternalClient(context.Context) (context.Context, roachpb.InternalClient, error)
+
 	// NextReplica returns the replica descriptor of the replica to be tried in
 	// the next call to SendNext. MoveToFront will cause the return value to
 	// change. Returns a zero value if the transport is exhausted.
@@ -154,56 +160,13 @@ func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	client := gt.orderedClients[gt.clientIndex]
-	gt.clientIndex++
+	ctx, iface, err := gt.NextInternalClient(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	ba.Replica = client.replica
-	return gt.send(ctx, client, ba)
-}
-
-func (gt *grpcTransport) send(
-	ctx context.Context, client batchClient, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
-	reply, err := func() (*roachpb.BatchResponse, error) {
-		// Bail out early if the context is already canceled. (GRPC will
-		// detect this pretty quickly, but the first check of the context
-		// in the local server comes pretty late)
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		gt.opts.metrics.SentCount.Inc(1)
-		var iface roachpb.InternalClient
-		var err error
-		ctx, iface, err = gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID)
-		if err != nil {
-			return nil, err
-		}
-		if rpc.IsLocal(iface) {
-			gt.opts.metrics.LocalSentCount.Inc(1)
-		}
-		reply, err := iface.Batch(ctx, &ba)
-		// If we queried a remote node, perform extra validation and
-		// import trace spans.
-		if reply != nil && !rpc.IsLocal(iface) {
-			for i := range reply.Responses {
-				if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
-					log.Error(ctx, err)
-				}
-			}
-			// Import the remotely collected spans, if any.
-			if len(reply.CollectedSpans) != 0 {
-				span := opentracing.SpanFromContext(ctx)
-				if span == nil {
-					return nil, errors.Errorf(
-						"trying to ingest remote spans but there is no recording span set up")
-				}
-				if err := tracing.ImportRemoteSpans(span, reply.CollectedSpans); err != nil {
-					return nil, errors.Wrap(err, "error ingesting remote spans")
-				}
-			}
-		}
-		return reply, err
-	}()
+	reply, err := gt.sendBatch(ctx, iface, ba)
 
 	// NotLeaseHolderErrors can be retried.
 	var retryable bool
@@ -217,6 +180,54 @@ func (gt *grpcTransport) send(
 	gt.setState(client.replica, retryable)
 
 	return reply, err
+}
+
+func (gt *grpcTransport) sendBatch(
+	ctx context.Context, iface roachpb.InternalClient, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	// Bail out early if the context is already canceled. (GRPC will
+	// detect this pretty quickly, but the first check of the context
+	// in the local server comes pretty late)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	gt.opts.metrics.SentCount.Inc(1)
+	if rpc.IsLocal(iface) {
+		gt.opts.metrics.LocalSentCount.Inc(1)
+	}
+	reply, err := iface.Batch(ctx, &ba)
+	// If we queried a remote node, perform extra validation and
+	// import trace spans.
+	if reply != nil && !rpc.IsLocal(iface) {
+		for i := range reply.Responses {
+			if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
+				log.Error(ctx, err)
+			}
+		}
+		// Import the remotely collected spans, if any.
+		if len(reply.CollectedSpans) != 0 {
+			span := opentracing.SpanFromContext(ctx)
+			if span == nil {
+				return nil, errors.Errorf(
+					"trying to ingest remote spans but there is no recording span set up")
+			}
+			if err := tracing.ImportRemoteSpans(span, reply.CollectedSpans); err != nil {
+				return nil, errors.Wrap(err, "error ingesting remote spans")
+			}
+		}
+	}
+	return reply, err
+}
+
+// NextInternalClient returns the next InternalClient to use for performing
+// RPCs.
+func (gt *grpcTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	client := gt.orderedClients[gt.clientIndex]
+	gt.clientIndex++
+	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID)
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
@@ -351,6 +362,12 @@ func (s *senderTransport) SendNext(
 	}
 
 	return br, nil
+}
+
+func (s *senderTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
 }
 
 func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
