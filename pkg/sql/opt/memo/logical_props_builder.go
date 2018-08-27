@@ -594,7 +594,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 	// aggregate projection list.
 	groupingColSet := ev.Private().(*GroupByDef).GroupingCols
 	aggColList := ev.Child(1).Private().(opt.ColList)
-	relational.OutputCols = groupingColSet.Union(opt.ColListToSet(aggColList))
+	relational.OutputCols = groupingColSet.Union(aggColList.ToSet())
 
 	// Not Null Columns
 	// ----------------
@@ -659,7 +659,7 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) props.Logical {
 	// Output Columns
 	// --------------
 	// Output columns are stored in the definition.
-	relational.OutputCols = opt.ColListToSet(colMap.Out)
+	relational.OutputCols = colMap.Out.ToSet()
 
 	// Not Null Columns
 	// ----------------
@@ -711,7 +711,7 @@ func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) props.Logical {
 	// Output Columns
 	// --------------
 	// Use output columns that are attached to the values op.
-	relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
+	relational.OutputCols = ev.Private().(opt.ColList).ToSet()
 
 	// Not Null Columns
 	// ----------------
@@ -752,7 +752,7 @@ func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
 	// Output Columns
 	// --------------
 	// Output columns are stored in the definition.
-	relational.OutputCols = opt.ColListToSet(def.ColList)
+	relational.OutputCols = def.ColList.ToSet()
 
 	// Not Null Columns
 	// ----------------
@@ -787,7 +787,7 @@ func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
 	// Output Columns
 	// --------------
 	// Output columns are stored in the definition.
-	relational.OutputCols = opt.ColListToSet(def.ColList)
+	relational.OutputCols = def.ColList.ToSet()
 
 	// Not Null Columns
 	// ----------------
@@ -1024,7 +1024,7 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 	// Output Columns
 	// --------------
 	// Output columns are stored in the definition.
-	relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
+	relational.OutputCols = ev.Private().(opt.ColList).ToSet()
 
 	// Not Null Columns
 	// ----------------
