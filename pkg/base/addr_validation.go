@@ -229,9 +229,20 @@ func resolveAddr(ctx context.Context, host, port string) (string, string, error)
 		return "", "", fmt.Errorf("cannot resolve %q to an address", host)
 	}
 
-	// TODO(knz): this function can be changed to return all resolved
-	// addresses once the server is taught to listen on multiple
-	// interfaces. #5816
+	// TODO(knz): the remainder function can be changed to return all
+	// resolved addresses once the server is taught to listen on
+	// multiple interfaces. #5816
+
+	// LookupIPAddr() can return a mix of IPv6 and IPv4
+	// addresses. Conventionally, the first resolved address is
+	// "preferred"; however, for compatibility with previous CockroachDB
+	// versions, we still prefer an IPv4 address if there is one.
+	for _, addr := range addrs {
+		if ip := addr.IP.To4(); ip != nil {
+			return ip.String(), port, nil
+		}
+	}
+	// No IPv4 address, return the first resolved address instead.
 	return addrs[0].String(), port, nil
 }
 
