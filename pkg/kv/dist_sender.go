@@ -15,6 +15,7 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -243,9 +245,30 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
 
 	if g != nil {
+		var mu struct {
+			syncutil.Mutex
+			value []byte
+		}
+
 		ctx := ds.AnnotateCtx(context.Background())
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, value roachpb.Value) {
+				// Check to see if the newly gossiped value for the first range differs
+				// from the previous value. We only evict the first range descriptor
+				// upon a change.
+				mu.Lock()
+				changed := bytes.Equal(value.RawBytes, mu.value)
+				if changed {
+					mu.value = append([]byte(nil), value.RawBytes...)
+				}
+				mu.Unlock()
+				if !changed {
+					if log.V(1) {
+						log.Infof(ctx, "gossiped first range is unchanged")
+					}
+					return
+				}
+
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
