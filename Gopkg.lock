@@ -257,14 +257,6 @@
   version = "2017.07.27"
 
 [[projects]]
-  digest = "1:b95738a1e6ace058b5b8544303c0871fc01d224ef0d672f778f696265d0f2917"
-  name = "github.com/chzyer/readline"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "62c6fe6193755f722b8b8788aa7357be55a50ff1"
-  version = "v1.4"
-
-[[projects]]
   digest = "1:be16f4bb5e875f3e5e90d08055e5f24c0aa75ca6b595d035380ce1f42db756dc"
   name = "github.com/client9/misspell"
   packages = [
@@ -708,10 +700,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1c6a34e679d4ef0df533ed5aadaa44feb5548435f48bf3d0bf1f4e2fc8aad891"
+  digest = "1:26fcd5801e409b8883ab1e89ae2432284d0f5aad0e44236a172a13401299db17"
   name = "github.com/google/pprof"
   packages = [
-    ".",
     "driver",
     "internal/binutils",
     "internal/driver",
@@ -1679,7 +1670,6 @@
     "github.com/golang/snappy",
     "github.com/google/btree",
     "github.com/google/go-github/github",
-    "github.com/google/pprof",
     "github.com/google/pprof/driver",
     "github.com/google/pprof/profile",
     "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway",
