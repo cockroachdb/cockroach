@@ -342,8 +342,10 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 		}
 	}
 	ctx := ds.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "unable to determine this node's attributes for replica "+
-		"selection; node is most likely bootstrapping")
+	if log.V(1) {
+		log.Infof(ctx, "unable to determine this node's attributes for replica "+
+			"selection; node is most likely bootstrapping")
+	}
 	return nil
 }
 
