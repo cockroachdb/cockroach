@@ -17,6 +17,9 @@ const clamp = (i: number) => i < 0 ? 0 : i;
 
 const countBars = [
   bar("count-first-try", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
+];
+
+const retryBars = [
   bar("count-retry", (d: StatementStatistics) => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
 ];
 
@@ -136,6 +139,7 @@ export function approximify(value: number) {
 }
 
 export const countBarChart = makeBarChart("Execution Count", countBars, approximify);
+export const retryBarChart = makeBarChart("Retry Count", retryBars, approximify);
 export const rowsBarChart = makeBarChart("Rows Affected.  Mean", rowsBars, approximify, rowsStdDev);
 export const latencyBarChart = makeBarChart("Latency.  Mean", latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
