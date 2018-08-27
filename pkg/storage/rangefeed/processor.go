@@ -40,17 +40,45 @@ const (
 	defaultCheckStreamsInterval = 100 * time.Millisecond
 )
 
+// newErrBufferCapacityExceeded creates an error that is returned to subscribers
+// if the rangefeed processor is not able to keep up with the flow of incoming
+// events and is forced to drop events in order to not block. The error is
+// usually associated with a slow consumer.
+// TODO(nvanbenschoten): currently a single slow consumer can cause all
+// rangefeeds on a Range to be shut down with this error. We should work
+// on isolating buffering for individual consumers so that a slow consumer
+// only affects itself. One idea for this is to replace Stream.Send with
+// Stream.SendAsync and give each stream its own individual buffer. If
+// an individual stream is unable to keep up, to should fail on its own.
+func newErrBufferCapacityExceeded() *roachpb.Error {
+	return roachpb.NewErrorf("rangefeed: buffer capacity exceeded due to slow consumer")
+}
+
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
 	Clock *hlc.Clock
 	Span  roachpb.RSpan
 
-	TxnPusher        TxnPusher
+	TxnPusher TxnPusher
+	// PushTxnsInterval specifies the interval at which a Processor will push
+	// all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
 	PushTxnsInterval time.Duration
-	PushTxnsAge      time.Duration
+	// PushTxnsAge specifies the age at which a Processor will begin to consider
+	// a transaction old enough to push.
+	PushTxnsAge time.Duration
 
-	EventChanCap         int
+	// EventChanCap specifies the capacity to give to the Processor's input
+	// channel.
+	EventChanCap int
+	// EventChanTimeout specifies the maximum duration that methods will
+	// wait to send on the Processor's input channel before giving up and
+	// shutting down the Processor. 0 for no timeout.
+	EventChanTimeout time.Duration
+
+	// CheckStreamsInterval specifies interval at which a Processor will check
+	// all streams to make sure they have not been canceled.
 	CheckStreamsInterval time.Duration
 }
 
@@ -129,7 +157,7 @@ func NewProcessor(cfg Config) *Processor {
 		lenReqC:  make(chan struct{}),
 		lenResC:  make(chan int),
 		eventC:   make(chan event, cfg.EventChanCap),
-		stopC:    make(chan *roachpb.Error),
+		stopC:    make(chan *roachpb.Error, 1),
 		stoppedC: make(chan struct{}),
 	}
 }
@@ -291,12 +319,15 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 	}
 	// Flush any remaining events before stopping.
 	p.syncEventC()
-	// Send on the channel instead of closing it. This ensures synchronous
-	// communication so that when this method returns the caller can be sure
-	// that the Processor goroutine is canceling all registrations and shutting
-	// down.
+	// Send the processor a stop signal.
+	p.sendStop(pErr)
+}
+
+func (p *Processor) sendStop(pErr *roachpb.Error) {
 	select {
 	case p.stopC <- pErr:
+		// stopC has non-zero capacity so this should not block unless
+		// multiple callers attempt to stop the Processor concurrently.
 	case <-p.stoppedC:
 		// Already stopped. Do nothing.
 	}
@@ -372,37 +403,65 @@ func (p *Processor) deliverCatchUpScanRes(r *registration, pErr *roachpb.Error) 
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
-// operations. Safe to call on nil Processor.
-func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) {
+// operations. It returns false if consuming the operations hit a timeout, as
+// specified by the EventChanTimeout configuration. If the method returns false,
+// the processor will have been stopped, so calling Stop is not necessary. Safe
+// to call on nil Processor.
+func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) bool {
 	if p == nil {
-		return
+		return true
 	}
 	if len(ops) == 0 {
-		return
+		return true
 	}
-	// TODO(nvanbenschoten): backpressure or disconnect on blocking call.
-	select {
-	case p.eventC <- event{ops: ops}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
-	}
+	return p.sendEvent(event{ops: ops}, p.EventChanTimeout)
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
-// for the rangefeed processor's resolved timestamp has advanced. Safe to call
-// on nil Processor.
-func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) {
+// for the rangefeed processor's resolved timestamp has advanced. It returns
+// false if forwarding the closed timestamp hit a timeout, as specified by the
+// EventChanTimeout configuration. If the method returns false, the processor
+// will have been stopped, so calling Stop is not necessary.  Safe to call on
+// nil Processor.
+func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 	if p == nil {
-		return
+		return true
 	}
 	if closedTS == (hlc.Timestamp{}) {
-		return
+		return true
 	}
-	select {
-	case p.eventC <- event{ct: closedTS}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
+}
+
+// sendEvent informs the Processor of a new event. If a timeout is specified,
+// the method will wait for no longer than that duration before giving up,
+// shutting down the Processor, and returning false. 0 for no timeout.
+func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
+	if timeout == 0 {
+		select {
+		case p.eventC <- e:
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		}
+	} else {
+		select {
+		case p.eventC <- e:
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
+		default:
+			select {
+			case p.eventC <- e:
+			case <-p.stoppedC:
+				// Already stopped. Do nothing.
+			case <-time.After(timeout):
+				// Sending on the eventC channel would have blocked.
+				// Instead, tear down the processor and return immediately.
+				p.sendStop(newErrBufferCapacityExceeded())
+				return false
+			}
+		}
 	}
+	return true
 }
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
