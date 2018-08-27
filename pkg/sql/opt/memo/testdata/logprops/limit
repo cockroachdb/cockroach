@@ -29,14 +29,12 @@ SELECT * FROM xyzs LIMIT 1
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -49,22 +47,18 @@ SELECT count(*) FROM xyzs LIMIT 10
 limit
  ├── columns: count:5(int)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(5)
  ├── prune: (5)
  ├── scalar-group-by
  │    ├── columns: count:5(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)
  │    ├── prune: (5)
  │    ├── project
- │    │    ├── stats: [rows=1000]
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=1000]
  │    │         ├── key: (1)
  │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │         ├── prune: (1-4)
@@ -78,14 +72,12 @@ SELECT * FROM xyzs LIMIT (SELECT 1)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1000]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -94,19 +86,16 @@ limit
       └── max1-row
            ├── columns: "?column?":5(int!null)
            ├── cardinality: [1 - 1]
-           ├── stats: [rows=1]
            ├── key: ()
            ├── fd: ()-->(5)
            └── project
                 ├── columns: "?column?":5(int!null)
                 ├── cardinality: [1 - 1]
-                ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(5)
                 ├── prune: (5)
                 ├── values
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1]
                 │    ├── key: ()
                 │    └── tuple [type=tuple]
                 └── projections
@@ -118,14 +107,12 @@ SELECT * FROM xyzs LIMIT 0
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 0]
- ├── stats: [rows=0]
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -138,11 +125,9 @@ SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 ----
 project
  ├── columns: x:9(int)
- ├── stats: [rows=1000]
  ├── prune: (9)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -153,24 +138,20 @@ project
                 ├── columns: x:8(int)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(8)
                 └── limit
                      ├── columns: x:8(int)
                      ├── outer: (1,2)
-                     ├── stats: [rows=1000]
                      ├── fd: ()-->(8)
                      ├── prune: (8)
                      ├── project
                      │    ├── columns: x:8(int)
                      │    ├── outer: (1)
-                     │    ├── stats: [rows=1000]
                      │    ├── fd: ()-->(8)
                      │    ├── prune: (8)
                      │    ├── scan kuv
                      │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │    │    ├── stats: [rows=1000]
                      │    │    ├── key: (5)
                      │    │    ├── fd: (5)-->(6,7)
                      │    │    ├── prune: (5-7)
@@ -187,7 +168,6 @@ scan xyzs@secondary
  ├── columns: s:4(string!null) x:1(int!null)
  ├── constraint: /-4/3: [/'foo' - /'foo']
  ├── limit: 4294967296
- ├── stats: [rows=1.42857143]
  ├── key: (1)
  ├── fd: ()-->(4)
  ├── prune: (1)
