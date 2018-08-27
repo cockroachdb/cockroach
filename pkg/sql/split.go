@@ -24,11 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 type splitNode struct {
 	optColumnsSlot
 
+	force     bool
 	tableDesc *sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
 	rows      planNode
@@ -76,6 +78,7 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 	}
 
 	return &splitNode{
+		force:     p.SessionData().ForceSplitAt,
 		tableDesc: tableDesc,
 		index:     index,
 		rows:      rows,
@@ -96,6 +99,18 @@ var splitNodeColumns = sqlbase.ResultColumns{
 // splitRun contains the run-time state of splitNode during local execution.
 type splitRun struct {
 	lastSplitKey []byte
+}
+
+func (n *splitNode) startExec(params runParams) error {
+	// This check is not intended to be foolproof. The setting could be outdated
+	// because of gossip inconsistency, or it could change halfway through the
+	// SPLIT AT's execution. It is, however, likely to prevent user error and
+	// confusion in the common case.
+	if !n.force && storage.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		return errors.New("splits would be immediately discarded by merge queue; " +
+			"disable the merge queue first by running 'SET CLUSTER SETTING kv.range_merge.queue_enabled = false'")
+	}
+	return nil
 }
 
 func (n *splitNode) Next(params runParams) (bool, error) {

@@ -47,6 +47,10 @@ CREATE TABLE decimal_t (a DECIMAL PRIMARY KEY)
 # Also split at the beginning of each index (0 for ASC, 100 for DESC) to
 # prevent interfering with previous indexes/tables.
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # p1 table (interleaved index)
 statement ok
 ALTER TABLE p1 SPLIT AT VALUES(2)

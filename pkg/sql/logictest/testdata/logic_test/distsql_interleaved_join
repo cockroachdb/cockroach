@@ -168,6 +168,10 @@ FROM
 # Split our ranges #
 ####################
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split at parent1 key into five parts.
 statement ok
 ALTER TABLE parent1 SPLIT AT SELECT i FROM generate_series(8, 32, 8) AS g(i)

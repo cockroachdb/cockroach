@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1796,33 +1797,24 @@ func TestSystemZoneConfigs(t *testing.T) {
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: initial replication succeeded")
 
-	// Allow for inserting zone configs without having to go through (or
-	// duplicate the logic from) the CLI.
-	config.TestingSetupZoneConfigHook(tc.Stopper())
-
 	// Update the meta zone config to have more replicas and expect the number
 	// of replicas to go up accordingly after running all replicas through the
 	// replicate queue.
-	zoneConfig := config.DefaultZoneConfig()
-	zoneConfig.NumReplicas += 2
-	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 5")
 	expectedReplicas += 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
 
 	// Do the same thing, but down-replicating the timeseries range.
-	zoneConfig = config.DefaultZoneConfig()
-	zoneConfig.NumReplicas -= 2
-	config.TestingSetZoneConfig(keys.TimeseriesRangesID, zoneConfig)
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE timeseries", "num_replicas: 1")
 	expectedReplicas -= 2
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
 
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
-	zoneConfig = config.DefaultZoneConfig()
-	zoneConfig.NumReplicas += 2
-	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 5")
 	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
 	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")

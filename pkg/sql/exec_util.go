@@ -1565,6 +1565,10 @@ func (m *sessionDataMutator) SetLookupJoinEnabled(val bool) {
 	m.data.LookupJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetForceSplitAt(val bool) {
+	m.data.ForceSplitAt = val
+}
+
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
 }

@@ -3,6 +3,10 @@
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split the index into 5 parts, as if numbers were in the range 1 to 100.
 statement ok
 ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)

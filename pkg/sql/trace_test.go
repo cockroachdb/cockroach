@@ -235,6 +235,9 @@ func TestTrace(t *testing.T) {
 	if _, err := clusterDB.Exec(`
 		CREATE DATABASE test;
 
+		-- Prevent the merge queue from immediately discarding our splits.
+		SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
 
@@ -520,6 +523,8 @@ func TestKVTraceDistSQL(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
 	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	r.Exec(t, "ALTER TABLE a SPLIT AT VALUES(1)")
 	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
 
