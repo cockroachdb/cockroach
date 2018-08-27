@@ -52,6 +52,7 @@ func TestGossipFirstRange(t *testing.T) {
 				descs <- &desc
 			}
 		},
+		gossip.Redundant,
 	)
 	// Unregister the callback before attempting to stop the stopper to prevent
 	// deadlock. This is still flaky in theory since a callback can fire between

@@ -46,7 +46,7 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 		defer sg.mu.Unlock()
 		delete(sg.storeKeyMap, key)
 		sg.cond.Broadcast()
-	})
+	}, gossip.Redundant)
 	return sg
 }
 

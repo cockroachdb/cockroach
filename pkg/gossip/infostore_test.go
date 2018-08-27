@@ -440,14 +440,19 @@ func TestCallbacks(t *testing.T) {
 		}
 	}
 
-	// Update an info.
-	{
+	// Update an info twice. The first time we expect to see a callback. The
+	// second time we don't because the value hasn't changed.
+	for i := 0; i < 2; i++ {
 		i1 := is.newInfo([]byte("a"), time.Second)
-		wg.Add(2)
+		if i == 0 {
+			wg.Add(2)
+		}
 		if err := is.addInfo("key1", i1); err != nil {
 			t.Error(err)
 		}
-		wg.Wait()
+		if i == 0 {
+			wg.Wait()
+		}
 
 		if expKeys := []string{"key1", "key1"}; !reflect.DeepEqual(cb1.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb1.Keys())
@@ -479,7 +484,7 @@ func TestCallbacks(t *testing.T) {
 
 	// Unregister a callback and verify nothing is invoked on it.
 	unregisterCB1()
-	iNew := is.newInfo([]byte("a"), time.Second)
+	iNew := is.newInfo([]byte("b"), time.Second)
 	wg.Add(2) // for the two cbAll callbacks
 	if err := is.addInfo("key1", iNew); err != nil {
 		t.Error(err)
