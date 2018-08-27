@@ -23,9 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cenk/backoff"
+	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -49,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/rubyist/circuitbreaker"
 )
 
 const (
@@ -170,10 +170,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
-	}
-
-	if params.ListeningURLFile != "" {
-		cfg.ListeningURLFile = params.ListeningURLFile
 	}
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
