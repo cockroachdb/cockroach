@@ -102,10 +102,34 @@
     background-color $link-color
 
   .rows-dev, .latency-parse-dev, .latency-plan-dev, .latency-run-dev, .latency-overhead-dev, .latency-overall-dev
-    background-color #F2C94C
+    background-color $warning-color
 
 .numeric-stats-table
   @extend $table-base
 
 .details-bar
   margin 12px 0
+
+.numeric-stat-legend
+  th
+    position relative
+    padding-left 24px
+    padding-right 5px
+
+  td
+    text-align right
+
+  &__bar
+    position absolute
+    width 21px
+    left 0
+
+    &--mean
+      height 14px
+      top 2px
+      background-color $link-color
+
+    &--dev
+      height 3px
+      top 8px
+      background-color $warning-color
