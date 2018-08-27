@@ -32,12 +32,6 @@ import (
 )
 
 const (
-	// mergeQueueTimerDuration is the duration between merges of queued ranges.
-	//
-	// TODO(benesch): rate-limit merges before 2.1 is released. It's currently set
-	// aggressively to smoke out problems in alphas.
-	mergeQueueTimerDuration = 0
-
 	// mergeQueuePurgatoryCheckInterval is the interval at which replicas in
 	// purgatory make merge attempts. Since merges are relatively untested, the
 	// reasons that a range may fail to merge are unknown, so the merge queue has
@@ -50,25 +44,21 @@ const (
 	mergeQueueConcurrency = 1
 )
 
-// MergeMaxRHSSize is a setting the controls the maximum size of the right-hand
-// range in a merge.
-var MergeMaxRHSSize = func() *settings.ByteSizeSetting {
-	s := settings.RegisterByteSizeSetting(
-		"kv.range_merge.max_rhs_size",
-		"maximum size of the right-hand range in a merge",
-		0,
-	)
-	s.Hide()
-	return s
-}()
-
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
-var MergeQueueEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		"kv.range_merge.queue_enabled",
-		"whether the automatic merge queue is enabled",
-		false,
+var MergeQueueEnabled = settings.RegisterBoolSetting(
+	"kv.range_merge.queue_enabled",
+	"whether the automatic merge queue is enabled",
+	true,
+)
+
+// MergeQueueInterval is a setting that controls how often the merge queue waits
+// between processing replicas.
+var MergeQueueInterval = func() *settings.DurationSetting {
+	s := settings.RegisterNonNegativeDurationSetting(
+		"kv.range_merge.queue_interval",
+		"how long the merge queue waits between processing replicas",
+		time.Second,
 	)
 	s.Hide()
 	return s
@@ -79,13 +69,9 @@ var MergeQueueEnabled = func() *settings.BoolSetting {
 //
 // A range will only be queued if it is beneath the minimum size threshold. Once
 // queued, the size of the right-hand neighbor will additionally be checked;
-// merges can only proceed if a) the right-hand neighbor is smaller than
-// MergeMaxRHSSize, and b) the merged range would not need to be immediately
+// merges can only proceed if a) the right-hand neighbor is beneath the minimum
+// size threshold, and b) the merged range would not need to be immediately
 // split, e.g. because the new range would exceed the maximum size threshold.
-// Note that (a) is a limitation of the current merge implementation. The right-
-// hand range's data must be rewritten into the left-hand range, even if the
-// ranges are collocated, which results in quite a bit of write amplification.
-// We hope to lift this restriction once this copy is unnecessary.
 //
 // Note that the merge queue is not capable of initiating all possible merges.
 // Consider the example below:
@@ -232,11 +218,6 @@ func (mq *mergeQueue) process(
 			minBytes, lhsStats.Total())
 		return nil
 	}
-	if maxBytes := MergeMaxRHSSize.Get(&mq.store.ClusterSettings().SV); rhsStats.Total() > maxBytes {
-		log.VEventf(ctx, 2, "skipping merge: RHS exceeds maximum size %d with %d bytes",
-			maxBytes, rhsStats.Total())
-		return nil
-	}
 
 	mergedDesc := &roachpb.RangeDescriptor{
 		StartKey: lhsDesc.StartKey,
@@ -295,8 +276,8 @@ func (mq *mergeQueue) process(
 	return nil
 }
 
-func (*mergeQueue) timer(time.Duration) time.Duration {
-	return mergeQueueTimerDuration
+func (mq *mergeQueue) timer(time.Duration) time.Duration {
+	return MergeQueueInterval.Get(&mq.store.ClusterSettings().SV)
 }
 
 func (mq *mergeQueue) purgatoryChan() <-chan time.Time {
