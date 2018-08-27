@@ -1111,11 +1111,27 @@ func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) err
 // of info denoted by key.
 type Callback func(string, roachpb.Value)
 
+// CallbackOption is a marker interface that callback options must implement.
+type CallbackOption interface {
+	apply(cb *callback)
+}
+
+type redundantCallbacks struct {
+}
+
+func (redundantCallbacks) apply(cb *callback) {
+	cb.redundant = true
+}
+
+// Redundant is a callback option that specifies that the callback should be
+// invoked even if the gossip value has not changed.
+var Redundant redundantCallbacks
+
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
-func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
+func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...CallbackOption) func() {
 	if pattern == KeySystemConfig {
 		ctx := g.AnnotateCtx(context.TODO())
 		log.Warningf(
@@ -1126,7 +1142,7 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
 	}
 
 	g.mu.Lock()
-	unregister := g.mu.is.registerCallback(pattern, method)
+	unregister := g.mu.is.registerCallback(pattern, method, opts...)
 	g.mu.Unlock()
 	return func() {
 		g.mu.Lock()

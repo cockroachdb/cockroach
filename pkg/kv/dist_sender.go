@@ -167,6 +167,11 @@ type DistSender struct {
 	nodeDialer       *nodedialer.Dialer
 	rpcRetryOptions  retry.Options
 	asyncSenderSem   chan struct{}
+
+	// disableFirstRangeUpdates disables updates of the first range via
+	// gossip. Used by tests which want finer control of the contents of the
+	// range cache.
+	disableFirstRangeUpdates int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -246,6 +251,9 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		ctx := ds.AnnotateCtx(context.Background())
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, value roachpb.Value) {
+				if atomic.LoadInt32(&ds.disableFirstRangeUpdates) == 1 {
+					return
+				}
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
@@ -261,6 +269,13 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 			})
 	}
 	return ds
+}
+
+// DisableFirstRangeUpdates disables updates of the first range via
+// gossip. Used by tests which want finer control of the contents of the range
+// cache.
+func (ds *DistSender) DisableFirstRangeUpdates() {
+	atomic.StoreInt32(&ds.disableFirstRangeUpdates, 1)
 }
 
 // Metrics returns a struct which contains metrics related to the distributed
