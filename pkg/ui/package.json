@@ -33,7 +33,7 @@
     "whatwg-fetch": "^2.0.3"
   },
   "devDependencies": {
-    "@types/analytics-node": "^0.0.30",
+    "@types/analytics-node": "^0.0.32",
     "@types/bytebuffer": "^5.0.33",
     "@types/chai": "^4.1.0",
     "@types/classnames": "^0.0.32",
