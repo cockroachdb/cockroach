@@ -288,7 +288,6 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/cockroachdb/crlfmt \
 		./vendor/github.com/cockroachdb/stress \
 		./vendor/github.com/golang/lint/golint \
-		./vendor/github.com/google/pprof \
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
 		./vendor/github.com/jteeuwen/go-bindata/go-bindata \
 		./vendor/github.com/kisielk/errcheck \
