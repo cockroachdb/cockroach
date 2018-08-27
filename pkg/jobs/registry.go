@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -522,7 +523,7 @@ func AddResumeHook(fn ResumeHookFn) {
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
-	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
+	const stmt = `SELECT id, payload, progress IS NULL FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
 	rows, _ /* cols */, err := r.ex.Query(
 		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
 	)
@@ -563,6 +564,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 
 	for _, row := range rows {
 		id := (*int64)(row[0].(*tree.DInt))
+
 		payload, err := UnmarshalPayload(row[1])
 		if err != nil {
 			return err
@@ -577,6 +579,34 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 			// resumability.
 			if log.V(2) {
 				log.Infof(ctx, "job %d: skipping: nil lease", *id)
+			}
+			continue
+		}
+
+		// If the job has no progress it is from a 2.0 cluster. If the entire cluster
+		// has been upgraded to 2.1 then we know nothing is running the job and it
+		// can be safely failed.
+		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
+			// TODO(mjibson): set this to cluster.Version_2_1 when it exists.
+			if r.settings.Version.IsMinSupported(cluster.VersionRangeMerges) {
+				payload.Error = "job predates cluster upgrade and must be re-run"
+				payloadBytes, err := protoutil.Marshal(payload)
+				if err != nil {
+					return err
+				}
+
+				// We can't use job.update here because it fails while attempting to unmarshal
+				// the progress. Setting the status to failed is idempotent so we don't care
+				// if multiple nodes execute this.
+				const updateStmt = `UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`
+				updateArgs := []interface{}{StatusFailed, payloadBytes, *id}
+				err = r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+					_, err := r.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
+					return err
+				})
+				if err != nil {
+					log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", id, err)
+				}
 			}
 			continue
 		}
