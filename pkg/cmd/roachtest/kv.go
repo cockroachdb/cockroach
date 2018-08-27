@@ -36,12 +36,13 @@ func registerKV(r *registry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
+			splits := " --splits=" + ifLocal("1000", fmt.Sprint(3000*nodes/3))
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=" + ifLocal("10s", "10m")
-			cmd := fmt.Sprintf(
-				"./workload run kv --init --read-percent=%d --splits=1000 --histograms=logs/stats.json"+
-					concurrency+duration+
-					" {pgurl:1-%d}",
+			cmd := fmt.Sprintf("ulimit -n 32768; "+
+				"./workload run kv --init --read-percent=%d --histograms=logs/stats.json"+
+				splits+concurrency+duration+
+				" {pgurl:1-%d}",
 				percent, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -51,7 +52,7 @@ func registerKV(r *registry) {
 
 	for _, p := range []int{0, 95} {
 		p := p
-		for _, n := range []int{1, 3} {
+		for _, n := range []int{1, 3, 72} {
 			// Run kv with encryption turned off because of recently found
 			// checksum mismatch when running workload against encrypted
 			// cluster.
