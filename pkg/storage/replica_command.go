@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -149,6 +150,15 @@ func (r *Replica) AdminSplit(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 10
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// The replica may have been destroyed since the start of the retry loop. We
+		// need to explicitly check this condition. Having a valid lease, as we
+		// verify below, does not imply that the range still exists: even after a
+		// range has been merged into its left-hand neighbor, its final lease (i.e.,
+		// the lease we have in r.mu.state.Lease) can remain valid indefinitely.
+		if _, err := r.IsDestroyed(); err != nil {
+			return reply, roachpb.NewError(err)
+		}
+
 		// Admin commands always require the range lease to begin (see
 		// executeAdminBatch), but we may have lost it while in this retry loop.
 		// Without the lease, a replica's local descriptor can be arbitrarily
@@ -276,7 +286,13 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
-	leftDesc.IncrementGeneration()
+	if r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeMerges) {
+		// To be safe, don't increment the generation counter unless all nodes are
+		// known to be aware of its existence. Since encoded range descriptors are
+		// used in CPut operations, it is theorized that non-nil generation counters
+		// in mixed-version clusters could cause subtle breakage.
+		leftDesc.IncrementGeneration()
+	}
 	leftDesc.EndKey = splitKey
 
 	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
@@ -383,6 +399,10 @@ func (r *Replica) AdminMerge(
 ) (roachpb.AdminMergeResponse, *roachpb.Error) {
 	var reply roachpb.AdminMergeResponse
 
+	if err := r.ClusterSettings().Version.CheckVersion(cluster.VersionRangeMerges, "range merges"); err != nil {
+		return reply, roachpb.NewError(err)
+	}
+
 	origLeftDesc := r.Desc()
 	if origLeftDesc.EndKey.Equal(roachpb.RKeyMax) {
 		// Merging the final range doesn't make sense.
@@ -485,9 +505,8 @@ func (r *Replica) AdminMerge(
 
 		// Send off this batch, ensuring that intents are placed on both the local
 		// copy and meta2's copy of the right-hand side range descriptor before we
-		// send the GetSnapshotForMerge request below. This is the precondition for
-		// sending a GetSnapshotForMerge request; see the godoc on the
-		// GetSnapshotForMerge request for details.
+		// send the Subsume request below. This is the precondition for sending a
+		// Subsume request; see the godoc on the Subsume request for details.
 		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
@@ -497,14 +516,14 @@ func (r *Replica) AdminMerge(
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
 		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
-			&roachpb.GetSnapshotForMergeRequest{
+			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftRange:     *origLeftDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
 		}
-		rhsSnapshotRes := br.(*roachpb.GetSnapshotForMergeResponse)
+		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
 		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
@@ -522,6 +541,7 @@ func (r *Replica) AdminMerge(
 					LeftDesc:       updatedLeftDesc,
 					RightDesc:      rightDesc,
 					RightMVCCStats: rhsSnapshotRes.MVCCStats,
+					FreezeStart:    rhsSnapshotRes.FreezeStart,
 				},
 			},
 		})
@@ -531,15 +551,15 @@ func (r *Replica) AdminMerge(
 
 	// If the merge transaction encounters an error, we need to trigger a full
 	// abort and try again with a new transaction. Why? runMergeTxn has the side
-	// effect of sending a GetSnapshotForMerge request to the right-hand range,
-	// which blocks the right-hand range from serving any traffic until the
-	// transaction commits or aborts. If we retry using the same transaction
-	// (i.e., a "transaction restart"), we'll send requests to the blocked
-	// right-hand range and deadlock. The right-hand range will see that the
-	// transaction is still pending and refuse to respond, but the transaction
-	// cannot commit until the right-hand range responds. By instead marking the
-	// transaction as aborted, we'll unlock the right-hand range, giving the next,
-	// fresh transaction a chance to succeed.
+	// effect of sending a Subsume request to the right-hand range, which blocks
+	// the right-hand range from serving any traffic until the transaction commits
+	// or aborts. If we retry using the same transaction (i.e., a "transaction
+	// restart"), we'll send requests to the blocked right-hand range and
+	// deadlock. The right-hand range will see that the transaction is still
+	// pending and refuse to respond, but the transaction cannot commit until the
+	// right-hand range responds. By instead marking the transaction as aborted,
+	// we'll unlock the right-hand range, giving the next, fresh transaction a
+	// chance to succeed.
 	//
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
@@ -826,6 +846,9 @@ func (r *Replica) changeReplicas(
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				// TODO(benesch): this trigger should just specify the updated
+				// descriptor, like the split and merge triggers, so that the receiver
+				// doesn't need to reconstruct the range descriptor update.
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
@@ -961,9 +984,6 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
-// TODO(bdarnell): store the entire RangeDescriptor in the CommitTrigger
-// and load it automatically instead of reconstructing individual
-// changes.
 func updateRangeDescriptor(
 	b *client.Batch,
 	descKey roachpb.Key,

@@ -198,8 +198,10 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
-		// We created the store without a real KV client, so it can't perform splits.
+		// We created the store without a real KV client, so it can't perform splits
+		// or merges.
 		tc.store.splitQueue.SetDisabled(true)
+		tc.store.mergeQueue.SetDisabled(true)
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
@@ -7734,25 +7736,25 @@ func TestDiffRange(t *testing.T) {
 	const expDiff = `--- leaseholder
 +++ follower
 -0.000001729,1 "a"
--  ts:1970-01-01 00:00:00.000001729 +0000 UTC
--  value:foo
--  raw_key:61 raw_value:666f6f
+-    ts:1970-01-01 00:00:00.000001729 +0000 UTC
+-    value:"foo"
+-    raw mvcc_key/value: 610000000000000006c1000000010d 666f6f
 +0.000001729,1 "ab"
-+  ts:1970-01-01 00:00:00.000001729 +0000 UTC
-+  value:foo
-+  raw_key:6162 raw_value:666f6f
++    ts:1970-01-01 00:00:00.000001729 +0000 UTC
++    value:"foo"
++    raw mvcc_key/value: 61620000000000000006c1000000010d 666f6f
 -0.000001729,1 "abcd"
--  ts:1970-01-01 00:00:00.000001729 +0000 UTC
--  value:foo
--  raw_key:61626364 raw_value:666f6f
+-    ts:1970-01-01 00:00:00.000001729 +0000 UTC
+-    value:"foo"
+-    raw mvcc_key/value: 616263640000000000000006c1000000010d 666f6f
 +0.000001729,1 "abcdef"
-+  ts:1970-01-01 00:00:00.000001729 +0000 UTC
-+  value:foo
-+  raw_key:616263646566 raw_value:666f6f
++    ts:1970-01-01 00:00:00.000001729 +0000 UTC
++    value:"foo"
++    raw mvcc_key/value: 6162636465660000000000000006c1000000010d 666f6f
 +0.000000000,0 "foo"
-+  ts:<zero>
-+  value:foo
-+  raw_key:666f6f raw_value:666f6f
++    ts:<zero>
++    value:"foo"
++    raw mvcc_key/value: 666f6f00 666f6f
 `
 
 	if diff := stringDiff.String(); diff != expDiff {
