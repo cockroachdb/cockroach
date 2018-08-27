@@ -91,8 +91,9 @@ var counters struct {
 }
 
 // GetAndResetFeatureCounts returns the current feature usage counts and resets
-// the counts for all features back to 0.
-func GetAndResetFeatureCounts() map[string]int32 {
+// the counts for all features back to 0. If `quantize` is true, the returned
+// counts are quantized to just order of magnitude using the `Bucket10` helper.
+func GetAndResetFeatureCounts(quantize bool) map[string]int32 {
 	counters.RLock()
 	m := make(map[string]int32, approxFeatureCount)
 	for k := range counters.m {
@@ -102,5 +103,10 @@ func GetAndResetFeatureCounts() map[string]int32 {
 		}
 	}
 	counters.RUnlock()
+	if quantize {
+		for k := range m {
+			m[k] = int32(Bucket10(int64(m[k])))
+		}
+	}
 	return m
 }
