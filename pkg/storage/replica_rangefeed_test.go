@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 // testStream is a mock implementation of roachpb.Internal_RangeFeedServer.
@@ -65,22 +64,7 @@ func (s *testStream) Cancel() {
 func (s *testStream) Send(e *roachpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// Send's contract does not promise that its provided events are safe for
-	// use after it has returned. To work around this, make a clone.
-	var eClone roachpb.RangeFeedEvent
-	{
-		b, err := protoutil.Marshal(e)
-		if err != nil {
-			panic(err)
-		}
-		err = protoutil.Unmarshal(b, &eClone)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	s.mu.events = append(s.mu.events, &eClone)
+	s.mu.events = append(s.mu.events, e)
 	return nil
 }
 
@@ -170,7 +154,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			Key: roachpb.Key("b"), Value: expVal1,
 		}},
 		{Checkpoint: &roachpb.RangeFeedCheckpoint{
-			Span:       roachpb.Span{Key: nil, EndKey: roachpb.KeyMax},
+			Span:       roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
 			ResolvedTS: hlc.Timestamp{},
 		}},
 	}
@@ -267,7 +251,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	waitForInitialCheckpoint := func(
 		subT *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error,
 	) {
-		span := roachpb.Span{Key: nil, EndKey: roachpb.KeyMax}
+		span := roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 		waitForInitialCheckpointAcrossSpan(subT, stream, streamErrC, span)
 	}
 
@@ -403,7 +387,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 
 		// Wait for the first checkpoint event on each stream.
 		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, roachpb.Span{
-			Key: nil, EndKey: splitKey,
+			Key: roachpb.KeyMin, EndKey: splitKey,
 		})
 		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, roachpb.Span{
 			Key: splitKey, EndKey: roachpb.KeyMax,

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -68,21 +67,7 @@ func (s *testStream) Send(e *roachpb.RangeFeedEvent) error {
 	if s.mu.sendErr != nil {
 		return s.mu.sendErr
 	}
-	// Send's contract does not promise that its provided events are safe for
-	// use after it has returned. To work around this, make a clone.
-	var eClone roachpb.RangeFeedEvent
-	{
-		b, err := protoutil.Marshal(e)
-		if err != nil {
-			panic(err)
-		}
-		err = protoutil.Unmarshal(b, &eClone)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	s.mu.events = append(s.mu.events, &eClone)
+	s.mu.events = append(s.mu.events, e)
 	return nil
 }
 

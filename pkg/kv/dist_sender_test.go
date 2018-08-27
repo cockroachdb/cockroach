@@ -156,6 +156,12 @@ func (l *simpleTransportAdapter) SendNext(
 	return l.fn(ctx, l.opts, l.replicas, ba)
 }
 
+func (l *simpleTransportAdapter) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	panic("unimplemented")
+}
+
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 	if !l.IsExhausted() {
 		return l.replicas[l.nextReplica].ReplicaDescriptor

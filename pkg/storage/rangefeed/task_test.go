@@ -71,10 +71,6 @@ type testIterator struct {
 	kvs []engine.MVCCKeyValue
 	cur int
 
-	// Simulate unsafe buffers.
-	unsafeKeyBuf []byte
-	unsafeValBuf []byte
-
 	closed bool
 	err    error
 	block  chan struct{}
@@ -152,28 +148,15 @@ func (s *testIterator) NextKey() {
 }
 
 func (s *testIterator) UnsafeKey() engine.MVCCKey {
-	curKey := s.curKV().Key
-	curKey.Key = copyToUnsafeBuf(&s.unsafeKeyBuf, curKey.Key)
-	return curKey
+	return s.curKV().Key
 }
 
 func (s *testIterator) UnsafeValue() []byte {
-	curVal := s.curKV().Value
-	return copyToUnsafeBuf(&s.unsafeValBuf, curVal)
+	return s.curKV().Value
 }
 
 func (s *testIterator) curKV() engine.MVCCKeyValue {
 	return s.kvs[s.cur]
-}
-
-func copyToUnsafeBuf(buf *[]byte, src []byte) []byte {
-	if cap(*buf) < len(src) {
-		*buf = append([]byte(nil), src...)
-	} else {
-		*buf = (*buf)[:len(src)]
-		copy(*buf, src)
-	}
-	return *buf
 }
 
 func TestInitResolvedTSScan(t *testing.T) {

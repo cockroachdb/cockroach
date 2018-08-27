@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -131,6 +132,10 @@ func equalSpanSets(a, b roachpb.Spans) bool {
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
 func (p *poller) Run(ctx context.Context) error {
+	if storage.RangefeedEnabled.Get(&p.settings.SV) {
+		return p.runUsingRangefeeds(ctx)
+	}
+
 	sender := p.db.NonTransactionalSender()
 	for {
 		pollDuration := changefeedPollInterval.Get(&p.settings.SV)
@@ -314,6 +319,155 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
 	}
 
 	return slurpKVs()
+}
+
+// TODO(nvanbenschoten): this should probably be a whole different type that
+// shares a common interface with poller.
+func (p *poller) runUsingRangefeeds(ctx context.Context) error {
+	startTS := p.highWater
+	spans, err := fetchSpansForTargets(ctx, p.db, p.targets, startTS)
+	if err != nil {
+		return err
+	}
+
+	g := ctxgroup.WithContext(ctx)
+	sender := p.db.NonTransactionalSender()
+	if startTS == (hlc.Timestamp{}) {
+		startTS = p.clock.Now()
+
+		// TODO(nvanbenschoten/danhhz): This should be replaced by a series of
+		// ScanRequests and this structure should be completely reworked. Right
+		// now it's copied verbatim from above.
+		var ranges []roachpb.RangeDescriptor
+		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			ranges, err = allRangeDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+			return errors.Wrap(err, "fetching range descriptors")
+		}
+
+		type spanMarker struct{}
+		type rangeMarker struct{}
+
+		var spanCovering intervalccl.Covering
+		for _, span := range p.spans {
+			spanCovering = append(spanCovering, intervalccl.Range{
+				Start:   []byte(span.Key),
+				End:     []byte(span.EndKey),
+				Payload: spanMarker{},
+			})
+		}
+
+		var rangeCovering intervalccl.Covering
+		for _, rangeDesc := range ranges {
+			rangeCovering = append(rangeCovering, intervalccl.Range{
+				Start:   []byte(rangeDesc.StartKey),
+				End:     []byte(rangeDesc.EndKey),
+				Payload: rangeMarker{},
+			})
+		}
+
+		chunks := intervalccl.OverlapCoveringMerge(
+			[]intervalccl.Covering{spanCovering, rangeCovering},
+		)
+
+		var requests []roachpb.Span
+		for _, chunk := range chunks {
+			if _, ok := chunk.Payload.([]interface{})[0].(spanMarker); !ok {
+				continue
+			}
+			requests = append(requests, roachpb.Span{Key: chunk.Start, EndKey: chunk.End})
+		}
+
+		g.GoCtx(func(ctx context.Context) error {
+			maxConcurrentExports := clusterNodeCount(p.gossip) *
+				int(storage.ExportRequestsLimit.Get(&p.settings.SV))
+			exportsSem := make(chan struct{}, maxConcurrentExports)
+
+			var atomicFinished int64
+
+			for _, span := range requests {
+				span := span
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case exportsSem <- struct{}{}:
+				}
+
+				g.GoCtx(func(ctx context.Context) error {
+					defer func() { <-exportsSem }()
+					if log.V(2) {
+						log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
+					}
+					header := roachpb.Header{Timestamp: startTS}
+					req := &roachpb.ExportRequest{
+						RequestHeader: roachpb.RequestHeaderFromSpan(span),
+						StartTime:     hlc.Timestamp{},
+						MVCCFilter:    roachpb.MVCCFilter_Latest,
+						ReturnSST:     true,
+					}
+					startTime := timeutil.Now()
+					res, pErr := client.SendWrappedWith(ctx, sender, header, req)
+					finished := atomic.AddInt64(&atomicFinished, 1)
+					if log.V(2) {
+						log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
+							span.Key, span.EndKey, finished, len(requests), timeutil.Since(startTime))
+					}
+					if pErr != nil {
+						return errors.Wrapf(
+							pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
+					}
+					for _, file := range res.(*roachpb.ExportResponse).Files {
+						if err := p.slurpSST(ctx, file.SST); err != nil {
+							return err
+						}
+					}
+					return p.buf.AddResolved(ctx, span, startTS)
+				})
+			}
+			return nil
+		})
+	}
+
+	// TODO(nvanbenschoten): This is horrible.
+	ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+	for _, span := range spans {
+		req := &roachpb.RangeFeedRequest{
+			Header: roachpb.Header{
+				Timestamp: startTS,
+			},
+			Span: span,
+		}
+		g.GoCtx(func(ctx context.Context) error {
+			return ds.RangeFeed(ctx, req, eventC).GoError()
+		})
+	}
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case e := <-eventC:
+				switch t := e.GetValue().(type) {
+				case *roachpb.RangeFeedValue:
+					kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
+					if err := p.buf.AddKV(ctx, kv); err != nil {
+						return err
+					}
+				case *roachpb.RangeFeedCheckpoint:
+					if err := p.buf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
+						return err
+					}
+				default:
+					log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	return g.Wait()
 }
 
 type byValueTimestamp []roachpb.KeyValue
