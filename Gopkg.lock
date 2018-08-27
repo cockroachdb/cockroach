@@ -700,10 +700,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:296b06d527d1b5b96ebb48f006f2da7f41f6caa480d942feb2e002cdf788e924"
+  digest = "1:26fcd5801e409b8883ab1e89ae2432284d0f5aad0e44236a172a13401299db17"
   name = "github.com/google/pprof"
   packages = [
-    ".",
     "driver",
     "internal/binutils",
     "internal/driver",
@@ -717,11 +716,10 @@
     "profile",
     "third_party/d3",
     "third_party/d3flamegraph",
-    "third_party/d3tip",
     "third_party/svgpan",
   ]
   pruneopts = "UT"
-  revision = "60840899638bfaf3fd6f2b17b9785f1dac67a4a4"
+  revision = "d723c7237b64c7871a69e4c411acb04245bcd23d"
 
 [[projects]]
   digest = "1:e145e9710a10bc114a6d3e2738aadf8de146adaa031854ffdf7bbfe15da85e63"
@@ -1265,6 +1263,14 @@
   version = "v2.18.06"
 
 [[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
+
+[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1664,7 +1670,6 @@
     "github.com/golang/snappy",
     "github.com/google/btree",
     "github.com/google/go-github/github",
-    "github.com/google/pprof",
     "github.com/google/pprof/driver",
     "github.com/google/pprof/profile",
     "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway",

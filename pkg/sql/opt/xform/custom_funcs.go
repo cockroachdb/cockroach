@@ -546,7 +546,7 @@ func (c *CustomFuncs) ConstructMergeJoins(
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
 	leftOrders := DeriveInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
-	leftOrders.RestrictToCols(opt.ColListToSet(leftEq))
+	leftOrders.RestrictToCols(leftEq.ToSet())
 	if len(leftOrders) == 0 {
 		return nil
 	}

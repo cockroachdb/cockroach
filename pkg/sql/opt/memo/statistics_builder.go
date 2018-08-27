@@ -875,7 +875,7 @@ func (sb *statisticsBuilder) buildSetOp(ev ExprView, relProps *props.Relational)
 		// Since UNION, INTERSECT and EXCEPT eliminate duplicate rows, the row
 		// count will equal the distinct count of the set of output columns.
 		colMap := ev.Private().(*SetOpColMap)
-		outputCols := opt.ColListToSet(colMap.Out)
+		outputCols := colMap.Out.ToSet()
 		colStat := sb.colStatSetOpImpl(outputCols, ev, relProps)
 		s.RowCount = colStat.DistinctCount
 	}
