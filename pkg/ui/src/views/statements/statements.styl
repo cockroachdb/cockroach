@@ -45,8 +45,27 @@
     color $tooltip-color
     font-style italic
 
+.statements-table__col-count
+  .bar-chart
+    width 100px
+
+.statements-table__col-retries
+  .bar-chart
+    width 80px
+
+.numeric-stats-table, .statements-table__col-rows, .statements-table__col-latency
+  .bar-chart
+    width 140px
+
+.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
+  .bar-chart
+    margin-left 3em
+
+    .label
+      left -3em
+      width 2.5em
+
 .bar-chart
-  width 140px
   height 14px
   margin-left 5em
   position relative
