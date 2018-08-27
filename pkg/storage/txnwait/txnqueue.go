@@ -95,11 +95,12 @@ type waitingPush struct {
 	}
 }
 
-// A waitingQuery represents a QueryTxn command that is waiting on
-// a target transaction to change status or acquire new dependencies.
-type waitingQuery struct {
-	req     *roachpb.QueryTxnRequest
+// A waitingQueries object represents one or more QueryTxn commands that are
+// waiting on the same target transaction to change status or acquire new
+// dependencies.
+type waitingQueries struct {
 	pending chan struct{}
+	count   int
 }
 
 // A pendingTxn represents a transaction waiting to be pushed by one
@@ -160,7 +161,7 @@ type Queue struct {
 	mu    struct {
 		syncutil.Mutex
 		txns    map[uuid.UUID]*pendingTxn
-		queries map[uuid.UUID][]*waitingQuery
+		queries map[uuid.UUID]*waitingQueries
 	}
 }
 
@@ -181,7 +182,7 @@ func (q *Queue) Enable() {
 		q.mu.txns = map[uuid.UUID]*pendingTxn{}
 	}
 	if q.mu.queries == nil {
-		q.mu.queries = map[uuid.UUID][]*waitingQuery{}
+		q.mu.queries = map[uuid.UUID]*waitingQueries{}
 	}
 }
 
@@ -199,11 +200,11 @@ func (q *Queue) Clear(disable bool) {
 		}
 		pt.waitingPushes = nil
 	}
-	var queryWaiters []chan struct{}
-	for _, waitingQueries := range q.mu.queries {
-		for _, w := range waitingQueries {
-			queryWaiters = append(queryWaiters, w.pending)
-		}
+
+	queryWaiters := q.mu.queries
+	queryWaitersCount := 0
+	for _, waitingQueries := range queryWaiters {
+		queryWaitersCount += waitingQueries.count
 	}
 
 	if log.V(1) {
@@ -211,7 +212,7 @@ func (q *Queue) Clear(disable bool) {
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
 			len(pushWaiters),
-			len(queryWaiters),
+			queryWaitersCount,
 		)
 	}
 
@@ -220,7 +221,7 @@ func (q *Queue) Clear(disable bool) {
 		q.mu.queries = nil
 	} else {
 		q.mu.txns = map[uuid.UUID]*pendingTxn{}
-		q.mu.queries = map[uuid.UUID][]*waitingQuery{}
+		q.mu.queries = map[uuid.UUID]*waitingQueries{}
 	}
 	q.mu.Unlock()
 
@@ -230,7 +231,7 @@ func (q *Queue) Clear(disable bool) {
 	}
 	// Close query waiters outside of the mutex lock.
 	for _, w := range queryWaiters {
-		close(w)
+		close(w.pending)
 	}
 }
 
@@ -269,15 +270,7 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	txn.AssertInitialized(ctx)
 	q.mu.Lock()
 
-	if log.V(1) {
-		if count := len(q.mu.queries[txn.ID]); count > 0 {
-			log.Infof(ctx, "returning %d waiting queries for %s", count, txn.ID.Short())
-		}
-	}
-	for _, w := range q.mu.queries[txn.ID] {
-		close(w.pending)
-	}
-	delete(q.mu.queries, txn.ID)
+	q.releaseWaitingQueriesLocked(ctx, txn.ID)
 
 	if q.mu.txns == nil {
 		// Not enabled; do nothing.
@@ -348,20 +341,12 @@ func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) 
 	return false
 }
 
-func (q *Queue) clearWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
-	waitingQueries := q.mu.queries[txnID]
-	if log.V(1) && len(waitingQueries) > 0 {
-		log.Infof(
-			ctx,
-			"proceeding with %d query waiters for %s",
-			len(waitingQueries),
-			txnID.Short(),
-		)
-	}
-	for _, w := range waitingQueries {
+func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
+	if w, ok := q.mu.queries[txnID]; ok {
+		log.VEventf(ctx, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
 		close(w.pending)
+		delete(q.mu.queries, txnID)
 	}
-	delete(q.mu.queries, txnID)
 }
 
 // ErrDeadlock is a sentinel error returned when a cyclic dependency between
@@ -418,7 +403,7 @@ func (q *Queue) MaybeWaitForPush(
 	// transaction, send on the waiting queries' channel to
 	// indicate there is a new dependent and they should proceed
 	// to execute the QueryTxn command.
-	q.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+	q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
 
 	if req.PusherTxn.ID != (uuid.UUID{}) {
 		log.VEventf(
@@ -567,7 +552,7 @@ func (q *Queue) MaybeWaitForPush(
 			// Since the pusher has been updated, clear any waiting queries
 			// so that they continue with a query of new dependents added here.
 			q.mu.Lock()
-			q.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+			q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
 			q.mu.Unlock()
 
 			if haveDependency {
@@ -620,11 +605,10 @@ func (q *Queue) MaybeWaitForQuery(
 	}
 
 	var maxWaitCh <-chan time.Time
-	pending, ok := q.mu.txns[req.Txn.ID]
 	// If the transaction we're waiting to query has a queue of txns
 	// in turn waiting on it, and is _already_ updated from what the
 	// caller is expecting, return to query the updates immediately.
-	if ok && q.isTxnUpdated(pending, req) {
+	if pending, ok := q.mu.txns[req.Txn.ID]; ok && q.isTxnUpdated(pending, req) {
 		q.mu.Unlock()
 		return nil
 	} else if !ok {
@@ -636,16 +620,35 @@ func (q *Queue) MaybeWaitForQuery(
 		maxWaitCh = time.After(maxWaitForQueryTxn)
 	}
 
-	query := &waitingQuery{
-		req:     req,
-		pending: make(chan struct{}),
+	// Add a new query to wait for updates to the transaction. If a query
+	// already exists, we can just increment its reference count.
+	query, ok := q.mu.queries[req.Txn.ID]
+	if ok {
+		query.count++
+	} else {
+		query = &waitingQueries{
+			pending: make(chan struct{}),
+			count:   1,
+		}
+		q.mu.queries[req.Txn.ID] = query
 	}
-	q.mu.queries[req.Txn.ID] = append(q.mu.queries[req.Txn.ID], query)
 	q.mu.Unlock()
 
-	if log.V(2) {
-		log.Infof(ctx, "waiting on query for %s", req.Txn.ID.Short())
-	}
+	// When we return, make sure to unregister the query so that it doesn't
+	// leak. If query.pending if closed, the query will have already been
+	// cleaned up, so this will be a no-op.
+	defer func() {
+		q.mu.Lock()
+		if query == q.mu.queries[req.Txn.ID] {
+			query.count--
+			if query.count == 0 {
+				delete(q.mu.queries, req.Txn.ID)
+			}
+		}
+		q.mu.Unlock()
+	}()
+
+	log.VEventf(ctx, 2, "waiting on query for %s", req.Txn.ID.Short())
 	select {
 	case <-ctx.Done():
 		// Caller has given up.
