@@ -124,7 +124,30 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		b := make([]byte, 1024*1024)
 		n := runtime.Stack(b, true)
 		fmt.Printf("%s\n", b[:n])
-		panic(errors.Errorf("timeout: %q. currently executing: %v", sql, db.mu.active))
+		// Now see if we can execute a SELECT 1. This is useful because sometimes an
+		// exec timeout is because of a slow-executing statement, and other times
+		// it's because the server is completely wedged. This is an automated way
+		// to find out.
+		errch := make(chan error, 1)
+		go func() {
+			rows, err := db.db.Query(`SELECT 1`)
+			if err == nil {
+				rows.Close()
+			}
+			errch <- err
+		}()
+		select {
+		case <-time.After(5 * time.Second):
+			fmt.Println("SELECT 1 timeout: probably a wedged server")
+		case err := <-errch:
+			if err != nil {
+				fmt.Println("SELECT 1 execute error:", err)
+			} else {
+				fmt.Println("SELECT 1 executed successfully: probably a slow statement")
+			}
+		}
+		fmt.Printf("timeout: %q. currently executing: %v\n", sql, db.mu.active)
+		panic("statement exec timeout")
 	}
 }
 
@@ -275,6 +298,9 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"create_database_stmt",
 		"drop_database_stmt",
 		"alter_rename_database_stmt",
+		"create_user_stmt",
+		"drop_user_stmt",
+		"alter_user_stmt",
 	}
 
 	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
