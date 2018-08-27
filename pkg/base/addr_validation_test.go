@@ -60,6 +60,21 @@ func TestValidateAddrs(t *testing.T) {
 		localAddr = "[" + localAddr + "]"
 	}
 
+	// We need to know what a port name resolution error look like,
+	// because they may be different across systems/libcs.
+	_, err = net.DefaultResolver.LookupPort(context.Background(), "tcp", "nonexistent")
+	if err == nil {
+		t.Fatal("expected port resolution failure, got no error")
+	}
+	portExpectedErr := err.Error()
+	// For the host name resolution error we can reliably expect "no such host"
+	// below, but before we test anything we need to ensure we indeed have
+	// a reliably non-resolvable host name.
+	_, err = net.DefaultResolver.LookupIPAddr(context.Background(), "nonexistent.example.com")
+	if err == nil {
+		t.Fatal("expected host resolution failure, got no error")
+	}
+
 	// The test cases.
 	testData := []struct {
 		in          addrs
@@ -120,7 +135,7 @@ func TestValidateAddrs(t *testing.T) {
 		{addrs{":26257", "", "localhost", ""}, "invalid --http-addr.*missing port in address", addrs{}},
 		// Invalid port number.
 		{addrs{"localhost:-1231", "", "", ""}, "invalid port", addrs{}},
-		{addrs{"localhost:nonexistent", "", "", ""}, "unknown port", addrs{}},
+		{addrs{"localhost:nonexistent", "", "", ""}, portExpectedErr, addrs{}},
 		// Invalid address.
 		{addrs{"nonexistent.example.com:26257", "", "", ""}, "no such host", addrs{}},
 		{addrs{"333.333.333.333:26257", "", "", ""}, "no such host", addrs{}},
