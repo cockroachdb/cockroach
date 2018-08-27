@@ -21,13 +21,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
-	RegisterCommand(roachpb.ComputeChecksum, DefaultDeclareKeys, ComputeChecksum)
+	RegisterCommand(roachpb.ComputeChecksum, declareKeysComputeChecksum, ComputeChecksum)
+}
+
+func declareKeysComputeChecksum(
+	roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet,
+) {
+	// Intentionally declare no keys, as ComputeChecksum does not need to be
+	// serialized with any other commands. It simply needs to be committed into
+	// the Raft log.
 }
 
 // Version numbers for Replica checksum computation. Requests silently no-op
