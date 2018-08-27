@@ -188,6 +188,16 @@ func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
 	return false
 }
 
+// IsSingleComputeChecksumRequest returns true iff the batch contains a single
+// request, and that request is a ComputeChecksumRequest.
+func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*ComputeChecksumRequest)
+		return ok
+	}
+	return false
+}
+
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.
