@@ -26,7 +26,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1646,23 +1644,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
-
-	if s.cfg.PIDFile != "" {
-		if err := ioutil.WriteFile(s.cfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-			log.Error(ctx, err)
-		}
-	}
-
-	if s.cfg.ListeningURLFile != "" {
-		pgURL, err := s.cfg.PGURL(url.User(security.RootUser))
-		if err == nil {
-			err = ioutil.WriteFile(s.cfg.ListeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
-		}
-
-		if err != nil {
-			log.Error(ctx, err)
-		}
-	}
 
 	log.Event(ctx, "server ready")
 

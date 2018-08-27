@@ -625,6 +625,27 @@ func runStart(cmd *cobra.Command, args []string) error {
 				fmt.Print(msg)
 			}
 
+			// If the invoker has requested a PID update, do it here. We
+			// also need to wait until the server is ready because the PID
+			// file may be a FIFO and a successful read from that FIFO is
+			// meant to signal the server is ready too.
+			if serverCfg.PIDFile != "" {
+				if err := ioutil.WriteFile(serverCfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+					log.Error(ctx, err)
+				}
+			}
+
+			// Ditto for the listen URL file.
+			if serverCfg.ListeningURLFile != "" {
+				pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+				if err == nil {
+					err = ioutil.WriteFile(serverCfg.ListeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
+				}
+				if err != nil {
+					log.Error(ctx, err)
+				}
+			}
+
 			// Signal readiness. This unblocks the process when running with
 			// --background or under systemd.
 			if err := sdnotify.Ready(); err != nil {
