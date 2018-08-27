@@ -200,9 +200,11 @@ func (b *Builder) buildDistinctOnArgs(inScope, projectionsScope, distinctOnScope
 		return
 	}
 
+	var colRefs opt.ColSet
 	for i := range distinctOnScope.cols {
-		b.addExtraColumn(inScope, projectionsScope, distinctOnScope, &distinctOnScope.cols[i])
+		b.addExtraColumn(inScope, projectionsScope, distinctOnScope, &distinctOnScope.cols[i], &colRefs)
 	}
 	projectionsScope.addExtraColumns(distinctOnScope.cols)
 	projectionsScope.distinctOnCols = distinctOnScope.colSet()
+	projectionsScope.updateOuterCols(&colRefs, inScope)
 }

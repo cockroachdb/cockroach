@@ -48,6 +48,7 @@ func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope
 
 	outScope = inScope.push()
 	outScope.appendColumnsFromScope(leftScope)
+	outScope.outerCols.UnionWith(rightScope.outerCols)
 
 	// newColsNeeded indicates whether or not we need to synthesize output
 	// columns. This is always required for a UNION, because the output columns

@@ -73,11 +73,13 @@ func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
 
 	orderByScope.ordering = make([]opt.OrderingColumn, 0, len(orderByScope.cols))
 
+	var colRefs opt.ColSet
 	for i := range orderByScope.cols {
-		b.buildOrderByArg(inScope, projectionsScope, orderByScope, &orderByScope.cols[i])
+		b.buildOrderByArg(inScope, projectionsScope, orderByScope, &orderByScope.cols[i], &colRefs)
 	}
 
 	projectionsScope.setOrdering(orderByScope.cols, orderByScope.ordering)
+	projectionsScope.updateOuterCols(&colRefs, inScope)
 }
 
 // findIndexByName returns an index in the table with the given name. If the
@@ -100,14 +102,14 @@ func (b *Builder) findIndexByName(table opt.Table, name tree.UnrestrictedName) (
 // addExtraColumn builds extraCol.expr as a column in extraColsScope; if it is
 // already projected in projectionsScope then that projection is re-used.
 func (b *Builder) addExtraColumn(
-	inScope, projectionsScope, extraColsScope *scope, extraCol *scopeColumn,
+	inScope, projectionsScope, extraColsScope *scope, extraCol *scopeColumn, colRefs *opt.ColSet,
 ) {
 	// Use an existing projection if possible. Otherwise, build a new
 	// projection.
 	if col := projectionsScope.findExistingCol(extraCol.getExpr()); col != nil {
 		extraCol.id = col.id
 	} else {
-		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol)
+		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol, colRefs)
 	}
 }
 
@@ -178,10 +180,10 @@ func (b *Builder) analyzeOrderByArg(
 // The projection column is built in the orderByScope and used to build
 // an ordering on the same scope.
 func (b *Builder) buildOrderByArg(
-	inScope, projectionsScope, orderByScope *scope, orderByCol *scopeColumn,
+	inScope, projectionsScope, orderByScope *scope, orderByCol *scopeColumn, colRefs *opt.ColSet,
 ) {
 	// Build the ORDER BY column.
-	b.addExtraColumn(inScope, projectionsScope, orderByScope, orderByCol)
+	b.addExtraColumn(inScope, projectionsScope, orderByScope, orderByCol, colRefs)
 
 	// Add the new column to the ordering.
 	orderByScope.ordering = append(orderByScope.ordering,

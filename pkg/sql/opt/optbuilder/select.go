@@ -401,11 +401,12 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
 			col := b.addColumn(projectionsScope, "" /* label */, expr.ResolvedType(), expr)
-			b.buildScalar(expr, outScope, projectionsScope, col)
+			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
 		b.constructProjectForScope(outScope, projectionsScope)
+		projectionsScope.outerCols = outScope.outerCols
 		outScope = projectionsScope
 	}
 
@@ -430,6 +431,7 @@ func (b *Builder) buildSelectClause(
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
 	projectionsScope := fromScope.replace()
+	projectionsScope.outerCols = fromScope.outerCols
 
 	// This is where the magic happens. When this call reaches an aggregate
 	// function that refers to variables in fromScope or an ancestor scope,
@@ -455,8 +457,9 @@ func (b *Builder) buildSelectClause(
 	}
 
 	if len(fromScope.srfs) > 0 {
-		outScope.group = b.constructProjectSet(outScope.group, fromScope.srfs)
+		b.buildProjectSet(outScope.group, fromScope.srfs, fromScope, outScope)
 	}
+	projectionsScope.outerCols.UnionWith(outScope.outerCols)
 
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
@@ -525,10 +528,12 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		// All "from" columns are visible to the filter expression.
 		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool)
 
-		filter := b.buildScalar(texpr, outScope, nil, nil)
+		var colRefs opt.ColSet
+		filter := b.buildScalar(texpr, outScope, nil, nil, &colRefs)
 		// Wrap the filter in a FiltersOp.
 		filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
+		outScope.updateOuterCols(&colRefs, outScope)
 	}
 
 	return outScope

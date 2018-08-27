@@ -132,10 +132,12 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 //
 // See Builder.buildStmt for a description of the remaining input values.
 func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
+	var colRefs opt.ColSet
 	for i := range projectionsScope.cols {
 		col := &projectionsScope.cols[i]
-		b.buildScalar(col.getExpr(), inScope, projectionsScope, col)
+		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, &colRefs)
 	}
+	projectionsScope.updateOuterCols(&colRefs, inScope)
 }
 
 // resolveColRef looks for the common case of a standalone column reference
@@ -219,11 +221,15 @@ func (b *Builder) finishBuildScalar(
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) finishBuildScalarRef(
-	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn,
+	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out memo.GroupID) {
 	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
 	// Remember whether the query was correlated for later.
 	b.IsCorrelated = b.IsCorrelated || isOuterColumn
+
+	if colRefs != nil {
+		colRefs.Add(int(col.id))
+	}
 
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).

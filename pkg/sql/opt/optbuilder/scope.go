@@ -72,6 +72,9 @@ type scope struct {
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+
+	// outerCols is the set of outer column references in this scope.
+	outerCols opt.ColSet
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -126,6 +129,7 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].group = 0
 	}
+	s.outerCols.UnionWith(src.outerCols)
 }
 
 // appendColumns adds newly bound variables to this scope.
@@ -236,6 +240,10 @@ func (s *scope) makePhysicalProps() props.Physical {
 
 	p.Ordering.FromOrdering(s.ordering)
 	return p
+}
+
+func (s *scope) updateOuterCols(colRefs *opt.ColSet, inScope *scope) {
+	s.outerCols.UnionWith(colRefs.Difference(inScope.colSet()))
 }
 
 // walkExprTree walks the given expression and performs name resolution,
@@ -823,7 +831,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // replaceSRF also stores a pointer to the new srf struct in this scope's srfs
 // slice. The slice is used later by the Builder to convert the input from
 // the FROM clause to a lateral cross join between the input and a Zip of all
-// the srfs in the s.srfs slice. See Builder.constructProjectSet in srfs.go for
+// the srfs in the s.srfs slice. See Builder.buildProjectSet in srfs.go for
 // more details.
 func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf {
 	// We need to save and restore the previous value of the field in
@@ -845,11 +853,13 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	if len(def.ReturnLabels) == 1 {
 		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc.ResolvedType(), typedFunc)
 	}
-	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol)
+	var colRefs opt.ColSet
+	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol, &colRefs)
 	srf := &srf{
 		FuncExpr: typedFunc.(*tree.FuncExpr),
 		cols:     srfScope.cols,
 		group:    out,
+		colRefs:  colRefs,
 	}
 	s.srfs = append(s.srfs, srf)
 
@@ -993,11 +1003,12 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	}
 
 	return &subquery{
-		cols:     outScope.cols,
-		group:    outScope.group,
-		ordering: outScope.ordering,
-		multiRow: multiRow,
-		expr:     sub,
+		cols:      outScope.cols,
+		group:     outScope.group,
+		ordering:  outScope.ordering,
+		multiRow:  multiRow,
+		expr:      sub,
+		outerCols: outScope.outerCols,
 	}
 }
 

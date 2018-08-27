@@ -15,6 +15,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -34,13 +35,14 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
+	var colRefs opt.ColSet
 	if limit.Offset != nil {
 		op := "OFFSET"
 		b.assertNoAggregationOrWindowing(limit.Offset, op)
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		parentScope.context = op
 		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int)
-		offset := b.buildScalar(texpr, parentScope, nil, nil)
+		offset := b.buildScalar(texpr, parentScope, nil, nil, &colRefs)
 		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
 	}
 	if limit.Count != nil {
@@ -49,7 +51,8 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		parentScope.context = op
 		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int)
-		limit := b.buildScalar(texpr, parentScope, nil, nil)
+		limit := b.buildScalar(texpr, parentScope, nil, nil, &colRefs)
 		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)
 	}
+	inScope.updateOuterCols(&colRefs, parentScope)
 }

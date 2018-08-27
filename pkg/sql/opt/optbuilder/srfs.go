@@ -33,6 +33,9 @@ type srf struct {
 
 	// group is the top level memo GroupID of the srf.
 	group memo.GroupID
+
+	// colRefs is the set of column references in the arguments of the srf.
+	colRefs opt.ColSet
 }
 
 // Walk is part of the tree.Expr interface.
@@ -84,6 +87,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 	// Build each of the provided expressions.
 	elems := make([]memo.GroupID, len(exprs))
+	var colRefs opt.ColSet
 	for i, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
@@ -103,7 +107,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
 
-		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol)
+		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol, &colRefs)
 	}
 
 	// Get the output columns of the Zip operation and construct the Zip.
@@ -114,6 +118,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	outScope.group = b.factory.ConstructZip(
 		b.factory.InternList(elems), b.factory.InternColList(colList),
 	)
+	outScope.updateOuterCols(&colRefs, inScope)
 
 	return outScope
 }
@@ -141,7 +146,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 	return group
 }
 
-// constructProjectSet constructs a lateral cross join between the given input
+// buildProjectSet constructs a lateral cross join between the given input
 // group and a Zip operation constructed from the given srfs.
 //
 // This function is called at most once per SELECT clause, and it is only
@@ -157,20 +162,23 @@ func (b *Builder) finishBuildGeneratorFunction(
 //
 // If the SRFs do not depend on the input, then the optimizer will replace the
 // apply join with a regular inner join during optimization.
-func (b *Builder) constructProjectSet(in memo.GroupID, srfs []*srf) memo.GroupID {
+func (b *Builder) buildProjectSet(in memo.GroupID, srfs []*srf, inScope, outScope *scope) {
 	// Get the output columns and GroupIDs of the Zip operation.
 	colList := make(opt.ColList, 0, len(srfs))
 	elems := make([]memo.GroupID, len(srfs))
+	var colRefs opt.ColSet
 	for i, srf := range srfs {
 		for _, col := range srf.cols {
 			colList = append(colList, col.id)
 		}
 		elems[i] = srf.group
+		colRefs.UnionWith(srf.colRefs)
 	}
 
 	zip := b.factory.ConstructZip(
 		b.factory.InternList(elems), b.factory.InternColList(colList),
 	)
 
-	return b.factory.ConstructInnerJoinApply(in, zip, b.factory.ConstructTrue())
+	outScope.group = b.factory.ConstructInnerJoinApply(in, zip, b.factory.ConstructTrue())
+	outScope.updateOuterCols(&colRefs, inScope)
 }

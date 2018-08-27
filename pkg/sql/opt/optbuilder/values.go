@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,6 +54,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 	inScope.context = "VALUES"
 
+	var colRefs opt.ColSet
 	for _, tuple := range values.Rows {
 		if numCols != len(tuple) {
 			panic(builderError{pgerror.NewErrorf(
@@ -64,7 +66,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 		for i, expr := range tuple {
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
-			elems[i] = b.buildScalar(texpr, inScope, nil, nil)
+			elems[i] = b.buildScalar(texpr, inScope, nil, nil, &colRefs)
 
 			// Verify that types of each tuple match one another.
 			if colTypes[i] == types.Unknown {
@@ -91,5 +93,6 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	outScope.group = b.factory.ConstructValues(
 		b.factory.InternList(rows), b.factory.InternColList(colList),
 	)
+	outScope.outerCols = colRefs
 	return outScope
 }

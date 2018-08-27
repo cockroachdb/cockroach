@@ -92,6 +92,10 @@ type aggregateInfo struct {
 
 	// col is the output column of the aggregation.
 	col *scopeColumn
+
+	// colRefs is the set of column references in the arguments of the
+	// aggregation.
+	colRefs opt.ColSet
 }
 
 // Walk is part of the tree.Expr interface.
@@ -207,9 +211,10 @@ func (b *Builder) buildAggregation(
 	}
 	aggInScope := fromScope.groupby.aggInScope
 	aggOutScope := fromScope.groupby.aggOutScope
+	var colRefs opt.ColSet
 
 	// The "from" columns are visible to any grouping expressions.
-	b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope, aggInScope)
+	b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope, aggInScope, &colRefs)
 	groupingsLen := len(fromScope.groupby.groupings)
 
 	// Copy the grouping columns to the aggOutScope.
@@ -220,7 +225,7 @@ func (b *Builder) buildAggregation(
 	if sel.Having != nil {
 		// Any "grouping" columns are visible to both the "having" and "projection"
 		// expressions.
-		having = b.buildHaving(havingExpr, fromScope)
+		having = b.buildHaving(havingExpr, fromScope, &colRefs)
 	}
 
 	b.buildProjectionList(fromScope, projectionsScope)
@@ -250,11 +255,16 @@ func (b *Builder) buildAggregation(
 			haveOrderingSensitiveAgg = true
 		}
 		aggCols[i].group = b.factory.DynamicConstruct(aggOp, operands)
+		colRefs.UnionWith(agg.colRefs)
 	}
 
 	if haveOrderingSensitiveAgg {
 		aggInScope.copyOrdering(fromScope)
 	}
+
+	// Update the projections scope with any outer cols from the grouping cols,
+	// aggregates, or HAVING clause.
+	projectionsScope.updateOuterCols(&colRefs, fromScope)
 
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments, as well as any additional order by columns.
@@ -278,6 +288,7 @@ func (b *Builder) buildAggregation(
 		having = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{having}))
 		aggOutScope.group = b.factory.ConstructSelect(aggOutScope.group, having)
 	}
+
 	return aggOutScope
 }
 
@@ -303,8 +314,10 @@ func (b *Builder) analyzeHaving(having *tree.Where, inScope *scope) tree.TypedEx
 //
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
-func (b *Builder) buildHaving(having tree.TypedExpr, inScope *scope) memo.GroupID {
-	return b.buildScalar(having, inScope, nil, nil)
+func (b *Builder) buildHaving(
+	having tree.TypedExpr, inScope *scope, colRefs *opt.ColSet,
+) memo.GroupID {
+	return b.buildScalar(having, inScope, nil, nil, colRefs)
 }
 
 // buildGroupingList builds a set of memo groups that represent a list of
@@ -318,7 +331,7 @@ func (b *Builder) buildHaving(having tree.TypedExpr, inScope *scope) memo.GroupI
 //
 // See Builder.buildStmt for a description of the remaining input values.
 func (b *Builder) buildGroupingList(
-	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
+	groupBy tree.GroupBy, selects tree.SelectExprs, inScope, outScope *scope, colRefs *opt.ColSet,
 ) {
 	inScope.groupby.groupings = make([]memo.GroupID, 0, len(groupBy))
 	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
@@ -328,7 +341,7 @@ func (b *Builder) buildGroupingList(
 
 	inScope.startGroupings()
 	for _, e := range groupBy {
-		b.buildGrouping(e, selects, inScope, outScope)
+		b.buildGrouping(e, selects, inScope, outScope, colRefs)
 	}
 	inScope.endGroupings()
 }
@@ -342,7 +355,7 @@ func (b *Builder) buildGroupingList(
 //
 // See Builder.buildStmt for a description of the remaining input values.
 func (b *Builder) buildGrouping(
-	groupBy tree.Expr, selects tree.SelectExprs, inScope, outScope *scope,
+	groupBy tree.Expr, selects tree.SelectExprs, inScope, outScope *scope, colRefs *opt.ColSet,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	groupBy = tree.StripParens(groupBy)
@@ -374,7 +387,7 @@ func (b *Builder) buildGrouping(
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
 		col := b.addColumn(outScope, label, e.ResolvedType(), e)
-		b.buildScalar(e, inScope, outScope, col)
+		b.buildScalar(e, inScope, outScope, col, colRefs)
 		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
 		inScope.groupby.groupings = append(inScope.groupby.groupings, col.group)
 	}
@@ -417,25 +430,22 @@ func (b *Builder) buildAggregateFunction(
 		args:     make([]memo.GroupID, len(f.Exprs)),
 	}
 
-	var cols opt.ColSet
 	for i, pexpr := range f.Exprs {
 		// This synthesizes a new tempScope column, unless the argument is a
 		// simple VariableOp.
 		texpr := pexpr.(tree.TypedExpr)
 		col := b.addColumn(tempScope, "" /* label */, texpr.ResolvedType(), texpr)
-		b.buildScalar(texpr, inScope, tempScope, col)
+		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		info.args[i] = col.group
 		if info.args[i] == 0 {
 			info.args[i] = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 		}
-
-		cols.UnionWith(b.factory.Memo().GroupProperties(info.args[i]).OuterCols())
 	}
 
 	// Find the appropriate aggregation scopes for this aggregate now that we
 	// know which columns it references. If necessary, we'll move the columns
 	// for the arguments from tempScope to aggInScope below.
-	aggInScope, aggOutScope := inScope.endAggFunc(cols)
+	aggInScope, aggOutScope := inScope.endAggFunc(info.colRefs)
 
 	// If we already have the same aggregation, reuse it. Otherwise add it
 	// to the list of aggregates that need to be computed by the groupby

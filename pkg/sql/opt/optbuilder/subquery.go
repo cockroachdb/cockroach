@@ -45,6 +45,9 @@ type subquery struct {
 
 	// expr is the AST Subquery expression.
 	expr *tree.Subquery
+
+	// outerCols is the set of outer column references in this subquery.
+	outerCols opt.ColSet
 }
 
 // String is part of the tree.Expr interface.
@@ -256,11 +259,11 @@ func (b *Builder) buildSingleRowSubquery(
 //     ==> ConstructNot(ConstructAny(<subquery>, <var>, Negate(<comp>)))
 //
 func (b *Builder) buildMultiRowSubquery(
-	c *tree.ComparisonExpr, inScope *scope,
+	c *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
 ) (out memo.GroupID, outScope *scope) {
 	out, outScope = b.buildSubqueryProjection(c.Right.(*subquery), inScope)
 
-	scalar := b.buildScalar(c.TypedLeft(), inScope, nil, nil)
+	scalar := b.buildScalar(c.TypedLeft(), inScope, nil, nil, colRefs)
 	outScope = outScope.replace()
 
 	var cmp opt.Operator

@@ -64,9 +64,11 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 			// Do not allow special functions in the ON clause.
 			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
 			outScope.context = "ON"
+			var colRefs opt.ColSet
 			filter = b.buildScalar(
-				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil,
+				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, &colRefs,
 			)
+			outScope.updateOuterCols(&colRefs, inScope)
 		} else {
 			filter = b.factory.ConstructTrue()
 		}
@@ -176,6 +178,8 @@ func (b *Builder) buildUsingJoin(
 	)
 
 	outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
+	outScope.outerCols.UnionWith(leftScope.outerCols)
+	outScope.outerCols.UnionWith(rightScope.outerCols)
 
 	if len(mergedCols) > 0 {
 		// Wrap in a projection to include the merged columns and ensure that all
