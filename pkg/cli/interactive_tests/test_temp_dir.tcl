@@ -7,6 +7,10 @@ set tempprefix "cockroach-temp"
 set storedir "mystore"
 set tempdir "mystore/temp"
 set cwd ""
+# Ensure that pwd will only return absolute paths.
+cd [file normalize [pwd]]
+set ::env(PWD) [pwd]
+
 # We want cwd to be "" if pwd is root since it will mess up our pattern matching.
 if {! [string match "/" [pwd]]} {
   set cwd [pwd]
@@ -117,7 +121,7 @@ end_test
 
 start_test "Check that temp directory does not get wiped upon subsequent failed cockroach start attempt and that a cockroach instance can be subsequently started up after a shutdown"
 send "$argv start --insecure --store=$storedir --background\r"
-eexpect "node starting"
+eexpect ":/# "
 # Try to start up a second cockroach instance with the same store path.
 send "$argv start --insecure --store=$storedir\r"
 eexpect "ERROR: could not cleanup temporary directories from record file: could not lock temporary directory $cwd/$storedir/$tempprefix*"

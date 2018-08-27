@@ -238,13 +238,16 @@ type Config struct {
 	// actions.
 	EventLogEnabled bool
 
-	// ListeningURLFile indicates the file to which the server writes
-	// its listening URL when it is ready.
-	ListeningURLFile string
+	// ReadyFn is called when the server has started listening on its
+	// sockets. The boolean argument indicates (iff true) that the
+	// server is not bootstrapped yet, will not bootstrap itself and
+	// will be waiting for an `init` command. This can be used to inform
+	// the user.
+	ReadyFn func(waitForInit bool)
 
-	// PIDFile indicates the file to which the server writes its PID when
-	// it is ready.
-	PIDFile string
+	// DelayedBootstrapFn is called if the boostrap process does not complete
+	// in a timely fashion, typically 30s after the server starts listening.
+	DelayedBootstrapFn func()
 
 	// EnableWebSessionAuthentication enables session-based authentication for
 	// the Admin API's HTTP endpoints.
@@ -367,12 +370,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
-	}
-	if cfg.ListeningURLFile != "" {
-		fmt.Fprintln(w, "listening URL file\t", cfg.ListeningURLFile)
-	}
-	if cfg.PIDFile != "" {
-		fmt.Fprintln(w, "PID file\t", cfg.PIDFile)
 	}
 	_ = w.Flush()
 

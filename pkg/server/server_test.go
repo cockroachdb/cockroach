@@ -23,7 +23,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -511,45 +510,6 @@ func TestSystemConfigGossip(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestListenURLFileCreation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	file, err := ioutil.TempFile(os.TempDir(), t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
-		ListeningURLFile: file.Name(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Stopper().Stop(context.TODO())
-	defer func() {
-		if err := os.Remove(file.Name()); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	data, err := ioutil.ReadFile(file.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	u, err := url.Parse(string(data))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if s.ServingAddr() != u.Host {
-		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
-	}
 }
 
 func TestListenerFileCreation(t *testing.T) {
