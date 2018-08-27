@@ -184,12 +184,10 @@ export function countBreakdown(s: StatementStatistics) {
     firstAttemptsBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={"First Try Count: " + firstAttempts} short>
-            <div
-              className="count-first-try bar-chart__bar"
-              style={{ width: scale(firstAttempts) + "%" }}
-            />
-          </ToolTipWrapper>
+          <div
+            className="count-first-try bar-chart__bar"
+            style={{ width: scale(firstAttempts) + "%" }}
+          />
         </div>
       );
     },
@@ -197,12 +195,10 @@ export function countBreakdown(s: StatementStatistics) {
     retriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ "Retry Count: " + retries } short>
-            <div
-              className="count-retry bar-chart__bar"
-              style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
-            />
-          </ToolTipWrapper>
+          <div
+            className="count-retry bar-chart__bar"
+            style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
+          />
         </div>
       );
     },
@@ -210,12 +206,10 @@ export function countBreakdown(s: StatementStatistics) {
     maxRetriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ "Max Retries: " + retries } short>
-            <div
-              className="count-retry bar-chart__bar"
-              style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
-            />
-          </ToolTipWrapper>
+          <div
+            className="count-retry bar-chart__bar"
+            style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
+          />
         </div>
       );
     },
