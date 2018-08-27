@@ -256,7 +256,7 @@ func (c *CustomFuncs) OutputCols(group memo.GroupID) opt.ColSet {
 	expr := c.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.AggregationsOp:
-		return opt.ColListToSet(c.ExtractColList(expr.AsAggregations().Cols()))
+		return c.ExtractColList(expr.AsAggregations().Cols()).ToSet()
 
 	case opt.ProjectionsOp:
 		return c.ExtractProjectionsOpDef(expr.AsProjections().Def()).AllCols()

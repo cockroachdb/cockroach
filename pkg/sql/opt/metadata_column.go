@@ -30,7 +30,16 @@ type ColSet = util.FastIntSet
 //
 // TODO(radu): perhaps implement a FastIntList with the same "small"
 // representation as FastIntMap but with a slice for large cases.
-type ColList = []ColumnID
+type ColList []ColumnID
+
+// ToSet converts a column id list to a column id set.
+func (cl ColList) ToSet() ColSet {
+	var r ColSet
+	for _, col := range cl {
+		r.Add(int(col))
+	}
+	return r
+}
 
 // ColMap provides a 1:1 mapping from one column id to another. It is used by
 // operators that need to match columns from its inputs.
