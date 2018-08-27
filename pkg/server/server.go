@@ -81,7 +81,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1330,18 +1329,6 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
-	}
-
-	// Signal readiness. This unblocks the process when running with
-	// --background or under systemd. At this point we have bound our
-	// listening port but the server is not yet running, so any
-	// connection attempts will be queued up in the kernel. We turn on
-	// servers below, first HTTP and later pgwire. If we're in
-	// initializing mode, we don't start the pgwire server until after
-	// initialization completes, so connections to that port will
-	// continue to block until we're initialized.
-	if err := sdnotify.Ready(); err != nil {
-		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 
 	// Filter the gossip bootstrap resolvers based on the listen and

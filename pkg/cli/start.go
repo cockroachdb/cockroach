@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -623,6 +624,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 			if !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
 			}
+
+			// Signal readiness. This unblocks the process when running with
+			// --background or under systemd.
+			if err := sdnotify.Ready(); err != nil {
+				log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+			}
+
 			return nil
 		}(); err != nil {
 			errChan <- err
