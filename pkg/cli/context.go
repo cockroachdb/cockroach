@@ -99,14 +99,17 @@ func initCLIDefaults() {
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
 
+	serverCfg.ReadyFn = nil
+	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
-	serverCfg.ListeningURLFile = ""
-	serverCfg.PIDFile = ""
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverListenAddr = ""
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
+	startCtx.listeningURLFile = ""
+	startCtx.pidFile = ""
+	startCtx.inBackground = false
 
 	quitCtx.serverDecommission = false
 
@@ -225,6 +228,18 @@ var startCtx struct {
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
+
+	// inBackground is set to true when restarting in the
+	// background after --background was processed.
+	inBackground bool
+
+	// listeningURLFile indicates the file to which the server writes
+	// its listening URL when it is ready.
+	listeningURLFile string
+
+	// pidFile indicates the file to which the server writes its PID
+	// when it is ready.
+	pidFile string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.

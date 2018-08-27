@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -469,6 +470,63 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// registered.
 	reportConfiguration(ctx)
 
+	// ReadyFn will be called when the server has started listening on
+	// its network sockets, but perhaps before it has done bootstrapping
+	// and thus before Start() completes.
+	serverCfg.ReadyFn = func(waitForInit bool) {
+		// Inform the user if the network settings are suspicious. We need
+		// to do that after starting to listen because we need to know
+		// which advertise address NewServer() has decided.
+		hintServerCmdFlags(ctx, cmd)
+
+		// If another process was waiting on the PID (e.g. using a FIFO),
+		// this is when we can tell them the node has started listening.
+		if startCtx.pidFile != "" {
+			log.Infof(ctx, "PID file: %s", startCtx.pidFile)
+			if err := ioutil.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+				log.Errorf(ctx, "failed writing the PID: %v", err)
+			}
+		}
+
+		if waitForInit {
+			log.Shout(ctx, log.Severity_INFO,
+				"initial startup completed, will now wait for `cockroach init`\n"+
+					"or a join to a running cluster to start accepting clients.\n"+
+					"Check the log file(s) for progress.")
+		}
+
+		// Ensure the configuration logging is written to disk in case a
+		// process is waiting for the sdnotify readiness to read important
+		// information from there.
+		log.Flush()
+
+		// Signal readiness. This unblocks the process when running with
+		// --background or under systemd.
+		if err := sdnotify.Ready(); err != nil {
+			log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+		}
+	}
+
+	// DelayedBoostrapFn will be called if the boostrap process is
+	// taking a bit long.
+	serverCfg.DelayedBootstrapFn = func() {
+		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try:
+
+- starting the other nodes, if you haven't already;
+- double-checking that the '--join' and '--listen'/'--advertise' flags are set up correctly;
+- running the 'cockroach init' command if you are trying to initialize a new cluster.
+
+If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."
+
+		if !startCtx.inBackground {
+			log.Shout(context.Background(), log.Severity_WARNING, msg)
+		} else {
+			// Don't shout to stderr since the server will have detached by
+			// the time this function gets called.
+			log.Warningf(ctx, msg)
+		}
+	}
+
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
 	log.Info(ctx, "starting cockroach node")
@@ -554,11 +612,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
-			// Inform the user if the network settings are suspicious. We
-			// need to do that after starting the server because we need to
-			// know which advertise address NewServer() has decided.
-			hintServerCmdFlags(ctx, cmd)
-
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
@@ -620,9 +673,25 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			msg := buf.String()
 			log.Infof(ctx, "node startup completed:\n%s", msg)
-			if !log.LoggingToStderr(log.Severity_INFO) {
+			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
 			}
+
+			// If the invoker has requested an URL update, do it now that
+			// the server is ready to accept SQL connections. We do this
+			// here and not in ReadyFn because we need to wait for bootstrap
+			// to complete.
+			if startCtx.listeningURLFile != "" {
+				log.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+				pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+				if err == nil {
+					err = ioutil.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
+				}
+				if err != nil {
+					log.Error(ctx, err)
+				}
+			}
+
 			return nil
 		}(); err != nil {
 			errChan <- err

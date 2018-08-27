@@ -254,7 +254,11 @@ func init() {
 	// special severity value DEFAULT instead.
 	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
-	// Security flags.
+	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
+	// If we are relaunching in the background due to the processing of --background,
+	// any warning about deprecated flags have been reported already; in that
+	// case we do not want warnings to be printed a second time.
+	markDeprecated := !startCtx.inBackground
 
 	{
 		f := StartCmd.Flags()
@@ -262,22 +266,30 @@ func init() {
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
 		VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
-		_ = f.MarkDeprecated(cliflags.ServerHost.Name, "use --listen-addr/--advertise-addr instead.")
 		VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
-		_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-addr instead.")
+		if markDeprecated {
+			_ = f.MarkDeprecated(cliflags.ServerHost.Name, "use --listen-addr/--advertise-addr instead.")
+			_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-addr instead.")
+		}
 
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
-		_ = f.MarkDeprecated(cliflags.AdvertiseHost.Name, "use --advertise-addr instead.")
+		if markDeprecated {
+			_ = f.MarkDeprecated(cliflags.AdvertiseHost.Name, "use --advertise-addr instead.")
+		}
 
 		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
 		VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
-		_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
+		if markDeprecated {
+			_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
+		}
 
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
-		_ = f.MarkDeprecated(cliflags.ListenHTTPAddrAlias.Name, "use --http-addr instead.")
 		StringFlag(f, &serverHTTPPort, cliflags.ListenHTTPPort, serverHTTPPort)
-		_ = f.MarkDeprecated(cliflags.ListenHTTPPort.Name, "use --http-addr=...:<port> instead.")
+		if markDeprecated {
+			_ = f.MarkDeprecated(cliflags.ListenHTTPAddrAlias.Name, "use --http-addr instead.")
+			_ = f.MarkDeprecated(cliflags.ListenHTTPPort.Name, "use --http-addr=...:<port> instead.")
+		}
 
 		StringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		VarFlag(f, &serverCfg.Locality, cliflags.Locality)
@@ -292,9 +304,9 @@ func init() {
 		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, serverCfg.ListeningURLFile)
+		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
-		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, serverCfg.PIDFile)
+		StringFlag(f, &startCtx.pidFile, cliflags.PIDFile, startCtx.pidFile)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.

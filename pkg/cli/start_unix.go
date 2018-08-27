@@ -55,6 +55,8 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 var startBackground bool
 
+const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
+
 func init() {
 	BoolFlag(StartCmd.Flags(), &startBackground, cliflags.Background, false)
 }
@@ -76,6 +78,10 @@ func maybeRerunBackground() (bool, error) {
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = stderr
+
+		// Notify to ourselves that we're restarting.
+		_ = os.Setenv(backgroundEnvVar, "1")
+
 		return true, sdnotify.Exec(cmd)
 	}
 	return false, nil
