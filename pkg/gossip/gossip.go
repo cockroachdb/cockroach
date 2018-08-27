@@ -674,6 +674,16 @@ func (g *Gossip) SimulationCycle() {
 	}
 }
 
+// EnableRedundantCallbacks enables the historic mode of operation where
+// callbacks were invokved whenever a new info was received regardless of
+// whether the data has changed. Various tests rely on this behavior as they
+// wait for callbacks to be received and can't handle the de-duplication.
+func (g *Gossip) EnableRedundantCallbacks() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.mu.is.redundantCallbacks = true
+}
+
 // maybeAddResolverLocked creates and adds a resolver for the specified
 // address if one does not already exist. Returns whether a new
 // resolver was added. The caller must hold the gossip mutex.

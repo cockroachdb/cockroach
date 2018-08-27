@@ -38,6 +38,10 @@ func TestGossipInvalidation(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
+	for i := range tc.Servers {
+		tc.Servers[i].Gossip().EnableRedundantCallbacks()
+	}
+
 	sc := stats.NewTableStatisticsCache(
 		10, /* cacheSize */
 		tc.Server(0).Gossip(),

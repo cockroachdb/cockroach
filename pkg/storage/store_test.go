@@ -1466,6 +1466,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
+	store.Gossip().EnableRedundantCallbacks()
 
 	baseID := uint32(keys.MinUserDescID)
 	testData := []struct {

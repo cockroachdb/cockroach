@@ -41,6 +41,10 @@ func TestGossipFirstRange(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(context.TODO())
 
+	for i := range tc.Servers {
+		tc.Servers[i].Gossip().EnableRedundantCallbacks()
+	}
+
 	errors := make(chan error)
 	descs := make(chan *roachpb.RangeDescriptor)
 	unregister := tc.Servers[0].Gossip().RegisterCallback(gossip.KeyFirstRangeDescriptor,

@@ -5187,6 +5187,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+	g.EnableRedundantCallbacks()
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 
@@ -5323,6 +5324,7 @@ func Example_rebalancing() {
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+	g.EnableRedundantCallbacks()
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 	// Deterministic must be set as this test is comparing the exact output

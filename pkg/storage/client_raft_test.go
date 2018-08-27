@@ -2837,6 +2837,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 
 	for _, s := range mtc.stores {
+		s.Gossip().EnableRedundantCallbacks()
 		if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
 			t.Fatal(err)
 		}

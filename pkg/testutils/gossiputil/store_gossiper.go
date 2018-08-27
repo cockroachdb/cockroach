@@ -36,6 +36,7 @@ type StoreGossiper struct {
 // NewStoreGossiper creates a store gossiper for use by tests. It adds the
 // callback to gossip.
 func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
+	g.EnableRedundantCallbacks()
 	sg := &StoreGossiper{
 		g:           g,
 		storeKeyMap: make(map[string]struct{}),

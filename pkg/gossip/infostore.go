@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -74,6 +75,11 @@ type infoStore struct {
 	callbackMu     syncutil.Mutex // Serializes callbacks
 	callbackWorkMu syncutil.Mutex // Protects callbackWork
 	callbackWork   []func()
+
+	// Should redundant callbacks be performed even when the value for an info
+	// has not changed. This was the historic behavior and is still required by
+	// some tests. See Gossip.EnableRedundantCallbacks.
+	redundantCallbacks bool
 }
 
 var monoTime struct {
@@ -181,7 +187,8 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
-	if existingInfo, ok := is.Infos[key]; ok {
+	existingInfo, ok := is.Infos[key]
+	if ok {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
@@ -204,7 +211,12 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			is.highWaterStamps[nID] = i.OrigStamp
 		}
 	}
-	is.processCallbacks(key, i.Value)
+	changed := is.redundantCallbacks ||
+		existingInfo == nil ||
+		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
+	if changed {
+		is.processCallbacks(key, i.Value)
+	}
 	return nil
 }
 
