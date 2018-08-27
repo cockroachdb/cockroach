@@ -26,7 +26,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -81,7 +79,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1332,16 +1329,16 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
-	// Signal readiness. This unblocks the process when running with
-	// --background or under systemd. At this point we have bound our
-	// listening port but the server is not yet running, so any
-	// connection attempts will be queued up in the kernel. We turn on
-	// servers below, first HTTP and later pgwire. If we're in
-	// initializing mode, we don't start the pgwire server until after
-	// initialization completes, so connections to that port will
-	// continue to block until we're initialized.
-	if err := sdnotify.Ready(); err != nil {
-		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+	// Signal readiness. At this point we have bound our listening port
+	// but the server is not yet running, so any connection attempts
+	// will be queued up in the kernel. We turn on servers below, first
+	// HTTP and later pgwire. If we're in initializing mode, we don't
+	// start the pgwire server until after initialization completes, so
+	// connections to that port will continue to block until we're
+	// initialized.
+	if s.cfg.ReadyFn != nil {
+		waitForInit := len(bootstrappedEngines) > 0 || len(s.cfg.GossipBootstrapResolvers) > 0
+		s.cfg.ReadyFn(waitForInit)
 	}
 
 	// Filter the gossip bootstrap resolvers based on the listen and
@@ -1352,18 +1349,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
 
-	defer time.AfterFunc(30*time.Second, func() {
-		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try
-
-- starting the other nodes, if you haven't already
-- double-checking that the '--join' and '--listen'/'--advertise' flags are set up correctly
-- running the 'cockroach init' command if you are trying to initialize a new cluster
-
-If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."
-
-		log.Shout(context.Background(), log.Severity_WARNING,
-			msg)
-	}).Stop()
+	if s.cfg.DelayedBootstrapFn != nil {
+		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
+	}
 
 	var hlcUpperBoundExists bool
 	if len(bootstrappedEngines) > 0 {
@@ -1659,23 +1647,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
-
-	if s.cfg.PIDFile != "" {
-		if err := ioutil.WriteFile(s.cfg.PIDFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-			log.Error(ctx, err)
-		}
-	}
-
-	if s.cfg.ListeningURLFile != "" {
-		pgURL, err := s.cfg.PGURL(url.User(security.RootUser))
-		if err == nil {
-			err = ioutil.WriteFile(s.cfg.ListeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL)), 0644)
-		}
-
-		if err != nil {
-			log.Error(ctx, err)
-		}
-	}
 
 	log.Event(ctx, "server ready")
 

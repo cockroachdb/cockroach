@@ -3,12 +3,14 @@
 source [file join [file dirnam $argv0] common.tcl]
 
 # Start a server with a --join flag so the init command is required
-# (even though we have no intention of starting a second node). Even
-# though the cluster is uninitialized, --background causes it to
-# return once we have bound our ports. Note that unlike other
+# (even though we have no intention of starting a second node).  Note that unlike other
 # expect-based tests, this one doesn't use a fifo for --pid_file
 # because we don't want reads from that fifo to change the outcome.
-system "$argv start --insecure --pid-file=server_pid --background -s=path=logs/db --join=localhost:26258 >>logs/expect-cmd.log 2>&1"
+system "$argv start --insecure --pid-file=server_pid -s=path=logs/db --listen-addr=localhost --background --join=localhost:26258 >>logs/expect-cmd.log 2>&1"
+
+start_test "Check that the server has informed us and the log file that it was ready before forking off in the background"
+system "grep -q 'initial startup completed, will now wait' logs/db/logs/cockroach.log"
+end_test
 
 start_test "Check that the SQL shell successfully times out upon connecting to an uninitialized node"
 # We shorten the default timeout of 5 seconds to make this test run faster.
@@ -37,7 +39,7 @@ send "show tables from system.pg_catalog;\r"
 # SQL connection. This also verifies that the blocked connection using
 # the pgwire listener does not block the grpc listener used for the
 # init command.
-system $argv init
+system "$argv init --insecure --host=localhost"
 
 # The command should now succeed, without logging any errors or
 # warnings.
