@@ -106,7 +106,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		}
 
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, mem.Metadata(), &keyBuffer{})
+		sb.init(&evalCtx, mem.Metadata())
 
 		// Make the scan.
 		def := &ScanOpDef{Table: tabID, Cols: cols}

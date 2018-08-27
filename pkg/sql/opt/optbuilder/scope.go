@@ -545,8 +545,8 @@ func (s *scope) FindSourceMatchingName(
 	var source tree.TableName
 	for ; s != nil; s = s.parent {
 		sources := make(map[tree.TableName]struct{})
-		for _, col := range s.cols {
-			sources[col.table] = exists
+		for i := range s.cols {
+			sources[s.cols[i].table] = exists
 		}
 
 		found := false
