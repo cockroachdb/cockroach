@@ -398,7 +398,7 @@ func TestCallbacks(t *testing.T) {
 
 	unregisterCB1 := is.registerCallback("key1", cb1.Add)
 	is.registerCallback("key2", cb2.Add)
-	is.registerCallback("key.*", cbAll.Add)
+	is.registerCallback("key.*", cbAll.Add, Redundant)
 
 	i1 := is.newInfo(nil, time.Second)
 	i2 := is.newInfo(nil, time.Second)
@@ -440,10 +440,13 @@ func TestCallbacks(t *testing.T) {
 		}
 	}
 
-	// Update an info.
-	{
+	// Update an info twice.
+	for i := 0; i < 2; i++ {
 		i1 := is.newInfo([]byte("a"), time.Second)
-		wg.Add(2)
+		// The first time both callbacks will fire because the value has
+		// changed. The second time cbAll (created with the Redundant option) will
+		// fire.
+		wg.Add(2 - i)
 		if err := is.addInfo("key1", i1); err != nil {
 			t.Error(err)
 		}
@@ -455,10 +458,10 @@ func TestCallbacks(t *testing.T) {
 		if expKeys := []string{"key2"}; !reflect.DeepEqual(cb2.Keys(), expKeys) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
-		keys := cbAll.Keys()
-		if expKeys := []string{"key1", "key2", "key3", "key1"}; !reflect.DeepEqual(keys, expKeys) {
-			t.Errorf("expected %v, got %v", expKeys, keys)
-		}
+	}
+
+	if expKeys := []string{"key1", "key2", "key3", "key1", "key1"}; !reflect.DeepEqual(cbAll.Keys(), expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
 	}
 
 	const numInfos = 3
@@ -479,7 +482,7 @@ func TestCallbacks(t *testing.T) {
 
 	// Unregister a callback and verify nothing is invoked on it.
 	unregisterCB1()
-	iNew := is.newInfo([]byte("a"), time.Second)
+	iNew := is.newInfo([]byte("b"), time.Second)
 	wg.Add(2) // for the two cbAll callbacks
 	if err := is.addInfo("key1", iNew); err != nil {
 		t.Error(err)

@@ -5299,7 +5299,10 @@ func TestAllocatorFullDisks(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+		func(_ string, _ roachpb.Value) { wg.Done() },
+		// Redundant callbacks are required by this test.
+		gossip.Redundant)
 
 	const generations = 100
 	const nodes = 20
@@ -5435,7 +5438,10 @@ func Example_rebalancing() {
 	})
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+		func(_ string, _ roachpb.Value) { wg.Done() },
+		// Redundant callbacks are required by this test.
+		gossip.Redundant)
 
 	const generations = 100
 	const nodes = 20
