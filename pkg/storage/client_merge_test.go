@@ -1909,10 +1909,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Create three fully-caught-up, adjacent ranges on all three stores.
 	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
-	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
-	for _, key := range splitKeys {
-		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
-			t.Fatal(pErr)
+	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
+	for i, key := range splitKeys {
+		if i != len(splitKeys)-1 {
+			// We'll split the last range off later.
+			if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+				t.Fatal(pErr)
+			}
 		}
 		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
 			t.Fatal(pErr)
@@ -1920,11 +1923,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		mtc.waitForValues(key, []int64{1, 1, 1})
 	}
 
-	lhsRepl0 := store0.LookupReplica(roachpb.RKey("a"))
+	aRepl0 := store0.LookupReplica(roachpb.RKey("a"))
 
 	// Start dropping all Raft traffic to the first range on store1.
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            lhsRepl0.RangeID,
+		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
 	})
 
@@ -1933,6 +1936,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if _, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(roachpb.Key("a"))); pErr != nil {
 			t.Fatal(pErr)
 		}
+	}
+
+	// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft snapshot
+	// will span both a merge and a split.
+	lastSplitKey := splitKeys[len(splitKeys)-1]
+	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(lastSplitKey)); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Truncate the logs of the LHS.
@@ -1976,10 +1986,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Verify that the sets of keys in store0 and store2 are identical.
 	storeKeys0 := getEngineKeySet(t, store0.Engine())
 	storeKeys2 := getEngineKeySet(t, store2.Engine())
+	dRepl0 := store0.LookupReplica(roachpb.RKey("d"))
 	ignoreKey := func(k string) bool {
-		// Unreplicated keys for the two remaining ranges are allowed to differ.
-		return strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(roachpb.RangeID(1)))) ||
-			strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(lhsRepl0.RangeID)))
+		// Unreplicated keys for the remaining ranges are allowed to differ.
+		for _, id := range []roachpb.RangeID{1, aRepl0.RangeID, dRepl0.RangeID} {
+			if strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(id))) {
+				return true
+			}
+		}
+		return false
 	}
 	for k := range storeKeys0 {
 		if ignoreKey(k) {
