@@ -73,6 +73,18 @@ func TestJoinReader(t *testing.T) {
 
 	tdFamily := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 
+	sqlutils.CreateTable(t, sqlDB, "t3parent",
+		"a INT PRIMARY KEY",
+		0,
+		sqlutils.ToRowFn(aFn))
+
+	sqlutils.CreateTableInterleaved(t, sqlDB, "t3",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
+		"t3parent(a)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
+	tdInterleaved := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
+
 	testCases := []struct {
 		description     string
 		indexIdx        uint32
@@ -244,9 +256,9 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 NULL]]",
 		},
 	}
-	for _, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily} {
+	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
-			t.Run(c.description, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
 				st := cluster.MakeTestingClusterSettings()
 				evalCtx := tree.MakeTestingEvalContext(st)
 				defer evalCtx.Stop(context.Background())
