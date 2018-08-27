@@ -3016,16 +3016,19 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	notify := backfillNotification
 
-	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL NOT NULL DEFAULT (DECIMAL '1.4')"); err != nil {
+	const add_column = `ALTER TABLE t.public.test ADD COLUMN x DECIMAL NOT NULL DEFAULT 1.4::DECIMAL`
+	if _, err := sqlDB.Exec(add_column); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP COLUMN v"); err != nil {
+	const drop_column = `ALTER TABLE t.public.test DROP COLUMN v`
+	if _, err := sqlDB.Exec(drop_column); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that an outstanding schema change exists.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	oldID := tableDesc.ID
 	if lenMutations := len(tableDesc.Mutations); lenMutations != 2 {
 		t.Fatalf("%d outstanding schema change", lenMutations)
 	}
@@ -3061,6 +3064,26 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	if k, x := tableDesc.Columns[0].Name, tableDesc.Columns[1].Name; k != "k" && x != "x" {
 		t.Fatalf("columns %q, %q in descriptor", k, x)
+	}
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: add_column,
+		DescriptorIDs: sqlbase.IDs{
+			oldID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: drop_column,
+		DescriptorIDs: sqlbase.IDs{
+			oldID,
+		},
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

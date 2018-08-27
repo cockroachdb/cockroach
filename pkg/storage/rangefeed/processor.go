@@ -37,7 +37,7 @@ const (
 	defaultPushTxnsAge = 10 * time.Second
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
-	defaultCheckStreamsInterval = 100 * time.Millisecond
+	defaultCheckStreamsInterval = 1 * time.Second
 )
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers

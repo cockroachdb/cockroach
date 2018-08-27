@@ -202,18 +202,20 @@ func (reg *registry) forOverlappingRegs(
 	span roachpb.Span, fn func(*registration) (disconnect bool, pErr *roachpb.Error),
 ) {
 	var toDelete []interval.Interface
-	reg.tree.DoMatching(
-		func(i interval.Interface) (done bool) {
-			r := i.(*registration)
-			dis, pErr := fn(r)
-			if dis {
-				r.errC <- pErr
-				toDelete = append(toDelete, i)
-			}
-			return false
-		},
-		span.AsRange(),
-	)
+	matchFn := func(i interval.Interface) (done bool) {
+		r := i.(*registration)
+		dis, pErr := fn(r)
+		if dis {
+			r.errC <- pErr
+			toDelete = append(toDelete, i)
+		}
+		return false
+	}
+	if span.EqualValue(all) {
+		reg.tree.Do(matchFn)
+	} else {
+		reg.tree.DoMatching(matchFn, span.AsRange())
+	}
 
 	if len(toDelete) == reg.tree.Len() {
 		reg.tree.Clear()

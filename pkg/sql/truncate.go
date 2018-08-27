@@ -229,19 +229,14 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
 	for _, m := range newTableDesc.Mutations {
-		if m.Direction == sqlbase.DescriptorMutation_ADD {
-			if col := m.GetColumn(); col != nil {
-				newTableDesc.Columns = append(newTableDesc.Columns, *col)
-			}
-			if idx := m.GetIndex(); idx != nil {
-				newTableDesc.Indexes = append(newTableDesc.Indexes, *idx)
-			}
-		}
+		newTableDesc.MakeMutationComplete(m)
 	}
 	newTableDesc.Mutations = nil
+
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
-	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
+	if err := p.createDescriptorWithID(
+		ctx, key, newID, &newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
 	}
 

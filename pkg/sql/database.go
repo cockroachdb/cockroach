@@ -253,13 +253,6 @@ func (dc *databaseCache) getDatabaseID(
 	return desc.ID, nil
 }
 
-// createDatabase implements the DatabaseDescEditor interface.
-func (p *planner) createDatabase(
-	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
-) (bool, error) {
-	return p.createDescriptor(ctx, databaseKey{desc.Name}, desc, ifNotExists)
-}
-
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
 	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
