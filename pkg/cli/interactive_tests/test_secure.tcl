@@ -22,7 +22,7 @@ end_test
 
 proc start_secure_server {argv certs_dir} {
     report "BEGIN START SECURE SERVER"
-    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
+    system "mkfifo url_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=server_pid --listening-url-file=url_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat url_fifo > server_url"
     report "END START SECURE SERVER"
 }
 

@@ -62,7 +62,7 @@ stop_server $argv
 
 start_test "Check that audit logging works even with a custom directory"
 # Start a server with a custom log
-system "$argv start --insecure --pid-file=pid_fifo --background -s=path=logs/db --sql-audit-dir=logs/db/audit-new >>logs/expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
+system "$argv start --insecure --pid-file=server_pid --listening-url-file=url_fifo --background -s=path=logs/db --sql-audit-dir=logs/db/audit-new >>logs/expect-cmd.log 2>&1 & cat url_fifo > server_url"
 
 set logfile logs/db/audit-new/cockroach-sql-audit.log
 

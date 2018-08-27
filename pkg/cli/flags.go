@@ -254,13 +254,11 @@ func init() {
 	// special severity value DEFAULT instead.
 	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
-	markDeprecated := true
-	if _, isSet := envutil.EnvString(backgroundEnvVar, 1); isSet {
-		// If we are relaunching in the background due to the processing of --background,
-		// any warning about deprecated flags have been reported already; in that
-		// case we do not want warnings to be printed a second time.
-		markDeprecated = false
-	}
+	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
+	// If we are relaunching in the background due to the processing of --background,
+	// any warning about deprecated flags have been reported already; in that
+	// case we do not want warnings to be printed a second time.
+	markDeprecated := !startCtx.inBackground
 
 	{
 		f := StartCmd.Flags()
@@ -306,9 +304,9 @@ func init() {
 		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, serverCfg.ListeningURLFile)
+		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
-		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, serverCfg.PIDFile)
+		StringFlag(f, &startCtx.pidFile, cliflags.PIDFile, startCtx.pidFile)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.

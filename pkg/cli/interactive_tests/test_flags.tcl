@@ -70,6 +70,14 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that --listening-url-file gets created with the right data"
+send "$argv start --insecure --listening-url-file=foourl\r"
+eexpect "node starting"
+system "grep -q 'postgresql://.*@.*:\[0-9\]\[0-9\]*' foourl"
+interrupt
+eexpect ":/# "
+end_test
+
 start_test {Check that the "failed running SUBCOMMAND" message does not consider a flag the subcommand}
 send "$argv --verbosity 2 start --garbage\r"
 eexpect {Failed running "start"}
