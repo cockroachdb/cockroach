@@ -15,6 +15,7 @@
 package testutils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -37,7 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
+
+// RuleSet efficiently stores an unordered set of RuleNames.
+type RuleSet = util.FastIntSet
 
 // OptTester is a helper for testing the various optimizer components. It
 // contains the boiler-plate code for the following useful tasks:
@@ -52,11 +57,12 @@ import (
 type OptTester struct {
 	Flags OptTesterFlags
 
-	catalog opt.Catalog
-	sql     string
-	ctx     context.Context
-	semaCtx tree.SemaContext
-	evalCtx tree.EvalContext
+	catalog   opt.Catalog
+	sql       string
+	ctx       context.Context
+	semaCtx   tree.SemaContext
+	evalCtx   tree.EvalContext
+	seenRules RuleSet
 
 	builder strings.Builder
 }
@@ -88,11 +94,19 @@ type OptTesterFlags struct {
 	Verbose bool
 
 	// DisableRules is a set of rules that are not allowed to run.
-	DisableRules map[opt.RuleName]struct{}
+	DisableRules RuleSet
 
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
 	ExploreTraceRule opt.RuleName
+
+	// ExpectedRules is a set of rules which must be exercised for the test to
+	// pass.
+	ExpectedRules RuleSet
+
+	// UnexpectedRules is a set of rules which must not be exercised for the test
+	// to pass.
+	UnexpectedRules RuleSet
 
 	ColStats []opt.ColSet
 }
@@ -168,6 +182,10 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
 //
+//  - expect: fail the test if the rules specified by name do not match.
+//
+//  - expect-not: fail the test if the rules specified by name match.
+//
 //  - disable: disables optimizer rules by name. Examples:
 //      opt disable=ConstrainScan
 //      norm disable=(NegateOr,NegateAnd)
@@ -212,7 +230,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(ev)
+		if err := ot.postProcess(ev); err != nil {
+			tb.Fatal(err)
+		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "norm":
@@ -225,7 +245,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(ev)
+		if err := ot.postProcess(ev); err != nil {
+			tb.Fatal(err)
+		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "opt":
@@ -233,7 +255,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		ot.postProcess(ev)
+		if err := ot.postProcess(ev); err != nil {
+			tb.Fatal(err)
+		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "rulestats":
@@ -270,11 +294,36 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 }
 
-func (ot *OptTester) postProcess(ev memo.ExprView) {
+func formatRuleSet(r RuleSet) string {
+	var buf bytes.Buffer
+	comma := false
+	for i, ok := r.Next(0); ok; i, ok = r.Next(i + 1) {
+		if comma {
+			buf.WriteString(", ")
+		}
+		comma = true
+		fmt.Fprintf(&buf, "%v", opt.RuleName(i))
+	}
+	return buf.String()
+}
+
+func (ot *OptTester) postProcess(ev memo.ExprView) error {
 	fillInLazyProps(ev)
 	for _, cols := range ot.Flags.ColStats {
 		ev.RequestColStat(&ot.evalCtx, cols)
 	}
+
+	if !ot.Flags.ExpectedRules.SubsetOf(ot.seenRules) {
+		unseen := ot.Flags.ExpectedRules.Difference(ot.seenRules)
+		return fmt.Errorf("expected to see %s, but was not triggered. Did see %s", formatRuleSet(unseen), formatRuleSet(ot.seenRules))
+	}
+
+	if ot.Flags.UnexpectedRules.Intersects(ot.seenRules) {
+		seen := ot.Flags.UnexpectedRules.Intersection(ot.seenRules)
+		return fmt.Errorf("expected not to see %s, but it was triggered", formatRuleSet(seen))
+	}
+
+	return nil
 }
 
 // Fills in lazily-derived properties (for display).
@@ -293,6 +342,18 @@ func fillInLazyProps(ev memo.ExprView) {
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		fillInLazyProps(ev.Child(i))
 	}
+}
+
+func ruleNamesToRuleSet(args []string) (RuleSet, error) {
+	var result RuleSet
+	for _, r := range args {
+		rn, err := ruleFromString(r)
+		if err != nil {
+			return result, err
+		}
+		result.Add(int(rn))
+	}
+	return result, nil
 }
 
 // Set parses an argument that refers to a flag.
@@ -337,15 +398,12 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("disable requires arguments")
 		}
-		if f.DisableRules == nil {
-			f.DisableRules = make(map[opt.RuleName]struct{})
-		}
 		for _, s := range arg.Vals {
 			r, err := ruleFromString(s)
 			if err != nil {
 				return err
 			}
-			f.DisableRules[r] = struct{}{}
+			f.DisableRules.Add(int(r))
 		}
 
 	case "rule":
@@ -355,6 +413,18 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		var err error
 		f.ExploreTraceRule, err = ruleFromString(arg.Vals[0])
 		if err != nil {
+			return err
+		}
+
+	case "expect":
+		var err error
+		if f.ExpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
+			return err
+		}
+
+	case "expect-not":
+		var err error
+		if f.UnexpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
 			return err
 		}
 
@@ -396,9 +466,10 @@ func (ot *OptTester) OptNorm() (memo.ExprView, error) {
 		if !ruleName.IsNormalize() {
 			return false
 		}
-		if _, disabled := ot.Flags.DisableRules[ruleName]; disabled {
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
+		ot.seenRules.Add(int(ruleName))
 		return true
 	})
 	return ot.optimizeExpr(o)
@@ -410,9 +481,10 @@ func (ot *OptTester) OptNorm() (memo.ExprView, error) {
 func (ot *OptTester) Optimize() (memo.ExprView, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
-		if _, disabled := ot.Flags.DisableRules[ruleName]; disabled {
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
+		ot.seenRules.Add(int(ruleName))
 		return true
 	})
 	return ot.optimizeExpr(o)
