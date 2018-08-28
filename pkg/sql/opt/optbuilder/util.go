@@ -254,7 +254,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			//   SELECT a AS b FROM t ORDER BY b
 			//   SELECT DISTINCT ON (b) a AS b FROM t
 			target := c.ColumnName
-			for j, col := range scope.cols {
+			for j := range scope.cols {
+				col := &scope.cols[j]
 				if col.name == target {
 					if index != -1 {
 						// There is more than one projection alias that matches the clause.

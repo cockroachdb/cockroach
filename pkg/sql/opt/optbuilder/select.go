@@ -471,9 +471,6 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		b.validateAsOf(from.AsOf)
 	}
 
-	var joinTables map[string]struct{}
-	colsAdded := 0
-
 	for _, table := range from.Tables {
 		tableScope := b.buildDataSource(table, nil /* indexFlags */, inScope)
 
@@ -482,17 +479,8 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 			continue
 		}
 
-		// Build a map of the table names in the join.
-		if joinTables == nil {
-			joinTables = make(map[string]struct{})
-		}
-		for _, col := range outScope.cols[colsAdded:] {
-			joinTables[col.table.FQString()] = exists
-		}
-		colsAdded = len(outScope.cols)
-
 		// Check that the same table name is not used multiple times.
-		b.validateJoinTableNames(joinTables, tableScope)
+		b.validateJoinTableNames(outScope, tableScope)
 
 		outScope.appendColumns(tableScope)
 		outScope.group = b.factory.ConstructInnerJoin(
