@@ -279,8 +279,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
+	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range gen.Tables() {
-		splitConcurrency := len(ops.WorkerFns)
 		if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
 			return err
 		}
