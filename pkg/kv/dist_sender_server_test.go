@@ -698,7 +698,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = int64(bound)
 		spans := [][]string{{"a", "c"}, {"c", "f"}, {"g", "h"}}
 		for _, span := range spans {
-			b.DelRange(span[0], span[1], true)
+			b.DelRange(span[0], span[1], true /* returnKeys */)
 		}
 		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
@@ -751,7 +751,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 3
-	b.DelRange("a", "c", true)
+	b.DelRange("a", "c", true /* returnKeys */)
 	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +764,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 
 	b = &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 1
-	b.DelRange("b", "c", true)
+	b.DelRange("b", "c", true /* returnKeys */)
 	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -811,7 +811,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = int64(bound)
 		spans := [][]string{{"a", "b3"}, {"b", "d"}, {"c", "f2a"}, {"f1a", "g"}}
 		for _, span := range spans {
-			b.DelRange(span[0], span[1], true)
+			b.DelRange(span[0], span[1], true /* returnKeys */)
 		}
 		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
@@ -858,8 +858,8 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// any active requests.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "b", false)
-		b.DelRange("e", "f", false)
+		b.DelRange("a", "b", false /* returnKeys */)
+		b.DelRange("e", "f", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -923,7 +923,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "d", false)
+		b.DelRange("a", "d", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -2373,7 +2373,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
-				b.DelRange("a", "b", false)
+				b.DelRange("a", "b", false /* returnKeys */)
 				b.CPut("c", "cput", "value")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
