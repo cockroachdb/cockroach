@@ -216,6 +216,31 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             <SqlBox value={ statement } />
           </section>
           <section className="section">
+            <NumericStatTable
+              title="Phase"
+              description="The execution latency of this statement, broken down by phase."
+              measure="Latency"
+              count={ count }
+              format={ (v: number) => Duration(v * 1e9) }
+              rows={[
+                { name: "Parse", value: stats.parse_lat, bar: parseBarChart },
+                { name: "Plan", value: stats.plan_lat, bar: planBarChart },
+                { name: "Run", value: stats.run_lat, bar: runBarChart },
+                { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
+                { name: "Overall", summary: true, value: stats.service_lat, bar: overallBarChart },
+              ]}
+            />
+          </section>
+          <section className="section">
+            <StatementsSortedTable
+              className="statements-table"
+              data={statsByNode}
+              columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
+              sortSetting={this.state.sortSetting}
+              onChangeSortSetting={this.changeSortSetting}
+            />
+          </section>
+          <section className="section">
             <table className="numeric-stats-table">
               <thead>
                 <tr className="numeric-stats-table__row--header">
@@ -257,38 +282,12 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
           </section>
           <section className="section">
             <NumericStatTable
-              title="Phase"
-              description="The execution latency of this statement, broken down by phase."
-              measure="Latency"
-              count={ count }
-              format={ (v: number) => Duration(v * 1e9) }
-              rows={[
-                { name: "Parse", value: stats.parse_lat, bar: parseBarChart },
-                { name: "Plan", value: stats.plan_lat, bar: planBarChart },
-                { name: "Run", value: stats.run_lat, bar: runBarChart },
-                { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
-                { name: "Overall", value: stats.service_lat, bar: overallBarChart },
-              ]}
-            />
-          </section>
-          <section className="section">
-            <NumericStatTable
               measure="Rows"
               count={ count }
               format={ (v: number) => "" + (Math.round(v * 100) / 100) }
               rows={[
                 { name: "Rows Affected", value: stats.num_rows, bar: rowsBarChart },
               ]}
-            />
-          </section>
-          <section className="section">
-            <h3>By Gateway Node</h3>
-            <StatementsSortedTable
-              className="statements-table"
-              data={statsByNode}
-              columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
-              sortSetting={this.state.sortSetting}
-              onChangeSortSetting={this.changeSortSetting}
             />
           </section>
         </div>
