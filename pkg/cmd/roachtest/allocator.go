@@ -40,7 +40,7 @@ func registerAllocator(r *registry) {
 
 		m := newMonitor(ctx, c, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
-			t.Status("loading fixture")
+			t.WorkerStatus("loading fixture")
 			if _, err := db.Exec(`RESTORE DATABASE workload FROM $1`, fixturePath); err != nil {
 				t.Fatal(err)
 			}
@@ -60,16 +60,20 @@ func registerAllocator(r *registry) {
 				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128`
 				l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
-					t.Fatal(err)
+					panic(err)
+					return
 				}
 				defer l.close()
-				_ = execCmd(ctx, c.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+				if err := execCmd(ctx, c.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd); err != nil {
+					panic(err)
+					return
+				}
 			}()
 		}
 
 		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			t.Status("waiting for reblance")
+			t.WorkerStatus("waiting for reblance")
 			return waitForRebalance(ctx, c.l, db, maxStdDev)
 		})
 		m.Wait()

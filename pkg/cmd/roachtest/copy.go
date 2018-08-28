@@ -51,21 +51,26 @@ func registerCopy(r *registry) {
 			defer db.Close()
 
 			t.Status("importing Bank fixture")
-			c.Run(ctx, c.Node(1), fmt.Sprintf(
+			if err := c.RunE(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load bank --rows=%d --payload-bytes=%d {pgurl:1}",
-				rows, payload))
+				rows, payload),
+			); err != nil {
+				return err
+			}
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
-				t.Fatalf("failed to rename table: %v", err)
+				return errors.Wrap(err, "failed to rename table")
 			}
 
-			t.Status("create copy of Bank schema")
-			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
+			t.WorkerStatus("create copy of Bank schema")
+			if err := c.RunE(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=0 {pgurl:1}"); err != nil {
+				t.Fatal(err)
+			}
 
 			rangeCount := func() int {
 				var count int
 				const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
-					t.Fatalf("failed to get range count: %v", err)
+					errors.Wrap(err, "failed to get range count: %v")
 				}
 				return count
 			}
@@ -117,7 +122,7 @@ func registerCopy(r *registry) {
 				err = runCopy(db)
 			}
 			if err != nil {
-				t.Fatalf("failed to copy rows: %s", err)
+				return errors.Wrap(err, "failed to copy rows")
 			}
 
 			rc := rangeCount()

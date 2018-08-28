@@ -91,7 +91,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		for ok := false; !ok; {
 			stmtReplicaCount := fmt.Sprintf(
 				`SELECT count(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database = 'kv';`, targetNodeID)
-			t.Status(stmtReplicaCount)
+			t.WorkerStatus(stmtReplicaCount)
 			if err := db.QueryRow(stmtReplicaCount).Scan(&ok); err != nil {
 				return err
 			}
@@ -117,7 +117,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		db := c.Conn(ctx, nodes)
 		defer db.Close()
 
-		t.Status(stmt)
+		t.WorkerStatus(stmt)
 		_, err := db.ExecContext(ctx, stmt)
 		if err != nil {
 			t.Fatal(err)
@@ -160,12 +160,12 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
-			t.Status("decommissioning node", id)
+			t.WorkerStatus("decommissioning node", id)
 			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --host=:"+port+" "+id)
 		}
 
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {
-			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
+			t.WorkerStatus(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
 			id, err := nodeID(node)
 
 			if err != nil {
@@ -206,8 +206,11 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			c.Start(ctx, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
-				c.InternalAddr(ctx, c.Node(nodes))[0], node)))
+			if err := c.StartE(ctx, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
+				c.InternalAddr(ctx, c.Node(nodes))[0], node)),
+			); err != nil {
+				return err
+			}
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes
 		// having disappeared. Verify that the workloads don't dip their qps or

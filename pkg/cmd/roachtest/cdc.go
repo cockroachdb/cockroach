@@ -32,25 +32,23 @@ func installKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
 	c.Run(ctx, kafkaNode, `sudo apt-get update`)
 	c.Run(ctx, kafkaNode, `yes | sudo apt-get install default-jre`)
 	c.Run(ctx, kafkaNode, `mkdir -p /mnt/data1/confluent`)
-
 }
 
-func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
+func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) error {
+	return c.RunE(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
 }
 
-func stopKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent stop`)
+func stopKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) error {
+	return c.RunE(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent stop`)
 }
 
 // stopFeeds cancels any running feeds on the cluster. Not necessary for the
 // nightly, but nice for development.
-func stopFeeds(db *gosql.DB, c *cluster) {
-	if _, err := db.Exec(`CANCEL JOBS (
+func stopFeeds(db *gosql.DB, c *cluster) error {
+	_, err := db.Exec(`CANCEL JOBS (
 			SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
-		)`); err != nil {
-		c.t.Fatal(err)
-	}
+		)`)
+	return err
 }
 
 type tpccWorkload struct {
@@ -67,8 +65,8 @@ func (tr *tpccWorkload) install(ctx context.Context, c *cluster) {
 	))
 }
 
-func (tr *tpccWorkload) run(ctx context.Context, c *cluster) {
-	c.Run(ctx, tr.workloadNodes, fmt.Sprintf(
+func (tr *tpccWorkload) run(ctx context.Context, c *cluster) error {
+	return c.RunE(ctx, tr.workloadNodes, fmt.Sprintf(
 		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=30m`,
 		tr.warehouseCount,
 		tr.sqlNodes,
@@ -108,7 +106,9 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	tpcc.install(ctx, c)
 	t.Status("installing kafka")
 	installKafka(ctx, c, kafkaNode)
-	startKafka(ctx, c, kafkaNode)
+	if err := startKafka(ctx, c, kafkaNode); err != nil {
+		t.Fatal(err)
+	}
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db, c)
 	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
@@ -123,8 +123,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		defer func() { close(tpccComplete) }()
-		tpcc.run(ctx, c)
-		return nil
+		return tpcc.run(ctx, c)
 	})
 	m.Go(func(ctx context.Context) error {
 		l, err := c.l.childLogger(`changefeed`)
@@ -134,7 +133,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 
 		var cursor string
 		if err := db.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&cursor); err != nil {
-			c.t.Fatal(err)
+			return err
 		}
 		c.l.printf("starting cursor at %s\n", cursor)
 
@@ -153,7 +152,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			return err
 		}
 
-		t.Status("watching changefeed")
+		t.WorkerStatus("watching changefeed")
 		for {
 			select {
 			case <-ctx.Done():
@@ -184,7 +183,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				if initialScanLatency == 0 {
 					initialScanLatency = timeutil.Since(timeutil.Unix(0, hwWallTime))
 					l.printf("initial scan latency %s\n", initialScanLatency)
-					t.Status("finished initial scan")
+					t.WorkerStatus("finished initial scan")
 					continue
 				}
 				latency := timeutil.Since(timeutil.Unix(0, hwWallTime))
@@ -221,7 +220,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				case <-t.C:
 				}
 
-				stopKafka(ctx, c, kafkaNode)
+				return stopKafka(ctx, c, kafkaNode)
 
 				select {
 				case <-tpccComplete:
@@ -231,7 +230,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				case <-time.After(downTime):
 				}
 
-				startKafka(ctx, c, kafkaNode)
+				return startKafka(ctx, c, kafkaNode)
 			}
 		})
 	}
