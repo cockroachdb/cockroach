@@ -16,11 +16,18 @@
   text-decoration none
   color $link-color
 
-.last-cleared-tooltip
+.last-cleared-tooltip, .numeric-stats-table
   &__tooltip
     width 36px  // Reserve space for 10px padding around centered 16px icon
     height 16px
     display inline-block
+
+    // Overrides to let the tooltip sit inside a table header.
+    text-transform none
+    font-weight normal
+    white-space normal
+    letter-spacing normal
+    font-size 14px
 
   &__tooltip-hover-area
     width 100%
