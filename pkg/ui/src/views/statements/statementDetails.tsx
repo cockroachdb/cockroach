@@ -67,6 +67,8 @@ interface NumericStatRow {
 }
 
 interface NumericStatTableProps {
+  title?: string;
+  measure: string;
   rows: NumericStatRow[];
   count: number;
   format?: (v: number) => string;
@@ -82,9 +84,11 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
       <table className="numeric-stats-table">
         <thead>
           <tr className="numeric-stats-table__row--header">
-            <th className="numeric-stats-table__cell" />
-            <th className="numeric-stats-table__cell">Mean</th>
-            <th className="numeric-stats-table__cell">Std. Dev.</th>
+            <th className="numeric-stats-table__cell">
+              { this.props.title }
+            </th>
+            <th className="numeric-stats-table__cell">Mean {this.props.measure}</th>
+            <th className="numeric-stats-table__cell">Standard Deviation</th>
             <th className="numeric-stats-table__cell" />
           </tr>
         </thead>
@@ -199,8 +203,14 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             <SqlBox value={ statement } />
           </section>
           <section className="section">
-            <h3>Execution Count</h3>
             <table className="numeric-stats-table">
+              <thead>
+                <tr className="numeric-stats-table__row--header">
+                  <th className="numeric-stats-table__cell" colSpan={ 3 }>
+                    Execution Count
+                  </th>
+                </tr>
+              </thead>
               <tbody>
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempts</th>
@@ -226,8 +236,9 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             </table>
           </section>
           <section className="section">
-            <h3>Latency by Phase</h3>
             <NumericStatTable
+              title="Phase"
+              measure="Latency"
               count={ count }
               format={ (v: number) => Duration(v * 1e9) }
               rows={[
@@ -240,12 +251,12 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             />
           </section>
           <section className="section">
-            <h3>Row Count</h3>
             <NumericStatTable
+              measure="Rows"
               count={ count }
               format={ (v: number) => "" + (Math.round(v * 100) / 100) }
               rows={[
-                { name: "Rows", value: stats.num_rows, bar: rowsBarChart },
+                { name: "Rows Affected", value: stats.num_rows, bar: rowsBarChart },
               ]}
             />
           </section>
