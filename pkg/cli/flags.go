@@ -200,6 +200,8 @@ func (a addrSetter) Set(v string) error {
 	return nil
 }
 
+const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
+
 func init() {
 	initCLIDefaults()
 
