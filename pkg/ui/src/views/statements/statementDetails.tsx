@@ -183,7 +183,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     const count = FixLong(stats.count).toInt();
     const firstAttemptCount = FixLong(stats.first_attempt_count).toInt();
 
-    const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart } = countBreakdown(this.props.statement);
+    const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart, totalCountBarChart } = countBreakdown(this.props.statement);
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
 
@@ -217,7 +217,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total</th>
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
-                  <td className="numeric-stats-table__cell" />
+                  <td className="numeric-stats-table__cell">{ totalCountBarChart() }</td>
                 </tr>
               </tbody>
             </table>
