@@ -145,7 +145,7 @@ type Server struct {
 	node               *Node
 	registry           *metric.Registry
 	recorder           *status.MetricsRecorder
-	runtime            status.RuntimeStatSampler
+	runtime            *status.RuntimeStatSampler
 	admin              *adminServer
 	status             *statusServer
 	authentication     *authenticationServer
@@ -451,7 +451,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip, st)
 	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
 
-	s.runtime = status.MakeRuntimeStatSampler(ctx, s.clock)
+	s.runtime = status.NewRuntimeStatSampler(ctx, s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
 	s.node = NewNode(
@@ -1768,25 +1768,54 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
-	systemMemory, err := status.GetTotalMemory(ctx)
-	if err != nil {
-		log.Warningf(ctx, "Could not compute system memory due to: %s", err)
-		return
+	var heapProfiler *heapprofiler.HeapProfiler
+
+	{
+		systemMemory, err := status.GetTotalMemory(ctx)
+		if err != nil {
+			log.Warningf(ctx, "Could not compute system memory due to: %s", err)
+		} else {
+			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
+			if err != nil {
+				log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
+			}
+		}
 	}
-	heapProfiler, err := heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
-	if err != nil {
-		log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
-	}
+
+	// We run two separate sampling loops, one for memory stats (via
+	// ReadMemStats) and one for all other runtime stats. This is necessary
+	// because as of go1.11, runtime.ReadMemStats() "stops the world" and
+	// requires waiting for any current GC run to finish. With a large heap, a
+	// single GC run may take longer than the default sampling period (10s).
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
-		ticker := time.NewTicker(frequency)
-		defer ticker.Stop()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(frequency)
 		for {
 			select {
-			case <-ticker.C:
+			case <-timer.C:
+				timer.Read = true
+				s.runtime.SampleMemStats(ctx)
+				timer.Reset(frequency)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(frequency)
+		for {
+			select {
+			case <-timer.C:
+				timer.Read = true
 				s.runtime.SampleEnvironment(ctx)
 				if heapProfiler != nil {
 					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.Rss.Value())
 				}
+				timer.Reset(frequency)
 			case <-s.stopper.ShouldStop():
 				return
 			}
