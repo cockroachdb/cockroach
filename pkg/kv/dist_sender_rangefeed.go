@@ -84,18 +84,21 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 func (ds *DistSender) partialRangeFeed(
 	g *ctxgroup.Group,
 	argsCopy roachpb.RangeFeedRequest,
-	rs roachpb.RSpan,
+	partialRS roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) {
 	g.GoCtx(func(ctx context.Context) error {
+		// Bound the partial rangefeed to the partial span.
+		argsCopy.Span = partialRS.AsRawSpanWithNoLocals()
+
 		// Start a retry loop for sending the batch to the range.
 		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 			// If we've cleared the descriptor on a send failure, re-lookup.
 			if desc == nil {
 				var err error
-				desc, evictToken, err = ds.getDescriptor(ctx, rs.Key, nil, false)
+				desc, evictToken, err = ds.getDescriptor(ctx, partialRS.Key, nil, false)
 				if err != nil {
 					log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 					continue
@@ -123,7 +126,7 @@ func (ds *DistSender) partialRangeFeed(
 					if err := evictToken.Evict(ctx); err != nil {
 						return err
 					}
-					return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, rs, eventCh)
+					return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, partialRS, eventCh)
 				case *roachpb.RangeFeedRetryError:
 					switch t.Reason {
 					case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
@@ -138,7 +141,7 @@ func (ds *DistSender) partialRangeFeed(
 						if err := evictToken.Evict(ctx); err != nil {
 							return err
 						}
-						return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, rs, eventCh)
+						return ds.divideAndSendRangeFeedToRanges(ctx, g, &argsCopy, partialRS, eventCh)
 					default:
 						log.Fatalf(ctx, "unexpected RangeFeedRetryError reason %v", t.Reason)
 					}
@@ -164,8 +167,8 @@ func (ds *DistSender) singleRangeFeed(
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) (hlc.Timestamp, *roachpb.Error) {
+	// Direct the rangefeed to the specified Range.
 	argsCopy.RangeID = desc.RangeID
-	argsCopy.Span = desc.RSpan().AsRawSpanWithNoLocals()
 
 	var latencyFn LatencyFunc
 	if ds.rpcContext != nil {
@@ -212,6 +215,7 @@ func (ds *DistSender) singleRangeFeed(
 					argsCopy.Timestamp.Forward(t.ResolvedTS)
 				}
 			case *roachpb.RangeFeedError:
+				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				return argsCopy.Timestamp, &t.Error
 			}
 			select {
