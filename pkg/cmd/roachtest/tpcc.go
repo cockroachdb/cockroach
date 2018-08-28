@@ -36,8 +36,11 @@ import (
 
 func registerTPCC(r *registry) {
 	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
-		nodes := c.nodes - 1
+		if !c.isLocal() {
+			c.RemountNoBarrier(ctx)
+		}
 
+		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
