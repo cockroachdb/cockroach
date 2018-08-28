@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -876,6 +878,10 @@ func (scc *schemaChangerCollection) reset() {
 	scc.schemaChangers = nil
 }
 
+func (scc *schemaChangerCollection) isEmpty() bool {
+	return len(scc.schemaChangers) == 0
+}
+
 // execSchemaChanges releases schema leases and runs the queued
 // schema changers. This needs to be run after the transaction
 // scheduling the schema change has finished.
@@ -884,8 +890,8 @@ func (scc *schemaChangerCollection) reset() {
 func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
 ) error {
-	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
-		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
+		fn(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
@@ -901,8 +907,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
-				if err == sqlbase.ErrDescriptorNotFound {
-				} else if isPermanentSchemaChangeError(err) {
+
+				if isPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
 					// There's some sketchiness here: we assume there's a single result
@@ -911,6 +917,12 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					if firstError == nil {
 						firstError = err
 					}
+				} else if err == sqlbase.ErrDescriptorNotFound || err == context.Canceled {
+					// 1. If the descriptor is dropped while the schema change
+					// is executing, the schema change is considered completed.
+					// 2. If the context is cancelled the schema changer quits here
+					// letting the asynchronous code path complete the schema
+					// change.
 				} else {
 					// retryable error.
 					continue
