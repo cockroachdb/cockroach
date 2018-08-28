@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -454,6 +455,7 @@ func (t *test) status(id int64, args ...interface{}) {
 // is equivalent to calling WorkerStatus. If no arguments are specified, the
 // status message is erased.
 func (t *test) Status(args ...interface{}) {
+	t.AssertMainGoroutine()
 	t.status(t.runnerID, args...)
 }
 
@@ -491,11 +493,13 @@ func (t *test) WorkerProgress(frac float64) {
 }
 
 func (t *test) Fatal(args ...interface{}) {
+	t.AssertMainGoroutine()
 	t.print(args...)
 	runtime.Goexit()
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
+	t.AssertMainGoroutine()
 	t.printf(format, args...)
 	runtime.Goexit()
 }
@@ -573,6 +577,17 @@ func (t *test) Failed() bool {
 	failed := t.mu.failed
 	t.mu.RUnlock()
 	return failed
+}
+
+func (t *test) AssertMainGoroutine() {
+	if id := goid.Get(); id != t.runnerID {
+		fmt.Println("cannot call this method from outside of the test's main goroutine, please fix the test")
+		debug.PrintStack()
+		// TODO(tschottdorf): enable this when it isn't sure to fail pretty much all of the roachtests
+		// out there. Perhaps it's OK to leave this deactivated "forever" and to simply remove the Fatal
+		// method instead.
+		// os.Exit(1)
+	}
 }
 
 // IsBuildVersion returns true if the build version is greater than or equal to

@@ -314,6 +314,7 @@ func makeClusterName(t testI) string {
 }
 
 type testI interface {
+	AssertMainGoroutine()
 	Name() string
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
@@ -546,7 +547,9 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 		expiration: nodes[0].expiration(),
 	}
 	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
+		c.status = func(args ...interface{}) {
+			impl.status(impl.runnerID, args...)
+		}
 	}
 	registerCluster(c)
 
@@ -709,6 +712,7 @@ func (c *cluster) destroy(ctx context.Context) {
 // (which doesn't go anywhere I've been able to find) Don't use this if you're
 // going to call cmd.CombinedOutput or cmd.Output.
 func (c *cluster) LoggedCommand(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
+	c.t.AssertMainGoroutine()
 	cmd := exec.CommandContext(ctx, arg0, args...)
 	cmd.Stdout = c.l.stdout
 	cmd.Stderr = c.l.stderr
@@ -717,6 +721,7 @@ func (c *cluster) LoggedCommand(ctx context.Context, arg0 string, args ...string
 
 // Put a local file to all of the machines in a cluster.
 func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -786,16 +791,24 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-// Start cockroach nodes on a subset of the cluster. The nodes parameter can
-// either be a specific node, empty (to indicate all nodes), or a pair of nodes
-// indicating a range.
 func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+
+	c.t.AssertMainGoroutine()
+	if err := c.StartE(ctx, opts...); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// Start cockroach nodes on a subset of the cluster. The nodes parameter can
+// either be a specific node, empty (to indicate all nodes), or a pair of nodes
+// indicating a range.
+func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return errors.New("interrupted")
 	}
 	c.status("starting cluster")
 	defer c.status()
@@ -812,9 +825,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		// This avoids annoying firewall prompts on macos
 		args = append(args, "--args", "--listen-addr=127.0.0.1")
 	}
-	if err := execCmd(ctx, c.l, args...); err != nil {
-		c.t.Fatal(err)
-	}
+	return execCmd(ctx, c.l, args...)
 }
 
 func argExists(args []string, target string) bool {
@@ -829,6 +840,7 @@ func argExists(args []string, target string) bool {
 // Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
 func (c *cluster) Stop(ctx context.Context, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -854,6 +866,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 // Wipe a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) Wipe(ctx context.Context, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -871,6 +884,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -879,6 +893,7 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 
 // Reformat the disk on the specified node.
 func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
@@ -888,6 +903,7 @@ func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...str
 
 // Install a package in a node
 func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
