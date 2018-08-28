@@ -31,7 +31,7 @@ TABLE uv
 # RejectNullsLeftJoin + RejectNullsRightJoin
 # ----------------------------------------------------------
 
-opt
+opt expect=RejectNullsRightJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
 ----
 left-join
@@ -48,7 +48,7 @@ left-join
  │    └── fd: (5)-->(6)
  └── true [type=bool]
 
-opt
+opt expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
 ----
 right-join
@@ -67,7 +67,7 @@ right-join
  └── true [type=bool]
 
 # Inner-join operator.
-opt
+opt expect=RejectNullsLeftJoin
 SELECT *
 FROM (SELECT * FROM a LEFT JOIN uv ON True) AS l
 INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True) AS r
@@ -114,7 +114,7 @@ inner-join
  └── true [type=bool]
 
 # Left-join operator.
-opt
+opt expect=RejectNullsLeftJoin
 SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
 ----
 inner-join (merge)
@@ -138,7 +138,7 @@ inner-join (merge)
            └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
 
 # Right-join operator.
-opt
+opt expect=RejectNullsRightJoin
 SELECT * FROM a RIGHT JOIN xy ON true WHERE a.k > xy.y
 ----
 inner-join
@@ -157,7 +157,7 @@ inner-join
       └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Full-join operator.
-opt
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
 ----
 inner-join
@@ -176,7 +176,7 @@ inner-join
  └── true [type=bool]
 
 # Apply operators.
-opt
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
 SELECT *
 FROM (SELECT * FROM a FULL JOIN xy ON True)
 WHERE (SELECT u FROM uv WHERE v=k)=i
@@ -231,7 +231,7 @@ right-join
 # ----------------------------------------------------------
 
 # Single max aggregate function.
-opt
+opt expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -268,7 +268,7 @@ project
            └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Single max aggregate function without grouping columns.
-opt
+opt expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -299,7 +299,7 @@ select
       └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Multiple aggregate functions on same column.
-opt
+opt expect=RejectNullsGroupBy
 SELECT min(x), max(x)
 FROM a
 LEFT JOIN xy
@@ -338,7 +338,7 @@ project
            └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Ignore ConstAgg aggregates on other columns.
-opt
+opt expect=RejectNullsGroupBy
 SELECT * FROM a WHERE (SELECT sum(x) FROM xy WHERE x=k)>i
 ----
 project
@@ -385,7 +385,7 @@ project
            └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't reject nulls when multiple columns are used.
-opt
+opt expect-not=RejectNullsGroupBy
 SELECT min(x), max(y)
 FROM (select k from a)
 LEFT JOIN (select x, y from xy)
@@ -427,7 +427,7 @@ project
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
-opt
+opt expect-not=RejectNullsGroupBy
 SELECT count(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -464,7 +464,7 @@ project
            └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # ConstNotNullAgg rejects nulls (regression test for #28810).
-norm
+opt expect=RejectNullsGroupBy
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project

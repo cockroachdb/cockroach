@@ -24,7 +24,7 @@ TABLE xy
 # --------------------------------------------------
 
 # Inline comparison.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k=1 AS expr FROM a) a WHERE expr IS NULL
 ----
 project
@@ -41,7 +41,7 @@ project
       └── k = 1 [type=bool, outer=(1)]
 
 # Inline arithmetic.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
@@ -58,7 +58,7 @@ project
       └── (k * 2) + 1 [type=int, outer=(1)]
 
 # Inline boolean logic.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT NOT(k>1 AND k<=5) AS expr FROM a) a WHERE expr
 ----
 project
@@ -71,7 +71,7 @@ project
       └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
 
 # Inline constants.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT (f IS NULL OR f != 10.5) AS expr FROM a) a WHERE expr
 ----
 project
@@ -86,7 +86,7 @@ project
       └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
 # Reference the expression to inline multiple times.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT f+1 AS expr FROM a) a WHERE expr=expr
 ----
 project
@@ -101,7 +101,7 @@ project
       └── f + 1.0 [type=float, outer=(3)]
 
 # Use outer references in both inlined expression and in referencing expression.
-opt
+opt expect=PushSelectIntoInlinableProject
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE expr > i*i)
 ----
 semi-join
@@ -232,7 +232,7 @@ project
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------
-opt
+opt expect=InlineProjectInProject
 SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
@@ -246,7 +246,7 @@ project
       └── k = 1 [type=bool, outer=(1)]
 
 # Inline multiple expressions.
-opt
+opt expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
@@ -260,7 +260,7 @@ project
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
 
 # Don't inline when there are multiple references.
-opt
+opt expect-not=InlineProjectInProject
 SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -277,7 +277,7 @@ project
       └── expr * 2 [type=int, outer=(6)]
 
 # Uncorrelated subquery should not block inlining.
-opt
+opt expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -296,7 +296,7 @@ project
       └── (k + 1) * 2 [type=int, outer=(1)]
 
 # Correlated subquery should be hoisted as usual.
-opt
+opt expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
