@@ -20,6 +20,7 @@ import { Pick } from "src/util/pick";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
@@ -68,6 +69,7 @@ interface NumericStatRow {
 
 interface NumericStatTableProps {
   title?: string;
+  description?: string;
   measure: string;
   rows: NumericStatRow[];
   count: number;
@@ -80,12 +82,23 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   };
 
   render() {
+    const tooltip = !this.props.description ? null : (
+        <div className="numeric-stats-table__tooltip">
+          <ToolTipWrapper text={this.props.description}>
+            <div className="numeric-stats-table__tooltip-hover-area">
+              <div className="numeric-stats-table__info-icon">i</div>
+            </div>
+          </ToolTipWrapper>
+        </div>
+      );
+
     return (
       <table className="numeric-stats-table">
         <thead>
           <tr className="numeric-stats-table__row--header">
             <th className="numeric-stats-table__cell">
               { this.props.title }
+              { tooltip }
             </th>
             <th className="numeric-stats-table__cell">Mean {this.props.measure}</th>
             <th className="numeric-stats-table__cell">Standard Deviation</th>
@@ -208,6 +221,13 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 <tr className="numeric-stats-table__row--header">
                   <th className="numeric-stats-table__cell" colSpan={ 3 }>
                     Execution Count
+                    <div className="numeric-stats-table__tooltip">
+                      <ToolTipWrapper text="The number of times this statement has been executed.">
+                        <div className="numeric-stats-table__tooltip-hover-area">
+                          <div className="numeric-stats-table__info-icon">i</div>
+                        </div>
+                      </ToolTipWrapper>
+                    </div>
                   </th>
                 </tr>
               </thead>
@@ -238,6 +258,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
           <section className="section">
             <NumericStatTable
               title="Phase"
+              description="The execution latency of this statement, broken down by phase."
               measure="Latency"
               count={ count }
               format={ (v: number) => Duration(v * 1e9) }
