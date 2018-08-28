@@ -55,8 +55,6 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 var startBackground bool
 
-const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
-
 func init() {
 	BoolFlag(StartCmd.Flags(), &startBackground, cliflags.Background, false)
 }
