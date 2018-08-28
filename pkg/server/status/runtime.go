@@ -18,7 +18,10 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"runtime/debug"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
@@ -213,6 +216,12 @@ var (
 	}
 )
 
+type memStats struct {
+	goAllocated uint64
+	goIdle      uint64
+	goTotal     uint64
+}
+
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
 // Returns the following:
@@ -231,12 +240,19 @@ type RuntimeStatSampler struct {
 	startTimeNanos int64
 	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
-	lastNow       int64
-	lastUtime     int64
-	lastStime     int64
-	lastPauseTime uint64
-	lastCgoCall   int64
-	lastNumGC     uint32
+	last struct {
+		now         int64
+		utime       int64
+		stime       int64
+		cgoCall     int64
+		gcCount     int64
+		gcPauseTime uint64
+		disk        diskStats
+		net         net.IOCountersStat
+	}
+
+	// Memory stats that are updated atomically by SampleMemStats.
+	memStats unsafe.Pointer
 
 	initialDiskCounters diskStats
 	initialNetCounters  net.IOCountersStat
@@ -283,8 +299,8 @@ type RuntimeStatSampler struct {
 	BuildTimestamp *metric.Gauge
 }
 
-// MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSampler {
+// NewRuntimeStatSampler constructs a new RuntimeStatSampler object.
+func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSampler {
 	// Construct the build info metric. It is constant.
 	// We first build set the labels on the metadata.
 	info := build.GetInfo()
@@ -316,7 +332,7 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 		log.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
 
-	return RuntimeStatSampler{
+	rsr := &RuntimeStatSampler{
 		clock:                  clock,
 		startTimeNanos:         clock.PhysicalNow(),
 		initialNetCounters:     netCounters,
@@ -352,6 +368,9 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 		Uptime:             metric.NewGauge(metaUptime),
 		BuildTimestamp:     buildTimestamp,
 	}
+	rsr.last.disk = rsr.initialDiskCounters
+	rsr.last.net = rsr.initialNetCounters
+	return rsr
 }
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
@@ -362,19 +381,14 @@ func MakeRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) RuntimeStatSa
 // This method should be called periodically by a higher level system in order
 // to keep runtime statistics current.
 func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
-	// Record memory and call stats from the runtime package.
-	// TODO(mrtracy): memory statistics will not include usage from RocksDB.
-	// Determine an appropriate way to compute total memory usage.
+	// Note that debug.ReadGCStats() does not suffer the same problem as
+	// runtime.ReadMemStats(). The only way you can know that is by reading the
+	// source.
+	gc := &debug.GCStats{}
+	debug.ReadGCStats(gc)
+
 	numCgoCall := runtime.NumCgoCall()
 	numGoroutine := runtime.NumGoroutine()
-
-	// It might be useful to call ReadMemStats() more often, but it stops the
-	// world while collecting stats so shouldn't be called too often.
-	// NOTE: the MemStats fields do not get decremented when memory is released,
-	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased for
-	// current memory reserved.
-	ms := runtime.MemStats{}
-	runtime.ReadMemStats(&ms)
 
 	// Retrieve Mem and CPU statistics.
 	pid := os.Getpid()
@@ -399,22 +413,57 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		}
 	}
 
+	var deltaDisk diskStats
+	diskCounters, err := getSummedDiskCounters(ctx)
+	if err != nil {
+		log.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
+	} else {
+		deltaDisk = diskCounters
+		subtractDiskCounters(&deltaDisk, rsr.last.disk)
+		rsr.last.disk = diskCounters
+		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
+
+		rsr.HostDiskReadBytes.Update(diskCounters.readBytes)
+		rsr.HostDiskReadTime.Update(int64(diskCounters.readTime))
+		rsr.HostDiskReadCount.Update(diskCounters.readCount)
+		rsr.HostDiskWriteBytes.Update(diskCounters.writeBytes)
+		rsr.HostDiskWriteTime.Update(int64(diskCounters.writeTime))
+		rsr.HostDiskWriteCount.Update(diskCounters.writeCount)
+		rsr.IopsInProgress.Update(diskCounters.iopsInProgress)
+	}
+
+	var deltaNet net.IOCountersStat
+	netCounters, err := getSummedNetStats(ctx)
+	if err != nil {
+		log.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+	} else {
+		deltaNet = netCounters
+		subtractNetworkCounters(&deltaNet, rsr.last.net)
+		rsr.last.net = netCounters
+		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
+
+		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
+		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
+		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
+		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
+	}
+
 	// Time statistics can be compared to the total elapsed time to create a
 	// useful percentage of total CPU usage, which would be somewhat less accurate
 	// if calculated later using downsampled time series data.
 	now := rsr.clock.PhysicalNow()
-	dur := float64(now - rsr.lastNow)
+	dur := float64(now - rsr.last.now)
 	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-	newUtime := int64(cpuTime.User) * 1e6
-	newStime := int64(cpuTime.Sys) * 1e6
-	uPerc := float64(newUtime-rsr.lastUtime) / dur
-	sPerc := float64(newStime-rsr.lastStime) / dur
-	pausePerc := float64(ms.PauseTotalNs-rsr.lastPauseTime) / dur
+	utime := int64(cpuTime.User) * 1e6
+	stime := int64(cpuTime.Sys) * 1e6
+	uPerc := float64(utime-rsr.last.utime) / dur
+	sPerc := float64(stime-rsr.last.stime) / dur
 	combinedNormalizedPerc := (sPerc + uPerc) / float64(runtime.NumCPU())
-	rsr.lastNow = now
-	rsr.lastUtime = newUtime
-	rsr.lastStime = newStime
-	rsr.lastPauseTime = ms.PauseTotalNs
+	gcPausePercent := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
+	rsr.last.now = now
+	rsr.last.utime = utime
+	rsr.last.stime = stime
+	rsr.last.gcPauseTime = uint64(gc.PauseTotal)
 
 	var cgoAllocated, cgoTotal uint
 	if getCgoMemStats != nil {
@@ -425,46 +474,80 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		}
 	}
 
-	goAllocated := ms.Alloc
-	goTotal := ms.Sys - ms.HeapReleased
+	ms := (*memStats)(atomic.LoadPointer(&rsr.memStats))
+	if ms == nil {
+		ms = &memStats{}
+	}
 
 	// Log summary of statistics to console.
-	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
+	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, "+
+		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
+		"%.1f/%.1f/%d (%%r/%%w/q)disk, %s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
-		humanize.IBytes(goAllocated), humanize.IBytes(ms.HeapIdle-ms.HeapReleased), humanize.IBytes(goTotal),
+		humanize.IBytes(ms.goAllocated), humanize.IBytes(ms.goIdle), humanize.IBytes(ms.goTotal),
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
-		cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
-	if log.V(2) {
-		log.Infof(ctx, "memstats: %+v", ms)
-	}
-	rsr.lastCgoCall = numCgoCall
-	rsr.lastNumGC = ms.NumGC
+		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
+		100*float64(deltaDisk.readTime)/dur, 100*float64(deltaDisk.writeTime)/dur,
+		diskCounters.iopsInProgress,
+		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
+	)
+	rsr.last.cgoCall = numCgoCall
+	rsr.last.gcCount = gc.NumGC
 
 	rsr.CgoCalls.Update(numCgoCall)
 	rsr.Goroutines.Update(int64(numGoroutine))
-	rsr.GoAllocBytes.Update(int64(goAllocated))
-	rsr.GoTotalBytes.Update(int64(goTotal))
 	rsr.CgoAllocBytes.Update(int64(cgoAllocated))
 	rsr.CgoTotalBytes.Update(int64(cgoTotal))
-	rsr.GcCount.Update(int64(ms.NumGC))
-	rsr.GcPauseNS.Update(int64(ms.PauseTotalNs))
-	rsr.GcPausePercent.Update(pausePerc)
-	rsr.CPUUserNS.Update(newUtime)
+	rsr.GcCount.Update(gc.NumGC)
+	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
+	rsr.GcPausePercent.Update(gcPausePercent)
+	rsr.CPUUserNS.Update(utime)
 	rsr.CPUUserPercent.Update(uPerc)
-	rsr.CPUSysNS.Update(newStime)
+	rsr.CPUSysNS.Update(stime)
 	rsr.CPUSysPercent.Update(sPerc)
 	rsr.CPUCombinedPercentNorm.Update(combinedNormalizedPerc)
 	rsr.FDOpen.Update(int64(fds.Open))
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.Rss.Update(int64(mem.Resident))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
+}
 
-	if err := rsr.sampleDiskStats(ctx); err != nil {
-		log.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
-	}
-	if err := rsr.sampleNetStats(ctx); err != nil {
-		log.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
+// SampleMemStats queries the runtime system for memory metrics, updating the
+// memory metric gauges and making these metrics available for logging by
+// SampleEnvironment.
+//
+// This method should be called periodically by a higher level system in order
+// to keep runtime statistics current. It is distinct from SampleEnvironment
+// due to a limitation in the Go runtime which causes runtime.ReadMemStats() to
+// block waiting for a GC cycle to finish which can take upwards of 10 seconds
+// on a large heap.
+func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
+	// Record memory and call stats from the runtime package. It might be useful
+	// to call ReadMemStats() more often, but it stops the world while collecting
+	// stats so shouldn't be called too often. For a similar reason, we want this
+	// call to come first because ReadMemStats() needs to wait for an existing GC
+	// to finish which can take multiple seconds on large heaps.
+	//
+	// NOTE: the MemStats fields do not get decremented when memory is released,
+	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased
+	// for current memory reserved.
+	ms := &runtime.MemStats{}
+	runtime.ReadMemStats(ms)
+
+	goAllocated := ms.Alloc
+	goTotal := ms.Sys - ms.HeapReleased
+	atomic.StorePointer(&rsr.memStats, unsafe.Pointer(&memStats{
+		goAllocated: goAllocated,
+		goIdle:      ms.HeapIdle - ms.HeapReleased,
+		goTotal:     goTotal,
+	}))
+
+	rsr.GoAllocBytes.Update(int64(goAllocated))
+	rsr.GoTotalBytes.Update(int64(goTotal))
+
+	if log.V(2) {
+		log.Infof(ctx, "memstats: %+v", ms)
 	}
 }
 
@@ -489,25 +572,6 @@ func getSummedDiskCounters(ctx context.Context) (diskStats, error) {
 	return sumDiskCounters(diskCounters), nil
 }
 
-func (rsr *RuntimeStatSampler) sampleDiskStats(ctx context.Context) error {
-	summedDiskCounters, err := getSummedDiskCounters(ctx)
-	if err != nil {
-		return err
-	}
-
-	subtractDiskCounters(&summedDiskCounters, rsr.initialDiskCounters)
-
-	rsr.HostDiskReadBytes.Update(summedDiskCounters.readBytes)
-	rsr.HostDiskReadTime.Update(int64(summedDiskCounters.readTime))
-	rsr.HostDiskReadCount.Update(summedDiskCounters.readCount)
-	rsr.HostDiskWriteBytes.Update(summedDiskCounters.writeBytes)
-	rsr.HostDiskWriteTime.Update(int64(summedDiskCounters.writeTime))
-	rsr.HostDiskWriteCount.Update(summedDiskCounters.writeCount)
-	rsr.IopsInProgress.Update(summedDiskCounters.iopsInProgress)
-
-	return nil
-}
-
 func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 	netCounters, err := net.IOCountersWithContext(ctx, true /* idk what this bool means */)
 	if err != nil {
@@ -515,22 +579,6 @@ func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 	}
 
 	return sumNetworkCounters(netCounters), nil
-}
-
-func (rsr *RuntimeStatSampler) sampleNetStats(ctx context.Context) error {
-	summedNetCounters, err := getSummedNetStats(ctx)
-	if err != nil {
-		return err
-	}
-
-	subtractNetworkCounters(&summedNetCounters, rsr.initialNetCounters)
-
-	rsr.HostNetSendBytes.Update(int64(summedNetCounters.BytesSent))
-	rsr.HostNetSendPackets.Update(int64(summedNetCounters.PacketsSent))
-	rsr.HostNetRecvBytes.Update(int64(summedNetCounters.BytesRecv))
-	rsr.HostNetRecvPackets.Update(int64(summedNetCounters.PacketsRecv))
-
-	return nil
 }
 
 // sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
