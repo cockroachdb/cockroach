@@ -25,7 +25,7 @@ TABLE abcde
 # SimplifyLimitOrdering
 # --------------------------------------------------
 # Remove constant column.
-opt
+opt expect=SimplifyLimitOrdering
 SELECT d, e FROM (SELECT d, 1 AS one, e FROM abcde) ORDER BY d, one, e LIMIT 10
 ----
 limit
@@ -41,7 +41,7 @@ limit
  └── const: 10 [type=int]
 
 # Remove multiple constant columns.
-opt
+opt expect=SimplifyLimitOrdering
 SELECT b, c FROM abcde WHERE d=1 AND e=2 ORDER BY b, c, d, e, a LIMIT 10
 ----
 limit
@@ -70,7 +70,7 @@ limit
  └── const: 10 [type=int]
 
 # Remove functionally dependent column that's only used in ordering.
-opt
+opt expect=SimplifyLimitOrdering
 SELECT c FROM abcde ORDER BY b, c, a, d LIMIT 10
 ----
 scan abcde@bc
@@ -84,7 +84,7 @@ scan abcde@bc
 # SimplifyOffsetOrdering
 # --------------------------------------------------
 # Remove all order by columns, because all are constant.
-opt
+opt expect=SimplifyOffsetOrdering
 SELECT d, e FROM (SELECT d, 1 AS one, e FROM abcde) ORDER BY one OFFSET 10
 ----
 offset
@@ -97,6 +97,8 @@ offset
 # SimplifyGroupByOrdering
 # --------------------------------------------------
 # Remove columns functionally dependent on key.
+# TODO(justin): figure out why this doesn't trigger SimplifyGroupByOrdering (it
+# triggers SimplifyRootOrdering).
 opt
 SELECT array_agg(b), a, c FROM abcde GROUP BY b, a, c ORDER BY a, b, c
 ----
@@ -118,7 +120,7 @@ group-by
            └── variable: c [type=int, outer=(3)]
 
 # ScalarGroupBy case.
-opt
+opt expect=SimplifyGroupByOrdering
 SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
 ----
 scalar-group-by
@@ -137,7 +139,7 @@ scalar-group-by
            └── variable: b [type=int, outer=(2)]
 
 # DistinctOn case.
-opt
+opt expect=SimplifyGroupByOrdering
 SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
 ----
 distinct-on
@@ -160,7 +162,7 @@ distinct-on
 # SimplifyRowNumberOrdering
 # --------------------------------------------------
 # Remove column functionally dependent on multi-column key.
-opt
+opt expect=SimplifyRowNumberOrdering
 SELECT * FROM (SELECT * FROM abcde WHERE b IS NOT NULL AND c IS NOT NULL ORDER BY c, d, b, e) WITH ORDINALITY
 ----
 row-number
@@ -192,7 +194,7 @@ row-number
 # SimplifyExplainOrdering
 # --------------------------------------------------
 # Remove functionally dependent synthesized column.
-opt
+opt expect=SimplifyExplainOrdering
 EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain

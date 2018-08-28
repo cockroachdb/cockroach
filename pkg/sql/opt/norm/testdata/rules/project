@@ -23,7 +23,7 @@ TABLE b
 # --------------------------------------------------
 
 # Same order, same names.
-opt
+opt expect=EliminateProject
 SELECT x, y FROM a
 ----
 scan a
@@ -32,7 +32,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Different order, aliased names.
-opt
+opt expect=EliminateProject
 SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
@@ -41,7 +41,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Reordered, duplicate, aliased columns.
-opt
+opt expect=EliminateProject
 SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
@@ -50,7 +50,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Added column (projection should not be eliminated).
-opt
+opt expect-not=EliminateProject
 SELECT *, 1 r FROM a
 ----
 project
@@ -68,7 +68,7 @@ project
 # EliminateProjectProject
 # --------------------------------------------------
 
-opt
+opt expect=EliminateProjectProject
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
