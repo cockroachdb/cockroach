@@ -303,11 +303,11 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 var _ ErrorDetailInterface = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
-	return "TransactionAbortedError: txn aborted"
+	return fmt.Sprintf("TransactionAbortedError(%s)", e.Reason)
 }
 
 func (e *TransactionAbortedError) message(pErr *Error) string {
-	return fmt.Sprintf("TransactionAbortedError: txn aborted %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionAbortedError(%s): %s", e.Reason, pErr.GetTxn())
 }
 
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
@@ -328,8 +328,10 @@ func (e *HandledRetryableTxnError) message(_ *Error) string {
 var _ ErrorDetailInterface = &HandledRetryableTxnError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
-func NewTransactionAbortedError() *TransactionAbortedError {
-	return &TransactionAbortedError{}
+func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbortedError {
+	return &TransactionAbortedError{
+		Reason: reason,
+	}
 }
 
 // NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
@@ -389,21 +391,6 @@ var _ transactionRestartError = &TransactionRetryError{}
 func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
-
-// NewTransactionReplayError initializes a new TransactionReplayError.
-func NewTransactionReplayError() *TransactionReplayError {
-	return &TransactionReplayError{}
-}
-
-func (e *TransactionReplayError) Error() string {
-	return fmt.Sprintf("replay txn")
-}
-
-func (e *TransactionReplayError) message(pErr *Error) string {
-	return fmt.Sprintf("replay txn %s", pErr.GetTxn())
-}
-
-var _ ErrorDetailInterface = &TransactionReplayError{}
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given message.

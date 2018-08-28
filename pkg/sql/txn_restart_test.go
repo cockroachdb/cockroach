@@ -135,7 +135,7 @@ func injectErrors(
 				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
-				return roachpb.NewTransactionAbortedError()
+				return roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 			}},
 		}
 		shuffle.Shuffle(injections)
@@ -934,13 +934,13 @@ func TestTxnUserRestart(t *testing.T) {
 			magicVals: createFilterVals(
 				map[string]int{"boulanger": 2}, // restartCounts
 				nil),
-			expectedErr: ".*RETRY_POSSIBLE_REPLAY.*",
+			expectedErr: "RETRY_POSSIBLE_REPLAY",
 		},
 		{
 			magicVals: createFilterVals(
 				nil,
 				map[string]int{"boulanger": 2}), // abortCounts
-			expectedErr: ".*txn aborted.*",
+			expectedErr: regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"),
 		},
 	}
 
