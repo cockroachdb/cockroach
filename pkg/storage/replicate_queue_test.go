@@ -52,6 +52,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
+		// TODO(benesch): Figure out why the merge queue causes this test to flake.
+		storage.MergeQueueEnabled.Override(&st.SV, false)
 		storage.EnableStatsBasedRebalancing.Override(&st.SV, false)
 	}
 
