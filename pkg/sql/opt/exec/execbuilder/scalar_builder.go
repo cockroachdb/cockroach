@@ -335,9 +335,21 @@ func (b *Builder) buildAnyScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.Ty
 	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, left, right), nil
 }
 
+func (b *Builder) buildUnsupportedExpr(
+	ctx *buildScalarCtx, ev memo.ExprView,
+) (tree.TypedExpr, error) {
+	return ev.Private().(tree.TypedExpr), nil
+}
+
 func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input := ev.Child(0)
+	// We cannot execute correlated subqueries.
+	if !input.Logical().Relational.OuterCols.Empty() {
+		return nil, b.decorrelationError()
+	}
+
 	// Build the execution plan for the input subquery.
-	plan, err := b.buildRelational(ev.Child(0))
+	plan, err := b.buildRelational(input)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +360,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 		types.Types[val] = ev.Metadata().ColumnType(opt.ColumnID(key))
 	})
 
-	input := b.addSubquery(exec.SubqueryAnyRows, types, plan.root)
+	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root)
 
 	// Build the scalar value that is compared against each row.
 	scalar, err := b.buildScalar(ctx, ev.Child(1))
@@ -357,21 +369,21 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 	}
 
 	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
-	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalar, input), nil
-}
-
-func (b *Builder) buildUnsupportedExpr(
-	ctx *buildScalarCtx, ev memo.ExprView,
-) (tree.TypedExpr, error) {
-	return ev.Private().(tree.TypedExpr), nil
+	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalar, subqueryExpr), nil
 }
 
 func (b *Builder) buildExistsSubquery(
 	ctx *buildScalarCtx, ev memo.ExprView,
 ) (tree.TypedExpr, error) {
+	input := ev.Child(0)
+	// We cannot execute correlated subqueries.
+	if !input.Logical().Relational.OuterCols.Empty() {
+		return nil, b.decorrelationError()
+	}
+
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
-	root, err := b.build(ev.Child(0))
+	root, err := b.build(input)
 	if err != nil {
 		return nil, err
 	}
