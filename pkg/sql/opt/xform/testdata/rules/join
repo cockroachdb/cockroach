@@ -794,16 +794,185 @@ left-join (merge)
            └── y = t [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
 
 # --------------------------------------------------
-# GenerateLookupJoin
+# GenerateLookupJoins
 # --------------------------------------------------
 
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
+----
+TABLE abcd
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX secondary
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE small (m INT, n INT)
+----
+TABLE small
+ ├── m int
+ ├── n int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+ALTER TABLE small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+# Covering case.
+opt
+SELECT a,b,n,m FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd@secondary)
+ ├── columns: a:4(int!null) b:5(int) n:2(int) m:1(int!null)
+ ├── key columns: [1] = [4]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+
+# Covering case, left-join.
+opt
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m
+----
+left-join (lookup abcd@secondary)
+ ├── columns: a:4(int) b:5(int) n:2(int) m:1(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+
+# Non-covering case.
+opt
+SELECT * FROM small JOIN abcd ON a=m
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── true [type=bool]
+
+# Non-covering case, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── true [type=bool]
+
+# Non-covering case, extra filter bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b>n
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── true [type=bool]
+
+# Non-covering case, extra filter bound by index, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ └── true [type=bool]
+
+# Non-covering case, extra filter not bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND c>n
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Non-covering case, extra filter not bound by index, left join.
+# In this case, we can't yet convert to a lookup join (see
+# the GenerateLookupJoins custom func).
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
+----
+right-join
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── scan abcd
+ │    └── columns: a:4(int) b:5(int) c:6(int)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,2,4,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+
 # Verify rule application when we can do a lookup join on both sides.
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc JOIN xyz ON a=x AND a=y
 ----
 ----
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join
@@ -829,7 +998,7 @@ New expression 1 of 1:
         └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join
@@ -857,12 +1026,28 @@ New expression 1 of 1:
 ----
 
 # Verify rule application when we can do a lookup join on the left side.
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc JOIN xyz ON a=z
 ----
 ----
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int!null)
+   ├── fd: (1)==(7), (7)==(1)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+
+No new expressions.
+
+================================================================================
+GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join
@@ -887,12 +1072,12 @@ New expression 1 of 1:
 ----
 ----
 
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc RIGHT JOIN xyz ON a=z
 ----
 ----
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
 ================================================================================
 Source expression:
   left-join
@@ -915,19 +1100,13 @@ New expression 1 of 1:
 ----
 ----
 
-# Verify we don't generate a lookup join.
-exploretrace rule=GenerateLookupJoin
-SELECT * FROM abc LEFT JOIN xyz ON a=z
-----
-
-
 # Verify rule application when we can do a lookup join on the right side.
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc JOIN xyz ON c=x
 ----
 ----
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
 ================================================================================
 Source expression:
   inner-join
@@ -949,15 +1128,31 @@ New expression 1 of 1:
    │    └── columns: a:1(int) b:2(int) c:3(int)
    └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
         └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+================================================================================
+GenerateLookupJoins
+================================================================================
+Source expression:
+  inner-join
+   ├── columns: a:1(int) b:2(int) c:3(int!null) x:5(int!null) y:6(int) z:7(int)
+   ├── fd: (3)==(5), (5)==(3)
+   ├── scan xyz
+   │    └── columns: x:5(int) y:6(int) z:7(int)
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+No new expressions.
 ----
 ----
 
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc LEFT JOIN xyz ON c=x
 ----
 ----
 ================================================================================
-GenerateLookupJoin
+GenerateLookupJoins
 ================================================================================
 Source expression:
   left-join
@@ -981,310 +1176,174 @@ New expression 1 of 1:
 ----
 
 # Verify we don't generate a lookup join.
-exploretrace rule=GenerateLookupJoin
+exploretrace rule=GenerateLookupJoins
 SELECT * FROM abc RIGHT JOIN xyz ON c=x
 ----
-
-# --------------------------------------------------
-# GenerateLookupJoinWithFilter
-# --------------------------------------------------
-
-# Verify rule application when we can do a lookup join on both sides.
-exploretrace rule=GenerateLookupJoinWithFilter
-SELECT * FROM abc JOIN xyz ON a=x AND a=y AND a > 1
-----
 ----
 ================================================================================
-GenerateLookupJoinWithFilter
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-New expression 1 of 1:
-  inner-join (lookup xyz@xy)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── key columns: [1] = [5]
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
-
-================================================================================
-GenerateLookupJoinWithFilter
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-New expression 1 of 1:
-  inner-join (lookup abc@ab)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── key columns: [5] = [1]
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-----
-----
-
-# Verify rule application when we can do a lookup join on both sides.
-exploretrace rule=GenerateLookupJoinWithFilter
-SELECT * FROM abc JOIN xyz ON a=x AND a=y AND a > 1
-----
-----
-================================================================================
-GenerateLookupJoinWithFilter
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-New expression 1 of 1:
-  inner-join (lookup xyz@xy)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── key columns: [1] = [5]
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
-
-================================================================================
-GenerateLookupJoinWithFilter
-================================================================================
-Source expression:
-  inner-join
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-New expression 1 of 1:
-  inner-join (lookup abc@ab)
-   ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
-   ├── key columns: [5] = [1]
-   ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-----
-----
-
-# Verify rule application when we can do a lookup join on one side.
-exploretrace rule=GenerateLookupJoinWithFilter
-SELECT * FROM abc LEFT JOIN xyz ON a=x AND a=y AND a > 1
-----
-----
-================================================================================
-GenerateLookupJoinWithFilter
-================================================================================
-Source expression:
-  left-join
-   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
-   ├── scan abc
-   │    └── columns: a:1(int) b:2(int) c:3(int)
-   ├── scan xyz@xy
-   │    ├── columns: x:5(int!null) y:6(int) z:7(int)
-   │    └── constraint: /5/6/8: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
-New expression 1 of 1:
-  left-join (lookup xyz@xy)
-   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
-   ├── key columns: [1] = [5]
-   ├── scan abc
-   │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: [/2 - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── x > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
-----
-----
-
-exploretrace rule=GenerateLookupJoinWithFilter
-SELECT * FROM abc RIGHT JOIN xyz ON a=x AND a=y AND a > 1
-----
-----
-================================================================================
-GenerateLookupJoinWithFilter
+GenerateLookupJoins
 ================================================================================
 Source expression:
   left-join
    ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   ├── scan abc@ab
-   │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-   │    └── constraint: /1/2/4: [/2 - ]
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+   ├── scan abc
+   │    └── columns: a:1(int) b:2(int) c:3(int)
+   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
 
-New expression 1 of 1:
-  left-join (lookup abc@ab)
-   ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
-   ├── key columns: [5] = [1]
-   ├── scan xyz
-   │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: [/2 - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        ├── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-        └── a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+No new expressions.
 ----
 ----
 
 # --------------------------------------------------
-# PushJoinThroughIndexJoin
+# GenerateLookupJoinsWithFilter
 # --------------------------------------------------
+# 
+# The rule and cases are similar to GenerateLookupJoins, except that we have a
+# filter that was pushed down to the lookup side (which needs to be pulled back
+# into the ON condition).
 
-exec-ddl
-CREATE TABLE uvw
-(
-    u INT PRIMARY KEY,
-    v INT,
-    w INT,
-    INDEX v (v)
-)
-----
-TABLE uvw
- ├── u int not null
- ├── v int
- ├── w int
- ├── INDEX primary
- │    └── u int not null
- └── INDEX v
-      ├── v int
-      └── u int not null
-
-# TODO(radu): index-join fixup needed
-exploretrace rule=PushJoinThroughIndexJoin
-SELECT * FROM abc JOIN uvw ON a=u
-----
-
-
-exec-ddl
-ALTER TABLE abc INJECT STATISTICS '[
-  {
-    "columns": ["a"],
-    "created_at": "2018-05-01 1:00:00.00000+00:00",
-    "row_count": 100,
-    "distinct_count": 100
-  }
-]'
-----
-
-exec-ddl
-ALTER TABLE uvw INJECT STATISTICS '[
-  {
-    "columns": ["u"],
-    "created_at": "2018-05-01 1:00:00.00000+00:00",
-    "row_count": 10000,
-    "distinct_count": 10000
-  }
-]'
-----
-
-# TODO(radu): index-join fixup needed
+# Covering case.
 opt
-SELECT * FROM abc JOIN uvw ON a=v
+SELECT a,b,n,m FROM small JOIN abcd ON a=m AND b>1
 ----
-inner-join
- ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── scan uvw
- │    ├── columns: u:5(int!null) v:6(int) w:7(int)
- │    ├── key: (5)
- │    └── fd: (5)-->(6,7)
- ├── scan abc
- │    └── columns: a:1(int) b:2(int) c:3(int)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+inner-join (lookup abcd@secondary)
+ ├── columns: a:4(int!null) b:5(int!null) n:2(int) m:1(int!null)
+ ├── key columns: [1] = [4]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
 
-# TODO(radu): index-join fixup needed
+# Covering case, left-join.
 opt
-SELECT * FROM abc JOIN uvw ON a=v AND b+u>1
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>1
 ----
-inner-join
- ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── scan uvw
- │    ├── columns: u:5(int!null) v:6(int) w:7(int)
- │    ├── key: (5)
- │    └── fd: (5)-->(6,7)
- ├── scan abc
- │    └── columns: a:1(int) b:2(int) c:3(int)
- └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── (b + u) > 1 [type=bool, outer=(2,5)]
+left-join (lookup abcd@secondary)
+ ├── columns: a:4(int) b:5(int) n:2(int) m:1(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
 
-# TODO(radu): index-join fixup needed
+# Non-covering case.
 opt
-SELECT * FROM abc JOIN uvw ON a=v WHERE b+w>1
+SELECT * FROM small JOIN abcd ON a=m AND b>1
 ----
-inner-join
- ├── columns: a:1(int!null) b:2(int) c:3(int) u:5(int!null) v:6(int!null) w:7(int)
- ├── fd: (5)-->(6,7), (1)==(6), (6)==(1)
- ├── scan uvw
- │    ├── columns: u:5(int!null) v:6(int) w:7(int)
- │    ├── key: (5)
- │    └── fd: (5)-->(6,7)
- ├── scan abc
- │    └── columns: a:1(int) b:2(int) c:3(int)
- └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── a = v [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── (b + w) > 1 [type=bool, outer=(2,7)]
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── true [type=bool]
+
+# Non-covering case, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>1
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── true [type=bool]
+
+# Non-covering case, extra filter bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND b>n AND b>1
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── true [type=bool]
+
+# Non-covering case, extra filter bound by index, left join.
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND b>n AND b>1
+----
+left-join (lookup abcd)
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── key columns: [7] = [7]
+ ├── left-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) abcd.rowid:7(int)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── true [type=bool]
+
+# Non-covering case, extra filter not bound by index.
+opt
+SELECT * FROM small JOIN abcd ON a=m AND c>n AND b>1
+----
+inner-join (lookup abcd)
+ ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── key columns: [7] = [7]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcd@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Non-covering case, extra filter not bound by index, left join.
+# In this case, we can't yet convert to a lookup join (see
+# the GenerateLookupJoins custom func).
+opt
+SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
+----
+right-join
+ ├── columns: m:1(int) n:2(int) a:4(int) b:5(int) c:6(int)
+ ├── select
+ │    ├── columns: a:4(int) b:5(int!null) c:6(int)
+ │    ├── scan abcd
+ │    │    └── columns: a:4(int) b:5(int) c:6(int)
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters [type=bool, outer=(1,2,4,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
