@@ -94,11 +94,11 @@ render                   ·             ·                                 (min 
       │                  aggregate 5   sum(column1)                      ·                                                                                                                                                 ·
       │                  aggregate 6   stddev(column1)                   ·                                                                                                                                                 ·
       │                  aggregate 7   variance(column1)                 ·                                                                                                                                                 ·
-      │                  aggregate 8   bool_and(column11)                ·                                                                                                                                                 ·
-      │                  aggregate 9   bool_or(column11)                 ·                                                                                                                                                 ·
-      │                  aggregate 10  xor_agg(column14)                 ·                                                                                                                                                 ·
+      │                  aggregate 8   bool_and(column10)                ·                                                                                                                                                 ·
+      │                  aggregate 9   bool_or(column10)                 ·                                                                                                                                                 ·
+      │                  aggregate 10  xor_agg(column13)                 ·                                                                                                                                                 ·
       │                  scalar        ·                                 ·                                                                                                                                                 ·
-      └── render         ·             ·                                 (column1 int, column11 bool, column14 bytes)                                                                                                      ·
+      └── render         ·             ·                                 (column1 int, column10 bool, column13 bytes)                                                                                                      ·
            │             render 0      (1)[int]                          ·                                                                                                                                                 ·
            │             render 1      (true)[bool]                      ·                                                                                                                                                 ·
            │             render 2      ('\x01')[bytes]                   ·                                                                                                                                                 ·
@@ -124,12 +124,12 @@ EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 render               ·            ·                           (count int, r int)       ·
  │                   render 0     (agg0)[int]                 ·                        ·
- │                   render 1     (column5)[int]              ·                        ·
- └── group           ·            ·                           (column5 int, agg0 int)  ·
-      │              aggregate 0  column5                     ·                        ·
+ │                   render 1     (column6)[int]              ·                        ·
+ └── group           ·            ·                           (column6 int, agg0 int)  ·
+      │              aggregate 0  column6                     ·                        ·
       │              aggregate 1  count_rows()                ·                        ·
       │              group by     @1                          ·                        ·
-      └── render     ·            ·                           (column5 int)            ·
+      └── render     ·            ·                           (column6 int)            ·
            │         render 0     ((k)[int] + (v)[int])[int]  ·                        ·
            └── scan  ·            ·                           (k int, v int)           ·
 ·                    table        kv@primary                  ·                        ·
@@ -868,11 +868,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 render               ·            ·            (m)              ·
  │                   render 0     agg0         ·                ·
- └── group           ·            ·            (column4, agg0)  ·
-      │              aggregate 0  column4      ·                ·
+ └── group           ·            ·            (column5, agg0)  ·
+      │              aggregate 0  column5      ·                ·
       │              aggregate 1  min(a)       ·                ·
       │              group by     @1           ·                ·
-      └── render     ·            ·            (column4, a)     ·
+      └── render     ·            ·            (column5, a)     ·
            │         render 0     a            ·                ·
            │         render 1     a            ·                ·
            └── scan  ·            ·            (a)              ·
@@ -884,11 +884,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
 render               ·            ·            (m)              ·
  │                   render 0     agg0         ·                ·
- └── group           ·            ·            (column4, agg0)  ·
-      │              aggregate 0  column4      ·                ·
+ └── group           ·            ·            (column5, agg0)  ·
+      │              aggregate 0  column5      ·                ·
       │              aggregate 1  min(a)       ·                ·
       │              group by     @1           ·                ·
-      └── render     ·            ·            (column4, a)     ·
+      └── render     ·            ·            (column5, a)     ·
            │         render 0     b            ·                ·
            │         render 1     a            ·                ·
            └── scan  ·            ·            (a, b)           ·

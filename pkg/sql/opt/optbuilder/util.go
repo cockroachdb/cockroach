@@ -156,7 +156,7 @@ func (b *Builder) expandStarAndResolveType(
 // group  The memo group ID of this column/expression (if any). This parameter
 //        is optional and can be set later in the returned scopeColumn.
 //
-// The new column is returned as a columnProps object.
+// The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
 	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
 ) *scopeColumn {
@@ -167,12 +167,57 @@ func (b *Builder) synthesizeColumn(
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
 	scope.cols = append(scope.cols, scopeColumn{
-		origName: name,
-		name:     name,
-		typ:      typ,
-		id:       colID,
-		expr:     expr,
-		group:    group,
+		name:  name,
+		typ:   typ,
+		id:    colID,
+		expr:  expr,
+		group: group,
+	})
+	return &scope.cols[len(scope.cols)-1]
+}
+
+// populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
+// the given existing column rather than allocating a new one.
+func (b *Builder) populateSynthesizedColumn(col *scopeColumn, group memo.GroupID) {
+	if col.name == "" {
+		col.name = tree.Name(fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1))
+	}
+
+	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
+	col.id = colID
+	col.group = group
+}
+
+// projectColumn projects src by copying its column ID to dst. projectColumn
+// also copies src.name to dst if an alias is not already set in dst. No other
+// fields are copied, for the following reasons:
+// - We don't copy group, as dst becomes a pass-through column in the new
+//   scope. dst already has group=0, so keep it as-is.
+// - We don't copy hidden, because projecting a column makes it visible.
+//   dst already has hidden=false, so keep it as-is.
+// - We don't copy table, since the table becomes anonymous in the new scope.
+// - We don't copy descending, since we don't want to overwrite dst.descending
+//   if dst is an ORDER BY column.
+// - expr, exprStr and typ in dst already correspond to the expression and type
+//   of the src column.
+func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
+	if dst.name == "" {
+		dst.name = src.name
+	}
+	dst.id = src.id
+}
+
+// addColumn adds a column to scope with the given label, type, and
+// expression. It returns a pointer to the new column. The column ID and group
+// are left empty so they can be filled in later.
+func (b *Builder) addColumn(
+	scope *scope, label string, typ types.T, expr tree.TypedExpr,
+) *scopeColumn {
+	name := tree.Name(label)
+	scope.cols = append(scope.cols, scopeColumn{
+		name: name,
+		typ:  typ,
+		expr: expr,
 	})
 	return &scope.cols[len(scope.cols)-1]
 }

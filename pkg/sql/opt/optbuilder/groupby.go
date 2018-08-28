@@ -76,42 +76,58 @@ type groupby struct {
 	// inAgg is true within the body of an aggregate function. inAgg is used
 	// to ensure that nested aggregates are disallowed.
 	inAgg bool
+
+	// buildingGroupingCols is true while the grouping columns are being built.
+	// It is used to ensure that the builder does not throw a grouping error
+	// prematurely.
+	buildingGroupingCols bool
 }
 
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
+	*tree.FuncExpr
+
 	def      memo.FuncOpDef
 	distinct bool
 	args     []memo.GroupID
+
+	// col is the output column of the aggregation.
+	col *scopeColumn
+
+	// colRefs contains the set of columns referenced by the arguments of the
+	// aggregation. It is used to determine the appropriate scope for this
+	// aggregation.
+	colRefs opt.ColSet
 }
 
-func (b *Builder) needsAggregation(sel *tree.SelectClause, orderBy tree.OrderBy) bool {
+// Walk is part of the tree.Expr interface.
+func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
+	return a
+}
+
+// TypeCheck is part of the tree.Expr interface.
+func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+// Eval is part of the tree.TypedExpr interface.
+func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic("aggregateInfo must be replaced before evaluation")
+}
+
+var _ tree.Expr = &aggregateInfo{}
+var _ tree.TypedExpr = &aggregateInfo{}
+
+func (b *Builder) needsAggregation(sel *tree.SelectClause, scope *scope) bool {
 	// We have an aggregation if:
 	//  - we have a GROUP BY, or
 	//  - we have a HAVING clause, or
 	//  - we have aggregate functions in the SELECT, DISTINCT ON and/or ORDER BY expressions.
-	if len(sel.GroupBy) > 0 || sel.Having != nil {
+	if len(sel.GroupBy) > 0 || sel.Having != nil || scope.hasAggregates() {
 		return true
-	}
-
-	for _, sel := range sel.Exprs {
-		// TODO(rytaft): This function does not recurse into subqueries, so this
-		// will be incorrect for correlated subqueries.
-		if b.exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
-			return true
-		}
-	}
-
-	for _, on := range sel.DistinctOn {
-		if b.exprTransformCtx.AggregateInExpr(on, b.semaCtx.SearchPath) {
-			return true
-		}
-	}
-
-	for _, ob := range orderBy {
-		if b.exprTransformCtx.AggregateInExpr(ob.Expr, b.semaCtx.SearchPath) {
-			return true
-		}
 	}
 
 	return false
@@ -155,30 +171,30 @@ func (b *Builder) constructGroupBy(
 }
 
 // buildAggregation builds the pre-projection and the aggregation operators.
-// Returns:
-//  - the output scope for the aggregation operation.
-//  - the output scope the post-projections.
+// Returns the output scope for the aggregation operation.
 func (b *Builder) buildAggregation(
-	sel *tree.SelectClause, orderBy tree.OrderBy, fromScope *scope,
-) (outScope *scope, projectionsScope *scope) {
+	sel *tree.SelectClause,
+	havingExpr tree.TypedExpr,
+	fromScope, projectionsScope, orderByScope, distinctOnScope *scope,
+) (outScope *scope) {
 	// We use two scopes:
 	//   - aggInScope contains columns that are used as input by the
 	//     GroupBy operator, specifically:
-	//      - grouping columns (from the GROUP BY)
 	//      - columns for the arguments to aggregate functions
-	//     The grouping columns always come first.
+	//      - grouping columns (from the GROUP BY)
+	//     The grouping columns always come second.
 	//
 	//   - aggOutScope contains columns that are produced by the GroupBy operator,
 	//     specifically:
-	//       - the grouping columns
-	//       - columns for the results of the aggregate functions.
+	//      - columns for the results of the aggregate functions.
+	//      - the grouping columns
 	//
 	// For example:
 	//
 	//   SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
 	//
-	//   aggInScope:   k+3 (as col1), v*2 (as col2)
-	//   aggOutScope:  k+3 (as col1), MIN(col2) (as col3)
+	//   aggInScope:   v*2 (as col2), k+3 (as col1)
+	//   aggOutScope:  MIN(col2) (as col3), k+3 (as col1)
 	//
 	// Any aggregate functions which contain column references to this scope
 	// trigger the creation of new grouping columns in the grouping scope. In
@@ -189,44 +205,45 @@ func (b *Builder) buildAggregation(
 	// TODO(radu): we aren't really using these as scopes, just as scopeColumn
 	// containers. Perhaps separate the scopeColumn in a separate structure and
 	// pass that instead of scopes.
-	aggInScope := fromScope.replace()
-	aggOutScope := fromScope.replace()
+	if fromScope.groupby.aggInScope == nil {
+		fromScope.groupby.aggInScope = fromScope.replace()
+	}
+	if fromScope.groupby.aggOutScope == nil {
+		fromScope.groupby.aggOutScope = fromScope.replace()
+	}
+	aggInScope := fromScope.groupby.aggInScope
+	aggOutScope := fromScope.groupby.aggOutScope
 
 	// The "from" columns are visible to any grouping expressions.
 	b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope, aggInScope)
-	groupings := fromScope.groupby.groupings
+	groupingsLen := len(fromScope.groupby.groupings)
 
 	// Copy the grouping columns to the aggOutScope.
-	aggOutScope.appendColumns(aggInScope)
-
-	fromScope.groupby.aggInScope = aggInScope
-	fromScope.groupby.aggOutScope = aggOutScope
+	groupingCols := aggInScope.getGroupingCols(groupingsLen)
+	aggOutScope.appendColumns(groupingCols)
 
 	var having memo.GroupID
 	if sel.Having != nil {
 		// Any "grouping" columns are visible to both the "having" and "projection"
-		// expressions. The build has the side effect of extracting aggregation
-		// columns.
-		having = b.buildHaving(sel.Having.Expr, fromScope)
+		// expressions.
+		having = b.buildHaving(havingExpr, fromScope)
 	}
 
-	projectionsScope = fromScope.replace()
-	// This is where the magic happens. When this call reaches an aggregate
-	// function that refers to variables in fromScope, buildAggregateFunction is
-	// called which adds columns to the aggInScope and aggOutScope.
-	b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
-
-	// Any additional columns or aggregates in the ORDER BY and DISTINCT ON
-	// clauses (if they exist) will be added here.
-	b.buildOrderBy(orderBy, fromScope, projectionsScope)
-	b.buildDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+	b.buildProjectionList(fromScope, projectionsScope)
+	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
+	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 
 	aggInfos := aggOutScope.groupby.aggs
 
 	// Construct the aggregation operators.
 	haveOrderingSensitiveAgg := false
 	aggCols := aggOutScope.getAggregateCols()
-	argCols := aggInScope.cols[len(groupings):]
+	argCols := aggInScope.getAggregateArgCols(groupingsLen)
+	var fromCols opt.ColSet
+	if b.subquery != nil {
+		// Only calculate the set of fromScope columns if it will be used below.
+		fromCols = fromScope.colSet()
+	}
 	for i, agg := range aggInfos {
 		var operands memo.DynamicOperands
 		for j := range agg.args {
@@ -244,6 +261,16 @@ func (b *Builder) buildAggregation(
 			haveOrderingSensitiveAgg = true
 		}
 		aggCols[i].group = b.factory.DynamicConstruct(aggOp, operands)
+		if b.subquery != nil {
+			// Update the subquery with any outer columns from the aggregate
+			// arguments. The outer columns were not added in finishBuildScalarRef
+			// because at the time the arguments were built, we did not know which
+			// was the appropriate scope for the aggregation. (buildAggregateFunction
+			// ensures that finishBuildScalarRef doesn't add the outer columns by
+			// temporarily setting b.subquery to nil. See buildAggregateFunction
+			// for more details.)
+			b.subquery.outerCols.UnionWith(agg.colRefs.Difference(fromCols))
+		}
 	}
 
 	if haveOrderingSensitiveAgg {
@@ -255,8 +282,8 @@ func (b *Builder) buildAggregation(
 	b.constructProjectForScope(fromScope, aggInScope)
 
 	var groupingColSet opt.ColSet
-	for i := range groupings {
-		groupingColSet.Add(int(aggInScope.cols[i].id))
+	for i := range groupingCols {
+		groupingColSet.Add(int(groupingCols[i].id))
 	}
 
 	aggOutScope.group = b.constructGroupBy(
@@ -272,7 +299,23 @@ func (b *Builder) buildAggregation(
 		having = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{having}))
 		aggOutScope.group = b.factory.ConstructSelect(aggOutScope.group, having)
 	}
-	return aggOutScope, projectionsScope
+	return aggOutScope
+}
+
+// analyzeHaving analyzes the having clause and returns it as a typed
+// expression. inScope contains the name bindings that are visible for this
+// HAVING clause (e.g., passed in from an enclosing statement).
+func (b *Builder) analyzeHaving(having *tree.Where, inScope *scope) tree.TypedExpr {
+	if having == nil {
+		return nil
+	}
+
+	// We need to save and restore the previous value of the field in semaCtx
+	// in case we are recursively called within a subquery context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("HAVING", tree.RejectWindowApplications|tree.RejectGenerators)
+	inScope.context = "HAVING"
+	return inScope.resolveAndRequireType(having.Expr, types.Bool)
 }
 
 // buildHaving builds a set of memo groups that represent the given HAVING
@@ -281,12 +324,8 @@ func (b *Builder) buildAggregation(
 //
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
-func (b *Builder) buildHaving(having tree.Expr, inScope *scope) memo.GroupID {
-	// We need to save and restore the previous value of the field in semaCtx
-	// in case we are recursively called within a subquery context.
-	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("HAVING", tree.RejectWindowApplications|tree.RejectGenerators)
-	return b.buildScalar(inScope.resolveAndRequireType(having, types.Bool, "HAVING"), inScope)
+func (b *Builder) buildHaving(having tree.TypedExpr, inScope *scope) memo.GroupID {
+	return b.buildScalar(having, inScope, nil, nil, nil)
 }
 
 // buildGroupingList builds a set of memo groups that represent a list of
@@ -304,9 +343,15 @@ func (b *Builder) buildGroupingList(
 ) {
 	inScope.groupby.groupings = make([]memo.GroupID, 0, len(groupBy))
 	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
+	if outScope.cols == nil {
+		outScope.cols = make([]scopeColumn, 0, len(groupBy))
+	}
+
+	inScope.startBuildingGroupingCols()
 	for _, e := range groupBy {
 		b.buildGrouping(e, selects, inScope, outScope)
 	}
+	inScope.endBuildingGroupingCols()
 }
 
 // buildGrouping builds a set of memo groups that represent a GROUP BY
@@ -338,6 +383,7 @@ func (b *Builder) buildGrouping(
 
 	// Make sure the GROUP BY columns have no special functions.
 	b.semaCtx.Properties.Require("GROUP BY", tree.RejectSpecial)
+	inScope.context = "GROUP BY"
 
 	// Resolve types, expand stars, and flatten tuples.
 	exprs := b.expandStarAndResolveType(groupBy, inScope)
@@ -348,7 +394,8 @@ func (b *Builder) buildGrouping(
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
-		col := b.buildScalarProjection(e, label, inScope, outScope)
+		col := b.addColumn(outScope, label, e.ResolvedType(), e)
+		b.buildScalar(e, inScope, outScope, col, nil)
 		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
 		inScope.groupby.groupings = append(inScope.groupby.groupings, col.group)
 	}
@@ -364,12 +411,12 @@ func (b *Builder) buildGrouping(
 //   aggInScope : x+1 AS column1
 //   aggOutScope: SUM(column1)
 //
-// If outScope is nil, then buildAggregateFunction returns a Variable reference
-// to the aggOutScope column. Otherwise, it adds that column to the outScope
-// projection, and returns 0.
+// buildAggregateFunction returns a pointer to the aggregateInfo containing
+// the function definition, fully built arguments, and the aggregate output
+// column.
 func (b *Builder) buildAggregateFunction(
-	f *tree.FuncExpr, funcDef memo.FuncOpDef, label string, inScope, outScope *scope,
-) (out memo.GroupID) {
+	f *tree.FuncExpr, funcDef memo.FuncOpDef, inScope *scope,
+) *aggregateInfo {
 	if len(f.Exprs) > 1 {
 		// TODO: #10495
 		panic(builderError{pgerror.UnimplementedWithIssueError(
@@ -377,40 +424,54 @@ func (b *Builder) buildAggregateFunction(
 			"aggregate functions with multiple arguments are not supported yet"),
 		})
 	}
-	if f.Filter != nil {
-		panic(unimplementedf("aggregates with FILTER are not supported yet"))
-	}
 
-	aggInScope, aggOutScope := inScope.startAggFunc()
+	tempScope := inScope.startAggFunc()
+	tempScopeColsBefore := len(tempScope.cols)
 
 	info := aggregateInfo{
+		FuncExpr: f,
 		def:      funcDef,
 		distinct: (f.Type == tree.DistinctFuncType),
 		args:     make([]memo.GroupID, len(f.Exprs)),
 	}
-	aggInScopeColsBefore := len(aggInScope.cols)
+
+	// Temporarily set b.subquery to nil so we don't add outer columns to the
+	// wrong scope.
+	subq := b.subquery
+	b.subquery = nil
+	defer func() { b.subquery = subq }()
+
 	for i, pexpr := range f.Exprs {
-		// This synthesizes a new aggInScope column, unless the argument is a simple
-		// VariableOp.
-		col := b.buildScalarProjection(
-			pexpr.(tree.TypedExpr), "" /* label */, inScope, aggInScope,
-		)
+		// This synthesizes a new tempScope column, unless the argument is a
+		// simple VariableOp.
+		texpr := pexpr.(tree.TypedExpr)
+		col := b.addColumn(tempScope, "" /* label */, texpr.ResolvedType(), texpr)
+		b.buildScalar(texpr, inScope, tempScope, col, &info.colRefs)
 		info.args[i] = col.group
 		if info.args[i] == 0 {
 			info.args[i] = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 		}
 	}
 
-	inScope.endAggFunc()
+	// Find the appropriate aggregation scopes for this aggregate now that we
+	// know which columns it references. If necessary, we'll move the columns
+	// for the arguments from tempScope to aggInScope below.
+	aggInScope, aggOutScope := inScope.endAggFunc(info.colRefs)
 
 	// If we already have the same aggregation, reuse it. Otherwise add it
 	// to the list of aggregates that need to be computed by the groupby
 	// expression and synthesize a column for the aggregation result.
-	col := aggOutScope.findAggregate(info)
-	if col == nil {
+	info.col = aggOutScope.findAggregate(info)
+	if info.col == nil {
 		// Use 0 as the group for now; it will be filled in later by the
 		// buildAggregation method.
-		col = b.synthesizeColumn(aggOutScope, label, f.ResolvedType(), f, 0 /* group */)
+		info.col = b.synthesizeColumn(aggOutScope, funcDef.Name, f.ResolvedType(), f, 0 /* group */)
+
+		// Move the columns for the aggregate input expressions to the correct scope.
+		if aggInScope != tempScope {
+			aggInScope.cols = append(aggInScope.cols, tempScope.cols[tempScopeColsBefore:]...)
+			tempScope.cols = tempScope.cols[:tempScopeColsBefore]
+		}
 
 		// Add the aggregate to the list of aggregates that need to be computed by
 		// the groupby expression.
@@ -418,17 +479,10 @@ func (b *Builder) buildAggregateFunction(
 	} else {
 		// Undo the adding of the args.
 		// TODO(radu): is there a cleaner way to do this?
-		aggInScope.cols = aggInScope.cols[:aggInScopeColsBefore]
-
-		// Update the column name if a label is provided.
-		if label != "" {
-			col.name = tree.Name(label)
-		}
+		tempScope.cols = tempScope.cols[:tempScopeColsBefore]
 	}
 
-	// Either wrap the column in a Variable expression if it's part of a larger
-	// expression, or else add it to the outScope if it needs to be projected.
-	return b.finishBuildScalarRef(col, label, aggOutScope, outScope)
+	return &info
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {

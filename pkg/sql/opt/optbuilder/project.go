@@ -67,14 +67,12 @@ func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.
 	)
 }
 
-// buildProjectionList builds a set of memo groups that represent the given
-// list of select expressions.
-//
-// See Builder.buildStmt for a description of the remaining input values.
+// analyzeProjectionList analyzes the given list of select expressions, and
+// adds the resulting labels and typed expressions to outScope.
 //
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
-func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, outScope *scope) {
+func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outScope *scope) {
 	// We need to save and restore the previous values of the replaceSRFs field
 	// and the field in semaCtx in case we are recursively called within a
 	// subquery context.
@@ -82,6 +80,7 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 	defer func(replaceSRFs bool) { inScope.replaceSRFs = replaceSRFs }(inScope.replaceSRFs)
 
 	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
+	inScope.context = "SELECT"
 	inScope.replaceSRFs = true
 
 	for _, e := range selects {
@@ -108,7 +107,7 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for i, e := range exprs {
-						b.buildScalarProjection(e, labels[i], inScope, outScope)
+						b.addColumn(outScope, labels[i], e.ResolvedType(), e)
 					}
 					continue
 				}
@@ -124,7 +123,18 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		label := b.getColName(e)
-		b.buildScalarProjection(texpr, label, inScope, outScope)
+		b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
+	}
+}
+
+// buildProjectionList builds a set of memo groups that represent the given
+// expressions in projectionsScope.
+//
+// See Builder.buildStmt for a description of the remaining input values.
+func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
+	for i := range projectionsScope.cols {
+		col := &projectionsScope.cols[i]
+		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, nil)
 	}
 }
 
@@ -156,26 +166,6 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 	return s
 }
 
-// buildScalarProjection builds a set of memo groups that represent a scalar
-// expression, and then projects a new output column (either passthrough or
-// synthesized) in outScope having that expression as its value.
-//
-// texpr   The given scalar expression.
-// label   If a new column is synthesized, it will be labeled with this string.
-//         For example, the query `SELECT (x + 1) AS "x_incr" FROM t` has a
-//         projection with a synthesized column "x_incr".
-//
-// The return value corresponds to the new column which has been created for
-// this scalar expression.
-//
-// See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) buildScalarProjection(
-	texpr tree.TypedExpr, label string, inScope, outScope *scope,
-) *scopeColumn {
-	b.buildScalarHelper(texpr, label, inScope, outScope)
-	return &outScope.cols[len(outScope.cols)-1]
-}
-
 // finishBuildScalar completes construction of a new scalar expression. If
 // outScope is nil, then finishBuildScalar returns the result memo group, which
 // can be nested within the larger expression being built. If outScope is not
@@ -190,24 +180,26 @@ func (b *Builder) buildScalarProjection(
 //           expression.
 // label     If a new column is synthesized, it will be labeled with this
 //           string.
+// outCol    The output column of the scalar which is being built. It can be
+//           nil if outScope is nil.
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) finishBuildScalar(
-	texpr tree.TypedExpr, group memo.GroupID, label string, inScope, outScope *scope,
+	texpr tree.TypedExpr, group memo.GroupID, inScope, outScope *scope, outCol *scopeColumn,
 ) (out memo.GroupID) {
 	if outScope == nil {
 		return group
 	}
 
 	// Avoid synthesizing a new column if possible.
-	if col := outScope.findExistingCol(texpr); col != nil {
-		col = outScope.appendColumn(col, label)
-		col.group = group
+	if col := outScope.findExistingCol(texpr); col != nil && col != outCol {
+		outCol.id = col.id
+		outCol.group = group
 		return group
 	}
 
-	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr, group)
+	b.populateSynthesizedColumn(outCol, group)
 	return group
 }
 
@@ -218,18 +210,30 @@ func (b *Builder) finishBuildScalar(
 // column to outScope, either as a passthrough column (if it already exists in
 // the input scope), or a variable expression.
 //
-// col     Column containing the scalar expression that's been referenced.
-// label   If passthrough column is added, it will optionally be labeled with
-//         this string (if not empty).
+// col      Column containing the scalar expression that's been referenced.
+// label    If passthrough column is added, it will optionally be labeled with
+//          this string (if not empty).
+// outCol   The output column which is being built. It can be nil if outScope is
+//          nil.
+// colRefs  The set of columns referenced so far by the scalar expression being
+//          built. If not nil, it is updated with the ID of this column.
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) finishBuildScalarRef(
-	col *scopeColumn, label string, inScope, outScope *scope,
+	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out memo.GroupID) {
-	isOuterColumn := inScope.isOuterColumn(col.id)
+	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
 	// Remember whether the query was correlated for later.
 	b.IsCorrelated = b.IsCorrelated || isOuterColumn
+
+	// Update the sets of column references and outer columns if needed.
+	if colRefs != nil {
+		colRefs.Add(int(col.id))
+	}
+	if isOuterColumn && b.subquery != nil {
+		b.subquery.outerCols.Add(int(col.id))
+	}
 
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).
@@ -242,20 +246,19 @@ func (b *Builder) finishBuildScalarRef(
 	if isOuterColumn {
 		// Avoid synthesizing a new column if possible.
 		existing := outScope.findExistingCol(col)
-		if existing == nil {
-			if label == "" {
-				label = string(col.name)
+		if existing == nil || existing == outCol {
+			if outCol.name == "" {
+				outCol.name = col.name
 			}
 			group := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
-			b.synthesizeColumn(outScope, label, col.typ, col, group)
+			b.populateSynthesizedColumn(outCol, group)
 			return group
 		}
 
 		col = existing
 	}
 
-	// Project the column, which has the side effect of making it visible.
-	col = outScope.appendColumn(col, label)
-	col.hidden = false
-	return col.group
+	// Project the column.
+	b.projectColumn(outCol, col)
+	return outCol.group
 }
