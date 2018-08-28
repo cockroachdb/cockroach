@@ -506,15 +506,6 @@ func (db *DB) AdminChangeReplicas(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// CheckConsistency runs a consistency check on all the ranges containing
-// the key span. It logs a diff of all the keys that are inconsistent
-// when withDiff is set to true.
-func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, withDiff bool) error {
-	b := &Batch{}
-	b.CheckConsistency(begin, end, withDiff)
-	return getOneErr(db.Run(ctx, b), b)
-}
-
 // WriteBatch applies the operations encoded in a BatchRepr, which is the
 // serialized form of a RocksDB Batch. The command cannot span Ranges and must
 // be run on an empty keyrange.

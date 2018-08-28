@@ -930,17 +930,6 @@ func NewScan(key, endKey Key) Request {
 	}
 }
 
-// NewCheckConsistency returns a Request initialized to scan from start to end keys.
-func NewCheckConsistency(key, endKey Key, withDiff bool) Request {
-	return &CheckConsistencyRequest{
-		RequestHeader: RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		WithDiff: withDiff,
-	}
-}
-
 // NewReverseScan returns a Request initialized to reverse scan from end to
 // start keys with max results.
 func NewReverseScan(key, endKey Key) Request {
@@ -1064,7 +1053,7 @@ func (*TransferLeaseRequest) flags() int {
 	return isWrite | isAlone | skipLeaseCheck
 }
 func (*RecomputeStatsRequest) flags() int   { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() int  { return isWrite | isRange }
+func (*ComputeChecksumRequest) flags() int  { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
 func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
 func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
