@@ -37,24 +37,11 @@ func init() {
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: types.String},
 		}
-		rows := tree.Exprs{tree.NewStrVal(show.Name)}
-		sel := &tree.Select{Select: &tree.ValuesClause{Rows: []tree.Exprs{rows}}}
-		subPlan, err := state.Select(ctx, sel, nil)
 
 		return func(_ context.Context, subPlans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-			for {
-				ok, err := subPlans[0].Next(state.RunParams(ctx))
-				if err != nil {
-					return err
-				}
-				if !ok {
-					break
-				}
-				resultsCh <- subPlans[0].Values()
-			}
-			subPlans[0].Close(ctx)
+			resultsCh <- tree.Datums{tree.NewDString(show.Name)}
 			return nil
-		}, header, []sql.PlanNode{subPlan}, err
+		}, header, []sql.PlanNode{}, nil
 	}
 	sql.AddPlanHook(testingPlanHook)
 }
