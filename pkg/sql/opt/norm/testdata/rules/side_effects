@@ -57,16 +57,16 @@ opt
 SELECT avg(f) FROM a WHERE i=5 GROUP BY i+(random()*10)::int, i+1
 ----
 project
- ├── columns: avg:8(float)
+ ├── columns: avg:6(float)
  ├── side-effects
  └── group-by
-      ├── columns: column6:6(int) avg:8(float)
-      ├── grouping columns: column6:6(int)
+      ├── columns: avg:6(float) column7:7(int)
+      ├── grouping columns: column7:7(int)
       ├── side-effects
-      ├── key: (6)
-      ├── fd: (6)-->(8)
+      ├── key: (7)
+      ├── fd: (7)-->(6)
       ├── project
-      │    ├── columns: column6:6(int) f:3(float)
+      │    ├── columns: column7:7(int) f:3(float)
       │    ├── side-effects
       │    ├── select
       │    │    ├── columns: i:2(int!null) f:3(float)

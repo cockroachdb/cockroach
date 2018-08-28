@@ -51,6 +51,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 
 	// Ensure there are no special functions in the clause.
 	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
+	inScope.context = "VALUES"
 
 	for _, tuple := range values.Rows {
 		if numCols != len(tuple) {
@@ -63,7 +64,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 		for i, expr := range tuple {
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
-			elems[i] = b.buildScalar(texpr, inScope)
+			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
 			// Verify that types of each tuple match one another.
 			if colTypes[i] == types.Unknown {

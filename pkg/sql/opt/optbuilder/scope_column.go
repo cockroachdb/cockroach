@@ -28,12 +28,8 @@ import (
 // interface. During name resolution, unresolved column names in the AST are
 // replaced with a scopeColumn.
 type scopeColumn struct {
-	// origName is the original name of this column, either in its origin table,
-	// or when it was first synthesized.
-	origName tree.Name
-
 	// name is the current name of this column. It is usually the same as
-	// origName, unless this column was renamed with an AS expression.
+	// the original name, unless this column was renamed with an AS expression.
 	name  tree.Name
 	table tree.TableName
 	typ   types.T
@@ -42,6 +38,10 @@ type scopeColumn struct {
 	// columns in the query.
 	id     opt.ColumnID
 	hidden bool
+
+	// descending indicates whether this column is sorted in descending order.
+	// This field is only used for ordering columns.
+	descending bool
 
 	// group is the GroupID of the scalar expression associated with this column.
 	// group is 0 for columns that are just passed through from an inner scope
@@ -57,20 +57,20 @@ type scopeColumn struct {
 	exprStr string
 }
 
+// getExpr returns the the expression that this column refers to, or the column
+// itself if the column does not refer to an expression.
+func (c *scopeColumn) getExpr() tree.TypedExpr {
+	if c.expr == nil {
+		return c
+	}
+	return c.expr
+}
+
 // getExprStr gets a stringified representation of the expression that this
-// column refers to, or the original column name if the column does not refer
-// to an expression. It caches the result in exprStr.
+// column refers to.
 func (c *scopeColumn) getExprStr() string {
 	if c.exprStr == "" {
-		if c.expr == nil {
-			if tableStr := c.table.String(); tableStr != "" {
-				c.exprStr = fmt.Sprintf("%s.%s", tableStr, c.origName)
-			} else {
-				c.exprStr = string(c.origName)
-			}
-		} else {
-			c.exprStr = symbolicExprStr(c.expr)
-		}
+		c.exprStr = symbolicExprStr(c.getExpr())
 	}
 	return c.exprStr
 }

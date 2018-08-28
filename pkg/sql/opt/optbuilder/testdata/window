@@ -22,9 +22,9 @@ error (0A000): window functions are not supported
 build
 SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 ----
-error (42803): aggregate function calls cannot contain window function calls
+error (0A000): window functions are not supported
 
 build
 SELECT * FROM kv GROUP BY v, count(w) OVER ()
 ----
-error: count(): window functions are not allowed in GROUP BY
+error (0A000): window functions are not supported

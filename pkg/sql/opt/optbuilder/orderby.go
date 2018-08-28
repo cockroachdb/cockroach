@@ -24,6 +24,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
+// clause and adds the resulting typed expressions to orderByScope.
+func (b *Builder) analyzeOrderBy(
+	orderBy tree.OrderBy, inScope, projectionsScope *scope,
+) (orderByScope *scope) {
+	if orderBy == nil {
+		return nil
+	}
+
+	orderByScope = inScope.push()
+	orderByScope.cols = make([]scopeColumn, 0, len(orderBy))
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("ORDER BY", tree.RejectGenerators)
+	inScope.context = "ORDER BY"
+
+	for i := range orderBy {
+		b.analyzeOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
+	}
+	return orderByScope
+}
+
 // buildOrderBy builds an Ordering physical property from the ORDER BY clause.
 // ORDER BY is not a relational expression, but instead a required physical
 // property on the output.
@@ -38,25 +63,18 @@ import (
 // buildOrderBy builds a set of memo groups for any ORDER BY columns that are
 // not already present in the SELECT list (as represented by the initial set
 // of columns in projectionsScope). buildOrderBy adds these new ORDER BY
-// columns to the projectionsScope and sets the ordering and presentation
-// properties on the projectionsScope. These properties later become part of
-// the required physical properties returned by Build.
-func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *scope) {
-	if orderBy == nil {
+// columns to the projectionsScope and sets the ordering property on the
+// projectionsScope. This property later becomes part of the required physical
+// properties returned by Build.
+func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
+	if orderByScope == nil {
 		return
 	}
 
-	// We need to save and restore the previous value of the field in
-	// semaCtx in case we are recursively called within a subquery
-	// context.
-	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("ORDER BY", tree.RejectGenerators)
+	orderByScope.ordering = make([]opt.OrderingColumn, 0, len(orderByScope.cols))
 
-	orderByScope := inScope.push()
-	orderByScope.ordering = make([]opt.OrderingColumn, 0, len(orderBy))
-
-	for i := range orderBy {
-		b.buildOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
+	for i := range orderByScope.cols {
+		b.buildOrderByArg(inScope, projectionsScope, orderByScope, &orderByScope.cols[i])
 	}
 
 	projectionsScope.setOrdering(orderByScope.cols, orderByScope.ordering)
@@ -79,23 +97,23 @@ func (b *Builder) findIndexByName(table opt.Table, name tree.UnrestrictedName) (
 	return nil, fmt.Errorf(`index %q not found`, name)
 }
 
-// addExtraColumn adds expr as a column to extraColsScope; if it is
+// addExtraColumn builds extraCol.expr as a column in extraColsScope; if it is
 // already projected in projectionsScope then that projection is re-used.
 func (b *Builder) addExtraColumn(
-	expr tree.TypedExpr, inScope, projectionsScope, extraColsScope *scope,
+	inScope, projectionsScope, extraColsScope *scope, extraCol *scopeColumn,
 ) {
 	// Use an existing projection if possible. Otherwise, build a new
 	// projection.
-	if col := projectionsScope.findExistingCol(expr); col != nil {
-		extraColsScope.cols = append(extraColsScope.cols, *col)
+	if col := projectionsScope.findExistingCol(extraCol.getExpr()); col != nil {
+		extraCol.id = col.id
 	} else {
-		b.buildScalarProjection(expr, "" /* label */, inScope, extraColsScope)
+		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol, nil)
 	}
 }
 
-// buildOrderByIndex appends to the ordering a column for each indexed column
-// in the specified index, including the implicit primary key columns.
-func (b *Builder) buildOrderByIndex(
+// analyzeOrderByIndex appends to the orderByScope a column for each indexed
+// column in the specified index, including the implicit primary key columns.
+func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
 	tn, err := order.Table.Normalize()
@@ -113,7 +131,6 @@ func (b *Builder) buildOrderByIndex(
 		panic(builderError{err})
 	}
 
-	start := len(orderByScope.cols)
 	// Append each key column from the index (including the implicit primary key
 	// columns) to the ordering scope.
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
@@ -123,59 +140,60 @@ func (b *Builder) buildOrderByIndex(
 			panic(err)
 		}
 
-		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
-		expr := inScope.resolveType(colItem, types.Any)
-		b.addExtraColumn(expr, inScope, projectionsScope, orderByScope)
-	}
-
-	// Add the new columns to the ordering.
-	for i := start; i < len(orderByScope.cols); i++ {
-		desc := index.Column(i - start).Descending
+		desc := col.Descending
 
 		// DESC inverts the order of the index.
 		if order.Direction == tree.Descending {
 			desc = !desc
 		}
 
-		orderByScope.ordering = append(orderByScope.ordering,
-			opt.MakeOrderingColumn(orderByScope.cols[i].id, desc),
-		)
+		colItem := tree.NewColumnItem(tab.Name(), col.Column.ColName())
+		expr := inScope.resolveType(colItem, types.Any)
+		outCol := b.addColumn(orderByScope, "" /* label */, expr.ResolvedType(), expr)
+		outCol.descending = desc
 	}
 }
 
-// buildOrderByArg sets up the projection(s) of a single ORDER BY argument.
-// Typically this is a single column, with the exception of qualified star
-// "table.*".
-//
-// The projection columns are added to the orderByScope.
-func (b *Builder) buildOrderByArg(
+// analyzeOrderByArg analyzes a single ORDER BY argument. Typically this is a
+// single column, with the exception of qualified star "table.*". The resulting
+// typed expression(s) are added to orderByScope.
+func (b *Builder) analyzeOrderByArg(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
 	if order.OrderType == tree.OrderByIndex {
-		b.buildOrderByIndex(order, inScope, projectionsScope, orderByScope)
+		b.analyzeOrderByIndex(order, inScope, projectionsScope, orderByScope)
 		return
 	}
+
+	// Analyze the ORDER BY column(s).
 	start := len(orderByScope.cols)
-
-	// Build each of the ORDER BY columns. As a side effect, this will append new
-	// columns to the end of orderByScope.cols.
-	b.buildExtraArgument(order.Expr, inScope, projectionsScope, orderByScope, "ORDER BY")
-
-	// Add the new columns to the ordering.
+	b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope)
 	for i := start; i < len(orderByScope.cols); i++ {
-		orderByScope.ordering = append(orderByScope.ordering,
-			opt.MakeOrderingColumn(orderByScope.cols[i].id, order.Direction == tree.Descending),
-		)
+		col := &orderByScope.cols[i]
+		col.descending = order.Direction == tree.Descending
 	}
 }
 
-// buildExtraArgument sets up the projection(s) of a single ORDER BY or DISTINCT
-// ON argument. Typically this is a single column, with the exception of
-// qualified star (table.*).
-//
-// The projection columns are added to the extraColsScope.
-func (b *Builder) buildExtraArgument(
-	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope, context string,
+// buildOrderByArg sets up the projection of a single ORDER BY argument.
+// The projection column is built in the orderByScope and used to build
+// an ordering on the same scope.
+func (b *Builder) buildOrderByArg(
+	inScope, projectionsScope, orderByScope *scope, orderByCol *scopeColumn,
+) {
+	// Build the ORDER BY column.
+	b.addExtraColumn(inScope, projectionsScope, orderByScope, orderByCol)
+
+	// Add the new column to the ordering.
+	orderByScope.ordering = append(orderByScope.ordering,
+		opt.MakeOrderingColumn(orderByCol.id, orderByCol.descending),
+	)
+}
+
+// analyzeExtraArgument analyzes a single ORDER BY or DISTINCT ON argument.
+// Typically this is a single column, with the exception of qualified star
+// (table.*). The resulting typed expression(s) are added to extraColsScope.
+func (b *Builder) analyzeExtraArgument(
+	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr = tree.StripParens(expr)
@@ -216,17 +234,17 @@ func (b *Builder) buildExtraArgument(
 	//    e.g. SELECT a, b FROM t ORDER by a+b
 
 	// First, deal with projection aliases.
-	idx := colIdxByProjectionAlias(expr, context, projectionsScope)
+	idx := colIdxByProjectionAlias(expr, inScope.context, projectionsScope)
 
 	// If the expression does not refer to an alias, deal with
 	// column ordinals.
 	if idx == -1 {
-		idx = colIndex(len(projectionsScope.cols), expr, context)
+		idx = colIndex(len(projectionsScope.cols), expr, inScope.context)
 	}
 
-	var exprs []tree.TypedExpr
+	var exprs tree.TypedExprs
 	if idx != -1 {
-		exprs = []tree.TypedExpr{&projectionsScope.cols[idx]}
+		exprs = []tree.TypedExpr{projectionsScope.cols[idx].getExpr()}
 	} else {
 		exprs = b.expandStarAndResolveType(expr, inScope)
 
@@ -234,12 +252,10 @@ func (b *Builder) buildExtraArgument(
 		exprs = flattenTuples(exprs)
 	}
 
-	// Build each of the columns. As a side effect, this will append new
-	// columns to the end of extraColsScope.cols.
 	for _, e := range exprs {
-		// Ensure we can order on the given column.
+		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		b.addExtraColumn(e, inScope, projectionsScope, extraColsScope)
+		b.addColumn(extraColsScope, "" /* label */, e.ResolvedType(), e)
 	}
 }
 
