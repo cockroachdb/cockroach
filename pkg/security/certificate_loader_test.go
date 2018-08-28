@@ -172,17 +172,9 @@ func TestNamingScheme(t *testing.T) {
 
 	goodNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 	badUserNodeCert := makeTestCert(t, "notnode", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
-	noServerAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noClientAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
-	noAuthNodeCert := makeTestCert(t, "node", fullKeyUsage, nil)
-	noEnciphermentNodeCert := makeTestCert(t, "node", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
-	noSignatureNodeCert := makeTestCert(t, "node", x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth})
 
 	goodRootCert := makeTestCert(t, "root", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 	notRootCert := makeTestCert(t, "notroot", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noClientAuthRootCert := makeTestCert(t, "root", fullKeyUsage, nil)
-	noEnciphermentRootCert := makeTestCert(t, "root", x509.KeyUsageDigitalSignature, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-	noSignatureRootCert := makeTestCert(t, "root", x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
 	// Do not use embedded certs.
 	security.ResetAssetLoader()
@@ -312,73 +304,6 @@ func TestNamingScheme(t *testing.T) {
 					Error: errors.New("client certificate has Subject \"CN=notroot\", expected \"CN=root")},
 				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
 					FileContents: badUserNodeCert, KeyFileContents: []byte("node.key")},
-			},
-		},
-		{
-			// No ServerAuth key usage.
-			files: []testFile{
-				{"node.crt", 0777, noServerAuthNodeCert},
-				{"node.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usage missing ServerAuth")},
-			},
-		},
-		{
-			// No ClientAuth key usage: this is checked later by the CertificateManager.
-			files: []testFile{
-				{"node.crt", 0777, noClientAuthNodeCert},
-				{"node.key", 0700, []byte("node.key")},
-				{"client.root.crt", 0777, noClientAuthRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New("client certificate does not have ClientAuth extended key usage")},
-				{FileUsage: security.NodePem, Filename: "node.crt", KeyFilename: "node.key",
-					FileContents: noClientAuthNodeCert, KeyFileContents: []byte("node.key")},
-			},
-		},
-		{
-			// No auth key usage.
-			files: []testFile{
-				{"node.crt", 0777, noAuthNodeCert},
-				{"node.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate extended key usage missing ServerAuth")},
-			},
-		},
-		{
-			// No KeyEncipherment key usage.
-			files: []testFile{
-				{"node.crt", 0777, noEnciphermentNodeCert},
-				{"node.key", 0700, []byte{}},
-				{"client.root.crt", 0777, noEnciphermentRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "client.root.crt",
-					Error: errors.New("client certificate key usages: KeyEncipherment=false, DigitalSignature=true, but both are needed")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate key usages: KeyEncipherment=false, DigitalSignature=true, but both are needed")},
-			},
-		},
-		{
-			// No DigitalSignature key usage.
-			files: []testFile{
-				{"node.crt", 0777, noSignatureNodeCert},
-				{"node.key", 0700, []byte{}},
-				{"client.root.crt", 0777, noSignatureRootCert},
-				{"client.root.key", 0700, []byte{}},
-			},
-			certs: []security.CertInfo{
-				{FileUsage: security.NodePem, Filename: "client.root.crt",
-					Error: errors.New("client certificate key usages: KeyEncipherment=true, DigitalSignature=false, but both are needed")},
-				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New("node certificate key usages: KeyEncipherment=true, DigitalSignature=false, but both are needed")},
 			},
 		},
 		{

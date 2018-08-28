@@ -431,41 +431,26 @@ func parseCertificate(ci *CertInfo) error {
 	return nil
 }
 
-func hasKeyUsage(cert *x509.Certificate, usage x509.KeyUsage) bool {
-	return cert.KeyUsage&usage != 0
-}
-
-func hasExtendedKeyUsage(cert *x509.Certificate, usage x509.ExtKeyUsage) bool {
-	if cert.ExtKeyUsage == nil {
-		return false
-	}
-	for _, u := range cert.ExtKeyUsage {
-		if u == usage {
-			return true
-		}
-	}
-	return false
-}
-
 // validateDualPurposeNodeCert takes a CertInfo and a parsed certificate and checks the
 // values of certain fields.
 // This should only be called on the NodePem CertInfo when there is no specific
 // client certificate for the 'node' user.
 // Fields required for a valid server certificate are already checked.
 func validateDualPurposeNodeCert(ci *CertInfo) error {
+	if ci == nil {
+		return errors.Errorf("no node certificate found")
+	}
+
+	if ci.Error != nil {
+		return ci.Error
+	}
+
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
 
 	// Check Subject Common Name.
 	if a, e := cert.Subject.CommonName, NodeUser; a != e {
 		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
-	}
-
-	hasServer := hasExtendedKeyUsage(cert, x509.ExtKeyUsageServerAuth)
-	hasClient := hasExtendedKeyUsage(cert, x509.ExtKeyUsageClientAuth)
-	if !hasServer || !hasClient {
-		return errors.Errorf("client/server node certificate extended key usages: ServerAuth=%t, ClientAuth=%t, but both are needed",
-			hasServer, hasClient)
 	}
 
 	return nil
@@ -477,38 +462,13 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 
 	switch ci.FileUsage {
 	case NodePem:
-		// Common Name and ExtendedKeyUsage are checked only if there is no client certificate for 'node'.
+		// Common Name is checked only if there is no client certificate for 'node'.
 		// This is done in validateDualPurposeNodeCert.
-
-		// Check key usages.
-		hasEncipherment := hasKeyUsage(cert, x509.KeyUsageKeyEncipherment)
-		hasSignature := hasKeyUsage(cert, x509.KeyUsageDigitalSignature)
-		if !hasEncipherment || !hasSignature {
-			return errors.Errorf("node certificate key usages: KeyEncipherment=%t, DigitalSignature=%t, but both are needed",
-				hasEncipherment, hasSignature)
-		}
-
-		if !hasExtendedKeyUsage(cert, x509.ExtKeyUsageServerAuth) {
-			return errors.Errorf("node certificate extended key usage missing ServerAuth")
-		}
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.
 		if a, e := cert.Subject.CommonName, ci.Name; a != e {
 			return errors.Errorf("client certificate has Subject \"CN=%s\", expected \"CN=%s\" (must match filename)", a, e)
 		}
-
-		// Check key usages.
-		hasEncipherment := hasKeyUsage(cert, x509.KeyUsageKeyEncipherment)
-		hasSignature := hasKeyUsage(cert, x509.KeyUsageDigitalSignature)
-		if !hasEncipherment || !hasSignature {
-			return errors.Errorf("client certificate key usages: KeyEncipherment=%t, DigitalSignature=%t, but both are needed",
-				hasEncipherment, hasSignature)
-		}
-
-		if !hasExtendedKeyUsage(cert, x509.ExtKeyUsageClientAuth) {
-			return errors.Errorf("client certificate does not have ClientAuth extended key usage")
-		}
-
 	}
 	return nil
 }
