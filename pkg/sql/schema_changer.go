@@ -174,6 +174,7 @@ func isPermanentSchemaChangeError(err error) bool {
 
 		}
 	}
+
 	return true
 }
 
@@ -1210,6 +1211,10 @@ type SchemaChangerTestingKnobs struct {
 	// transaction is unable to commit because it is violating the two
 	// version lease invariant.
 	TwoVersionLeaseViolation func()
+
+	// ErrorsSeen is called with all the errors seen by the
+	// synchronous code path.
+	ErrorsSeen func(err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

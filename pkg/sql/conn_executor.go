@@ -1853,25 +1853,27 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 	case txnCommit:
-		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
-			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
-		); schemaChangeErr != nil {
-			// We got a schema change error. We'll return it to the client as the
-			// result of the current statement - which is either the DDL statement or
-			// a COMMIT statement if the DDL was part of an explicit transaction. In
-			// the explicit transaction case, we return a funky error code to the
-			// client to seed fear about what happened to the transaction. The reality
-			// is that the transaction committed, but at least some of the staged
-			// schema changes failed. We don't have a good way to indicate this.
-			if implicitTxn {
-				res.SetError(schemaChangeErr)
-			} else {
-				res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+		if !ex.extraTxnState.schemaChangers.isEmpty() {
+			if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
+				ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
+			); schemaChangeErr != nil {
+				// We got a schema change error. We'll return it to the client as the
+				// result of the current statement - which is either the DDL statement or
+				// a COMMIT statement if the DDL was part of an explicit transaction. In
+				// the explicit transaction case, we return a funky error code to the
+				// client to seed fear about what happened to the transaction. The reality
+				// is that the transaction committed, but at least some of the staged
+				// schema changes failed. We don't have a good way to indicate this.
+				if implicitTxn {
+					res.SetError(schemaChangeErr)
+				} else {
+					res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+				}
 			}
-		}
 
-		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
+			// Wait for the cache to reflect the dropped databases if any.
+			ex.extraTxnState.tables.waitForCacheToDropDatabases(ex.Ctx())
+		}
 
 		fallthrough
 	case txnRestart, txnAborted:

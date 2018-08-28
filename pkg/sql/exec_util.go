@@ -882,6 +882,10 @@ func (scc *schemaChangerCollection) reset() {
 	scc.schemaChangers = nil
 }
 
+func (scc *schemaChangerCollection) isEmpty() bool {
+	return len(scc.schemaChangers) == 0
+}
+
 // execSchemaChanges releases schema leases and runs the queued
 // schema changers. This needs to be run after the transaction
 // scheduling the schema change has finished.
@@ -890,8 +894,11 @@ func (scc *schemaChangerCollection) reset() {
 func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
 ) error {
-	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
-		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if scc.isEmpty() {
+		panic("execSchemaChanges called with no queued schema changes")
+	}
+	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
+		fn(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
@@ -904,11 +911,14 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
+				if errorsSeen := cfg.SchemaChangerTestingKnobs.ErrorsSeen; errorsSeen != nil {
+					errorsSeen(err)
+				}
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
-				if err == sqlbase.ErrDescriptorNotFound {
-				} else if isPermanentSchemaChangeError(err) {
+
+				if isPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
 					// There's some sketchiness here: we assume there's a single result
@@ -917,6 +927,12 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					if firstError == nil {
 						firstError = err
 					}
+				} else if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
+					// 1. If the descriptor is dropped while the schema change
+					// is executing, the schema change is considered completed.
+					// 2. If the context is canceled the schema changer quits here
+					// letting the asynchronous code path complete the schema
+					// change.
 				} else {
 					// retryable error.
 					continue
