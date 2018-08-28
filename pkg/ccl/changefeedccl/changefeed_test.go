@@ -165,6 +165,8 @@ func TestChangefeedTimestamps(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "d",
+		// TODO(dan): HACK until the changefeed can control pgwire flushing.
+		ConnResultsBufferBytes: 1,
 	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
