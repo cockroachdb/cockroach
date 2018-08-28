@@ -1909,13 +1909,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Create three fully-caught-up, adjacent ranges on all three stores.
 	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
-	splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
-	for i, key := range splitKeys {
-		if i != len(splitKeys)-1 {
-			// We'll split the last range off later.
-			if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
-				t.Fatal(pErr)
-			}
+	for _, key := range []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")} {
+		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key)); pErr != nil {
+			t.Fatal(pErr)
 		}
 		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
 			t.Fatal(pErr)
@@ -1940,8 +1936,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft snapshot
 	// will span both a merge and a split.
-	lastSplitKey := splitKeys[len(splitKeys)-1]
-	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(lastSplitKey)); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("d"))); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1971,47 +1966,43 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Wait for all replicas to catch up to the same point. Because we truncated
 	// the log while store2 was unavailable, this will require a Raft snapshot.
-	for _, key := range splitKeys {
-		if _, pErr := client.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
-			t.Fatal(pErr)
+	testutils.SucceedsSoon(t, func() error {
+		afterRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+		if afterRaftSnaps <= beforeRaftSnaps {
+			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
 		}
-		mtc.waitForValues(key, []int64{2, 2, 2})
-	}
 
-	afterRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
-	if afterRaftSnaps == beforeRaftSnaps {
-		t.Fatal("expected store2 to apply at least 1 additional raft snapshot")
-	}
-
-	// Verify that the sets of keys in store0 and store2 are identical.
-	storeKeys0 := getEngineKeySet(t, store0.Engine())
-	storeKeys2 := getEngineKeySet(t, store2.Engine())
-	dRepl0 := store0.LookupReplica(roachpb.RKey("d"))
-	ignoreKey := func(k string) bool {
-		// Unreplicated keys for the remaining ranges are allowed to differ.
-		for _, id := range []roachpb.RangeID{1, aRepl0.RangeID, dRepl0.RangeID} {
-			if strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(id))) {
-				return true
+		// Verify that the sets of keys in store0 and store2 are identical.
+		storeKeys0 := getEngineKeySet(t, store0.Engine())
+		storeKeys2 := getEngineKeySet(t, store2.Engine())
+		dRepl0 := store0.LookupReplica(roachpb.RKey("d"))
+		ignoreKey := func(k string) bool {
+			// Unreplicated keys for the remaining ranges are allowed to differ.
+			for _, id := range []roachpb.RangeID{1, aRepl0.RangeID, dRepl0.RangeID} {
+				if strings.HasPrefix(k, string(keys.MakeRangeIDUnreplicatedPrefix(id))) {
+					return true
+				}
+			}
+			return false
+		}
+		for k := range storeKeys0 {
+			if ignoreKey(k) {
+				continue
+			}
+			if _, ok := storeKeys2[k]; !ok {
+				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
 			}
 		}
-		return false
-	}
-	for k := range storeKeys0 {
-		if ignoreKey(k) {
-			continue
+		for k := range storeKeys2 {
+			if ignoreKey(k) {
+				continue
+			}
+			if _, ok := storeKeys0[k]; !ok {
+				return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+			}
 		}
-		if _, ok := storeKeys2[k]; !ok {
-			t.Errorf("store2 missing key %s", roachpb.Key(k))
-		}
-	}
-	for k := range storeKeys2 {
-		if ignoreKey(k) {
-			continue
-		}
-		if _, ok := storeKeys0[k]; !ok {
-			t.Errorf("store2 has extra key %s", roachpb.Key(k))
-		}
-	}
+		return nil
+	})
 }
 
 // TestStoreRangeMergeDuringShutdown verifies that a shutdown of a store
