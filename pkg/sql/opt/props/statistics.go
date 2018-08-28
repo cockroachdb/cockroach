@@ -49,7 +49,7 @@ type Statistics struct {
 	// the row counts can be unpredictable; thus, a row count of 0.001 should be
 	// considered 1000 times better than a row count of 1, even though if this was
 	// a true row count they would be pretty much the same thing.
-	RowCount float64
+	rowCount float64
 
 	// ColStats is a collection of statistics that pertain to columns in an
 	// expression or table. It is keyed by a set of one or more columns over which
@@ -59,17 +59,46 @@ type Statistics struct {
 	// Selectivity is a value between 0 and 1 representing the estimated
 	// reduction in number of rows for the top-level operator in this
 	// expression.
-	Selectivity float64
+	selectivity float64
+}
+
+// Copy returns a copy of the given Statistics object
+func (s *Statistics) Copy() Statistics {
+	c := Statistics{}
+	c.rowCount = s.rowCount
+	c.ColStats = s.ColStats.Copy()
+	c.selectivity = s.selectivity
+	return c
+}
+
+// RowCount is a getter method for Statistics.rowCount
+func (s *Statistics) RowCount() float64 {
+	return s.rowCount
+}
+
+// UpdateRowCount is a setter method for Statistics.rowCount
+func (s *Statistics) UpdateRowCount(rowCount float64) {
+	s.rowCount = rowCount
+}
+
+// Selectivity is a getter method for Statistics.selectivity
+func (s *Statistics) Selectivity() float64 {
+	return s.selectivity
+}
+
+// UpdateSelectivity is a setter method for Statistics.selectivity
+func (s *Statistics) UpdateSelectivity(selectivity float64) {
+	s.selectivity = selectivity
 }
 
 // Init initializes the data members of Statistics.
 func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	if relProps.Cardinality.IsZero() {
-		s.RowCount = 0
-		s.Selectivity = 0
+		s.UpdateRowCount(0)
+		s.UpdateSelectivity(0)
 		return true
 	}
-	s.Selectivity = 1
+	s.UpdateSelectivity(1)
 	return false
 }
 
@@ -79,21 +108,21 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 // updating distinct counts.
 func (s *Statistics) ApplySelectivity(selectivity float64) {
 	if selectivity == 0 {
-		s.RowCount = 0
+		s.UpdateRowCount(0)
 		for i, n := 0, s.ColStats.Count(); i < n; i++ {
-			s.ColStats.Get(i).DistinctCount = 0
+			s.ColStats.Get(i).UpdateDistinctCount(0)
 		}
 		return
 	}
 
-	s.RowCount *= selectivity
-	s.Selectivity *= selectivity
+	s.UpdateRowCount(s.RowCount() * selectivity)
+	s.UpdateSelectivity(s.Selectivity() * selectivity)
 
 	// Make sure none of the distinct counts are larger than the row count.
 	for i, n := 0, s.ColStats.Count(); i < n; i++ {
 		colStat := s.ColStats.Get(i)
-		if colStat.DistinctCount > s.RowCount {
-			colStat.DistinctCount = s.RowCount
+		if colStat.DistinctCount() > s.RowCount() {
+			colStat.UpdateDistinctCount(s.RowCount())
 		}
 	}
 }
@@ -101,14 +130,14 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 func (s *Statistics) String() string {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount())
 	colStats := make(ColumnStatistics, s.ColStats.Count())
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStats[i] = s.ColStats.Get(i)
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount())
 	}
 	buf.WriteString("]")
 
@@ -127,21 +156,39 @@ type ColumnStatistic struct {
 
 	// DistinctCount is the estimated number of distinct values of this
 	// set of columns for this expression.
-	DistinctCount float64
+	distinctCount float64
+}
+
+// Copy returns a copy of the given ColumnStatistic
+func (c *ColumnStatistic) Copy() ColumnStatistic {
+	cp := ColumnStatistic{}
+	cp.Cols = c.Cols.Copy()
+	cp.distinctCount = c.distinctCount
+	return cp
+}
+
+// UpdateDistinctCount is a setter method for ColumnStatistics.distinctCount
+func (c *ColumnStatistic) UpdateDistinctCount(distinctCount float64) {
+	c.distinctCount = distinctCount
+}
+
+// DistinctCount is a getter method for ColumnStatistics.distinctCount
+func (c *ColumnStatistic) DistinctCount() float64 {
+	return c.distinctCount
 }
 
 // ApplySelectivity updates the distinct count according to a given selectivity.
 func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
-	if selectivity == 1 || c.DistinctCount == 0 {
+	if selectivity == 1 || c.DistinctCount() == 0 {
 		return
 	}
 	if selectivity == 0 {
-		c.DistinctCount = 0
+		c.UpdateDistinctCount(0)
 		return
 	}
 
 	n := inputRows
-	d := c.DistinctCount
+	d := c.DistinctCount()
 
 	// If each distinct value appears n/d times, and the probability of a
 	// row being filtered out is (1 - selectivity), the probability that all
@@ -150,7 +197,7 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	//
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
-	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
+	c.UpdateDistinctCount(d - d*math.Pow(1-selectivity, n/d))
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.

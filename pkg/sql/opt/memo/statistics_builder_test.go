@@ -130,7 +130,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)
 
 		// Calculate row count and selectivity.
-		s.RowCount = mem.GroupProperties(scanGroup).Relational.Stats.RowCount
+		s.UpdateRowCount(mem.GroupProperties(scanGroup).Relational.Stats.RowCount())
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
 		s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
 
@@ -272,7 +272,7 @@ func testStats(
 		t.Fatalf("\nexpected: %s\nactual  : %s", expectedStats, actual)
 	}
 
-	if s.Selectivity != expectedSelectivity {
-		t.Fatalf("\nexpected: %f\nactual  : %f", expectedSelectivity, s.Selectivity)
+	if s.Selectivity() != expectedSelectivity {
+		t.Fatalf("\nexpected: %f\nactual  : %f", expectedSelectivity, s.Selectivity())
 	}
 }

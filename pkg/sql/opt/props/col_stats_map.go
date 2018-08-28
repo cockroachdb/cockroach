@@ -92,6 +92,24 @@ type ColStatsMap struct {
 	unique prefixID
 }
 
+// Copy returns a copy of the given ColStatsMap
+func (m *ColStatsMap) Copy() ColStatsMap {
+	c := ColStatsMap{}
+	for i, k := range m.initial {
+		c.initial[i] = k.Copy()
+	}
+	for _, k := range m.other {
+		c.other = append(c.other, k.Copy())
+	}
+
+	for k, v := range m.index {
+		c.index[k] = v
+	}
+	c.count = m.count
+	c.unique = m.unique
+	return c
+}
+
 // Count returns the number of column statistics in the map.
 func (m *ColStatsMap) Count() int {
 	return m.count
