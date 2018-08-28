@@ -41,7 +41,7 @@ import (
 var (
 	parallelism   = 10
 	count         = 1
-	debug         = false
+	debugEnabled  = false
 	dryrun        = false
 	postIssues    = true
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -395,7 +395,7 @@ func (r *registry) Run(filter []string) int {
 			r.status.Unlock()
 
 		case <-sig:
-			if !debug {
+			if !debugEnabled {
 				destroyAllClusters()
 			}
 		}
@@ -725,7 +725,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 				c = newCluster(ctx, t, t.spec.Nodes)
 				if c != nil {
 					defer func() {
-						if !debug || !t.Failed() {
+						if !debugEnabled || !t.Failed() {
 							c.Destroy(ctx)
 						} else {
 							c.l.printf("not destroying cluster to allow debugging\n")
@@ -772,7 +772,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 						if c != nil {
 							c.FetchLogs(ctx)
 							// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-							if !debug && c.destroyed != nil {
+							if !debugEnabled && c.destroyed != nil {
 								c.Destroy(ctx)
 							}
 						}

@@ -31,6 +31,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -209,10 +210,63 @@ func unregisterCluster(c *cluster) bool {
 }
 
 func execCmd(ctx context.Context, l *logger, args ...string) error {
+	// NB: It is important that this waitgroup Waits after cancel() below.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+
 	l.printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = l.stdout
-	cmd.Stderr = l.stderr
+
+	// Do a dance around https://github.com/golang/go/issues/23019.
+	// Briefly put, passing os.Std{out,err} to subprocesses isn't great for
+	// context cancellation as Run() will wait for any subprocesses to finish.
+	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
+	// if the context got cancelled right away. Work around the problem by passing
+	// pipes to the command on which we set aggressive deadlines once the context
+	// expires.
+	{
+		rOut, wOut, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rOut.Close()
+		defer wOut.Close()
+		rErr, wErr, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rErr.Close()
+		defer wErr.Close()
+
+		cmd.Stdout = wOut
+		cmd.Stderr = wErr
+
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			_, _ = io.Copy(l.stdout, rOut)
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = io.Copy(l.stderr, rErr)
+		}()
+
+		go func() {
+			defer wg.Done()
+			<-ctx.Done()
+			now := timeutil.Now()
+			_ = rOut.SetDeadline(now)
+			_ = wOut.SetDeadline(now)
+			_ = rErr.SetDeadline(now)
+			_ = wErr.SetDeadline(now)
+		}()
+	}
+
 	if err := cmd.Run(); err != nil {
 		return errors.Wrapf(err, `%s`, strings.Join(args, ` `))
 	}
@@ -1089,8 +1143,29 @@ func (m *monitor) Go(fn func(context.Context) error) {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.Status()
 		}
-		return fn(m.ctx)
+		var returned bool
+		defer func() {
+			if r := recover(); r != nil || !returned {
+				if !returned {
+					fmt.Println("runtime.Goexit was called from a monitor goroutine. Don't do this.")
+					debug.PrintStack()
+					os.Exit(1)
+				}
+			}
+		}()
+		err := fn(m.ctx)
+		returned = true
+		return err
 	})
+}
+
+func (m *monitor) WaitE() error {
+	if m.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return errors.New("already failed")
+	}
+
+	return m.wait(roachprod, "monitor", m.nodes)
 }
 
 func (m *monitor) Wait() {
@@ -1098,9 +1173,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-
-	err := m.wait(roachprod, "monitor", m.nodes)
-	if err != nil {
+	if err := m.WaitE(); err != nil {
 		m.t.Fatal(err)
 	}
 }
