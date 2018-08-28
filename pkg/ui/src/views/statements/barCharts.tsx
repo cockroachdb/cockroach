@@ -207,8 +207,19 @@ export function countBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <div
-            className="count-retry bar-chart__bar"
-            style={{ width: scale(maxRetries) + "%", position: "absolute", right: "0" }}
+            className="count-max-retries bar-chart__bar"
+            style={{ width: scale(maxRetries) + "%" }}
+          />
+        </div>
+      );
+    },
+
+    totalCountBarChart() {
+      return (
+        <div className="bar-chart bar-chart--breakdown">
+          <div
+            className="count-total bar-chart__bar"
+            style={{ width: scale(count) + "%" }}
           />
         </div>
       );
