@@ -909,8 +909,11 @@ func (scc *schemaChangerCollection) reset() {
 func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
 ) error {
-	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
-		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if len(scc.schemaChangers) == 0 {
+		return nil
+	}
+	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
+		fn(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
@@ -923,10 +926,19 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
+				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
+					onError(err)
+				}
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
-				if err == sqlbase.ErrDescriptorNotFound {
+
+				if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
+					// 1. If the descriptor is dropped while the schema change
+					// is executing, the schema change is considered completed.
+					// 2. If the context is canceled the schema changer quits here
+					// letting the asynchronous code path complete the schema
+					// change.
 				} else if isPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
