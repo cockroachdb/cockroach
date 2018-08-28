@@ -85,7 +85,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     );
 
     return (
-      <div className="statements">
+      <React.Fragment>
         <PageConfig>
           <PageConfigItem>
             <Dropdown
@@ -95,43 +95,52 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               onChange={this.selectApp}
             />
           </PageConfigItem>
+          <PageConfigItem position="center">
+            <h4 className="statement-count-title">
+              {this.props.statements.length}
+              {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
+              statement fingerprints.
+            </h4>
+          </PageConfigItem>
+          <PageConfigItem position="right">
+            <h4 className="last-cleared-title">
+              <div className="last-cleared-tooltip__tooltip">
+                <ToolTipWrapper text={lastClearedHelpText}>
+                  <div className="last-cleared-tooltip__tooltip-hover-area">
+                    <div className="last-cleared-tooltip__info-icon">i</div>
+                  </div>
+                </ToolTipWrapper>
+              </div>
+              Last cleared {this.props.lastReset}.
+            </h4>
+          </PageConfigItem>
         </PageConfig>
 
-        <div className="statements__last-hour-note" style={{ marginTop: 20 }}>
-          {this.props.statements.length}
-          {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
-          statement fingerprints.
-          Last cleared {this.props.lastReset}.
-          <div className="last-cleared-tooltip__tooltip">
-            <ToolTipWrapper text={lastClearedHelpText}>
-              <div className="last-cleared-tooltip__tooltip-hover-area">
-                <div className="last-cleared-tooltip__info-icon">i</div>
-              </div>
-            </ToolTipWrapper>
-          </div>
-        </div>
-
-        <StatementsSortedTable
-          className="statements-table"
-          data={this.props.statements}
-          columns={makeStatementsColumns(this.props.statements, selectedApp)}
-          sortSetting={this.state.sortSetting}
-          onChangeSortSetting={this.changeSortSetting}
-        />
-      </div>
+        <section className="section">
+          <StatementsSortedTable
+            className="statements-table"
+            data={this.props.statements}
+            columns={makeStatementsColumns(this.props.statements, selectedApp)}
+            sortSetting={this.state.sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
+          />
+        </section>
+      </React.Fragment>
     );
   }
 
   render() {
     return (
-      <section className="section" style={{ maxWidth: "none" }}>
+      <React.Fragment>
         <Helmet>
           <title>
             { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
           </title>
         </Helmet>
 
-        <h1 style={{ marginBottom: 20 }}>Statements</h1>
+        <section className="section">
+          <h1>Statements</h1>
+        </section>
 
         <Loading
           loading={_.isNil(this.props.statements)}
@@ -139,7 +148,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           image={spinner}
           render={this.renderStatements}
         />
-      </section>
+      </React.Fragment>
     );
   }
 }
