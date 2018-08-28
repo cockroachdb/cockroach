@@ -45,6 +45,7 @@ function shortStatement(summary: StatementSummary, original: string) {
     case "select": return "SELECT FROM " + summary.table;
     case "delete": return "DELETE FROM " + summary.table;
     case "create": return "CREATE TABLE " + summary.table;
+    case "set": return "SET " + summary.table;
     default: return original;
   }
 }
