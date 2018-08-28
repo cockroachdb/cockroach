@@ -1297,11 +1297,8 @@ func (ds *DistSender) sendToReplicas(
 			// We retry ambiguous commit batches to avoid returning the
 			// unrecoverable AmbiguousResultError. This is safe because
 			// repeating an already-successfully applied batch is
-			// guaranteed to return either a TransactionReplayError (in
-			// case the replay happens at the original leader), or a
-			// TransactionRetryError (in case the replay happens at a new
-			// leader). If the original attempt merely timed out or was
-			// lost, then the batch will succeed and we can be assured the
+			// guaranteed to return an error. If the original attempt merely timed out
+			// or was lost, then the batch will succeed and we can be assured the
 			// commit was applied just once.
 			if haveCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err

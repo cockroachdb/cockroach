@@ -2540,6 +2540,10 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // the read timestamp cache. That is, if the read timestamp cache returns a
 // value below minReadTS, minReadTS (without an associated txn id) will be used
 // instead to adjust the batch's timestamp.
+//
+// The timestamp cache also has a role in preventing replays of BeginTransaction
+// reordered after an EndTransaction. If that's detected, an error will be
+// returned.
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
@@ -2550,29 +2554,42 @@ func (r *Replica) applyTimestampCache(
 			header := args.Header()
 			// BeginTransaction is a special case. We use the transaction
 			// key to look for an entry which would indicate this transaction
-			// has already been finalized, in which case this is a replay.
+			// has already been finalized, in which case this BeginTxn might be a
+			// replay (it might also be delayed, coming in behind an async EndTxn).
+			// If the request hits the timestamp cache, then we return a retriable
+			// error: if this is a re-evaluation, then the error will be transformed
+			// into an ambiguous one higher up. Otherwise, if the client is still
+			// waiting for a result, then this cannot be a "replay" of any sort.
+			//
+			// The retriable error we return is a TransactionAbortedError, instructing
+			// the client to create a new transaction. Since a transaction record
+			// doesn't exist, there's no point in the client to continue with the
+			// existing transaction at a new epoch.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.Txn.ID)
-				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil)
+				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
 				// GetMaxWrite will only find a timestamp interval with an
 				// associated txnID on the TransactionKey if an EndTxnReq has
 				// been processed. All other timestamp intervals will have no
 				// associated txnID and will be due to the low-water mark.
 				switch wTxnID {
 				case ba.Txn.ID:
-					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
+					newTxn := ba.Txn.Clone()
+					newTxn.Status = roachpb.ABORTED
+					newTxn.Timestamp.Forward(wTS.Next())
+					return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY), &newTxn)
 				case uuid.UUID{} /* noTxnID */ :
 					if !wTS.Less(ba.Txn.Timestamp) {
-						// This is a crucial bit of code. The timestamp cache is
-						// reset with the current time as the low-water mark, so
-						// if this replica recently obtained the lease, this
-						// case will be true for new txns, even if they're not a
-						// replay. We move the timestamp forward and return
-						// retry. If it's really a replay, it won't retry.
-						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
-						err := roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
-						return bumped, roachpb.NewErrorWithTxn(err, &txn)
+						// On lease transfers the timestamp cache is reset with the transfer
+						// time as the low-water mark, so if this replica recently obtained
+						// the lease, this case will be true for new txns, even if they're
+						// not a replay. We move the timestamp forward and return retry.
+						newTxn := ba.Txn.Clone()
+						newTxn.Status = roachpb.ABORTED
+						newTxn.Timestamp.Forward(wTS.Next())
+						return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+							roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY), &newTxn)
 					}
 				default:
 					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
@@ -5841,7 +5858,8 @@ func checkIfTxnAborted(
 			newTxn.Priority = entry.Priority
 		}
 		newTxn.Status = roachpb.ABORTED
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
+		return roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), &newTxn)
 	}
 	return nil
 }
