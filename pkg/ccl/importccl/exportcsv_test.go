@@ -81,8 +81,14 @@ func TestExportImportBank(t *testing.T) {
 		}
 		t.Run("null="+null, func(t *testing.T) {
 			var files []string
+
+			var asOf string
+			db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&asOf)
+
 			for _, row := range db.QueryStr(t,
-				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal:///t' WITH chunk_rows = $1, delimiter = '|' %s FROM TABLE bank`, nullAs), chunkSize,
+				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal:///t'
+					WITH chunk_rows = $1, delimiter = '|' %s
+					FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), chunkSize,
 			) {
 				files = append(files, row[0])
 				f, err := ioutil.ReadFile(filepath.Join(dir, "t", row[0]))
@@ -97,7 +103,7 @@ func TestExportImportBank(t *testing.T) {
 			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA (%s) WITH delimiter = '|'%s`, schema, fileList, nullIf))
 
 			db.CheckQueryResults(t,
-				`SELECT * FROM bank ORDER BY id`, db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
+				fmt.Sprintf(`SELECT * FROM bank AS OF SYSTEM TIME %s ORDER BY id`, asOf), db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
 			)
 			db.CheckQueryResults(t,
 				`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank2`, db.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank`),
