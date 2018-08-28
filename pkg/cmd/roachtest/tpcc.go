@@ -643,3 +643,21 @@ func registerTPCCBench(r *registry) {
 		registerTPCCBenchSpec(r, b)
 	}
 }
+
+func testHarness(ctx context.Context, t *test, c *cluster) {
+	m := newMonitor(ctx, c, c.Range(1, c.nodes))
+	m.ExpectDeaths(int32(c.nodes))
+	m.Go(func(ctx context.Context) error {
+		return c.RunE(ctx, c.Node(1), "sleep", "2000")
+	})
+	m.Go(func(ctx context.Context) error {
+		if false {
+			// If this runs, it'll runtime.Goexit in t.Fatal and
+			// the monitor will catch this and show a stack trace
+			// instead of hanging.
+			c.Run(ctx, c.Node(1), "idontexistihope")
+		}
+		return c.RunE(ctx, c.Range(1, 3), "idontexisttoo")
+	})
+	m.Wait()
+}

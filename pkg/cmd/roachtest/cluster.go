@@ -31,6 +31,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -209,10 +210,63 @@ func unregisterCluster(c *cluster) bool {
 }
 
 func execCmd(ctx context.Context, l *logger, args ...string) error {
+	// NB: It is important that this waitgroup Waits after cancel() below.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+
 	l.printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = l.stdout
-	cmd.Stderr = l.stderr
+
+	// Do a dance around https://github.com/golang/go/issues/23019.
+	// Briefly put, passing os.Std{out,err} to subprocesses isn't great for
+	// context cancellation as Run() will wait for any subprocesses to finish.
+	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
+	// if the context got cancelled right away. Work around the problem by passing
+	// pipes to the command on which we set aggressive deadlines once the context
+	// expires.
+	{
+		rOut, wOut, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rOut.Close()
+		defer wOut.Close()
+		rErr, wErr, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rErr.Close()
+		defer wErr.Close()
+
+		cmd.Stdout = wOut
+		cmd.Stderr = wErr
+
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			_, _ = io.Copy(l.stdout, rOut)
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = io.Copy(l.stderr, rErr)
+		}()
+
+		go func() {
+			defer wg.Done()
+			<-ctx.Done()
+			now := timeutil.Now()
+			_ = rOut.SetDeadline(now)
+			_ = wOut.SetDeadline(now)
+			_ = rErr.SetDeadline(now)
+			_ = wErr.SetDeadline(now)
+		}()
+	}
+
 	if err := cmd.Run(); err != nil {
 		return errors.Wrapf(err, `%s`, strings.Join(args, ` `))
 	}
@@ -260,6 +314,7 @@ func makeClusterName(t testI) string {
 }
 
 type testI interface {
+	AssertMainGoroutine()
 	Name() string
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
@@ -492,7 +547,9 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 		expiration: nodes[0].expiration(),
 	}
 	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
+		c.status = func(args ...interface{}) {
+			impl.status(impl.runnerID, args...)
+		}
 	}
 	registerCluster(c)
 
@@ -655,6 +712,7 @@ func (c *cluster) destroy(ctx context.Context) {
 // (which doesn't go anywhere I've been able to find) Don't use this if you're
 // going to call cmd.CombinedOutput or cmd.Output.
 func (c *cluster) LoggedCommand(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
+	c.t.AssertMainGoroutine()
 	cmd := exec.CommandContext(ctx, arg0, args...)
 	cmd.Stdout = c.l.stdout
 	cmd.Stderr = c.l.stderr
@@ -663,6 +721,7 @@ func (c *cluster) LoggedCommand(ctx context.Context, arg0 string, args ...string
 
 // Put a local file to all of the machines in a cluster.
 func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -732,16 +791,24 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-// Start cockroach nodes on a subset of the cluster. The nodes parameter can
-// either be a specific node, empty (to indicate all nodes), or a pair of nodes
-// indicating a range.
 func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+
+	c.t.AssertMainGoroutine()
+	if err := c.StartE(ctx, opts...); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// Start cockroach nodes on a subset of the cluster. The nodes parameter can
+// either be a specific node, empty (to indicate all nodes), or a pair of nodes
+// indicating a range.
+func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return errors.New("interrupted")
 	}
 	c.status("starting cluster")
 	defer c.status()
@@ -758,9 +825,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		// This avoids annoying firewall prompts on macos
 		args = append(args, "--args", "--listen-addr=127.0.0.1")
 	}
-	if err := execCmd(ctx, c.l, args...); err != nil {
-		c.t.Fatal(err)
-	}
+	return execCmd(ctx, c.l, args...)
 }
 
 func argExists(args []string, target string) bool {
@@ -775,6 +840,7 @@ func argExists(args []string, target string) bool {
 // Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
 func (c *cluster) Stop(ctx context.Context, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -800,6 +866,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 // Wipe a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) Wipe(ctx context.Context, opts ...option) {
+	c.t.AssertMainGoroutine()
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -817,6 +884,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -825,6 +893,7 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 
 // Reformat the disk on the specified node.
 func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
@@ -834,6 +903,7 @@ func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...str
 
 // Install a package in a node
 func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
+	c.t.AssertMainGoroutine()
 	err := execCmd(ctx, c.l,
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
@@ -1089,8 +1159,29 @@ func (m *monitor) Go(fn func(context.Context) error) {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.Status()
 		}
-		return fn(m.ctx)
+		var returned bool
+		defer func() {
+			if r := recover(); r != nil || !returned {
+				if !returned {
+					fmt.Println("runtime.Goexit was called from a monitor goroutine. Don't do this.")
+					debug.PrintStack()
+					os.Exit(1)
+				}
+			}
+		}()
+		err := fn(m.ctx)
+		returned = true
+		return err
 	})
+}
+
+func (m *monitor) WaitE() error {
+	if m.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return errors.New("already failed")
+	}
+
+	return m.wait(roachprod, "monitor", m.nodes)
 }
 
 func (m *monitor) Wait() {
@@ -1098,9 +1189,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-
-	err := m.wait(roachprod, "monitor", m.nodes)
-	if err != nil {
+	if err := m.WaitE(); err != nil {
 		m.t.Fatal(err)
 	}
 }

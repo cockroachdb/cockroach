@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -47,8 +49,11 @@ func registerCancel(r *registry) {
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("importing TPCC fixture")
-			c.Run(ctx, c.Node(1), fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", warehouses))
+			if err := c.RunE(ctx, c.Node(1), fmt.Sprintf(
+				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", warehouses),
+			); err != nil {
+				return err
+			}
 
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()
@@ -67,7 +72,7 @@ func registerCancel(r *registry) {
 					_, err := conn.Exec(queryPrefix + q)
 					if err == nil {
 						close(sem)
-						t.Fatal("query completed before it could be canceled")
+						panic("query completed before it could be canceled")
 					} else {
 						fmt.Printf("query failed with error: %s\n", err)
 					}
@@ -84,19 +89,21 @@ func registerCancel(r *registry) {
 
 				const cancelQuery = `CANCEL QUERY (
 	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%')`
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
+				if err := c.RunE(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`); err != nil {
+					return err
+				}
 				cancelStartTime := timeutil.Now()
 
 				select {
 				case _, ok := <-sem:
 					if !ok {
-						t.Fatal("query could not be canceled")
+						return errors.New("query could not be canceled")
 					}
 					timeToCancel := timeutil.Now().Sub(cancelStartTime)
 					fmt.Printf("canceling \"%s\" took %s\n", q, timeToCancel)
 
 				case <-time.After(5 * time.Second):
-					t.Fatal("query took too long to respond to cancellation")
+					return errors.New("query took too long to respond to cancellation")
 				}
 			}
 
