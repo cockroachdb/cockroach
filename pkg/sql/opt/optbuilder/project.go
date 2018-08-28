@@ -134,7 +134,7 @@ func (b *Builder) analyzeProjectionList(selects tree.SelectExprs, inScope, outSc
 func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
 	for i := range projectionsScope.cols {
 		col := &projectionsScope.cols[i]
-		b.buildScalar(col.getExpr(), inScope, projectionsScope, col)
+		b.buildScalar(col.getExpr(), inScope, projectionsScope, col, nil)
 	}
 }
 
@@ -210,20 +210,30 @@ func (b *Builder) finishBuildScalar(
 // column to outScope, either as a passthrough column (if it already exists in
 // the input scope), or a variable expression.
 //
-// col     Column containing the scalar expression that's been referenced.
-// label   If passthrough column is added, it will optionally be labeled with
-//         this string (if not empty).
-// outCol  The output column which is being built. It can be nil if outScope is
-//         nil.
+// col      Column containing the scalar expression that's been referenced.
+// label    If passthrough column is added, it will optionally be labeled with
+//          this string (if not empty).
+// outCol   The output column which is being built. It can be nil if outScope is
+//          nil.
+// colRefs  The set of columns referenced so far by the scalar expression being
+//          built. If not nil, it is updated with the ID of this column.
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) finishBuildScalarRef(
-	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn,
+	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out memo.GroupID) {
 	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
 	// Remember whether the query was correlated for later.
 	b.IsCorrelated = b.IsCorrelated || isOuterColumn
+
+	// Update the sets of column references and outer columns if needed.
+	if colRefs != nil {
+		colRefs.Add(int(col.id))
+	}
+	if isOuterColumn && b.subquery != nil {
+		b.subquery.outerCols.Add(int(col.id))
+	}
 
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).

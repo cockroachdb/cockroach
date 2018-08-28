@@ -401,7 +401,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
 			col := b.addColumn(projectionsScope, "" /* label */, expr.ResolvedType(), expr)
-			b.buildScalar(expr, outScope, projectionsScope, col)
+			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
@@ -525,7 +525,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		// All "from" columns are visible to the filter expression.
 		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool)
 
-		filter := b.buildScalar(texpr, outScope, nil, nil)
+		filter := b.buildScalar(texpr, outScope, nil, nil, nil)
 		// Wrap the filter in a FiltersOp.
 		filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)

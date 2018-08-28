@@ -830,7 +830,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	if len(def.ReturnLabels) == 1 {
 		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc.ResolvedType(), typedFunc)
 	}
-	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol)
+	out := s.builder.buildFunction(typedFunc.(*tree.FuncExpr), s, srfScope, outCol, nil)
 	srf := &srf{
 		FuncExpr: typedFunc.(*tree.FuncExpr),
 		cols:     srfScope.cols,
@@ -953,6 +953,17 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 		s.replaceSRFs = false
 	}
 
+	subq := subquery{
+		multiRow: multiRow,
+		expr:     sub,
+	}
+
+	// Save and restore the previous value of s.builder.subquery in case we are
+	// recursively called within a subquery context.
+	outer := s.builder.subquery
+	defer func() { s.builder.subquery = outer }()
+	s.builder.subquery = &subq
+
 	outScope := s.builder.buildStmt(sub.Select, s)
 
 	// Treat the subquery result as an anonymous data source (i.e. column names
@@ -981,13 +992,10 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 		outScope = projScope
 	}
 
-	return &subquery{
-		cols:     outScope.cols,
-		group:    outScope.group,
-		ordering: outScope.ordering,
-		multiRow: multiRow,
-		expr:     sub,
-	}
+	subq.cols = outScope.cols
+	subq.group = outScope.group
+	subq.ordering = outScope.ordering
+	return &subq
 }
 
 // VisitPost is part of the Visitor interface.

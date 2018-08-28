@@ -103,7 +103,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
 
-		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol)
+		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 	}
 
 	// Get the output columns of the Zip operation and construct the Zip.

@@ -86,6 +86,10 @@ type Builder struct {
 	// views contains a cache of views that have already been parsed, in case they
 	// are referenced multiple times in the same query.
 	views map[opt.View]*tree.Select
+
+	// subquery contains a pointer to the subquery which is currently being built
+	// (if any).
+	subquery *subquery
 }
 
 // New creates a new Builder structure initialized with the given

@@ -2346,3 +2346,75 @@ project
            │              └── array-agg [type=int[]]
            │                   └── variable: max [type=int]
            └── array: [type=int[]]
+
+build
+SELECT
+    (SELECT (SELECT (SELECT (max(t1.a * t2.a), max(t3.a)) FROM t1 GROUP BY t3.b) FROM t2))
+FROM
+    t3;
+----
+error (42803): subquery uses ungrouped column "b" from outer query
+
+build
+SELECT
+    (
+        SELECT
+            (t2.a < ALL (SELECT max((SELECT max(a) FROM t1 GROUP BY t3.b)) FROM t1), max(t3.a))
+        FROM
+            t2
+    )
+FROM
+    t3;
+----
+project
+ ├── columns: "?column?":21(tuple{bool, int})
+ ├── scalar-group-by
+ │    ├── columns: max:16(int) max:19(int)
+ │    ├── project
+ │    │    ├── columns: column15:15(int) a:18(int)
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
+ │    │    └── projections
+ │    │         ├── subquery [type=int]
+ │    │         │    └── max1-row
+ │    │         │         ├── columns: max:13(int)
+ │    │         │         └── project
+ │    │         │              ├── columns: max:13(int)
+ │    │         │              └── group-by
+ │    │         │                   ├── columns: max:13(int) b:14(int)
+ │    │         │                   ├── grouping columns: b:14(int)
+ │    │         │                   ├── project
+ │    │         │                   │    ├── columns: b:14(int) t1.a:10(int)
+ │    │         │                   │    ├── scan t1
+ │    │         │                   │    │    └── columns: t1.a:10(int) t1.b:11(int) t1.rowid:12(int!null)
+ │    │         │                   │    └── projections
+ │    │         │                   │         └── variable: t3.b [type=int]
+ │    │         │                   └── aggregations
+ │    │         │                        └── max [type=int]
+ │    │         │                             └── variable: t1.a [type=int]
+ │    │         └── variable: t3.a [type=int]
+ │    └── aggregations
+ │         ├── max [type=int]
+ │         │    └── variable: column15 [type=int]
+ │         └── max [type=int]
+ │              └── variable: a [type=int]
+ └── projections
+      └── subquery [type=tuple{bool, int}]
+           └── max1-row
+                ├── columns: "?column?":20(tuple{bool, int})
+                └── project
+                     ├── columns: "?column?":20(tuple{bool, int})
+                     ├── scan t2
+                     │    └── columns: t2.a:4(int) t2.b:5(int) t2.rowid:6(int!null)
+                     └── projections
+                          └── tuple [type=tuple{bool, int}]
+                               ├── not [type=bool]
+                               │    └── any: ge [type=bool]
+                               │         ├── project
+                               │         │    ├── columns: max:17(int)
+                               │         │    ├── scan t1
+                               │         │    │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
+                               │         │    └── projections
+                               │         │         └── variable: max [type=int]
+                               │         └── variable: t2.a [type=int]
+                               └── variable: max [type=int]

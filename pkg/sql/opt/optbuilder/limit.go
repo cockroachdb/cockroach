@@ -40,7 +40,7 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		parentScope.context = op
 		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int)
-		offset := b.buildScalar(texpr, parentScope, nil, nil)
+		offset := b.buildScalar(texpr, parentScope, nil, nil, nil)
 		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
 	}
 	if limit.Count != nil {
@@ -49,7 +49,7 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
 		parentScope.context = op
 		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int)
-		limit := b.buildScalar(texpr, parentScope, nil, nil)
+		limit := b.buildScalar(texpr, parentScope, nil, nil, nil)
 		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)
 	}
 }
