@@ -97,10 +97,6 @@ type StmtBuf struct {
 		// cond is signaled when new commands are pushed.
 		cond *sync.Cond
 
-		// readerBlocked is set while the reader is blocked on waiting for a command
-		// to be pushed into the buffer.
-		readerBlocked bool
-
 		// data contains the elements of the buffer.
 		data []Command
 
@@ -421,9 +417,7 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 				"can only wait for next command; corrupt cursor: %d", curPos)
 		}
 		// Wait for the next Command to arrive to the buffer.
-		buf.mu.readerBlocked = true
 		buf.mu.cond.Wait()
-		buf.mu.readerBlocked = false
 	}
 }
 
