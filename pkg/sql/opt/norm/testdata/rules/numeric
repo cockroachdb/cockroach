@@ -15,7 +15,7 @@ TABLE a
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt
+opt expect=(FoldPlusZero,FoldZeroPlus)
 SELECT
     (a.i + a.i) + 0 AS r, 0 + (a.i + a.i) AS s,
     (a.f + a.f) + 0 AS t, 0 + (a.f + a.f) AS u,
@@ -39,7 +39,7 @@ project
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt
+opt expect=FoldMinusZero
 SELECT
     (a.i + a.i) - 0 AS r,
     (a.f + a.f) - 0 AS s,
@@ -60,7 +60,7 @@ project
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt
+opt expect=(FoldMultOne,FoldOneMult)
 SELECT
     (a.i + a.i) * 1 AS r, 1 * (a.i + a.i) AS s,
     (a.f + a.f) * 1 AS t, 1 * (a.f + a.f) AS u,
@@ -83,7 +83,7 @@ project
 # FoldDivOne
 # --------------------------------------------------
 
-opt
+opt expect=FoldDivOne
 SELECT
     a.i / 1 AS r,
     a.f / 1 AS s,
@@ -102,7 +102,7 @@ project
 # --------------------------------------------------
 # InvertMinus
 # --------------------------------------------------
-opt
+opt expect=InvertMinus
 SELECT
     -(a.f - a.f) AS r,
     -(a.d - a.i) AS s,
@@ -121,7 +121,7 @@ project
 # --------------------------------------------------
 # EliminateUnaryMinus
 # --------------------------------------------------
-opt
+opt expect=EliminateUnaryMinus
 SELECT -(-a.i::int) AS r FROM a
 ----
 project
