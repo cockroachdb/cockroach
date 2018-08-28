@@ -15,12 +15,17 @@
 package xform_test
 
 import (
+	"flag"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+)
+
+var externalTestData = flag.String(
+	"d", "testdata/external/", "test files directory for TestExternal",
 )
 
 // TestCoster files can be run separately like this:
@@ -80,7 +85,7 @@ func TestRules(t *testing.T) {
 func TestExternal(t *testing.T) {
 	runDataDrivenTest(
 		t,
-		"testdata/external/",
+		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
