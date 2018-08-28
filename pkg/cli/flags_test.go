@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -294,6 +295,12 @@ func TestHttpHostFlagValue(t *testing.T) {
 	}{
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
+		// confirm --http-host still works
+		{[]string{"start", "--" + cliflags.ListenHTTPAddrAlias.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, ":12345", "--" + cliflags.ListenHTTPAddrAlias.Name, "192.168.0.111"}, "192.168.0.111:12345"},
+		// confirm --http-port still works
+		{[]string{"start", "--" + cliflags.ListenHTTPPort.Name, "12345"}, ":12345"},
+		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "192.168.0.111", "--" + cliflags.ListenHTTPPort.Name, "12345"}, "192.168.0.111:12345"},
 		// confirm hostnames will work
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
