@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -125,8 +126,18 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 			log.Infof(ctx, "%s backfill (%d, %d) at row: %d, span: %s",
 				b.name, desc.ID, mutationID, row, sp)
 		}
+
+		// readAsOf is the time the backfill was started. We read at an old
+		// timestamp to try to avoid restarts with other transactions. However if
+		// the backfill takes longer than the TTL of the table the backfill will
+		// fail and rollback. To fix this, move readAsOf up to a more recent time
+		// that still has the benefits above without the TTL risk.
+		// TODO(mjibson): can we do something smarter than -10m?
+		now := b.flowCtx.ClientDB.Clock().Now().Add((-10 * time.Minute).Nanoseconds(), 0)
+		now.Forward(b.spec.ReadAsOf)
+
 		var err error
-		sp.Key, err = b.runChunk(ctx, mutations, sp, chunkSize, b.spec.ReadAsOf)
+		sp.Key, err = b.runChunk(ctx, mutations, sp, chunkSize, now)
 		if err != nil {
 			return err
 		}
