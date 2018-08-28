@@ -2490,7 +2490,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // note this txn is read-only but still restarts
 		},
 		{
-			name: "multi range batch with uncertainty interval error",
+			name: "multi-range batch with uncertainty interval error",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2506,7 +2506,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // will succeed because no mixed success
 		},
 		{
-			name: "multi range batch with uncertainty interval error and get conflict",
+			name: "multi-range batch with uncertainty interval error and get conflict",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "init")
 			},
@@ -2528,7 +2528,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // will fail because of conflict on refresh span for the Get
 		},
 		{
-			name: "multi range batch with uncertainty interval error and mixed success",
+			name: "multi-range batch with uncertainty interval error and mixed success",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2542,7 +2542,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // client-side retry required as this will be an mixed success
 		},
 		{
-			name: "multi range scan with uncertainty interval error",
+			name: "multi-range scan with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				_, err := txn.Scan(ctx, "a", "d", 0)
 				return err
@@ -2551,7 +2551,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
 		},
 		{
-			name: "multi range DelRange with uncertainty interval error",
+			name: "multi-range DelRange with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},
