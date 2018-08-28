@@ -271,23 +271,25 @@ func init() {
 		VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
 		if markDeprecated {
 			_ = f.MarkDeprecated(cliflags.ServerHost.Name, "use --listen-addr/--advertise-addr instead.")
-			_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-addr instead.")
+			_ = f.MarkDeprecated(cliflags.ServerPort.Name, "use --listen-addr=...:<port> instead.")
 		}
 
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
+		VarFlag(f, aliasStrVar{&serverAdvertisePort}, cliflags.AdvertisePort)
 		if markDeprecated {
 			_ = f.MarkDeprecated(cliflags.AdvertiseHost.Name, "use --advertise-addr instead.")
+			_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
 		}
 
-		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
 		VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 		if markDeprecated {
 			_ = f.MarkDeprecated(cliflags.AdvertisePort.Name, "use --advertise-addr=...:<port> instead.")
 		}
 
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
-		StringFlag(f, &serverHTTPPort, cliflags.ListenHTTPPort, serverHTTPPort)
+		VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
+		VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
 		if markDeprecated {
 			_ = f.MarkDeprecated(cliflags.ListenHTTPAddrAlias.Name, "use --http-addr instead.")
 			_ = f.MarkDeprecated(cliflags.ListenHTTPPort.Name, "use --http-addr=...:<port> instead.")
