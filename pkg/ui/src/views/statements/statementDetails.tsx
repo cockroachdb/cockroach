@@ -63,6 +63,7 @@ interface NumericStatRow {
   name: string;
   value: NumericStat;
   bar?: () => ReactNode;
+  summary?: boolean;
 }
 
 interface NumericStatTableProps {
@@ -90,8 +91,10 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
         <tbody style={{ textAlign: "right" }}>
           {
             this.props.rows.map((row: NumericStatRow) => {
+              const classNames = "numeric-stats-table__row--body" +
+                (row.summary ? " numeric-stats-table__row--summary" : "");
               return (
-                <tr className="numeric-stats-table__row--body">
+                <tr className={classNames}>
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
                   <td className="numeric-stats-table__cell">{ this.props.format(row.value.mean) }</td>
                   <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
@@ -214,7 +217,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ FixLong(stats.max_retries).toInt() }</td>
                   <td className="numeric-stats-table__cell">{ maxRetriesBarChart() }</td>
                 </tr>
-                <tr className="numeric-stats-table__row--body">
+                <tr className="numeric-stats-table__row--body numeric-stats-table__row--summary">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total</th>
                   <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
                   <td className="numeric-stats-table__cell">{ totalCountBarChart() }</td>
