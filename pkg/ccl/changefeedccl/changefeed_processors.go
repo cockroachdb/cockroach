@@ -110,9 +110,16 @@ func newChangeAggregatorProcessor(
 	if ca.sink, err = getSink(spec.Feed.SinkURI, spec.Feed.Targets); err != nil {
 		return nil, err
 	}
-	if b, ok := ca.sink.(*bufferSink); ok {
-		ca.changedRowBuf = &b.buf
+
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
+	switch st := ca.sink.(type) {
+	case *bufferSink:
+		ca.changedRowBuf = &st.buf
+	case *sqlSink:
+		st.failHook = flowCtx.TestingKnobs().FailChangefeedSqlSinkHook
 	}
+
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.

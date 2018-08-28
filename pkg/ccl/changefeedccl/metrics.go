@@ -39,6 +39,8 @@ func (s *metricsSink) EmitRow(ctx context.Context, topic string, key, value []by
 		s.metrics.EmittedMessages.Inc(1)
 		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
 		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
+	} else if isRetryableSinkError(err) {
+		s.metrics.SinkErrorRetries.Inc(1)
 	}
 	return err
 }
@@ -60,6 +62,8 @@ func (s *metricsSink) Flush(ctx context.Context) error {
 	if err == nil {
 		s.metrics.Flushes.Inc(1)
 		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())
+	} else if isRetryableSinkError(err) {
+		s.metrics.SinkErrorRetries.Inc(1)
 	}
 	return err
 }
@@ -113,17 +117,24 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
+	metaChangefeedSinkErrorRetries = metric.Metadata{
+		Name:        "changefeed.sink_error_retries",
+		Help:        "Total retryable errors encountered while emitting to sinks",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 const noMinHighWaterSentinel = int64(math.MaxInt64)
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	EmittedMessages *metric.Counter
-	EmittedBytes    *metric.Counter
-	EmitNanos       *metric.Counter
-	Flushes         *metric.Counter
-	FlushNanos      *metric.Counter
+	EmittedMessages  *metric.Counter
+	EmittedBytes     *metric.Counter
+	EmitNanos        *metric.Counter
+	Flushes          *metric.Counter
+	FlushNanos       *metric.Counter
+	SinkErrorRetries *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -139,11 +150,12 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics() metric.Struct {
 	m := &Metrics{
-		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
-		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
-		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
-		Flushes:         metric.NewCounter(metaChangefeedFlushes),
-		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
+		EmittedMessages:  metric.NewCounter(metaChangefeedEmittedMessages),
+		EmittedBytes:     metric.NewCounter(metaChangefeedEmittedBytes),
+		EmitNanos:        metric.NewCounter(metaChangefeedEmitNanos),
+		Flushes:          metric.NewCounter(metaChangefeedFlushes),
+		FlushNanos:       metric.NewCounter(metaChangefeedFlushNanos),
+		SinkErrorRetries: metric.NewCounter(metaChangefeedSinkErrorRetries),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.MinHighWater = metric.NewFunctionalGauge(metaChangefeedMinHighWater, func() int64 {

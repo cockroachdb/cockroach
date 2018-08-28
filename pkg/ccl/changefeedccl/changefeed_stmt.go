@@ -11,6 +11,10 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"time"
+
+	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -328,12 +332,64 @@ func (b *changefeedResumer) Resume(
 	phs := planHookState.(sql.PlanHookState)
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	err := distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+
+	// Errors encountered while emitting changes to the Sink may be transient; for
+	// example, a temporary network outage. When one of these errors occurs, we do
+	// not fail the job but rather restart the distSQL flow after a short backoff.
+	opts := retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+	}
+	var err error
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		err = distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+		if !isRetryableSinkError(err) {
+			break
+		}
+		// Re-load the job in order to update our progress object, which may have
+		// been updated by the changeFrontier processor since the flow started.
+		reloadedJob, phsErr := phs.ExecCfg().JobRegistry.LoadJob(ctx, *job.ID())
+		if phsErr != nil {
+			err = phsErr
+			break
+		}
+		progress = reloadedJob.Progress()
+		// startedCh is normally used to signal back to the creator of the job that
+		// the job has started; however, in this case nothing will ever receive
+		// on the channel, causing the changefeed flow to block. Replace it with
+		// a dummy channel.
+		startedCh = make(chan tree.Datums, 1)
+		log.Infof(ctx, `CHANGEFEED job %d encountered retryable error: %v`, *job.ID(), err)
+		continue
+	}
 	if err != nil {
 		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
 	}
-	return err
+	return nil
 }
+
+func isRetryableSinkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == errTestRetryableSinkError {
+		return true
+	}
+	// Sarama ProducerErrors indicate an error emitting a message to Kafka.
+	// Examples might include a network connection error, a missing topic, or some
+	// other type of configuration error. Many of these errors are likely
+	// transient and correctable, but some of them may be significant enough to be
+	// considered permanent (for example, if we are emitting messages in a bad
+	// format). However, we do not have enough information on the spectrum of
+	// possible Kafka errors to make this determination, so for now we default to
+	// treating all such errors as retryable.
+	if _, ok := err.(*sarama.ProducerError); ok {
+		return true
+	}
+	return false
+}
+
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
 func (b *changefeedResumer) OnTerminal(

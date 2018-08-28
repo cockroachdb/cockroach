@@ -131,6 +131,11 @@ func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	return &evalCtx
 }
 
+// TestingKnobs returns the distsql testing knobs for this flow context.
+func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
+	return ctx.testingKnobs
+}
+
 type flowStatus int
 
 // Flow status indicators.

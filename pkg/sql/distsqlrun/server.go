@@ -609,6 +609,11 @@ type TestingKnobs struct {
 	// DeterministicStats overrides stats which don't have reliable values, like
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
+
+	// FailChangefeedSqlSink is a function that can be used to cause the SQL
+	// Changefeed sink to fail If this function is set and returns true, emits to
+	// SQL Sinks will fail with a retryable error.
+	FailChangefeedSqlSinkHook func() bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

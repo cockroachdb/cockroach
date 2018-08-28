@@ -335,7 +335,11 @@ const (
 	// While sqlSink is only used for testing, hardcode the number of
 	// partitions to something small but greater than 1.
 	sqlSinkNumPartitions = 3
+	// testRetryableSinkError is a constant error value which indicates a synthetic,
+	// retryable error from a sink in a test context.
 )
+
+var errTestRetryableSinkError = errors.New("synethic retryable sink error")
 
 // sqlSink mirrors the semantics offered by kafkaSink as closely as possible,
 // but writes to a SQL table (presumably in CockroachDB). Currently only for
@@ -352,7 +356,8 @@ type sqlSink struct {
 	topics    map[string]struct{}
 	hasher    hash.Hash32
 
-	rowBuf []interface{}
+	rowBuf   []interface{}
+	failHook func() bool
 }
 
 func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlSink, error) {
@@ -430,6 +435,10 @@ func (s *sqlSink) emit(
 
 // Flush implements the Sink interface.
 func (s *sqlSink) Flush(ctx context.Context) error {
+	if s.failHook != nil && s.failHook() {
+		return errTestRetryableSinkError
+	}
+
 	if len(s.rowBuf) == 0 {
 		return nil
 	}
