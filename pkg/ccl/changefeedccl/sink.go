@@ -248,6 +248,9 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
 		s.mu.Unlock()
+		if _, ok := flushErr.(*sarama.ProducerError); ok {
+			flushErr = &retryableSinkError{cause: flushErr}
+		}
 		return flushErr
 	}
 }
@@ -335,6 +338,8 @@ const (
 	// While sqlSink is only used for testing, hardcode the number of
 	// partitions to something small but greater than 1.
 	sqlSinkNumPartitions = 3
+	// testRetryableSinkError is a constant error value which indicates a synthetic,
+	// retryable error from a sink in a test context.
 )
 
 // sqlSink mirrors the semantics offered by kafkaSink as closely as possible,
@@ -352,7 +357,8 @@ type sqlSink struct {
 	topics    map[string]struct{}
 	hasher    hash.Hash32
 
-	rowBuf []interface{}
+	rowBuf   []interface{}
+	failHook func() bool
 }
 
 func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlSink, error) {
@@ -521,4 +527,34 @@ func (s *bufferSink) Flush(_ context.Context) error {
 func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
+}
+
+// causer matches the (unexported) interface used by Go to allow errors to wrap
+// their parent cause.
+type causer interface {
+	Cause() error
+}
+
+// retryableSinkError should be used by sinks to wrap any error which may
+// be retried.
+type retryableSinkError struct {
+	cause error
+}
+
+func (e retryableSinkError) Error() string { return e.cause.Error() }
+func (e retryableSinkError) Cause() error  { return e.cause }
+
+// isRetryableSinkError returns true if the supplied error, or any of its parent
+// causes, is a retryableSinkError.
+func isRetryableSinkError(err error) bool {
+	for {
+		if _, ok := err.(retryableSinkError); ok {
+			return true
+		}
+		if e, ok := err.(causer); ok {
+			err = e.Cause()
+			continue
+		}
+		return false
+	}
 }

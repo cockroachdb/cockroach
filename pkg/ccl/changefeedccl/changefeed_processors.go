@@ -110,9 +110,13 @@ func newChangeAggregatorProcessor(
 	if ca.sink, err = getSink(spec.Feed.SinkURI, spec.Feed.Targets); err != nil {
 		return nil, err
 	}
+
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
 	}
+
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
@@ -142,7 +146,11 @@ func newChangeAggregatorProcessor(
 	}
 	rowsFn := kvsToRows(leaseMgr, tableHist, spec.Feed, buf.Get)
 
-	ca.tickFn = emitEntries(spec.Feed, ca.sink, rowsFn)
+	var knobs TestingKnobs
+	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		knobs = *cfKnobs
+	}
+	ca.tickFn = emitEntries(spec.Feed, ca.sink, rowsFn, knobs)
 
 	return ca, nil
 }
@@ -334,6 +342,7 @@ func newChangeFrontierProcessor(
 	if b, ok := cf.sink.(*bufferSink); ok {
 		cf.resolvedBuf = &b.buf
 	}
+
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.

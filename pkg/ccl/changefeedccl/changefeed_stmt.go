@@ -11,6 +11,9 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -328,12 +331,46 @@ func (b *changefeedResumer) Resume(
 	phs := planHookState.(sql.PlanHookState)
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
-	err := distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+
+	// Errors encountered while emitting changes to the Sink may be transient; for
+	// example, a temporary network outage. When one of these errors occurs, we do
+	// not fail the job but rather restart the distSQL flow after a short backoff.
+	opts := retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+	}
+	var err error
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		err = distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+		if !isRetryableSinkError(err) {
+			break
+		}
+		log.Infof(ctx, `CHANGEFEED job %d encountered retryable error: %v`, *job.ID(), err)
+		// Re-load the job in order to update our progress object, which may have
+		// been updated by the changeFrontier processor since the flow started.
+		reloadedJob, phsErr := phs.ExecCfg().JobRegistry.LoadJob(ctx, *job.ID())
+		if phsErr != nil {
+			err = phsErr
+			break
+		}
+		progress = reloadedJob.Progress()
+		// startedCh is normally used to signal back to the creator of the job that
+		// the job has started; however, in this case nothing will ever receive
+		// on the channel, causing the changefeed flow to block. Replace it with
+		// a dummy channel.
+		startedCh = make(chan tree.Datums, 1)
+		if metrics, ok := phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			metrics.SinkErrorRetries.Inc(1)
+		}
+		continue
+	}
 	if err != nil {
 		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
 	}
-	return err
+	return nil
 }
+
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
 func (b *changefeedResumer) OnTerminal(
