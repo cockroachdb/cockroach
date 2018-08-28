@@ -15,6 +15,7 @@
 package xform_test
 
 import (
+	"flag"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -70,6 +71,10 @@ func TestRules(t *testing.T) {
 	)
 }
 
+var externalTestData = flag.String(
+	"d", "testdata/external/", "test files directory for TestExternal",
+)
+
 // TestExternal contains test cases from external customers and external
 // benchmarks (like TPCH), so that changes in their query plans can be monitored
 // over time.
@@ -77,10 +82,14 @@ func TestRules(t *testing.T) {
 // TestExternal files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
 //   ...
+//
+// Test files from another location can be run using the -d flag:
+//   make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
+//
 func TestExternal(t *testing.T) {
 	runDataDrivenTest(
 		t,
-		"testdata/external/",
+		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
