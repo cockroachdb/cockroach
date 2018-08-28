@@ -65,7 +65,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
 			outScope.context = "ON"
 			filter = b.buildScalar(
-				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil,
+				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
 		} else {
 			filter = b.factory.ConstructTrue()
