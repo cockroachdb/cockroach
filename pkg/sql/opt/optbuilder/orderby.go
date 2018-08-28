@@ -107,7 +107,7 @@ func (b *Builder) addExtraColumn(
 	if col := projectionsScope.findExistingCol(extraCol.getExpr()); col != nil {
 		extraCol.id = col.id
 	} else {
-		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol)
+		b.buildScalar(extraCol.getExpr(), inScope, extraColsScope, extraCol, nil)
 	}
 }
 

@@ -64,7 +64,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 		for i, expr := range tuple {
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
-			elems[i] = b.buildScalar(texpr, inScope, nil, nil)
+			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
 			// Verify that types of each tuple match one another.
 			if colTypes[i] == types.Unknown {
