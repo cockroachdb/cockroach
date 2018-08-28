@@ -97,53 +97,6 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	initialHighWater := hlc.Timestamp{WallTime: -1}
-	var spans []roachpb.Span
-	for _, watch := range spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-
-	var err error
-	if ca.sink, err = getSink(spec.Feed.SinkURI, spec.Feed.Targets); err != nil {
-		return nil, err
-	}
-	if b, ok := ca.sink.(*bufferSink); ok {
-		ca.changedRowBuf = &b.buf
-	}
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	metrics := flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	ca.sink = makeMetricsSink(metrics, ca.sink)
-
-	buf := makeBuffer()
-	ca.poller = makePoller(
-		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip, spans,
-		spec.Feed, initialHighWater, buf)
-
-	leaseMgr := flowCtx.LeaseManager.(*sql.LeaseManager)
-	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
-		// NB: Each new `tableDesc.Version` is initially written with an mvcc
-		// timestamp equal to its `ModificationTime`. It might later update that
-		// `Version` with backfill progress, but we only validate a table
-		// descriptor through its `ModificationTime` before using it, so this
-		// validation function can't depend on anything that changes after a new
-		// `Version` of a table desc is written.
-		return validateChangefeedTable(spec.Feed.Targets, desc)
-	}, initialHighWater)
-	ca.tableHistUpdater = &tableHistoryUpdater{
-		settings: flowCtx.Settings,
-		db:       flowCtx.ClientDB,
-		targets:  spec.Feed.Targets,
-		m:        tableHist,
-	}
-	rowsFn := kvsToRows(leaseMgr, tableHist, spec.Feed, buf.Get)
-
-	ca.tickFn = emitEntries(spec.Feed, ca.sink, rowsFn)
-
 	return ca, nil
 }
 
@@ -155,9 +108,70 @@ func (ca *changeAggregator) OutputTypes() []sqlbase.ColumnType {
 func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
 
-	// Give errCh enough buffer for both of these, but only the first one is
+	// Give errCh enough buffer at least two errors, but only the first one is
 	// ever used.
 	ca.errCh = make(chan error, 2)
+
+	initialHighWater := hlc.Timestamp{WallTime: -1}
+	var spans []roachpb.Span
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+
+	var err error
+	if ca.sink, err = getSink(ca.spec.Feed.SinkURI, ca.spec.Feed.Targets); err != nil {
+		// Early abort in the case that there is an error creating the sink.
+		ca.errCh <- err
+		ctx = ca.StartInternal(ctx, changeAggregatorProcName)
+		ca.cancel()
+		return ctx
+	}
+
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
+	if b, ok := ca.sink.(*bufferSink); ok {
+		ca.changedRowBuf = &b.buf
+	}
+
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	ca.sink = makeMetricsSink(metrics, ca.sink)
+
+	buf := makeBuffer()
+	ca.poller = makePoller(
+		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
+		spans, ca.spec.Feed, initialHighWater, buf,
+	)
+
+	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
+	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
+		// NB: Each new `tableDesc.Version` is initially written with an mvcc
+		// timestamp equal to its `ModificationTime`. It might later update that
+		// `Version` with backfill progress, but we only validate a table
+		// descriptor through its `ModificationTime` before using it, so this
+		// validation function can't depend on anything that changes after a new
+		// `Version` of a table desc is written.
+		return validateChangefeedTable(ca.spec.Feed.Targets, desc)
+	}, initialHighWater)
+	ca.tableHistUpdater = &tableHistoryUpdater{
+		settings: ca.flowCtx.Settings,
+		db:       ca.flowCtx.ClientDB,
+		targets:  ca.spec.Feed.Targets,
+		m:        tableHist,
+	}
+	rowsFn := kvsToRows(leaseMgr, tableHist, ca.spec.Feed, buf.Get)
+
+	var knobs TestingKnobs
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		knobs = *cfKnobs
+	}
+	ca.tickFn = emitEntries(ca.spec.Feed, ca.sink, rowsFn, knobs)
+
 	ca.pollerDoneCh = make(chan struct{})
 	go func(ctx context.Context) {
 		defer close(ca.pollerDoneCh)
@@ -177,8 +191,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		ca.cancel()
 	}(ctx)
 
-	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
-	return ctx
+	return ca.StartInternal(ctx, changeAggregatorProcName)
 }
 
 func (ca *changeAggregator) close() {
@@ -334,6 +347,7 @@ func newChangeFrontierProcessor(
 	if b, ok := cf.sink.(*bufferSink); ok {
 		cf.resolvedBuf = &b.buf
 	}
+
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
