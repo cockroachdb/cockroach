@@ -30,14 +30,13 @@ TABLE xyz
       ├── z int
       └── x int not null (storing)
 
-# TODO(radu): fix the runaway exploration on this query.
 rulestats
 SELECT * FROM abc JOIN xyz ON a=x
 ----
 Normalization rules applied 0 times.
 Exploration rules applied 8 times, added 5 expressions.
 Top exploration rules:
-  CommuteJoin        applied 2 times, added 1 expressions.
-  GenerateMergeJoins applied 2 times, added 2 expressions.
-  GenerateLookupJoin applied 2 times, added 2 expressions.
-  GenerateIndexScans applied 2 times, added 0 expressions.
+  CommuteJoin         applied 2 times, added 1 expressions.
+  GenerateMergeJoins  applied 2 times, added 2 expressions.
+  GenerateLookupJoins applied 2 times, added 2 expressions.
+  GenerateIndexScans  applied 2 times, added 0 expressions.

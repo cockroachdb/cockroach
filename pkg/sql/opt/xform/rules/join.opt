@@ -41,98 +41,29 @@
 =>
 (ConstructMergeJoins (OpName) $left $right $on)
 
-# GenerateLookupJoin creates a LookupJoin alternative for a Join which has a
-# Scan as its right input.
-[GenerateLookupJoin, Explore]
+# GenerateLookupJoins creates LookupJoin operators for all indexes (of the Scan
+# table) which allow it (including non-covering indexes). See the
+# GenerateLookupJoins custom function for more details.
+[GenerateLookupJoins, Explore]
 (InnerJoin | LeftJoin
     $left:*
-    (Scan $scanDef:*)
-    $on:* & (CanUseLookupJoin $left $scanDef $on)
+    (Scan $scanDef:*) & (IsCanonicalScan $scanDef)
+    $on:*
 )
 =>
-(ConstructLookupJoin (OpName) $left $scanDef $on)
+(GenerateLookupJoins (OpName) $left $scanDef $on)
 
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
 # with the ON condition (this is correct for both inner and left join).
-[GenerateLookupJoinWithFilter, Explore]
+[GenerateLookupJoinsWithFilter, Explore]
 (InnerJoin | LeftJoin
     $left:*
     (Select
-        (Scan $scanDef:*)
+        (Scan $scanDef:*) & (IsCanonicalScan $scanDef)
         $filter:*
     )
-    $on:* & (CanUseLookupJoin $left $scanDef $on)
+    $on:*
 )
 =>
-(ConstructLookupJoin (OpName) $left $scanDef (ConcatFilters $on $filter))
-
-# PushJoinThroughIndexJoin takes an expression which does an index join followed
-# by a join and produces an expression which first does the join and then joins
-# with the index. This can be advantageous when the join has fewer results than
-# the right input; in particular, the new join can be converted to a lookup join
-# by other rules.
-#
-#     Join                            LookupJoin
-#     /   \                               |
-#    /     \              ->            Join
-#  Left  IndexJoin                      /   \
-#           |                          /     \
-#         Right                      Left  Right
-#
-# Note that the IndexJoin becomes a more general LookupJoin because an IndexJoin
-# can only output columns from one table, whereas we also need to output columns
-# produced by Left.
-#
-# The rule can only be applied when the ON condition doesn't depend on columns
-# added by the index join.
-[PushJoinThroughIndexJoin, Explore]
-(InnerJoin | LeftJoin
-    $left:*
-    (IndexJoin $right:* $indexJoinDef:*)
-    $on:* & (IsBoundBy $on (OutputCols2 $left $right))
-)
-=>
-(LookupJoin
-   $newJoin:((OpName) $left $right $on)
-   (True)
-   (HoistIndexJoinDef $indexJoinDef $newJoin (OpName))
-)
-
-# PushJoinThroughIndexJoinWithExtraFilter is a specialization of the previous
-# rule for the case of an inner join where only part of the ON condition can be
-# evaluated before the index join.
-#
-# This case is particularly important because any filters on the results of an
-# inner join get pushed into the ON condition; so simply adding a WHERE clause
-# can stop the previous rule from running.
-#
-# TODO(radu): this rule doesn't cover left join because of a technicality: if a
-# left row has matches in newJoin but has no matches in the lookup join, only
-# the looked up columns get NULL-extended (whereas some of the table columns are
-# coming from newJoin and those would need to be NULLed out too). The fix would
-# be to lookup all columns and discard those from newJoin. This requires a
-# top-level projection, as well as an inner projection to avoid having the same
-# ColumnID on both sides of the lookup join.
-[PushJoinThroughIndexJoinWithExtraFilter, Explore]
-(InnerJoin
-    $left:*
-    (IndexJoin $right:* $indexJoinDef:*)
-    $on:* & ^(IsBoundBy $on $innerCols:(OutputCols2 $left $right)) & (Filters
-        $onList: [
-            ...
-            $condition:* & (IsBoundBy $condition $innerCols)
-            ...
-        ]
-    )
-)
-=>
-(LookupJoin
-    $newJoin:(InnerJoin
-        $left
-        $right
-        (Filters (ExtractBoundConditions $onList $innerCols))
-    )
-    (Filters (ExtractUnboundConditions $onList $innerCols))
-    (HoistIndexJoinDef $indexJoinDef $newJoin (OpName))
-)
+(GenerateLookupJoins (OpName) $left $scanDef (ConcatFilters $on $filter))

@@ -355,7 +355,7 @@ GenerateMergeJoins
   +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
   +                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 --------------------------------------------------------------------------------
-GenerateLookupJoin (higher cost)
+GenerateLookupJoins (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: s:4(string)
@@ -396,7 +396,7 @@ CommuteJoin (no changes)
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-GenerateLookupJoinWithFilter (higher cost)
+GenerateLookupJoinsWithFilter (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: s:4(string)
