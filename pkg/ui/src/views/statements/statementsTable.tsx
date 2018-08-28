@@ -74,7 +74,7 @@ function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string
   return (
     <Link to={ `/node/${props.nodeId}` }>
       <div className="node-name__tooltip">
-        <ToolTipWrapper text={props.nodeNames[props.nodeId]}>
+        <ToolTipWrapper text={props.nodeNames[props.nodeId]} short>
           <div className="node-name-tooltip__tooltip-hover-area">
             <div className="node-name-tooltip__info-icon">n{props.nodeId}</div>
           </div>
