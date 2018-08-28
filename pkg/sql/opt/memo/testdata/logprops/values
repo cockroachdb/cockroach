@@ -13,7 +13,6 @@ SELECT * FROM (VALUES (1, 2), (3, 4), (NULL, 5))
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── cardinality: [3 - 3]
- ├── stats: [rows=3]
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
  │    ├── const: 1 [type=int]
@@ -31,11 +30,9 @@ SELECT (VALUES (x), (y+1)) FROM xy
 ----
 project
  ├── columns: column1:4(int)
- ├── stats: [rows=1000]
  ├── prune: (4)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -46,14 +43,12 @@ project
                 ├── columns: column1:3(int)
                 ├── outer: (1,2)
                 ├── cardinality: [1 - 1]
-                ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(3)
                 └── values
                      ├── columns: column1:3(int)
                      ├── outer: (1,2)
                      ├── cardinality: [2 - 2]
-                     ├── stats: [rows=2]
                      ├── prune: (3)
                      ├── tuple [type=tuple{int}, outer=(1)]
                      │    └── variable: x [type=int, outer=(1)]
@@ -69,7 +64,6 @@ SELECT * FROM (VALUES (1, 2))
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)

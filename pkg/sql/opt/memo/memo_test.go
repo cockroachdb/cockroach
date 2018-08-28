@@ -24,12 +24,13 @@ import (
 )
 
 func TestMemo(t *testing.T) {
-	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
+		memo.ExprFmtHideStats
 	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
 func TestLogicalProps(t *testing.T) {
-	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
 	runDataDrivenTest(t, "testdata/logprops/", flags)
 }
 

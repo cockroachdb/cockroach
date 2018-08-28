@@ -24,22 +24,18 @@ union
  ├── columns: x:6(int) y:7(int)
  ├── left columns: xy.x:1(int) xy.y:2(int)
  ├── right columns: u:3(int) v:4(int)
- ├── stats: [rows=2000, distinct(6,7)=2000]
  ├── key: (6,7)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── project
       ├── columns: u:3(int) v:4(int!null)
-      ├── stats: [rows=1000, distinct(3,4)=1000]
       ├── prune: (3,4)
       └── scan uv
            ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1000, distinct(3,4)=1000]
            ├── key: (5)
            ├── fd: (5)-->(3,4)
            ├── prune: (3-5)
@@ -52,25 +48,21 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── right columns: v:4(int) u:3(int) rowid:5(int)
- ├── stats: [rows=1.42857143, distinct(1,2)=1.42857143]
  ├── key: (1,2)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── select
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3-5)=1.42857143]
       ├── key: (5)
       ├── fd: ()-->(3), (5)-->(4)
       ├── prune: (4,5)
       ├── interesting orderings: (+5)
       ├── scan uv
       │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-      │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
       │    ├── key: (5)
       │    ├── fd: (5)-->(3,4)
       │    ├── prune: (3-5)
@@ -87,30 +79,25 @@ except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── right columns: u:3(int) v:4(int) v:4(int)
- ├── stats: [rows=1000, distinct(1,2)=1000]
  ├── key: (1,2)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── project
       ├── columns: u:3(int!null) v:4(int!null)
-      ├── stats: [rows=1.42857143, distinct(3,4)=1.42857143]
       ├── fd: ()-->(3)
       ├── prune: (3,4)
       └── select
            ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1.42857143, distinct(3)=1, distinct(3,4)=1.42857143]
            ├── key: (5)
            ├── fd: ()-->(3), (5)-->(4)
            ├── prune: (4,5)
            ├── interesting orderings: (+5)
            ├── scan uv
            │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
            │    ├── key: (5)
            │    ├── fd: (5)-->(3,4)
            │    ├── prune: (3-5)
@@ -126,13 +113,11 @@ SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333.333333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    ├── stats: [rows=1000]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
@@ -144,30 +129,25 @@ select
            │         ├── columns: column13:13(tuple{int, int})
            │         ├── outer: (1,2)
            │         ├── cardinality: [0 - 1]
-           │         ├── stats: [rows=1]
            │         ├── key: ()
            │         ├── fd: ()-->(13)
            │         └── project
            │              ├── columns: column13:13(tuple{int, int})
            │              ├── outer: (1,2)
-           │              ├── stats: [rows=1400]
            │              ├── prune: (13)
            │              ├── union
            │              │    ├── columns: x:11(int) u:12(int)
            │              │    ├── left columns: x:6(int) uv.u:3(int)
            │              │    ├── right columns: y:10(int) uv.v:8(int)
            │              │    ├── outer: (1,2)
-           │              │    ├── stats: [rows=1400, distinct(11,12)=1400]
            │              │    ├── key: (11,12)
            │              │    ├── project
            │              │    │    ├── columns: x:6(int) uv.u:3(int)
            │              │    │    ├── outer: (1)
-           │              │    │    ├── stats: [rows=1000, distinct(3,6)=700]
            │              │    │    ├── fd: ()-->(6)
            │              │    │    ├── prune: (3,6)
            │              │    │    ├── scan uv
            │              │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
-           │              │    │    │    ├── stats: [rows=1000, distinct(3)=700]
            │              │    │    │    ├── key: (5)
            │              │    │    │    ├── fd: (5)-->(3,4)
            │              │    │    │    ├── prune: (3-5)
@@ -177,12 +157,10 @@ select
            │              │    └── project
            │              │         ├── columns: y:10(int) uv.v:8(int!null)
            │              │         ├── outer: (2)
-           │              │         ├── stats: [rows=1000, distinct(8,10)=700]
            │              │         ├── fd: ()-->(10)
            │              │         ├── prune: (8,10)
            │              │         ├── scan uv
            │              │         │    ├── columns: uv.u:7(int) uv.v:8(int!null) uv.rowid:9(int!null)
-           │              │         │    ├── stats: [rows=1000, distinct(8)=700]
            │              │         │    ├── key: (9)
            │              │         │    ├── fd: (9)-->(7,8)
            │              │         │    ├── prune: (7-9)
@@ -210,18 +188,15 @@ union
  ├── left columns: column1:3(int)
  ├── right columns: column1:4(int)
  ├── cardinality: [1 - 8]
- ├── stats: [rows=8, distinct(5)=8]
  ├── key: (5)
  ├── union-all
  │    ├── columns: column1:3(int)
  │    ├── left columns: column1:1(int)
  │    ├── right columns: column1:2(int)
  │    ├── cardinality: [5 - 5]
- │    ├── stats: [rows=5, distinct(3)=5]
  │    ├── values
  │    │    ├── columns: column1:1(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=3]
  │    │    ├── prune: (1)
  │    │    ├── tuple [type=tuple{int}]
  │    │    │    └── const: 1 [type=int]
@@ -232,7 +207,6 @@ union
  │    └── values
  │         ├── columns: column1:2(int)
  │         ├── cardinality: [2 - 2]
- │         ├── stats: [rows=2, distinct(2)=2]
  │         ├── prune: (2)
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 4 [type=int]
@@ -241,7 +215,6 @@ union
  └── values
       ├── columns: column1:4(int)
       ├── cardinality: [3 - 3]
-      ├── stats: [rows=3, distinct(4)=3]
       ├── prune: (4)
       ├── tuple [type=tuple{int}]
       │    └── const: 6 [type=int]
@@ -263,18 +236,15 @@ intersect
  ├── left columns: column1:1(int)
  ├── right columns: column1:3(int)
  ├── cardinality: [0 - 2]
- ├── stats: [rows=2, distinct(1)=2]
  ├── key: (1)
  ├── intersect-all
  │    ├── columns: column1:1(int)
  │    ├── left columns: column1:1(int)
  │    ├── right columns: column1:2(int)
  │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=2, distinct(1)=2]
  │    ├── values
  │    │    ├── columns: column1:1(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=3]
  │    │    ├── prune: (1)
  │    │    ├── tuple [type=tuple{int}]
  │    │    │    └── const: 1 [type=int]
@@ -285,7 +255,6 @@ intersect
  │    └── values
  │         ├── columns: column1:2(int)
  │         ├── cardinality: [2 - 2]
- │         ├── stats: [rows=2, distinct(2)=2]
  │         ├── prune: (2)
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 4 [type=int]
@@ -294,7 +263,6 @@ intersect
  └── values
       ├── columns: column1:3(int)
       ├── cardinality: [3 - 3]
-      ├── stats: [rows=3, distinct(3)=3]
       ├── prune: (3)
       ├── tuple [type=tuple{int}]
       │    └── const: 6 [type=int]
@@ -316,18 +284,15 @@ except
  ├── left columns: column1:1(int)
  ├── right columns: column1:3(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=3, distinct(1)=3]
  ├── key: (1)
  ├── except-all
  │    ├── columns: column1:1(int)
  │    ├── left columns: column1:1(int)
  │    ├── right columns: column1:2(int)
  │    ├── cardinality: [1 - 3]
- │    ├── stats: [rows=3, distinct(1)=3]
  │    ├── values
  │    │    ├── columns: column1:1(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=3]
  │    │    ├── prune: (1)
  │    │    ├── tuple [type=tuple{int}]
  │    │    │    └── const: 1 [type=int]
@@ -338,7 +303,6 @@ except
  │    └── values
  │         ├── columns: column1:2(int)
  │         ├── cardinality: [2 - 2]
- │         ├── stats: [rows=2, distinct(2)=2]
  │         ├── prune: (2)
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 4 [type=int]
@@ -347,7 +311,6 @@ except
  └── values
       ├── columns: column1:3(int)
       ├── cardinality: [4 - 4]
-      ├── stats: [rows=4, distinct(3)=4]
       ├── prune: (3)
       ├── tuple [type=tuple{int}]
       │    └── const: 6 [type=int]
