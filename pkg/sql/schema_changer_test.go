@@ -17,6 +17,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -3470,5 +3471,98 @@ func TestCancelSchemaChange(t *testing.T) {
 	eCount := maxValue + 1
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+}
+
+// TestCancelSchemaChangeContext tests that a canceled context on
+// the session with a schema change after the schema change transaction
+// has committed will not indefinitely retry executing the post schema
+// execution transactions using a canceled context. The schema
+// change will give up and ultimately be executed to completion through
+// the asynchronous schema changer.
+func TestCancelSchemaChangeContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	notifyBackfill := make(chan struct{})
+	cancelSessionDone := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	seenContextCancel := false
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if notify := notifyBackfill; notify != nil {
+					notifyBackfill = nil
+					close(notify)
+					<-cancelSessionDone
+				}
+				return nil
+			},
+			OnError: func(err error) {
+				if err == context.Canceled && !seenContextCancel {
+					seenContextCancel = true
+					return
+				}
+				t.Errorf("saw unexpected error: %+v", err)
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notification := notifyBackfill
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ctx := context.TODO()
+		// When using db.Exec(), CANCEL SESSION below will result in the
+		// database client retrying the request on another connection.
+		// Use a connection here so when the session gets canceled; a
+		// connection failure is returned.
+		// TODO(vivek): It's likely we need to vendor lib/pq#422 and check
+		// that this is unnecessary.
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+		if _, err := conn.ExecContext(
+			ctx, `CREATE INDEX foo ON t.public.test (v)`); err != driver.ErrBadConn {
+			t.Errorf("unexpected err = %+v", err)
+		}
+	}()
+
+	<-notification
+
+	if _, err := db.Exec(`
+CANCEL SESSIONS (SELECT session_id FROM [SHOW SESSIONS] WHERE last_active_query LIKE 'CREATE INDEX%')
+`); err != nil {
+		t.Error(err)
+	}
+
+	close(cancelSessionDone)
+
+	wg.Wait()
+
+	if !seenContextCancel {
+		t.Fatal("didnt see context cancel error")
 	}
 }
