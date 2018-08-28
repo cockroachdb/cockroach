@@ -62,13 +62,13 @@ interface StatementDetailsState {
 interface NumericStatRow {
   name: string;
   value: NumericStat;
-  bar?: () => {};
+  bar?: () => ReactNode;
 }
 
 interface NumericStatTableProps {
   rows: NumericStatRow[];
   count: number;
-  format: (v: number) => string;
+  format?: (v: number) => string;
 }
 
 class NumericStatTable extends React.Component<NumericStatTableProps> {
