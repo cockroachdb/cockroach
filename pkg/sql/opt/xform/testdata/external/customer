@@ -1,0 +1,754 @@
+# ==============================================================================
+# This file contains schema and queries collected from various customers who
+# have publicly posted their schema and queries, such as in a Github issue or
+# one of our other public support channels. The purpose of collecting these
+# queries is to minimize the chance of performance regression in future versions
+# of Cockroach DB.
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# Github Issue 20334: Ensure that optimizer uses the secondary
+# edges_auto_index_fk_dst_ref_nodes index so it can then merge join.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE nodes (
+	id INT NOT NULL,
+	payload STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, payload)
+)
+----
+TABLE nodes
+ ├── id int not null
+ ├── payload string
+ └── INDEX primary
+      └── id int not null
+
+exec-ddl
+CREATE TABLE edges (
+	src INT NOT NULL,
+	dst INT NOT NULL,
+	payload STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (src ASC, dst ASC),
+	CONSTRAINT fk_dst_ref_nodes FOREIGN KEY (dst) REFERENCES nodes (id),
+	INDEX edges_auto_index_fk_dst_ref_nodes (dst ASC),
+	CONSTRAINT fk_src_ref_nodes FOREIGN KEY (src) REFERENCES nodes (id),
+	FAMILY "primary" (src, dst, payload)
+)
+----
+TABLE edges
+ ├── src int not null
+ ├── dst int not null
+ ├── payload string
+ ├── INDEX primary
+ │    ├── src int not null
+ │    └── dst int not null
+ └── INDEX edges_auto_index_fk_dst_ref_nodes
+      ├── dst int not null
+      └── src int not null
+
+opt
+select nodes.id,dst from nodes join edges on edges.dst=nodes.id
+----
+inner-join (merge)
+ ├── columns: id:1(int!null) dst:4(int!null)
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan nodes
+ │    ├── columns: id:1(int!null)
+ │    ├── key: (1)
+ │    └── ordering: +1
+ ├── scan edges@edges_auto_index_fk_dst_ref_nodes
+ │    ├── columns: dst:4(int!null)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+           └── dst = id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+
+# ------------------------------------------------------------------------------
+# Github Issues 16313/16426: Ensure that STORING index is used to filter unread
+# articles before index joining to the primary index.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE article (
+	id INT NOT NULL DEFAULT unique_rowid(),
+	feed INT NOT NULL,
+	folder INT NOT NULL,
+	hash STRING NULL,
+	title STRING NULL,
+	summary STRING NULL,
+	content STRING NULL,
+	link STRING NULL,
+	read BOOL NULL,
+	date TIMESTAMP WITH TIME ZONE NULL,
+	retrieved TIMESTAMP WITH TIME ZONE NULL,
+	CONSTRAINT "primary" PRIMARY KEY (folder ASC, feed ASC, id ASC),
+	UNIQUE INDEX article_id_key (id ASC),
+	UNIQUE INDEX article_hash_key (hash ASC),
+	UNIQUE INDEX article_idx_read_key (id ASC) STORING (read),
+	FAMILY "primary" (id, feed, folder, hash, title, summary, content, link, read, date, retrieved)
+) INTERLEAVE IN PARENT feed (folder, feed)
+----
+TABLE article
+ ├── id int not null
+ ├── feed int not null
+ ├── folder int not null
+ ├── hash string
+ ├── title string
+ ├── summary string
+ ├── content string
+ ├── link string
+ ├── read bool
+ ├── date timestamptz
+ ├── retrieved timestamptz
+ ├── INDEX primary
+ │    ├── folder int not null
+ │    ├── feed int not null
+ │    └── id int not null
+ ├── INDEX article_id_key
+ │    ├── id int not null
+ │    ├── folder int not null (storing)
+ │    └── feed int not null (storing)
+ ├── INDEX article_hash_key
+ │    ├── hash string
+ │    ├── folder int not null (storing)
+ │    ├── feed int not null (storing)
+ │    └── id int not null (storing)
+ └── INDEX article_idx_read_key
+      ├── id int not null
+      ├── folder int not null (storing)
+      ├── feed int not null (storing)
+      └── read bool (storing)
+
+opt
+SELECT id, feed, folder, title, summary, content, link, date
+FROM article
+WHERE NOT read and id > 0 order by id limit 50
+----
+project
+ ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) date:10(timestamptz)
+ ├── cardinality: [0 - 50]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,5-8,10)
+ ├── ordering: +1
+ └── limit
+      ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      ├── internal-ordering: +1 opt(9)
+      ├── cardinality: [0 - 50]
+      ├── key: (1)
+      ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      ├── ordering: +1 opt(9)
+      ├── index-join article
+      │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      │    ├── key: (1)
+      │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      │    ├── ordering: +1 opt(9)
+      │    └── select
+      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── key: (1)
+      │         ├── fd: ()-->(9), (1)-->(2,3)
+      │         ├── ordering: +1 opt(9)
+      │         ├── scan article@article_idx_read_key
+      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
+      │         │    ├── constraint: /1: [/1 - ]
+      │         │    ├── key: (1)
+      │         │    ├── fd: (1)-->(2,3,9)
+      │         │    └── ordering: +1 opt(9)
+      │         └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      └── const: 50 [type=int]
+
+# Check that forcing the index works as well.
+opt
+SELECT id, feed, folder, title, summary, content, link, date
+FROM article@article_idx_read_key
+WHERE NOT read and id > 0 order by id limit 50
+----
+project
+ ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) date:10(timestamptz)
+ ├── cardinality: [0 - 50]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3,5-8,10)
+ ├── ordering: +1
+ └── limit
+      ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      ├── internal-ordering: +1 opt(9)
+      ├── cardinality: [0 - 50]
+      ├── key: (1)
+      ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      ├── ordering: +1 opt(9)
+      ├── index-join article
+      │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
+      │    ├── key: (1)
+      │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      │    ├── ordering: +1 opt(9)
+      │    └── select
+      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── key: (1)
+      │         ├── fd: ()-->(9), (1)-->(2,3)
+      │         ├── ordering: +1 opt(9)
+      │         ├── scan article@article_idx_read_key
+      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
+      │         │    ├── constraint: /1: [/1 - ]
+      │         │    ├── flags: force-index=article_idx_read_key
+      │         │    ├── key: (1)
+      │         │    ├── fd: (1)-->(2,3,9)
+      │         │    └── ordering: +1 opt(9)
+      │         └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      └── const: 50 [type=int]
+
+# Use only columns covered by the index.
+opt
+SELECT id, read FROM article WHERE NOT read and id > 0 order by id limit 5
+----
+limit
+ ├── columns: id:1(int!null) read:9(bool!null)
+ ├── internal-ordering: +1 opt(9)
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: ()-->(9)
+ ├── ordering: +1 opt(9)
+ ├── select
+ │    ├── columns: id:1(int!null) read:9(bool!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(9)
+ │    ├── ordering: +1 opt(9)
+ │    ├── scan article@article_idx_read_key
+ │    │    ├── columns: id:1(int!null) read:9(bool)
+ │    │    ├── constraint: /1: [/1 - ]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(9)
+ │    │    └── ordering: +1 opt(9)
+ │    └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
+ │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+ └── const: 5 [type=int]
+
+# ------------------------------------------------------------------------------
+# Github Issue 14241: Ensure that optimizer uses a reverse scan over test_idx
+# with restrictive spans and no explicit sort operator.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE IF NOT EXISTS leaderboard_record (
+    PRIMARY KEY (leaderboard_id, expires_at, owner_id),
+    -- Creating a foreign key constraint and defining indexes that include it
+    -- in the same transaction breaks. See issue cockroachdb/cockroach#13505.
+    -- In this case we prefer the indexes over the constraint.
+    -- FOREIGN KEY (leaderboard_id) REFERENCES leaderboard(id),
+    id                 BYTEA        UNIQUE NOT NULL,
+    leaderboard_id     BYTEA        NOT NULL,
+    owner_id           BYTEA        NOT NULL,
+    handle             VARCHAR(20)  NOT NULL,
+    lang               VARCHAR(18)  DEFAULT 'en' NOT NULL,
+    location           VARCHAR(64), -- e.g. "San Francisco, CA"
+    timezone           VARCHAR(64), -- e.g. "Pacific Time (US & Canada)"
+    rank_value         BIGINT       DEFAULT 0 CHECK (rank_value >= 0) NOT NULL,
+    score              BIGINT       DEFAULT 0 NOT NULL,
+    num_score          INT          DEFAULT 0 CHECK (num_score >= 0) NOT NULL,
+    -- FIXME replace with JSONB
+    metadata           BYTEA        DEFAULT '{}' CHECK (length(metadata) < 16000) NOT NULL,
+    ranked_at          INT          CHECK (ranked_at >= 0) DEFAULT 0 NOT NULL,
+    updated_at         INT          CHECK (updated_at > 0) NOT NULL,
+    -- Used to enable proper order in revscan when sorting by score descending.
+    updated_at_inverse INT          CHECK (updated_at > 0) NOT NULL,
+    expires_at         INT          CHECK (expires_at >= 0) DEFAULT 0 NOT NULL,
+    banned_at          INT          CHECK (expires_at >= 0) DEFAULT 0 NOT NULL,
+    INDEX test_idx(leaderboard_id, expires_at, score, updated_at_inverse, id)
+);
+----
+TABLE leaderboard_record
+ ├── id bytes not null
+ ├── leaderboard_id bytes not null
+ ├── owner_id bytes not null
+ ├── handle string not null
+ ├── lang string not null
+ ├── location string
+ ├── timezone string
+ ├── rank_value int not null
+ ├── score int not null
+ ├── num_score int not null
+ ├── metadata bytes not null
+ ├── ranked_at int not null
+ ├── updated_at int not null
+ ├── updated_at_inverse int not null
+ ├── expires_at int not null
+ ├── banned_at int not null
+ ├── INDEX primary
+ │    ├── leaderboard_id bytes not null
+ │    ├── expires_at int not null
+ │    └── owner_id bytes not null
+ └── INDEX test_idx
+      ├── leaderboard_id bytes not null
+      ├── expires_at int not null
+      ├── score int not null
+      ├── updated_at_inverse int not null
+      ├── id bytes not null
+      └── owner_id bytes not null
+
+opt
+SELECT score, expires_at
+FROM leaderboard_record
+WHERE leaderboard_id = 'test'
+    AND expires_at = 0
+    AND (score, updated_at_inverse, id) < (100, 500, 'some_id')
+ORDER BY score desc, updated_at_inverse DESC
+LIMIT 50
+----
+project
+ ├── columns: score:9(int!null) expires_at:15(int!null)
+ ├── cardinality: [0 - 50]
+ ├── fd: ()-->(15)
+ ├── ordering: -9,-14 opt(15)
+ └── scan leaderboard_record@test_idx,rev
+      ├── columns: id:1(bytes!null) leaderboard_id:2(bytes!null) score:9(int!null) updated_at_inverse:14(int!null) expires_at:15(int!null)
+      ├── constraint: /2/15/9/14/1/3: [/'\x74657374'/0 - /'\x74657374'/0/100/500/'\x736f6d655f6964')
+      ├── limit: 50(rev)
+      ├── fd: ()-->(2,15)
+      └── ordering: -9,-14 opt(2,15)
+
+# ------------------------------------------------------------------------------
+# Github Issue 26444: Ensure that optimizer uses a merge join using the
+# secondary indexes.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE rides (
+    id UUID NOT NULL,
+    rider_id UUID NULL,
+    vehicle_id UUID NULL,
+    start_address STRING NULL,
+    end_address STRING NULL,
+    start_time TIMESTAMP NULL,
+    end_time TIMESTAMP NULL,
+    revenue FLOAT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX rides_vehicle_id_idx (vehicle_id ASC),
+    FAMILY "primary" (id, rider_id, vehicle_id, start_address,
+    end_address, start_time, end_time, revenue)
+)
+----
+TABLE rides
+ ├── id uuid not null
+ ├── rider_id uuid
+ ├── vehicle_id uuid
+ ├── start_address string
+ ├── end_address string
+ ├── start_time timestamp
+ ├── end_time timestamp
+ ├── revenue float
+ ├── INDEX primary
+ │    └── id uuid not null
+ └── INDEX rides_vehicle_id_idx
+      ├── vehicle_id uuid
+      └── id uuid not null
+
+exec-ddl
+CREATE TABLE vehicles (
+    id UUID NOT NULL,
+    type STRING NULL,
+    city STRING NOT NULL,
+    owner_id UUID NULL,
+    creation_time TIMESTAMP NULL,
+    status STRING NULL,
+    ext JSON NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX vehicles_id_idx (id ASC) STORING (owner_id),
+    FAMILY "primary" (id, type, city, owner_id, creation_time, status, ext)
+)
+----
+TABLE vehicles
+ ├── id uuid not null
+ ├── type string
+ ├── city string not null
+ ├── owner_id uuid
+ ├── creation_time timestamp
+ ├── status string
+ ├── ext jsonb
+ ├── INDEX primary
+ │    ├── city string not null
+ │    └── id uuid not null
+ └── INDEX vehicles_id_idx
+      ├── id uuid not null
+      ├── city string not null
+      └── owner_id uuid (storing)
+
+opt
+select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
+----
+group-by
+ ├── columns: owner_id:12(uuid) count:16(int)
+ ├── grouping columns: owner_id:12(uuid)
+ ├── key: (12)
+ ├── fd: (12)-->(16)
+ ├── inner-join (merge)
+ │    ├── columns: vehicle_id:3(uuid!null) vehicles.id:9(uuid!null) owner_id:12(uuid)
+ │    ├── fd: (3)==(9), (9)==(3)
+ │    ├── scan rides@rides_vehicle_id_idx
+ │    │    ├── columns: vehicle_id:3(uuid)
+ │    │    └── ordering: +3
+ │    ├── scan vehicles@vehicles_id_idx
+ │    │    ├── columns: vehicles.id:9(uuid!null) owner_id:12(uuid)
+ │    │    └── ordering: +9
+ │    └── merge-on
+ │         ├── left ordering: +3
+ │         ├── right ordering: +9
+ │         └── filters [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+ │              └── vehicles.id = vehicle_id [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+ └── aggregations
+      └── count-rows [type=int]
+
+# ------------------------------------------------------------------------------
+# Github Issue 24415: Ensure the optimizer uses the covering index.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE data (
+  id UUID NULL,
+  value INT NULL,
+  col1 INT NULL,
+  col2 INT NULL,
+  col3 INT NULL,
+  col4 INT NULL,
+  col5 INT NULL,
+  col6 INT NULL,
+  col7 INT NULL,
+  col8 INT NULL,
+  col9 INT NULL,
+  col10 INT NULL,
+  INDEX foo (id ASC) STORING (value)
+)
+----
+TABLE data
+ ├── id uuid
+ ├── value int
+ ├── col1 int
+ ├── col2 int
+ ├── col3 int
+ ├── col4 int
+ ├── col5 int
+ ├── col6 int
+ ├── col7 int
+ ├── col8 int
+ ├── col9 int
+ ├── col10 int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX foo
+      ├── id uuid
+      ├── rowid int not null (hidden)
+      └── value int (storing)
+
+opt
+SELECT id, sum(value) FROM data GROUP BY id
+----
+group-by
+ ├── columns: id:1(uuid) sum:14(decimal)
+ ├── grouping columns: id:1(uuid)
+ ├── key: (1)
+ ├── fd: (1)-->(14)
+ ├── scan data@foo
+ │    └── columns: id:1(uuid) value:2(int)
+ └── aggregations [outer=(2)]
+      └── sum [type=decimal, outer=(2)]
+           └── variable: value [type=int, outer=(2)]
+
+# ------------------------------------------------------------------------------
+# Github Issue 24297: Ensure the optimizer chooses the more selective secondary
+# index that requires an explicit sort (rather than the less selective secondary
+# index that avoids the sort).
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE t_sync_data (
+    remote_id UUID NOT NULL,
+    conflict_remote_id UUID NULL,
+    user_id UUID NOT NULL,
+    last_sync_id INT NOT NULL,
+    data_type STRING NOT NULL,
+    sync_data STRING NULL,
+    deleted BOOL NOT NULL,
+    create_device_id STRING NOT NULL,
+    original_data_id STRING NOT NULL,
+    create_time INT NOT NULL,
+    last_update_time INT NOT NULL,
+    CONSTRAINT “primary” PRIMARY KEY (remote_id ASC),
+    INDEX t_sync_data_user_id_data_type_idx (user_id ASC, data_type ASC),
+    INDEX t_sync_data_last_sync_id_idx (last_sync_id ASC),
+    FAMILY f_meta (remote_id, conflict_remote_id, user_id, last_sync_id, data_type, deleted, create_device_id, original_data_id, create_time, last_update_time),
+    FAMILY f_data (sync_data),
+    INDEX index1 (last_sync_id, user_id, data_type),
+    INDEX index2 (user_id, data_type),
+    INDEX index3 (last_sync_id)
+)
+----
+TABLE t_sync_data
+ ├── remote_id uuid not null
+ ├── conflict_remote_id uuid
+ ├── user_id uuid not null
+ ├── last_sync_id int not null
+ ├── data_type string not null
+ ├── sync_data string
+ ├── deleted bool not null
+ ├── create_device_id string not null
+ ├── original_data_id string not null
+ ├── create_time int not null
+ ├── last_update_time int not null
+ ├── INDEX “primary”
+ │    └── remote_id uuid not null
+ ├── INDEX t_sync_data_user_id_data_type_idx
+ │    ├── user_id uuid not null
+ │    ├── data_type string not null
+ │    └── remote_id uuid not null
+ ├── INDEX t_sync_data_last_sync_id_idx
+ │    ├── last_sync_id int not null
+ │    └── remote_id uuid not null
+ ├── INDEX index1
+ │    ├── last_sync_id int not null
+ │    ├── user_id uuid not null
+ │    ├── data_type string not null
+ │    └── remote_id uuid not null
+ ├── INDEX index2
+ │    ├── user_id uuid not null
+ │    ├── data_type string not null
+ │    └── remote_id uuid not null
+ └── INDEX index3
+      ├── last_sync_id int not null
+      └── remote_id uuid not null
+
+opt
+SELECT *
+FROM t_sync_data
+WHERE last_sync_id>0
+  AND user_id='11cd19e4-837d-4bff-4a76-aefa0ddbec64'
+  AND data_type='a01'
+ORDER BY last_sync_id ASC
+LIMIT 50
+----
+limit
+ ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ ├── internal-ordering: +4 opt(3,5)
+ ├── cardinality: [0 - 50]
+ ├── key: (1)
+ ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+ ├── ordering: +4 opt(3,5)
+ ├── sort
+ │    ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+ │    ├── ordering: +4 opt(3,5)
+ │    └── select
+ │         ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │         ├── key: (1)
+ │         ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+ │         ├── index-join t_sync_data
+ │         │    ├── columns: remote_id:1(uuid!null) conflict_remote_id:2(uuid) user_id:3(uuid!null) last_sync_id:4(int!null) data_type:5(string!null) sync_data:6(string) deleted:7(bool!null) create_device_id:8(string!null) original_data_id:9(string!null) create_time:10(int!null) last_update_time:11(int!null)
+ │         │    ├── key: (1)
+ │         │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+ │         │    └── scan t_sync_data@t_sync_data_user_id_data_type_idx
+ │         │         ├── columns: remote_id:1(uuid!null) user_id:3(uuid!null) data_type:5(string!null)
+ │         │         ├── constraint: /3/5/1: [/'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01' - /'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01']
+ │         │         ├── key: (1)
+ │         │         └── fd: ()-->(3,5)
+ │         └── filters [type=bool, outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │              └── last_sync_id > 0 [type=bool, outer=(4), constraints=(/4: [/1 - ]; tight)]
+ └── const: 50 [type=int]
+
+# ------------------------------------------------------------------------------
+# Github Issue 15649: Use order-matching index even with a high offset/limit.
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE test (
+    id INT NOT NULL,
+    midname STRING NULL,
+    name STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX test_name_idx (name ASC),
+    FAMILY "primary" (id, midname, name)
+)
+----
+TABLE test
+ ├── id int not null
+ ├── midname string
+ ├── name string
+ ├── INDEX primary
+ │    └── id int not null
+ └── INDEX test_name_idx
+      ├── name string
+      └── id int not null
+
+opt
+EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
+----
+explain
+ ├── columns: tree:4(string) field:5(string) description:6(string)
+ └── sort
+      ├── columns: id:1(int!null)
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── ordering: +1
+      └── limit
+           ├── columns: id:1(int!null)
+           ├── internal-ordering: +1
+           ├── cardinality: [0 - 10]
+           ├── key: (1)
+           ├── sort
+           │    ├── columns: id:1(int!null)
+           │    ├── key: (1)
+           │    ├── ordering: +1
+           │    └── offset
+           │         ├── columns: id:1(int!null)
+           │         ├── internal-ordering: +1
+           │         ├── key: (1)
+           │         ├── scan test
+           │         │    ├── columns: id:1(int!null)
+           │         │    ├── key: (1)
+           │         │    └── ordering: +1
+           │         └── const: 10000 [type=int]
+           └── const: 10 [type=int]
+
+# ------------------------------------------------------------------------------
+# Github Issue 17270: Use the o_ok index rather than the primary index, since
+# o_ok has only 2 columns (o_orderkey and rowid).
+# ------------------------------------------------------------------------------
+exec-ddl
+CREATE TABLE orders (
+    o_orderkey INT NOT NULL,
+    o_custkey INT NOT NULL,
+    o_orderstatus STRING(1) NOT NULL,
+    o_totalprice DECIMAL(15,2) NOT NULL,
+    o_orderdate DATE NOT NULL,
+    o_orderpriority STRING(15) NOT NULL,
+    o_clerk STRING(15) NOT NULL,
+    o_shippriority INT NOT NULL,
+    o_comment STRING(79) NOT NULL,
+    UNIQUE INDEX o_ok (o_orderkey ASC),
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    FAMILY "primary" (o_orderkey, o_custkey, o_orderstatus, o_totalprice, o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment, rowid)
+)
+----
+TABLE orders
+ ├── o_orderkey int not null
+ ├── o_custkey int not null
+ ├── o_orderstatus string not null
+ ├── o_totalprice decimal not null
+ ├── o_orderdate date not null
+ ├── o_orderpriority string not null
+ ├── o_clerk string not null
+ ├── o_shippriority int not null
+ ├── o_comment string not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX o_ok
+ │    ├── o_orderkey int not null
+ │    └── rowid int not null (hidden) (storing)
+ ├── INDEX o_ck
+ │    ├── o_custkey int not null
+ │    └── rowid int not null (hidden)
+ └── INDEX o_od
+      ├── o_orderdate date not null
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE lineitem (
+    l_orderkey INT NOT NULL,
+    l_partkey INT NOT NULL,
+    l_suppkey INT NOT NULL,
+    l_linenumber INT NOT NULL,
+    l_quantity DECIMAL(15,2) NOT NULL,
+    l_extendedprice DECIMAL(15,2) NOT NULL,
+    l_discount DECIMAL(15,2) NOT NULL,
+    l_tax DECIMAL(15,2) NOT NULL,
+    l_returnflag STRING(1) NOT NULL,
+    l_linestatus STRING(1) NOT NULL,
+    l_shipdate DATE NOT NULL,
+    l_commitdate DATE NOT NULL,
+    l_receiptdate DATE NOT NULL,
+    l_shipinstruct STRING(25) NOT NULL,
+    l_shipmode STRING(10) NOT NULL,
+    l_comment STRING(44) NOT NULL,
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    FAMILY "primary" (l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment, rowid)
+)
+----
+TABLE lineitem
+ ├── l_orderkey int not null
+ ├── l_partkey int not null
+ ├── l_suppkey int not null
+ ├── l_linenumber int not null
+ ├── l_quantity decimal not null
+ ├── l_extendedprice decimal not null
+ ├── l_discount decimal not null
+ ├── l_tax decimal not null
+ ├── l_returnflag string not null
+ ├── l_linestatus string not null
+ ├── l_shipdate date not null
+ ├── l_commitdate date not null
+ ├── l_receiptdate date not null
+ ├── l_shipinstruct string not null
+ ├── l_shipmode string not null
+ ├── l_comment string not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_ok
+ │    ├── l_orderkey int not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_pk
+ │    ├── l_partkey int not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_sk
+ │    ├── l_suppkey int not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_sd
+ │    ├── l_shipdate date not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_cd
+ │    ├── l_commitdate date not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_rd
+ │    ├── l_receiptdate date not null
+ │    └── rowid int not null (hidden)
+ ├── INDEX l_pk_sk
+ │    ├── l_partkey int not null
+ │    ├── l_suppkey int not null
+ │    └── rowid int not null (hidden)
+ └── INDEX l_sk_pk
+      ├── l_suppkey int not null
+      ├── l_partkey int not null
+      └── rowid int not null (hidden)
+
+opt
+SELECT count(l_orderkey) FROM orders, lineitem WHERE orders.o_orderkey = lineitem.l_orderkey
+----
+scalar-group-by
+ ├── columns: count:28(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(28)
+ ├── inner-join (merge)
+ │    ├── columns: o_orderkey:1(int!null) l_orderkey:11(int!null)
+ │    ├── fd: (1)==(11), (11)==(1)
+ │    ├── scan orders@o_ok
+ │    │    ├── columns: o_orderkey:1(int!null)
+ │    │    ├── key: (1)
+ │    │    └── ordering: +1
+ │    ├── scan lineitem@l_ok
+ │    │    ├── columns: l_orderkey:11(int!null)
+ │    │    └── ordering: +11
+ │    └── merge-on
+ │         ├── left ordering: +1
+ │         ├── right ordering: +11
+ │         └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ │              └── o_orderkey = l_orderkey [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ └── aggregations [outer=(11)]
+      └── count [type=int, outer=(11)]
+           └── variable: l_orderkey [type=int, outer=(11)]
