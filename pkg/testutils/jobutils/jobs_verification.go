@@ -175,6 +175,15 @@ func VerifySystemJob(
 	return nil
 }
 
+// GetJobID gets a particular job's ID.
+func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
+	var jobID int64
+	db.QueryRow(t, `
+	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
+	).Scan(&jobID)
+	return jobID
+}
+
 // GetJobProgress loads the Progress message associated with the job.
 func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
 	ret := &jobspb.Progress{}

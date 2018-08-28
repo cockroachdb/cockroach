@@ -1907,10 +1907,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 	}
 
+	jobRolledBack := 0
+	jobID := jobutils.GetJobID(t, &runner, jobRolledBack)
+
 	// Roll back job.
 	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
-		Description: "ROLL BACK " + testCases[0].sql,
+		Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, testCases[jobRolledBack].sql),
 		DescriptorIDs: sqlbase.IDs{
 			tableDesc.ID,
 		},
@@ -3411,10 +3414,11 @@ func TestCancelSchemaChange(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+			jobID := jobutils.GetJobID(t, sqlDB, idx)
 			idx++
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
-				Description: "ROLL BACK " + tc.sql,
+				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
 				DescriptorIDs: sqlbase.IDs{
 					tableDesc.ID,
 				},

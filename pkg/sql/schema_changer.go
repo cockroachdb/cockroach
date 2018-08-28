@@ -1029,7 +1029,7 @@ func (sc *SchemaChanger) createRollbackJob(
 			}
 			payload := job.Payload()
 			rollbackJob := sc.jobRegistry.NewJob(jobs.Record{
-				Description:   "ROLL BACK " + payload.Description,
+				Description:   fmt.Sprintf("ROLL BACK JOB %d: %s", *job.ID(), payload.Description),
 				Username:      payload.Username,
 				DescriptorIDs: payload.DescriptorIDs,
 				Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
