@@ -271,7 +271,7 @@ func registerVersion(r *registry) {
 		}
 	}
 
-	const version = "v2.0.0"
+	const version = "v2.0.5"
 	for _, n := range []int{3, 5} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
