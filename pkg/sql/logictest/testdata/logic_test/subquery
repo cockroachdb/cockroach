@@ -505,3 +505,12 @@ query B
 EXECUTE b(3)
 ----
 true
+
+# Regression test for #29205 - make sure the memory account for wrapped local
+# planNode within subqueries is properly hooked up.
+
+statement ok
+CREATE TABLE a (a TEXT PRIMARY KEY)
+
+statement ok
+SELECT (SELECT repeat(a::STRING, 2) FROM [INSERT INTO a VALUES('foo') RETURNING a]);
