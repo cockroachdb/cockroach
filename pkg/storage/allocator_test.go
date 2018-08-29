@@ -397,7 +397,6 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -431,7 +430,6 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -451,7 +449,6 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
@@ -473,7 +470,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		multiDCConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -486,7 +482,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			StoreID: result1.StoreID,
 		}},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -511,7 +506,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			},
 		},
 		firstRangeInfo,
-		false,
 	)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores: %+v", result3)
@@ -543,7 +537,6 @@ func TestAllocatorExistingReplica(t *testing.T) {
 			},
 		},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -604,9 +597,6 @@ func TestAllocatorRebalance(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 
-	st := a.storePool.st
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -618,7 +608,6 @@ func TestAllocatorRebalance(t *testing.T) {
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}}, firstRange),
 			storeFilterThrottled,
-			false,
 		)
 		if result == nil {
 			i-- // loop until we find 10 candidates
@@ -638,7 +627,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, a.scorerOptions())
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -735,8 +724,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	st := a.storePool.st
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
 	replicas := []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1},
 		{NodeID: 4, StoreID: 4},
@@ -773,7 +760,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			status,
 			rangeInfo,
 			storeFilterThrottled,
-			false,
 		)
 		if result != nil {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
@@ -793,7 +779,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			status,
 			rangeInfo,
 			storeFilterThrottled,
-			false,
 		)
 		if result != nil {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
@@ -810,7 +795,6 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			status,
 			rangeInfo,
 			storeFilterThrottled,
-			false,
 		)
 		if result == nil || result.StoreID != stores[1].StoreID {
 			t.Fatalf("%d: expected rebalance to s%d, but got %v; details: %s",
@@ -825,8 +809,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-
-	EnableStatsBasedRebalancing.Override(&sp.st.SV, false)
 
 	mockStorePool(
 		sp,
@@ -887,8 +869,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				config.ZoneConfig{},
 				nil,
 				testRangeInfo(c.existing, firstRange),
-				storeFilterThrottled,
-				false)
+				storeFilterThrottled)
 			if c.expected > 0 {
 				if result == nil {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -988,8 +969,6 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			defer stopper.Stop(context.Background())
 
 			st := a.storePool.st
-			EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 			cluster := tc.cluster(st)
 
 			// It doesn't make sense to test sets of stores containing fewer than 4
@@ -1031,7 +1010,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
+				if a, e := shouldRebalance(context.Background(), desc, sl, a.scorerOptions()), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 				}
 			}
@@ -1072,9 +1051,6 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 
-	st := a.storePool.st
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -1086,7 +1062,6 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}}, firstRange),
 			storeFilterThrottled,
-			false,
 		)
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
@@ -1100,7 +1075,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, a.scorerOptions())
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -1248,7 +1223,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	EnableStatsBasedRebalancing.Override(&a.storePool.st.SV, false)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
@@ -1367,7 +1341,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil, /* raftStatus */
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
-			false,
 		)
 		var resultID roachpb.StoreID
 		if result != nil {
@@ -1436,7 +1409,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil, /* raftStatus */
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
-			false,
 		)
 		var gotExpected bool
 		if result == nil {
@@ -1935,7 +1907,6 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 			config.ZoneConfig{},
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
-			false,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -2019,7 +1990,6 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 			config.ZoneConfig{},
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
-			false,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -2041,7 +2011,6 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	EnableStatsBasedRebalancing.Override(&a.storePool.st.SV, false)
 	defer stopper.Stop(context.Background())
 
 	stores := []*roachpb.StoreDescriptor{
@@ -2143,7 +2112,6 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			nil,
 			testRangeInfo(existingRepls, firstRange),
 			storeFilterThrottled,
-			false,
 		)
 		if targetStore == nil {
 			t.Fatalf("%d: RebalanceTarget(%v) returned no target store; details: %s", i, c.existing, details)
@@ -2494,7 +2462,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			existingRepls,
 			rangeInfo,
 			a.storePool.getLocalities(existingRepls),
-			a.scorerOptions(false),
+			a.scorerOptions(),
 		)
 		best := candidates.best()
 		match := true
@@ -2718,7 +2686,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 			analyzed,
 			rangeInfo,
 			a.storePool.getLocalities(existingRepls),
-			a.scorerOptions(false),
+			a.scorerOptions(),
 		)
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d: expected removeCandidates(%v) = %v, but got %v",
@@ -3515,7 +3483,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			rangeInfo,
 			a.storePool.getLocalities(existingRepls),
 			a.storePool.getNodeLocalityString,
-			a.scorerOptions(false),
+			a.scorerOptions(),
 		)
 		match := true
 		if len(tc.expected) != len(results) {
@@ -3539,7 +3507,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
 			target, details := a.RebalanceTarget(
-				context.Background(), zone, nil, rangeInfo, storeFilterThrottled, false)
+				context.Background(), zone, nil, rangeInfo, storeFilterThrottled)
 			var found bool
 			if target == nil && len(tc.validTargets) == 0 {
 				found = true
@@ -3905,9 +3873,6 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	st := a.storePool.st
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
 		targetRepl, _, err := a.RemoveTarget(
@@ -3915,7 +3880,6 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 			config.ZoneConfig{},
 			replicas,
 			testRangeInfo(replicas, firstRange),
-			false,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -4400,7 +4364,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 
 	lastPriority := float64(999999999)
 	for i, tcase := range testCases {
-		action, priority := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc}, false)
+		action, priority := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %q, got action %q",
 				i, allocatorActionNames[tcase.expectedAction], allocatorActionNames[action])
@@ -4410,108 +4374,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority
-	}
-}
-
-// TestAllocatorComputeActionDisableStatsRebalance is used to verify whether the cluster could balance out
-// if we disable stats-based-rebalance.
-func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop(ctx)
-
-	st := a.storePool.st
-	EnableStatsBasedRebalancing.Override(&st.SV, true)
-	// Make sure the cluster's initial status is not balanced.
-	// store 1, 2, 3 has 200 replicas, store 4 has only 30 replicas.
-	// So obviously, if we want the replica is homogeneous within each store,
-	// we should rebalance some replicas from store 1, 2, 3 to store 4.
-	// However, we set the WritesPerSecond of store 4 is much bigger than other store,
-	// so if we enable stats-based rebalance, we couldn't spread out the replicas on store 1, 2, 3.
-	stores := []*roachpb.StoreDescriptor{
-		{
-			StoreID: 1,
-			Node:    roachpb.NodeDescriptor{NodeID: 1},
-			Capacity: roachpb.StoreCapacity{
-				RangeCount:      200,
-				WritesPerSecond: 30,
-			},
-		},
-		{
-			StoreID: 2,
-			Node:    roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{
-				RangeCount:      200,
-				WritesPerSecond: 30,
-			},
-		},
-		{
-			StoreID: 3,
-			Node:    roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{
-				RangeCount:      200,
-				WritesPerSecond: 30,
-			},
-		},
-		{
-			StoreID: 4,
-			Node:    roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{
-				RangeCount:      30,
-				WritesPerSecond: 100,
-			},
-		},
-	}
-	sg := gossiputil.NewStoreGossiper(g)
-	sg.GossipStores(stores, t)
-
-	desc := roachpb.RangeDescriptor{
-		RangeID: firstRange,
-		Replicas: []roachpb.ReplicaDescriptor{
-			{
-				StoreID:   1,
-				NodeID:    1,
-				ReplicaID: 1,
-			},
-			{
-				StoreID:   2,
-				NodeID:    2,
-				ReplicaID: 2,
-			},
-			{
-				StoreID:   3,
-				NodeID:    3,
-				ReplicaID: 3,
-			},
-		},
-	}
-	for i := 0; i < 50; i++ {
-		target, _ := a.RebalanceTarget(
-			context.Background(),
-			config.ZoneConfig{},
-			nil,
-			testRangeInfo(desc.Replicas, desc.RangeID),
-			storeFilterThrottled,
-			false, /* disableStatsBasedRebalancing */
-		)
-		if target != nil {
-			t.Errorf("expected no balance, but got %d", target.StoreID)
-		}
-	}
-
-	for i := 0; i < 50; i++ {
-		target, _ := a.RebalanceTarget(
-			context.Background(),
-			config.ZoneConfig{},
-			nil,
-			testRangeInfo(desc.Replicas, desc.RangeID),
-			storeFilterThrottled,
-			true, /* disableStatsBasedRebalancing */
-		)
-		if expectedStore := roachpb.StoreID(4); target.StoreID != expectedStore {
-			t.Errorf("expected balance to %d, but got %d", expectedStore, target.StoreID)
-		}
 	}
 }
 
@@ -4599,7 +4461,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, tcase.dead, nil, nil, nil)
 
-		action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &tcase.desc}, false)
+		action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 		}
@@ -4820,7 +4682,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
 
-		action, _ := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc}, false)
+		action, _ := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
@@ -4834,7 +4696,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
-	action, priority := a.ComputeAction(context.Background(), config.ZoneConfig{}, RangeInfo{}, false)
+	action, priority := a.ComputeAction(context.Background(), config.ZoneConfig{}, RangeInfo{})
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}
@@ -4902,7 +4764,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
@@ -4915,7 +4776,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %v", err)
@@ -4938,7 +4798,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 	)
 	if _, ok := err.(purgatoryError); ok {
 		t.Fatalf("expected a non purgatory error, got: %v", err)
@@ -5205,7 +5064,6 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				nil,
 				testRangeInfo(existingReplicas, firstRange),
 				storeFilterThrottled,
-				false,
 			)
 
 			if tc.expected == nil && actual != nil {
@@ -5267,8 +5125,6 @@ func TestAllocatorFullDisks(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
@@ -5367,7 +5223,6 @@ func TestAllocatorFullDisks(t *testing.T) {
 						nil,
 						testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 						storeFilterThrottled,
-						false,
 					)
 					if target != nil {
 						if log.V(1) {
@@ -5406,8 +5261,6 @@ func Example_rebalancing() {
 	defer stopper.Stop(context.TODO())
 
 	st := cluster.MakeTestingClusterSettings()
-	EnableStatsBasedRebalancing.Override(&st.SV, false)
-
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
@@ -5492,7 +5345,6 @@ func Example_rebalancing() {
 				nil,
 				testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 				storeFilterThrottled,
-				false,
 			)
 			if target != nil {
 				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
