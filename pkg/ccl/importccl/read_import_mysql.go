@@ -309,27 +309,44 @@ func mysqlTableToCockroach(
 
 	const seqOpt = "auto_increment="
 	var seqName string
-	var seqDesc *sqlbase.TableDescriptor
+	var startingValue int64
 	for _, opt := range strings.Fields(strings.ToLower(in.Options)) {
 		if strings.HasPrefix(opt, seqOpt) {
+			seqName = name + "_auto_inc"
 			i, err := strconv.Atoi(strings.TrimPrefix(opt, seqOpt))
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "parsing AUTO_INCREMENT value")
 			}
-			i64 := int64(i)
-			seqVals[id] = i64
-			priv := sqlbase.NewDefaultPrivilegeDescriptor()
-			opts := tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &i64}}
-			seqName = name + "_auto_inc"
-			desc, err := sql.MakeSequenceTableDesc(seqName, opts, parentID, id, time, priv, nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			seqDesc = &desc
-			fks.resolver[seqName] = seqDesc
-			id++
+			startingValue = int64(i)
 			break
 		}
+	}
+
+	if seqName == "" {
+		for _, raw := range in.Columns {
+			if raw.Type.Autoincrement {
+				seqName = name + "_auto_inc"
+				break
+			}
+		}
+	}
+
+	var seqDesc *sqlbase.TableDescriptor
+	// If we have an auto-increment seq, create it and increment the id.
+	if seqName != "" {
+		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		var opts tree.SequenceOptions
+		if startingValue != 0 {
+			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
+			seqVals[id] = startingValue
+		}
+		desc, err := sql.MakeSequenceTableDesc(seqName, opts, parentID, id, time, priv, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		seqDesc = &desc
+		fks.resolver[seqName] = seqDesc
+		id++
 	}
 
 	tblName := tree.MakeUnqualifiedTableName(tree.Name(name))
@@ -345,9 +362,7 @@ func mysqlTableToCockroach(
 			return nil, nil, err
 		}
 		if raw.Type.Autoincrement {
-			if seqName == "" {
-				return nil, nil, errors.Errorf("column %q specifies AUTO_INCREMENT but table options did not include it", def.Name)
-			}
+
 			expr, err := parser.ParseExpr(fmt.Sprintf("nextval('%s':::STRING)", seqName))
 			if err != nil {
 				return nil, nil, err

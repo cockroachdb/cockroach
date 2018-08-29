@@ -248,7 +248,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 			KEY ki (k, i)
 		)`,
 		`CREATE TABLE third (
-			i INT PRIMARY KEY,
+			i INT PRIMARY KEY AUTO_INCREMENT,
 			a INT, b INT, C INT,
 			FOREIGN KEY (a, b) REFERENCES second (i, k) ON DELETE RESTRICT ON UPDATE RESTRICT,
 			FOREIGN KEY (c) REFERENCES third (i) ON UPDATE CASCADE
