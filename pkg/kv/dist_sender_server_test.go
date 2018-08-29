@@ -698,7 +698,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = int64(bound)
 		spans := [][]string{{"a", "c"}, {"c", "f"}, {"g", "h"}}
 		for _, span := range spans {
-			b.DelRange(span[0], span[1], true)
+			b.DelRange(span[0], span[1], true /* returnKeys */)
 		}
 		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
@@ -751,7 +751,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 3
-	b.DelRange("a", "c", true)
+	b.DelRange("a", "c", true /* returnKeys */)
 	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +764,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 
 	b = &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 1
-	b.DelRange("b", "c", true)
+	b.DelRange("b", "c", true /* returnKeys */)
 	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -811,7 +811,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = int64(bound)
 		spans := [][]string{{"a", "b3"}, {"b", "d"}, {"c", "f2a"}, {"f1a", "g"}}
 		for _, span := range spans {
-			b.DelRange(span[0], span[1], true)
+			b.DelRange(span[0], span[1], true /* returnKeys */)
 		}
 		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
@@ -858,8 +858,8 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// any active requests.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "b", false)
-		b.DelRange("e", "f", false)
+		b.DelRange("a", "b", false /* returnKeys */)
+		b.DelRange("e", "f", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -923,7 +923,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "d", false)
+		b.DelRange("a", "d", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -1658,6 +1658,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
+	// Don't clobber the test's splits.
+	storeKnobs.DisableMergeQueue = true
+
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.TODO()
@@ -1852,6 +1855,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}
 			return nil
 		}
+	// Don't clobber the test's splits.
+	storeKnobs.DisableMergeQueue = true
+
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.Background()
@@ -2373,7 +2379,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
-				b.DelRange("a", "b", false)
+				b.DelRange("a", "b", false /* returnKeys */)
 				b.CPut("c", "cput", "value")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
@@ -2490,7 +2496,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // note this txn is read-only but still restarts
 		},
 		{
-			name: "multi range batch with uncertainty interval error",
+			name: "multi-range batch with uncertainty interval error",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2506,7 +2512,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // will succeed because no mixed success
 		},
 		{
-			name: "multi range batch with uncertainty interval error and get conflict",
+			name: "multi-range batch with uncertainty interval error and get conflict",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "init")
 			},
@@ -2528,7 +2534,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // will fail because of conflict on refresh span for the Get
 		},
 		{
-			name: "multi range batch with uncertainty interval error and mixed success",
+			name: "multi-range batch with uncertainty interval error and mixed success",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "c", "value")
 			},
@@ -2542,7 +2548,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // client-side retry required as this will be an mixed success
 		},
 		{
-			name: "multi range scan with uncertainty interval error",
+			name: "multi-range scan with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				_, err := txn.Scan(ctx, "a", "d", 0)
 				return err
@@ -2551,7 +2557,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
 		},
 		{
-			name: "multi range DelRange with uncertainty interval error",
+			name: "multi-range DelRange with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.DelRange(ctx, "a", "d")
 			},

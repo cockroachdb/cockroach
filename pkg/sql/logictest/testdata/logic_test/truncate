@@ -132,3 +132,22 @@ TRUNCATE a CASCADE
 query I
 SELECT * FROM d
 ----
+
+subtest truncate_29010
+
+statement ok
+CREATE SEQUENCE foo;
+
+statement ok
+CREATE TABLE bar (
+  id INT NOT NULL DEFAULT nextval('foo':::STRING),
+  description STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  FAMILY "primary" (id, description)
+);
+
+statement ok
+TRUNCATE bar
+
+statement ok
+DROP TABLE bar;
