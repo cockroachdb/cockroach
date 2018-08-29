@@ -189,7 +189,7 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		if err := p.saveNonmutationAndNotify(ctx, dependencyDesc); err != nil {
+		if err := p.writeSchemaChange(ctx, dependencyDesc, sqlbase.InvalidMutationID); err != nil {
 			return cascadeDroppedViews, err
 		}
 	}

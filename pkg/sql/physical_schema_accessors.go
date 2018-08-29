@@ -195,12 +195,5 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
 ) (*ObjectDescriptor, *DatabaseDescriptor, error) {
-	// Can we use the table cache?
-	// - avoidCached -> the caller said no.
-	if !flags.avoidCached {
-		return a.tc.getTableVersion(flags.ctx, name, flags)
-	}
-
-	// Default path.
-	return a.SchemaAccessor.GetObjectDesc(name, flags)
+	return a.tc.getTableVersion(flags.ctx, name, flags)
 }

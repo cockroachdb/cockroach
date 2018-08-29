@@ -172,15 +172,17 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 // Returns res = nil if the zone specifier is not for a table or index.
 func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
-) (res *sqlbase.TableDescriptor, err error) {
+) (res *MutableTableDescriptor, err error) {
 	if zs.TargetsIndex() {
-		_, res, err = expandIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
+		_, res, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
 	} else if zs.TargetsTable() {
 		tn, err := zs.TableOrIndex.Table.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		res, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+		p.runWithOptions(resolveFlags{skipCache: true}, func() {
+			res, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+		})
 		if err != nil {
 			return nil, err
 		}

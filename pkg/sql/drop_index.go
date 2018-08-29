@@ -39,14 +39,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	// don't exist and continue execution.
 	idxNames := make([]fullIndexName, 0, len(n.IndexList))
 	for _, index := range n.IndexList {
-		var tn *tree.TableName
-		var tableDesc *TableDescriptor
-		var err error
-		// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-		// TODO(vivek): check if the cache can be used.
-		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			tn, tableDesc, err = expandIndexName(ctx, p, index, !n.IfExists /* requireTable */)
-		})
+		tn, tableDesc, err := expandMutableIndexName(ctx, p, index, !n.IfExists /* requireTable */)
 		if err != nil {
 			// Error or table did not exist.
 			return nil, err
@@ -72,12 +65,8 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		var tableDesc *TableDescriptor
-		var err error
-		params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			tableDesc, err = ResolveExistingObject(
-				ctx, params.p, index.tn, true /*required*/, requireTableDesc)
-		})
+		tableDesc, err := params.p.ResolveMutableTableDescriptor(
+			ctx, index.tn, true /*required*/, requireTableDesc)
 		if err != nil {
 			// Somehow the descriptor we had during newPlan() is not there
 			// any more.

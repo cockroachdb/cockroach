@@ -298,7 +298,7 @@ func maybeAddSequenceDependencies(
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
 	evalCtx *tree.EvalContext,
-) ([]*sqlbase.TableDescriptor, error) {
+) ([]*MutableTableDescriptor, error) {
 	ctx := evalCtx.Ctx()
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
@@ -310,9 +310,20 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		seqDesc, err := ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
-		if err != nil {
-			return nil, err
+
+		var seqDesc *MutableTableDescriptor
+		p, ok := sc.(*planner)
+		if ok {
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, parsedSeqName, true /*required*/, requireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// This is only executed via IMPORT which uses its own resolver.
+			seqDesc, err = ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
 		}
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.

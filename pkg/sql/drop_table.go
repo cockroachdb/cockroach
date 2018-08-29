@@ -152,12 +152,8 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
-) (tableDesc *sqlbase.TableDescriptor, err error) {
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
-	})
+) (*MutableTableDescriptor, error) {
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +222,7 @@ func (p *planner) removeFK(
 		return err
 	}
 	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
@@ -243,7 +239,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
@@ -411,7 +407,7 @@ func (p *planner) removeFKBackReference(
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(ctx, t)
+	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleaveBackReference(
@@ -445,7 +441,7 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		return p.saveNonmutationAndNotify(ctx, t)
+		return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 	}
 	return nil
 }

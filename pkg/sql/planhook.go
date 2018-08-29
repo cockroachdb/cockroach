@@ -92,6 +92,8 @@ type PlanHookState interface {
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	Select(ctx context.Context, n *tree.Select, desiredTypes []types.T) (planNode, error)
 	EvalAsOfTimestamp(asOf tree.AsOfClause, max hlc.Timestamp) (hlc.Timestamp, error)
+	ResolveUncachedDatabaseByName(
+		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
