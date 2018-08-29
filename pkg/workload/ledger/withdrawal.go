@@ -42,8 +42,6 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				return err
 			}
 
-			// TODO(nvanbenschoten): query for game session?
-
 			amount := randAmount(rng)
 			c.balance -= amount
 			if c.balance < 0 {
@@ -68,8 +66,7 @@ func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				return err
 			}
 
-			// TODO(nvanbenschoten): insert new game session?
-			return nil
+			return insertSession(tx, config, rng)
 		})
 	return nil, err
 }

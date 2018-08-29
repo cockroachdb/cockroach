@@ -42,6 +42,10 @@ func (bal deposit) run(config *ledger, db *gosql.DB) (interface{}, error) {
 				return err
 			}
 
+			if err := getSession(tx, config, rng); err != nil {
+				return err
+			}
+
 			amount := randAmount(rng)
 			c.balance += amount
 			c.sequence++
