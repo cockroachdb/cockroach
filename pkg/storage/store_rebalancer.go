@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,6 +40,47 @@ const (
 	// by less than this amount even if the amount is greater than the percentage
 	// threshold. This avoids too many lease transfers in lightly loaded clusters.
 	minQPSThresholdDifference = 100
+)
+
+// LoadBasedRebalancingMode controls whether range rebalancing takes
+// additional variables such as write load and disk usage into account.
+// If disabled, rebalancing is done purely based on replica count.
+var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
+	"kv.allocator.load_based_rebalancing",
+	"whether to rebalance based on the distribution of QPS across stores",
+	"leases",
+	map[int64]string{
+		int64(LBRebalancingOff):               "off",
+		int64(LBRebalancingLeasesOnly):        "leases",
+		int64(LBRebalancingLeasesAndReplicas): "leases and replicas",
+	},
+)
+
+// qpsRebalanceThreshold is much like rangeRebalanceThreshold, but for
+// QPS rather than range count. This should be set higher than
+// rangeRebalanceThreshold because QPS can naturally vary over time as
+// workloads change and clients come and go, so we need to be a little more
+// forgiving to avoid thrashing.
+var qpsRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
+	"kv.allocator.qps_rebalance_threshold",
+	"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
+	0.25,
+)
+
+// LBRebalancingMode controls if and when we do store-level rebalancing
+// based on load.
+type LBRebalancingMode int64
+
+const (
+	// LBRebalancingOff means that we do not do store-level rebalancing
+	// based on load statistics.
+	LBRebalancingOff LBRebalancingMode = iota
+	// LBRebalancingLeasesOnly means that we rebalance leases based on
+	// store-level QPS imbalances.
+	LBRebalancingLeasesOnly
+	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
+	// replicas based on store-level QPS imbalances.
+	LBRebalancingLeasesAndReplicas
 )
 
 // StoreRebalancer is responsible for examining how the associated store's load
@@ -106,24 +148,26 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-ticker.C:
 			}
 
-			if !EnableStatsBasedRebalancing.Get(&sr.st.SV) {
+			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+			if mode == LBRebalancingOff {
 				continue
 			}
 
 			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(roachpb.RangeID(0), storeFilterNone)
-			sr.rebalanceStore(ctx, storeList)
+			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
 }
 
-func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, storeList StoreList) {
-
-	statThreshold := statRebalanceThreshold.Get(&sr.st.SV)
+func (sr *StoreRebalancer) rebalanceStore(
+	ctx context.Context, mode LBRebalancingMode, storeList StoreList,
+) {
+	qpsThresholdFraction := qpsRebalanceThreshold.Get(&sr.st.SV)
 
 	// First check if we should transfer leases away to better balance QPS.
-	qpsMinThreshold := math.Min(storeList.candidateQueriesPerSecond.mean*(1-statThreshold),
+	qpsMinThreshold := math.Min(storeList.candidateQueriesPerSecond.mean*(1-qpsThresholdFraction),
 		storeList.candidateQueriesPerSecond.mean-minQPSThresholdDifference)
-	qpsMaxThreshold := math.Max(storeList.candidateQueriesPerSecond.mean*(1+statThreshold),
+	qpsMaxThreshold := math.Max(storeList.candidateQueriesPerSecond.mean*(1+qpsThresholdFraction),
 		storeList.candidateQueriesPerSecond.mean+minQPSThresholdDifference)
 
 	var localDesc *roachpb.StoreDescriptor
@@ -161,9 +205,6 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, storeList StoreLi
 			ctx, sysCfg, &hottestRanges, localDesc, storeList, storeMap, qpsMinThreshold, qpsMaxThreshold)
 		replicasToMaybeRebalance = append(replicasToMaybeRebalance, considerForRebalance...)
 		if replWithStats.repl == nil {
-			log.Infof(ctx,
-				"ran out of leases worth transferring and qps (%.2f) is still above desired threshold (%.2f); considering load-based replica rebalances",
-				localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
 			break
 		}
 
@@ -179,11 +220,7 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, storeList StoreLi
 
 		// Finally, update our local copies of the descriptors so that if
 		// additional transfers are needed we'll be making the decisions with more
-		// up-to-date info.
-		//
-		// TODO(a-robinson): This just updates the copies used locally by the
-		// storeRebalancer. We may also want to update the copies in the StorePool
-		// itself.
+		// up-to-date info. The StorePool copies are updated by transferLease.
 		localDesc.Capacity.LeaseCount--
 		localDesc.Capacity.QueriesPerSecond -= replWithStats.qps
 		if otherDesc := storeMap[target.StoreID]; otherDesc != nil {
@@ -198,6 +235,16 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, storeList StoreLi
 			localDesc.StoreID, localDesc.Capacity.QueriesPerSecond, storeList.candidateQueriesPerSecond.mean, qpsMaxThreshold)
 		return
 	}
+
+	if mode != LBRebalancingLeasesAndReplicas {
+		log.Infof(ctx,
+			"ran out of leases worth transferring and qps (%.2f) is still above desired threshold (%.2f)",
+			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
+		return
+	}
+	log.Infof(ctx,
+		"ran out of leases worth transferring and qps (%.2f) is still above desired threshold (%.2f); considering load-based replica rebalances",
+		localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
 
 	// Re-combine replicasToMaybeRebalance with what remains of hottestRanges so
 	// that we'll reconsider them for replica rebalancing.
@@ -467,8 +514,8 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			// such as zone constraints, locality diversity, and full disk come
 			// into play.
 			rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
-			options := sr.rq.allocator.scorerOptions(false /* disableStatsBasedRebalancing */)
-			options.balanceQPSInsteadOfCount = true
+			options := sr.rq.allocator.scorerOptions()
+			options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.st.SV)
 			target, _ := sr.rq.allocator.allocateTargetFromList(
 				ctx,
 				storeList,
@@ -555,13 +602,4 @@ func storeListToMap(sl StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
 		storeMap[sl.stores[i].StoreID] = &sl.stores[i]
 	}
 	return storeMap
-}
-
-func existingTarget(targets []roachpb.ReplicationTarget, candidateID roachpb.StoreID) bool {
-	for _, target := range targets {
-		if candidateID == target.StoreID {
-			return true
-		}
-	}
-	return false
 }

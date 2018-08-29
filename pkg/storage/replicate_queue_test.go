@@ -62,7 +62,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		storage.EnableStatsBasedRebalancing.Override(&st.SV, false)
+		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
 	}
 
 	const newRanges = 5

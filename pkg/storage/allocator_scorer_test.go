@@ -1058,10 +1058,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	options := scorerOptions{
-		statsBasedRebalancingEnabled: true,
-	}
-
+	options := scorerOptions{}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
@@ -1473,14 +1470,9 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	options := scorerOptions{
-		statsBasedRebalancingEnabled: true,
-	}
-
+	options := scorerOptions{}
 	storeList := StoreList{
-		candidateRanges:          stat{mean: 1000},
-		candidateLogicalBytes:    stat{mean: 512 * 1024 * 1024},
-		candidateWritesPerSecond: stat{mean: 1000},
+		candidateRanges: stat{mean: 1000},
 	}
 
 	sEmpty := roachpb.StoreCapacity{
@@ -1489,146 +1481,30 @@ func TestBalanceScore(t *testing.T) {
 		LogicalBytes: 0,
 	}
 	sMean := roachpb.StoreCapacity{
-		Capacity:        1024 * 1024 * 1024,
-		Available:       512 * 1024 * 1024,
-		LogicalBytes:    512 * 1024 * 1024,
-		RangeCount:      1000,
-		WritesPerSecond: 1000,
-		BytesPerReplica: roachpb.Percentiles{
-			P10: 100 * 1024,
-			P25: 250 * 1024,
-			P50: 500 * 1024,
-			P75: 750 * 1024,
-			P90: 1000 * 1024,
-		},
-		WritesPerReplica: roachpb.Percentiles{
-			P10: 1,
-			P25: 2.5,
-			P50: 5,
-			P75: 7.5,
-			P90: 10,
-		},
+		Capacity:     1024 * 1024 * 1024,
+		Available:    512 * 1024 * 1024,
+		LogicalBytes: 512 * 1024 * 1024,
+		RangeCount:   1000,
 	}
 	sRangesOverfull := sMean
 	sRangesOverfull.RangeCount = 1500
 	sRangesUnderfull := sMean
 	sRangesUnderfull.RangeCount = 500
-	sBytesOverfull := sMean
-	sBytesOverfull.Available = 256 * 1024 * 1024
-	sBytesOverfull.LogicalBytes = sBytesOverfull.Capacity - sBytesOverfull.Available
-	sBytesUnderfull := sMean
-	sBytesUnderfull.Available = 768 * 1024 * 1024
-	sBytesUnderfull.LogicalBytes = sBytesUnderfull.Capacity - sBytesUnderfull.Available
-	sRangesOverfullBytesOverfull := sRangesOverfull
-	sRangesOverfullBytesOverfull.Available = 256 * 1024 * 1024
-	sRangesOverfullBytesOverfull.LogicalBytes =
-		sRangesOverfullBytesOverfull.Capacity - sRangesOverfullBytesOverfull.Available
-	sRangesUnderfullBytesUnderfull := sRangesUnderfull
-	sRangesUnderfullBytesUnderfull.Available = 768 * 1024 * 1024
-	sRangesUnderfullBytesUnderfull.LogicalBytes =
-		sRangesUnderfullBytesUnderfull.Capacity - sRangesUnderfullBytesUnderfull.Available
-	sRangesUnderfullBytesOverfull := sRangesUnderfull
-	sRangesUnderfullBytesOverfull.Available = 256 * 1024 * 1024
-	sRangesUnderfullBytesOverfull.LogicalBytes =
-		sRangesUnderfullBytesOverfull.Capacity - sRangesUnderfullBytesOverfull.Available
-	sRangesOverfullBytesUnderfull := sRangesOverfull
-	sRangesOverfullBytesUnderfull.Available = 768 * 1024 * 1024
-	sRangesOverfullBytesUnderfull.LogicalBytes =
-		sRangesOverfullBytesUnderfull.Capacity - sRangesOverfullBytesUnderfull.Available
-	sRangesUnderfullBytesOverfullWritesOverfull := sRangesUnderfullBytesOverfull
-	sRangesUnderfullBytesOverfullWritesOverfull.WritesPerSecond = 1500
-	sRangesUnderfullBytesUnderfullWritesOverfull := sRangesUnderfullBytesUnderfull
-	sRangesUnderfullBytesUnderfullWritesOverfull.WritesPerSecond = 1500
 
-	rEmpty := RangeInfo{}
-	rMedian := RangeInfo{
-		LogicalBytes:    500 * 1024,
-		WritesPerSecond: 5,
-	}
-	rHighBytes := rMedian
-	rHighBytes.LogicalBytes = 2000 * 1024
-	rLowBytes := rMedian
-	rLowBytes.LogicalBytes = 50 * 1024
-	rHighBytesHighWrites := rHighBytes
-	rHighBytesHighWrites.WritesPerSecond = 20
-	rHighBytesLowWrites := rHighBytes
-	rHighBytesLowWrites.WritesPerSecond = 0.5
-	rLowBytesHighWrites := rLowBytes
-	rLowBytesHighWrites.WritesPerSecond = 20
-	rLowBytesLowWrites := rLowBytes
-	rLowBytesLowWrites.WritesPerSecond = 0.5
-	rHighWrites := rMedian
-	rHighWrites.WritesPerSecond = 20
-	rLowWrites := rMedian
-	rLowWrites.WritesPerSecond = 0.5
+	ri := RangeInfo{}
 
 	testCases := []struct {
 		sc       roachpb.StoreCapacity
-		ri       RangeInfo
 		expected float64
 	}{
-		{sEmpty, rEmpty, 3},
-		{sEmpty, rMedian, 2},
-		{sEmpty, rHighBytes, 2},
-		{sEmpty, rLowBytes, 2},
-		{sMean, rEmpty, 0},
-		{sMean, rMedian, 0},
-		{sMean, rHighBytes, 0},
-		{sMean, rLowBytes, 0},
-		{sRangesOverfull, rEmpty, -1},
-		{sRangesOverfull, rMedian, -1},
-		{sRangesOverfull, rHighBytes, -1},
-		{sRangesOverfull, rLowBytes, -1},
-		{sRangesUnderfull, rEmpty, 1},
-		{sRangesUnderfull, rMedian, 1},
-		{sRangesUnderfull, rHighBytes, 1},
-		{sRangesUnderfull, rLowBytes, 1},
-		{sBytesOverfull, rEmpty, 1},
-		{sBytesOverfull, rMedian, 0},
-		{sBytesOverfull, rHighBytes, -1},
-		{sBytesOverfull, rLowBytes, 1},
-		{sBytesUnderfull, rEmpty, -1},
-		{sBytesUnderfull, rMedian, 0},
-		{sBytesUnderfull, rHighBytes, 1},
-		{sBytesUnderfull, rLowBytes, -1},
-		{sRangesOverfullBytesOverfull, rEmpty, -.5},
-		{sRangesOverfullBytesOverfull, rMedian, -2},
-		{sRangesOverfullBytesOverfull, rHighBytes, -1.5},
-		{sRangesOverfullBytesOverfull, rLowBytes, -.5},
-		{sRangesUnderfullBytesUnderfull, rEmpty, .5},
-		{sRangesUnderfullBytesUnderfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfull, rHighBytes, 1.5},
-		{sRangesUnderfullBytesUnderfull, rLowBytes, .5},
-		{sRangesUnderfullBytesOverfull, rEmpty, 2},
-		{sRangesUnderfullBytesOverfull, rMedian, 1},
-		{sRangesUnderfullBytesOverfull, rHighBytes, 0},
-		{sRangesUnderfullBytesOverfull, rLowBytes, 2},
-		{sRangesOverfullBytesUnderfull, rEmpty, -2},
-		{sRangesOverfullBytesUnderfull, rMedian, -1},
-		{sRangesOverfullBytesUnderfull, rHighBytes, 0},
-		{sRangesOverfullBytesUnderfull, rLowBytes, -2},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rEmpty, 3},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rMedian, 1},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytes, 0},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesHighWrites, -1},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesLowWrites, 1},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytes, 2},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesHighWrites, 1},
-		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesLowWrites, 3},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rEmpty, 1.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 1.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, 0.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 2.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -0.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1.5},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighWrites, 1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
+		{sEmpty, 1},
+		{sMean, 0},
+		{sRangesOverfull, -1},
+		{sRangesUnderfull, 1},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(storeList, tc.sc, tc.ri, options), tc.expected; a.totalScore() != e {
-			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
+		if a, e := balanceScore(storeList, tc.sc, ri, options), tc.expected; a.totalScore() != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %s; want %.2f", i, tc.sc, a, e)
 		}
 	}
 }
@@ -1636,77 +1512,34 @@ func TestBalanceScore(t *testing.T) {
 func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	options := scorerOptions{
-		statsBasedRebalancingEnabled: true,
-	}
-
-	const diskCapacity = 2000
 	storeList := StoreList{
-		candidateRanges:          stat{mean: 1000},
-		candidateLogicalBytes:    stat{mean: 1000},
-		candidateWritesPerSecond: stat{mean: 1000},
-	}
-	emptyRange := RangeInfo{}
-	normalRange := RangeInfo{
-		LogicalBytes:    10,
-		WritesPerSecond: 10,
-	}
-	outlierRange := RangeInfo{
-		LogicalBytes:    10,
-		WritesPerSecond: 10000,
+		candidateRanges: stat{mean: 1000},
 	}
 
 	testCases := []struct {
-		rangeCount      int32
-		liveBytes       int64
-		writesPerSecond float64
-		ri              RangeInfo
-		toConverges     bool
-		fromConverges   bool
+		rangeCount    int32
+		toConverges   bool
+		fromConverges bool
 	}{
-		{0, 0, 0, emptyRange, true, false},
-		{900, 900, 900, emptyRange, true, false},
-		{900, 900, 2000, emptyRange, true, false},
-		{999, 1000, 1000, emptyRange, true, false},
-		{1000, 1000, 1000, emptyRange, false, false},
-		{1001, 1000, 1000, emptyRange, false, true},
-		{2000, 2000, 2000, emptyRange, false, true},
-		{900, 2000, 2000, emptyRange, true, false},
-		{0, 0, 0, normalRange, true, false},
-		{900, 900, 900, normalRange, true, false},
-		{900, 900, 2000, normalRange, true, false},
-		{999, 1000, 1000, normalRange, false, false},
-		{2000, 2000, 2000, normalRange, false, true},
-		{900, 2000, 2000, normalRange, false, true},
-		{1000, 990, 990, normalRange, true, false},
-		{1000, 994, 994, normalRange, true, false},
-		{1000, 990, 995, normalRange, false, false},
-		{1000, 1010, 1010, normalRange, false, true},
-		{1000, 1010, 1005, normalRange, false, false},
-		{0, 0, 0, outlierRange, true, false},
-		{900, 900, 900, outlierRange, true, false},
-		{900, 900, 2000, outlierRange, true, false},
-		{999, 1000, 1000, outlierRange, false, false},
-		{2000, 2000, 10000, outlierRange, false, true},
-		{900, 2000, 10000, outlierRange, false, true},
-		{1000, 990, 990, outlierRange, false, false},
-		{1000, 1000, 10000, outlierRange, false, false},
-		{1000, 1010, 10000, outlierRange, false, true},
-		{1001, 1010, 1005, outlierRange, false, true},
+		{0, true, false},
+		{900, true, false},
+		{900, true, false},
+		{999, true, false},
+		{1000, false, false},
+		{1001, false, true},
+		{2000, false, true},
+		{900, true, false},
 	}
+
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
-			Capacity:        diskCapacity,
-			Available:       diskCapacity - tc.liveBytes,
-			LogicalBytes:    tc.liveBytes,
-			RangeCount:      tc.rangeCount,
-			WritesPerSecond: tc.writesPerSecond,
+			RangeCount: tc.rangeCount,
 		}
-		if a, e := rebalanceToConvergesOnMean(storeList, sc, tc.ri, options), tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
+		if a, e := rebalanceToConvergesOnMean(storeList, sc), tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(storeList, sc, tc.ri, options), tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
+		if a, e := rebalanceFromConvergesOnMean(storeList, sc), tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
 	}
 }
