@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// TODO(benesch): move this test to somewhere more specific than package server.
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -111,7 +112,11 @@ func TestIntentResolution(t *testing.T) {
 					}
 					return nil
 				}
+			// Prevent the merge queue from immediately discarding our splits.
+			storeKnobs.DisableMergeQueue = true
 
+			// TODO(benesch): starting a test server for every test case is needlessly
+			// inefficient.
 			s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop(context.TODO())
