@@ -45,9 +45,10 @@ const (
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
 
-	sinkSchemeBuffer     = ``
-	sinkSchemeKafka      = `kafka`
-	sinkParamTopicPrefix = `topic_prefix`
+	sinkParamTopicPrefix      = `topic_prefix`
+	sinkSchemeBuffer          = ``
+	sinkSchemeExperimentalSQL = `experimental-sql`
+	sinkSchemeKafka           = `kafka`
 )
 
 var changefeedOptionExpectValues = map[string]bool{

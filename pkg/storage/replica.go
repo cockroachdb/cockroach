@@ -69,16 +69,6 @@ import (
 )
 
 const (
-	// sentinelGossipTTL is time-to-live for the gossip sentinel. The
-	// sentinel informs a node whether or not it's connected to the
-	// primary gossip network and not just a partition. As such it must
-	// expire on a reasonable basis and be continually re-gossiped. The
-	// replica which is the lease holder of the first range gossips it.
-	sentinelGossipTTL = 2 * time.Minute
-	// sentinelGossipInterval is the approximate interval at which the
-	// sentinel info is gossiped.
-	sentinelGossipInterval = sentinelGossipTTL / 2
-
 	// configGossipTTL is the time-to-live for configuration maps.
 	configGossipTTL = 0 // does not expire
 	// optimizePutThreshold is the minimum length of a contiguous run
@@ -6501,7 +6491,9 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().GetBytes(), sentinelGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(
+		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
+		r.store.cfg.SentinelGossipTTL()); err != nil {
 		log.Errorf(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
