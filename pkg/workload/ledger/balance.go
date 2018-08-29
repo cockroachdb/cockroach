@@ -18,16 +18,13 @@ package ledger
 import (
 	gosql "database/sql"
 	"math/rand"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type balance struct{}
 
 var _ ledgerTx = balance{}
 
-func (bal balance) run(config *ledger, db *gosql.DB) (interface{}, error) {
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+func (bal balance) run(config *ledger, db *gosql.DB, rng *rand.Rand) (interface{}, error) {
 	cID := config.randCustomer(rng)
 
 	_, err := getBalance(db, config, cID, config.historicalBalance)
