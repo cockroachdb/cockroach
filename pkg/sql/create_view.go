@@ -146,16 +146,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
-
 	// Collect all the tables/views this view depends on.
 	for backrefID := range n.planDeps {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 

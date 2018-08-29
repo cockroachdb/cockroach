@@ -880,7 +880,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 
 // reverseMutations reverses the direction of all the mutations with the
 // mutationID. This is called after hitting an irrecoverable error while
-// applying a schema change. If a column being added is reversed and dropped,
+// applying a schema change. If a column being added is reversed and droped,
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
 	// Reverse the flow of the state machine.
@@ -943,7 +943,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 
 		// Mark other reversed mutation jobs as failed.
 		for m := range droppedMutations {
-			_, err := sc.markJobFailed(ctx, txn, tableDesc, m, causingError)
+			_, err := markJobFailed(ctx, txn, tableDesc, m, sc.jobRegistry, causingError)
 			if err != nil {
 				return err
 			}
@@ -977,19 +977,20 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 }
 
 // Mark the job associated with the mutation as failed.
-func (sc *SchemaChanger) markJobFailed(
+func markJobFailed(
 	ctx context.Context,
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
 	mutationID sqlbase.MutationID,
+	jobRegistry *jobs.Registry,
 	causingError error,
 ) (*jobs.Job, error) {
 	// Mark job as failed.
-	jobID, err := sc.getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
+	jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
 	if err != nil {
 		return nil, err
 	}
-	job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+	job, err := jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -1004,7 +1005,7 @@ func (sc *SchemaChanger) createRollbackJob(
 ) (*jobs.Job, error) {
 
 	// Mark job as failed.
-	job, err := sc.markJobFailed(ctx, txn, tableDesc, sc.mutationID, causingError)
+	job, err := markJobFailed(ctx, txn, tableDesc, sc.mutationID, sc.jobRegistry, causingError)
 	if err != nil {
 		return nil, err
 	}
