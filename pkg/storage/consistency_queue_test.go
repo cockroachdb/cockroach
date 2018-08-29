@@ -300,6 +300,11 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		ScanInterval:    time.Second,
 		ScanMinIdleTime: 0,
 		ScanMaxIdleTime: 100 * time.Millisecond,
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableMergeQueue: true,
+			},
+		},
 	}
 	nodeZeroArgs := tsArgs
 	nodeZeroArgs.StoreSpecs = []base.StoreSpec{{

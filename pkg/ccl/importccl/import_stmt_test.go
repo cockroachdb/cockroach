@@ -2169,7 +2169,16 @@ func TestImportPgDump(t *testing.T) {
 	)
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata")
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args := base.TestServerArgs{
+		ExternalIODir: baseDir,
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// TODO(benesch): figure out why this test sometimes hangs forever if
+				// the merge queue is enabled.
+				DisableMergeQueue: true,
+			},
+		},
+	}
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
