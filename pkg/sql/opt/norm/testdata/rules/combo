@@ -746,7 +746,7 @@ DecorrelateJoin
     │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
     └── filters [type=bool]
 ================================================================================
-EliminateEmptyAnd
+EliminateEmptyFilters
   Cost: 2190.00
 ================================================================================
    select
