@@ -20,6 +20,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -175,17 +177,25 @@ func TestChangefeedTimestamps(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
 	var ts0 string
-	sqlDB.QueryRow(t,
-		`BEGIN; INSERT INTO foo VALUES (0); SELECT cluster_logical_timestamp(); COMMIT`,
-	).Scan(&ts0)
+	if err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(
+			`INSERT INTO foo VALUES (0) RETURNING cluster_logical_timestamp()`,
+		).Scan(&ts0)
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	rows := sqlDB.Query(t, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 	defer closeFeedRowsHack(t, sqlDB, rows)
 
 	var ts1 string
-	sqlDB.QueryRow(t,
-		`BEGIN; INSERT INTO foo VALUES (1); SELECT cluster_logical_timestamp(); COMMIT`,
-	).Scan(&ts1)
+	if err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+		return tx.QueryRow(
+			`INSERT INTO foo VALUES (1) RETURNING cluster_logical_timestamp()`,
+		).Scan(&ts1)
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	assertPayloads(t, rows, []string{
 		`foo: [0]->{"__crdb__": {"updated": "` + ts0 + `"}, "a": 0}`,
