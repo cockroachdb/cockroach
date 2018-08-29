@@ -18,8 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strconv"
 	"time"
 
@@ -122,7 +120,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.printf(fmt.Sprintf("run: %s\n", stmt))
+		c.l.Printf(fmt.Sprintf("run: %s\n", stmt))
 	}
 
 	var m *errgroup.Group // see comment in version.go
@@ -133,10 +131,11 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		cmd = fmt.Sprintf(cmd, nodes)
 		m.Go(func() error {
-			quietL, err := newLogger(cmd, strconv.Itoa(i), "workload"+strconv.Itoa(i), ioutil.Discard, os.Stderr)
+			quietL, err := c.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
 			if err != nil {
 				return err
 			}
+			defer quietL.close()
 			return c.RunL(ctx, quietL, c.Node(nodes), cmd)
 		})
 	}
