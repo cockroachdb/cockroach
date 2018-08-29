@@ -45,7 +45,17 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	const numNodes = 5
 	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.TODO())
 
