@@ -114,6 +114,7 @@ func registerVersion(r *registry) {
 			if err != nil {
 				return err
 			}
+			time.Sleep(time.Minute)
 			// NB: the number of calls to `sleep` needs to be reflected in `loadDuration`.
 			sleepAndCheck := func() error {
 				t.WorkerStatus("sleeping")
