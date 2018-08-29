@@ -105,6 +105,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	cfg.TimeSeriesDataStore = model
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
+	cfg.TestingKnobs.DisableMergeQueue = true
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())

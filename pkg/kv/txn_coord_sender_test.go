@@ -289,7 +289,10 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 // Test that the theartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		// Prevent the merge queue from immediately discarding our splits.
+		DisableMergeQueue: true,
+	})
 	defer s.Stop()
 	ctx := context.Background()
 

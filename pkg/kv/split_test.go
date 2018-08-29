@@ -238,7 +238,10 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		// Prevent the merge queue from immediately discarding our splits.
+		DisableMergeQueue: true,
+	})
 	defer s.Stop()
 
 	ctx := context.TODO()
