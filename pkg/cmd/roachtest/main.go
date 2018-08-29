@@ -117,7 +117,7 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 		cmd.Flags().IntVar(
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
-			&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
+			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
 		cmd.Flags().BoolVarP(
 			&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
 		cmd.Flags().IntVarP(
@@ -151,7 +151,7 @@ Cockroach cluster with existing data.
 		&stores, "stores", "n", stores, "number of stores to distribute data across")
 	storeGenCmd.Flags().SetInterspersed(false) // ignore workload flags
 	storeGenCmd.Flags().BoolVarP(
-		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
+		&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
 
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
