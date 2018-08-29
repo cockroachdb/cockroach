@@ -330,7 +330,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 	info.Schema = schema
 
-	info.FeatureUsage = telemetry.GetAndResetFeatureCounts()
+	info.FeatureUsage = telemetry.GetAndResetFeatureCounts(true /* quantize */)
 
 	info.ErrorCounts = make(map[string]int64)
 	info.UnimplementedErrors = make(map[string]int64)
