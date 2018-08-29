@@ -668,14 +668,14 @@ type NormalizeVisitor struct {
 	ctx *EvalContext
 	err error
 
-	isConstVisitor isConstVisitor
+	fastIsConstVisitor fastIsConstVisitor
 }
 
 var _ Visitor = &NormalizeVisitor{}
 
 // MakeNormalizeVisitor creates a NormalizeVisitor instance.
 func MakeNormalizeVisitor(ctx *EvalContext) NormalizeVisitor {
-	return NormalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
+	return NormalizeVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
 }
 
 // Err retrieves the error field in the NormalizeVisitor.
@@ -716,9 +716,6 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
-		if _, ok := expr.(*Placeholder); ok {
-			return expr
-		}
 		value, err := expr.(TypedExpr).Eval(v.ctx)
 		if err != nil {
 			// Ignore any errors here (e.g. division by zero), so they can happen
@@ -744,7 +741,7 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 }
 
 func (v *NormalizeVisitor) isConst(expr Expr) bool {
-	return v.isConstVisitor.run(expr)
+	return v.fastIsConstVisitor.run(expr)
 }
 
 // isNumericZero returns true if the datum is a number and equal to
@@ -834,6 +831,72 @@ func (v *isConstVisitor) run(expr Expr) bool {
 func IsConst(evalCtx *EvalContext, expr Expr) bool {
 	v := isConstVisitor{ctx: evalCtx}
 	return v.run(expr)
+}
+
+// fastIsConstVisitor is similar to isConstVisitor, but it only visits
+// at most two levels of the tree (with one exception, see below).
+// In essence, it determines whether an expression is constant by checking
+// whether its children are const Datums.
+//
+// This can be used during normalization since constants are evaluated
+// bottom-up. If a child is *not* a const Datum, that means it was already
+// determined to be non-constant, and therefore was not evaluated.
+type fastIsConstVisitor struct {
+	ctx     *EvalContext
+	isConst bool
+
+	// visited indicates whether we have already visited one level of the tree.
+	// fastIsConstVisitor only visits at most two levels of the tree, with one
+	// exception: If the second level has a Cast expression, fastIsConstVisitor
+	// may visit three levels.
+	visited bool
+}
+
+var _ Visitor = &fastIsConstVisitor{}
+
+func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.visited {
+		if _, ok := expr.(*CastExpr); ok {
+			// We recurse one more time for cast expressions, since the
+			// NormalizeVisitor may have wrapped a NULL.
+			return true, expr
+		}
+		if _, ok := expr.(Datum); !ok || isVar(v.ctx, expr) {
+			// If the child expression is not a const Datum, the parent expression is
+			// not constant. Note that all constant literals have already been
+			// normalized to Datum in TypeCheck.
+			v.isConst = false
+		}
+		return false, expr
+	}
+	v.visited = true
+
+	// If the parent expression is a variable or impure function, we know that it
+	// is not constant.
+
+	if isVar(v.ctx, expr) {
+		v.isConst = false
+		return false, expr
+	}
+
+	switch t := expr.(type) {
+	case *FuncExpr:
+		if t.IsImpure() {
+			v.isConst = false
+			return false, expr
+		}
+	}
+
+	return true, expr
+}
+
+func (*fastIsConstVisitor) VisitPost(expr Expr) Expr { return expr }
+
+func (v *fastIsConstVisitor) run(expr Expr) bool {
+	v.isConst = true
+	v.visited = false
+	WalkExprConst(v, expr)
+	return v.isConst
 }
 
 // isVar returns true if the expression's value can vary during plan
