@@ -456,6 +456,16 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 	return
 }
 
+// SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
+// informs a node whether or not it's connected to the primary gossip network
+// and not just a partition. As such it must expire fairly quickly and be
+// continually re-gossiped as a connected gossip network is necessary to
+// propagate liveness. The replica which is the lease holder of the first range
+// gossips it.
+func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
+	return cfg.RangeLeaseActiveDuration() / 2
+}
+
 // DefaultRetryOptions should be used for retrying most
 // network-dependent operations.
 func DefaultRetryOptions() retry.Options {

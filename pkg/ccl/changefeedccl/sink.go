@@ -10,20 +10,21 @@ package changefeedccl
 
 import (
 	"context"
-	"math"
+	gosql "database/sql"
+	"fmt"
+	"hash"
+	"hash/fnv"
 	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -57,6 +58,14 @@ func getSink(sinkURI string, targets map[sqlbase.ID]string) (Sink, error) {
 	case sinkSchemeKafka:
 		kafkaTopicPrefix := u.Query().Get(sinkParamTopicPrefix)
 		return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+	case sinkSchemeExperimentalSQL:
+		// Swap the changefeed prefix for the sql connection one that sqlSink
+		// expects.
+		u.Scheme = `postgres`
+		// TODO(dan): Make tableName configurable or based on the job ID or
+		// something.
+		tableName := `sqlsink`
+		return makeSQLSink(u.String(), tableName, targets)
 	default:
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
@@ -309,6 +318,147 @@ func (p *changefeedPartitioner) Partition(
 	return p.hash.Partition(message, numPartitions)
 }
 
+const (
+	sqlSinkCreateTableStmt = `CREATE TABLE IF NOT EXISTS "%s" (
+		topic STRING,
+		partition INT,
+		message_id INT,
+		key BYTES, value BYTES,
+		resolved BYTES,
+		PRIMARY KEY (topic, partition, message_id)
+	)`
+	sqlSinkEmitStmt = `INSERT INTO "%s" (topic, partition, message_id, key, value, resolved)`
+	sqlSinkEmitCols = 6
+	// Some amount of batching to mirror a bit how kafkaSink works.
+	sqlSinkRowBatchSize = 3
+	// While sqlSink is only used for testing, hardcode the number of
+	// partitions to something small but greater than 1.
+	sqlSinkNumPartitions = 3
+)
+
+// sqlSink mirrors the semantics offered by kafkaSink as closely as possible,
+// but writes to a SQL table (presumably in CockroachDB). Currently only for
+// testing.
+//
+// Each emitted row or resolved timestamp is stored as a row in the table. Each
+// table gets 3 partitions. Similar to kafkaSink, the order between two emits is
+// only preserved if they are emitted to by the same node and to the same
+// partition.
+type sqlSink struct {
+	db *gosql.DB
+
+	tableName string
+	topics    map[string]struct{}
+	hasher    hash.Hash32
+
+	rowBuf []interface{}
+}
+
+func makeSQLSink(uri, tableName string, targets map[sqlbase.ID]string) (*sqlSink, error) {
+	if u, err := url.Parse(uri); err != nil {
+		return nil, err
+	} else if u.Path == `` {
+		return nil, errors.Errorf(`must specify database`)
+	}
+	db, err := gosql.Open(`postgres`, uri)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(fmt.Sprintf(sqlSinkCreateTableStmt, tableName)); err != nil {
+		return nil, err
+	}
+
+	s := &sqlSink{
+		db:        db,
+		tableName: tableName,
+		topics:    make(map[string]struct{}),
+		hasher:    fnv.New32a(),
+	}
+	for _, tableName := range targets {
+		s.topics[tableName] = struct{}{}
+	}
+	return s, nil
+}
+
+// EmitRow implements the Sink interface.
+func (s *sqlSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
+	if _, ok := s.topics[topic]; !ok {
+		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
+	}
+
+	// Hashing logic copied from sarama.HashPartitioner.
+	s.hasher.Reset()
+	if _, err := s.hasher.Write(key); err != nil {
+		return err
+	}
+	partition := int32(s.hasher.Sum32()) % sqlSinkNumPartitions
+	if partition < 0 {
+		partition = -partition
+	}
+
+	var noResolved []byte
+	return s.emit(ctx, topic, partition, key, value, noResolved)
+}
+
+// EmitResolvedTimestamp implements the Sink interface.
+func (s *sqlSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
+	var noKey, noValue []byte
+	for topic := range s.topics {
+		for partition := int32(0); partition < sqlSinkNumPartitions; partition++ {
+			if err := s.emit(ctx, topic, partition, noKey, noValue, payload); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *sqlSink) emit(
+	ctx context.Context, topic string, partition int32, key, value, resolved []byte,
+) error {
+	// Generate the message id on the client to match the guaranttees of kafka
+	// (two messages are only guaranteed to keep their order if emitted from the
+	// same producer to the same partition).
+	messageID := builtins.GenerateUniqueInt(roachpb.NodeID(partition))
+	s.rowBuf = append(s.rowBuf, topic, partition, messageID, key, value, resolved)
+	if len(s.rowBuf)/sqlSinkEmitCols >= sqlSinkRowBatchSize {
+		return s.Flush(ctx)
+	}
+	return nil
+}
+
+// Flush implements the Sink interface.
+func (s *sqlSink) Flush(ctx context.Context) error {
+	if len(s.rowBuf) == 0 {
+		return nil
+	}
+
+	var stmt strings.Builder
+	fmt.Fprintf(&stmt, sqlSinkEmitStmt, s.tableName)
+	for i := 0; i < len(s.rowBuf); i++ {
+		if i == 0 {
+			stmt.WriteString(` VALUES (`)
+		} else if i%sqlSinkEmitCols == 0 {
+			stmt.WriteString(`),(`)
+		} else {
+			stmt.WriteString(`,`)
+		}
+		fmt.Fprintf(&stmt, `$%d`, i+1)
+	}
+	stmt.WriteString(`)`)
+	_, err := s.db.Exec(stmt.String(), s.rowBuf...)
+	if err != nil {
+		return err
+	}
+	s.rowBuf = s.rowBuf[:0]
+	return nil
+}
+
+// Close implements the Sink interface.
+func (s *sqlSink) Close() error {
+	return s.db.Close()
+}
+
 // encDatumRowBuffer is a FIFO of `EncDatumRow`s.
 //
 // TODO(dan): There's some potential allocation savings here by reusing the same
@@ -370,149 +520,4 @@ func (s *bufferSink) Flush(_ context.Context) error {
 func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
-}
-
-type metricsSink struct {
-	metrics *Metrics
-	wrapped Sink
-}
-
-func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
-	m := &metricsSink{
-		metrics: metrics,
-		wrapped: s,
-	}
-	return m
-}
-
-func (s *metricsSink) EmitRow(ctx context.Context, topic string, key, value []byte) error {
-	start := timeutil.Now()
-	err := s.wrapped.EmitRow(ctx, topic, key, value)
-	if err == nil {
-		s.metrics.EmittedMessages.Inc(1)
-		s.metrics.EmittedBytes.Inc(int64(len(key) + len(value)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
-	}
-	return err
-}
-
-func (s *metricsSink) EmitResolvedTimestamp(ctx context.Context, payload []byte) error {
-	start := timeutil.Now()
-	err := s.wrapped.EmitResolvedTimestamp(ctx, payload)
-	if err == nil {
-		s.metrics.EmittedMessages.Inc(1)
-		s.metrics.EmittedBytes.Inc(int64(len(payload)))
-		s.metrics.EmitNanos.Inc(timeutil.Since(start).Nanoseconds())
-	}
-	return err
-}
-
-func (s *metricsSink) Flush(ctx context.Context) error {
-	start := timeutil.Now()
-	err := s.wrapped.Flush(ctx)
-	if err == nil {
-		s.metrics.Flushes.Inc(1)
-		s.metrics.FlushNanos.Inc(timeutil.Since(start).Nanoseconds())
-	}
-	return err
-}
-
-func (s *metricsSink) Close() error {
-	return s.wrapped.Close()
-}
-
-var (
-	metaChangefeedEmittedMessages = metric.Metadata{
-		Name:        "changefeed.emitted_messages",
-		Help:        "Messages emitted by all feeds",
-		Measurement: "Messages",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaChangefeedEmittedBytes = metric.Metadata{
-		Name:        "changefeed.emitted_bytes",
-		Help:        "Bytes emitted by all feeds",
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaChangefeedEmitNanos = metric.Metadata{
-		Name:        "changefeed.emit_nanos",
-		Help:        "Total time spent emitting all feeds",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	// This is more naturally a histogram but that creates a lot of timeseries
-	// and it's not clear that the additional fidelity is worth it. Revisit if
-	// evidence suggests otherwise.
-	metaChangefeedFlushes = metric.Metadata{
-		Name:        "changefeed.flushes",
-		Help:        "Total flushes across all feeds",
-		Measurement: "Flushes",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaChangefeedFlushNanos = metric.Metadata{
-		Name:        "changefeed.flush_nanos",
-		Help:        "Total time spent flushing all feeds",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	// TODO(dan): This was intended to be a measure of the minimum distance of
-	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
-	// the face of changing zone configs is much harder, so this will have to do
-	// for now.
-	metaChangefeedMinHighWater = metric.Metadata{
-		Name:        "changefeed.min_high_water",
-		Help:        "Latest high_water timestamp of most behind feed",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_TIMESTAMP_NS,
-	}
-)
-
-const noMinHighWaterSentinel = int64(math.MaxInt64)
-
-// Metrics are for production monitoring of changefeeds.
-type Metrics struct {
-	EmittedMessages *metric.Counter
-	EmittedBytes    *metric.Counter
-	EmitNanos       *metric.Counter
-	Flushes         *metric.Counter
-	FlushNanos      *metric.Counter
-
-	mu struct {
-		syncutil.Mutex
-		id       int
-		resolved map[int]hlc.Timestamp
-	}
-	MinHighWater *metric.Gauge
-}
-
-// MetricStruct implements the metric.Struct interface.
-func (*Metrics) MetricStruct() {}
-
-// MakeMetrics makes the metrics for changefeed monitoring.
-func MakeMetrics() metric.Struct {
-	m := &Metrics{
-		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
-		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
-		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
-		Flushes:         metric.NewCounter(metaChangefeedFlushes),
-		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
-	}
-	m.mu.resolved = make(map[int]hlc.Timestamp)
-	m.MinHighWater = metric.NewFunctionalGauge(metaChangefeedMinHighWater, func() int64 {
-		minHighWater := noMinHighWaterSentinel
-		m.mu.Lock()
-		for _, resolved := range m.mu.resolved {
-			if minHighWater == noMinHighWaterSentinel || resolved.WallTime < minHighWater {
-				minHighWater = resolved.WallTime
-			}
-		}
-		m.mu.Unlock()
-		return minHighWater
-	})
-	return m
-}
-
-func init() {
-	jobs.MakeChangefeedMetricsHook = MakeMetrics
 }

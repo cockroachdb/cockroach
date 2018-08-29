@@ -92,3 +92,17 @@ func (s ServerStatus) String() string {
 	}
 	return buf.String()
 }
+
+func (c Connectivity) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "gossip connectivity\n")
+	if c.SentinelNodeID != 0 {
+		fmt.Fprintf(&buf, "  n%d [sentinel];\n", c.SentinelNodeID)
+	}
+	fmt.Fprintf(&buf, " ")
+	for _, conn := range c.ClientConns {
+		fmt.Fprintf(&buf, " n%d -> n%d;", conn.SourceID, conn.TargetID)
+	}
+	fmt.Fprintf(&buf, "\n")
+	return buf.String()
+}
