@@ -1990,10 +1990,11 @@ SELECT array_to_string(ARRAY['a', 'b,', 'c'], NULL), array_to_string(ARRAY['a', 
 ----
 NULL  afoob,foozerpfooc
 
-query TT
-SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
-----
-NULL  NULL
+statement error could not determine polymorphic type
+SELECT array_to_string(NULL, ',')
+
+statement error could not determine polymorphic type
+SELECT array_to_string(NULL, 'foo', 'zerp')
 
 subtest pg_is_in_recovery
 

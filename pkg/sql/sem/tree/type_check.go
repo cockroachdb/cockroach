@@ -867,6 +867,18 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	expr.fn = overloadImpl
 	expr.fnProps = &def.FunctionProperties
 	expr.typ = overloadImpl.returnType()(typedSubExprs)
+	if expr.typ == UnknownReturnType {
+		typeNames := make([]string, 0, len(expr.Exprs))
+		for _, expr := range typedSubExprs {
+			typeNames = append(typeNames, expr.ResolvedType().String())
+		}
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeDatatypeMismatchError,
+			"could not determine polymorphic type: %s(%s)",
+			&expr.Func,
+			strings.Join(typeNames, ", "),
+		)
+	}
 	return expr, nil
 }
 

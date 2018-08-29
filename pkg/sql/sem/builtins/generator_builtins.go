@@ -100,11 +100,8 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
 					return tree.UnknownReturnType
-				}
-				if args[0].ResolvedType() == types.Unknown {
-					return types.Unknown
 				}
 				return types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
 			},
@@ -117,7 +114,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
 					return tree.UnknownReturnType
 				}
 				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ

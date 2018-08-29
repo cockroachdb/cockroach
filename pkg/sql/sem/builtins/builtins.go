@@ -2342,10 +2342,15 @@ may increase either contention or retry errors, or both.`,
 
 	"array_to_string": makeBuiltin(arrayPropsNullableArgs(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
+			Types: tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
+			ReturnType: func(args []tree.TypedExpr) types.T {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
+					return tree.UnknownReturnType
+				}
+				return types.String
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull || args[1] == tree.DNull {
+				if args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
 				arr := tree.MustBeDArray(args[0])
@@ -2355,10 +2360,15 @@ may increase either contention or retry errors, or both.`,
 			Info: "Join an array into a string with a delimiter.",
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
+			Types: tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
+			ReturnType: func(args []tree.TypedExpr) types.T {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
+					return tree.UnknownReturnType
+				}
+				return types.String
+			},
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull || args[1] == tree.DNull {
+				if args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
 				arr := tree.MustBeDArray(args[0])
