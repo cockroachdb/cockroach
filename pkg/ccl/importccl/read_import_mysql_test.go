@@ -199,7 +199,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 
 	t.Run("third-in-multi", func(t *testing.T) {
 		skip := fkHandler{allowed: true, skip: true, resolver: make(fkResolver)}
-		expected := descForTable(t, readFile(t, `third.cockroach-schema.sql`), expectedParent, 51, skip)
+		expected := descForTable(t, readFile(t, `third.cockroach-schema.sql`), expectedParent, 52, skip)
 		got := readMysqlCreateFrom(t, files.wholeDB, "third", 51, skip)
 		compareTables(t, expected, got)
 	})
