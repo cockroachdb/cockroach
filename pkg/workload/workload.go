@@ -363,7 +363,7 @@ func Setup(
 func maybeDisableMergeQueue(db *gosql.DB) error {
 	var ok bool
 	if err := db.QueryRow(
-		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] WHERE variable = 'kv.range_merge.queue_enabled'`,
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
 	).Scan(&ok); err != nil || !ok {
 		return err
 	}
