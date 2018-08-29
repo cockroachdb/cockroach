@@ -577,19 +577,14 @@ func (sc *SchemaChanger) backfillIndexes(
 ) error {
 	// Pick a read timestamp for our index backfill, or reuse the previously
 	// stored one.
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		details := *sc.job.WithTxn(txn).Payload().Details.(*jobs.Payload_SchemaChange).SchemaChange
-		if details.ReadAsOf == (hlc.Timestamp{}) {
-			details.ReadAsOf = txn.CommitTimestamp()
-			if err := sc.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-				return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
-			}
+	details := *sc.job.Payload().Details.(*jobs.Payload_SchemaChange).SchemaChange
+	if details.ReadAsOf == (hlc.Timestamp{}) {
+		details.ReadAsOf = sc.clock.Now()
+		if err := sc.job.SetDetails(ctx, details); err != nil {
+			return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
 		}
-		sc.readAsOf = details.ReadAsOf
-		return nil
-	}); err != nil {
-		return err
 	}
+	sc.readAsOf = details.ReadAsOf
 
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
