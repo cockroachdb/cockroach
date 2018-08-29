@@ -150,6 +150,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:752f1e64a07686d354c797fbde07c21f3d0e5a24f096858dbb731765a7e6a449"
+  name = "github.com/armon/circbuf"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bbbad097214e2918d8543d5201d12bfd7bca254d"
+
+[[projects]]
+  branch = "master"
   digest = "1:9fd3a6ab34bb103ba228eefd044d3f9aa476237ea95a46d12e8cccd3abf3fea2"
   name = "github.com/armon/go-radix"
   packages = ["."]
@@ -1614,6 +1622,7 @@
     "github.com/VividCortex/ewma",
     "github.com/abourget/teamcity",
     "github.com/andy-kimball/arenaskl",
+    "github.com/armon/circbuf",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/awsutil",
     "github.com/aws/aws-sdk-go/aws/credentials",

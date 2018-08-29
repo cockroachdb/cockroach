@@ -38,14 +38,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	// "postgres" gosql driver
+	_ "github.com/lib/pq"
+
+	"github.com/armon/circbuf"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
-	// "postgres" gosql driver
-
-	_ "github.com/lib/pq"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -209,12 +210,83 @@ func unregisterCluster(c *cluster) bool {
 }
 
 func execCmd(ctx context.Context, l *logger, args ...string) error {
+	// NB: It is important that this waitgroup Waits after cancel() below.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+
 	l.printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = l.stdout
-	cmd.Stderr = l.stderr
+
+	debugStdoutBuffer, _ := circbuf.NewBuffer(1024)
+	debugStderrBuffer, _ := circbuf.NewBuffer(1024)
+
+	// Do a dance around https://github.com/golang/go/issues/23019.
+	// Briefly put, passing os.Std{out,err} to subprocesses isn't great for
+	// context cancellation as Run() will wait for any subprocesses to finish.
+	// For example, "roachprod run x -- sleep 20" would wait 20 seconds, even
+	// if the context got canceled right away. Work around the problem by passing
+	// pipes to the command on which we set aggressive deadlines once the context
+	// expires.
+	{
+		rOut, wOut, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rOut.Close()
+		defer wOut.Close()
+		rErr, wErr, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+		defer rErr.Close()
+		defer wErr.Close()
+
+		cmd.Stdout = wOut
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
+		}()
+
+		if l.stderr == l.stdout {
+			// If l.stderr == l.stdout, we use only one pipe to avoid
+			// duplicating everything.
+			wg.Done()
+			cmd.Stderr = wOut
+		} else {
+			cmd.Stderr = wErr
+			go func() {
+				defer wg.Done()
+				_, _ = io.Copy(l.stderr, io.TeeReader(rErr, debugStderrBuffer))
+			}()
+		}
+
+		go func() {
+			defer wg.Done()
+			<-ctx.Done()
+			// NB: setting a more aggressive deadline here makes TestClusterMonitor flaky.
+			now := timeutil.Now().Add(3 * time.Second)
+			_ = rOut.SetDeadline(now)
+			_ = wOut.SetDeadline(now)
+			_ = rErr.SetDeadline(now)
+			_ = wErr.SetDeadline(now)
+		}()
+	}
+
 	if err := cmd.Run(); err != nil {
-		return errors.Wrapf(err, `%s`, strings.Join(args, ` `))
+		cancel()
+		wg.Wait() // synchronize access to ring buffer
+		return errors.Wrapf(
+			err,
+			"%s returned:\nstderr:\n%s\nstdout:\n%s",
+			strings.Join(args, " "),
+			debugStderrBuffer.String(),
+			debugStdoutBuffer.String(),
+		)
 	}
 	return nil
 }
@@ -1083,14 +1155,54 @@ func (m *monitor) ExpectDeaths(count int32) {
 	atomic.AddInt32(&m.expDeaths, count)
 }
 
+var errGoexit = errors.New("Goexit() was called")
+
 func (m *monitor) Go(fn func(context.Context) error) {
-	m.g.Go(func() error {
+	m.g.Go(func() (err error) {
+		var returned bool
+		defer func() {
+			if returned {
+				return
+			}
+			if r := recover(); r != errGoexit && r != nil {
+				// Pass any regular panics through.
+				panic(r)
+			} else {
+				// If the invoked method called runtime.Goexit (such as it
+				// happens when it calls t.Fatal), exit with a sentinel error
+				// here so that the wrapped errgroup cancels itself.
+				//
+				// Note that the trick here is that we panicked explicitly below,
+				// which somehow "overrides" the Goexit which is supposed to be
+				// un-recoverable, but we do need to recover to return an error.
+				err = errGoexit
+			}
+		}()
 		if impl, ok := m.t.(*test); ok {
 			// Automatically clear the worker status message when the goroutine exits.
-			defer impl.Status()
+			defer impl.WorkerStatus()
 		}
-		return fn(m.ctx)
+		defer func() {
+			if !returned {
+				if r := recover(); r != nil {
+					panic(r)
+				}
+				panic(errGoexit)
+			}
+		}()
+		err = fn(m.ctx)
+		returned = true
+		return err
 	})
+}
+
+func (m *monitor) WaitE() error {
+	if m.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return errors.New("already failed")
+	}
+
+	return m.wait(roachprod, "monitor", m.nodes)
 }
 
 func (m *monitor) Wait() {
@@ -1098,9 +1210,7 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-
-	err := m.wait(roachprod, "monitor", m.nodes)
-	if err != nil {
+	if err := m.WaitE(); err != nil {
 		m.t.Fatal(err)
 	}
 }
