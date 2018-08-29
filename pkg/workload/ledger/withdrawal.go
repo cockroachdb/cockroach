@@ -47,12 +47,12 @@ func (withdrawal) run(config *ledger, db *gosql.DB, rng *rand.Rand) (interface{}
 			}
 			c.sequence++
 
-			tID, err := insertTransaction(tx, config, rng, c.identifier)
-			if err != nil {
+			if err := updateBalance(tx, config, c); err != nil {
 				return err
 			}
 
-			if err := updateBalance(tx, config, c); err != nil {
+			tID, err := insertTransaction(tx, config, rng, c.identifier)
+			if err != nil {
 				return err
 			}
 
