@@ -32,12 +32,13 @@ type worker struct {
 	hists  *workload.Histograms
 	db     *gosql.DB
 
+	rng      *rand.Rand
 	deckPerm []int
 	permIdx  int
 }
 
 type ledgerTx interface {
-	run(config *ledger, db *gosql.DB) (interface{}, error)
+	run(config *ledger, db *gosql.DB, rng *rand.Rand) (interface{}, error)
 }
 
 type tx struct {
@@ -118,7 +119,7 @@ func (w *worker) run(ctx context.Context) error {
 	w.permIdx++
 
 	start := timeutil.Now()
-	if _, err := t.run(w.config, w.db); err != nil {
+	if _, err := t.run(w.config, w.db, w.rng); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
 	w.hists.Get(t.name).Record(timeutil.Since(start))

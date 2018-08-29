@@ -18,6 +18,7 @@ package ledger
 import (
 	"context"
 	gosql "database/sql"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 )
@@ -26,7 +27,7 @@ type reversal struct{}
 
 var _ ledgerTx = reversal{}
 
-func (reversal) run(config *ledger, db *gosql.DB) (interface{}, error) {
+func (reversal) run(config *ledger, db *gosql.DB, rng *rand.Rand) (interface{}, error) {
 	err := crdb.ExecuteTx(
 		context.Background(),
 		db,

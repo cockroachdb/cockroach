@@ -191,11 +191,13 @@ func (w *ledger) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Q
 
 	w.reg = reg
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	now := timeutil.Now().UnixNano()
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		worker := &worker{
 			config:   w,
 			hists:    reg.GetHandle(),
 			db:       db,
+			rng:      rand.New(rand.NewSource(now + int64(i))),
 			deckPerm: append([]int(nil), w.deck...),
 			permIdx:  len(w.deck),
 		}

@@ -21,15 +21,13 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type withdrawal struct{}
 
 var _ ledgerTx = withdrawal{}
 
-func (withdrawal) run(config *ledger, db *gosql.DB) (interface{}, error) {
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+func (withdrawal) run(config *ledger, db *gosql.DB, rng *rand.Rand) (interface{}, error) {
 	cID := randInt(rng, 0, config.customers-1)
 
 	err := crdb.ExecuteTx(
