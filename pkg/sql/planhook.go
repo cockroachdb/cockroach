@@ -130,12 +130,6 @@ func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
-	// Since hook plans are opaque to the plan walker, these haven't been started.
-	for _, sub := range f.subplans {
-		if err := startExec(params, sub); err != nil {
-			return err
-		}
-	}
 	go func() {
 		err := f.f(params.ctx, f.subplans, f.run.resultsCh)
 		select {

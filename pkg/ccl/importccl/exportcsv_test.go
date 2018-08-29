@@ -174,3 +174,25 @@ func TestExportJoin(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t AS VALUES (1, 2)`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///join' FROM SELECT * FROM t, t as u`)
 }
+
+func TestExportOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
+	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///order' from select * from foo order by y asc limit 2`)
+	content, err := ioutil.ReadFile(filepath.Join(dir, "order", "n1.0.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
