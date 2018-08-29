@@ -178,7 +178,7 @@ func init() {
 		versionCmd,
 		DebugCmd,
 		sqlfmtCmd,
-		workloadcli.WorkloadCmd(),
+		workloadcli.WorkloadCmd(true /* userFacing */),
 	)
 }
 
