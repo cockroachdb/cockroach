@@ -257,7 +257,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 				i INT PRIMARY KEY,
 
 				c       CHAR(10) NOT NULL,
-				s       VARCHAR(100),
+				s       VARCHAR(100) DEFAULT 'this is s\'s default value',
 				tx      TEXT,
 				e       ENUM('Small', 'Medium', 'Large'),
 
@@ -265,7 +265,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 				vbin    VARBINARY(100),
 				bl      BLOB,
 
-				dt      DATETIME NOT NULL,
+				dt      DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
 				d       DATE,
 				ts      TIMESTAMP,
 				t       TIME,
@@ -278,7 +278,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 
 				iw      INT(5) NOT NULL,
 				iz      INT ZEROFILL,
-				ti      TINYINT,
+				ti      TINYINT DEFAULT 5,
 				si      SMALLINT,
 				mi      MEDIUMINT,
 				bi      BIGINT,
