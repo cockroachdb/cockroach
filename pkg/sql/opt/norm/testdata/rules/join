@@ -37,59 +37,6 @@ TABLE uv
  └── INDEX primary
       └── u int not null
 
-# --------------------------------------------------
-# EnsureJoinFiltersAnd
-# --------------------------------------------------
-opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x AND b.y<a.i
-----
-inner-join (merge)
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
- ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── y < i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-
-# --------------------------------------------------
-# EnsureJoinFilters
-# --------------------------------------------------
-opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x
-----
-inner-join (merge)
- ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
 opt
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
 ----
