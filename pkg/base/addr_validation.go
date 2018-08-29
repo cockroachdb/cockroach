@@ -220,13 +220,21 @@ func resolveAddr(ctx context.Context, host, port string) (string, string, error)
 		return host, port, nil
 	}
 
+	addr, err := LookupAddr(ctx, resolver, host)
+	return addr, port, err
+}
+
+// LookupAddr resolves the given address/host to an IP address. If
+// multiple addresses are resolved, it returns the first IPv4 address
+// available if there is one, otherwise the first address.
+func LookupAddr(ctx context.Context, resolver *net.Resolver, host string) (string, error) {
 	// Resolve the IP address or hostname to an IP address.
 	addrs, err := resolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if len(addrs) == 0 {
-		return "", "", fmt.Errorf("cannot resolve %q to an address", host)
+		return "", fmt.Errorf("cannot resolve %q to an address", host)
 	}
 
 	// TODO(knz): the remainder function can be changed to return all
@@ -239,11 +247,11 @@ func resolveAddr(ctx context.Context, host, port string) (string, string, error)
 	// versions, we still prefer an IPv4 address if there is one.
 	for _, addr := range addrs {
 		if ip := addr.IP.To4(); ip != nil {
-			return ip.String(), port, nil
+			return ip.String(), nil
 		}
 	}
 	// No IPv4 address, return the first resolved address instead.
-	return addrs[0].String(), port, nil
+	return addrs[0].String(), nil
 }
 
 // CheckCertificateAddrs validates the addresses inside the configured
