@@ -178,7 +178,7 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if row == nil {
 			// Done with this batch.
 			ij.fetcherReady = false
-		} else if outRow := ij.processRowHelper(row); outRow != nil {
+		} else if outRow := ij.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}

@@ -868,7 +868,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			break
 		}
 
-		outRow := z.processRowHelper(row)
+		outRow := z.ProcessRowHelper(row)
 		if outRow == nil {
 			continue
 		}

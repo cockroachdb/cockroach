@@ -109,7 +109,7 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			break
 		}
 
-		if outRow := mts.processRowHelper(row); outRow != nil {
+		if outRow := mts.ProcessRowHelper(row); outRow != nil {
 			mts.sendRowNumMeta = true
 			return outRow, nil
 		}
