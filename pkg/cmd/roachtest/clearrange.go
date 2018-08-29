@@ -111,7 +111,7 @@ func registerClearRange(r *registry) {
 					if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
-					c.l.printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
+					c.l.Printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
 					t.WorkerProgress(float64(i+1) / float64(minutes))
 					select {
 					case <-after:

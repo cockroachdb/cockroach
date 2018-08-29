@@ -18,10 +18,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 
@@ -81,10 +79,11 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 		cmd = fmt.Sprintf(cmd, nodes)
 		m.Go(func() error {
-			quietL, err := newLogger(cmd, strconv.Itoa(i), "workload"+strconv.Itoa(i), ioutil.Discard, os.Stderr)
+			quietL, err := c.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
 			if err != nil {
 				return err
 			}
+			defer quietL.close()
 			return c.RunL(ctxWG, quietL, c.Node(numNodes), cmd)
 		})
 	}
@@ -182,12 +181,16 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 	printDiskUsages := func() {
 		for i := 1; i <= numNodes; i++ {
-			quietL, _ := newLogger("disk_space", strconv.Itoa(i), "", ioutil.Discard, os.Stderr)
+			quietL, err := c.l.ChildLogger(fmt.Sprintf("df-%d", i), quietStdout)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer quietL.close()
 			output, err := c.RunWithBuffer(ctx, quietL, c.Node(i), "df", "-h", "{store-dir}")
 			if err != nil {
-				c.l.printf("Failed to run df on node %d due to error: %v\n", i, err)
+				c.l.Printf("Failed to run df on node %d due to error: %v\n", i, err)
 			} else {
-				c.l.printf("node %d, df output:\n %s\n", i, string(output))
+				c.l.Printf("node %d, df output:\n %s\n", i, string(output))
 			}
 		}
 	}
@@ -249,7 +252,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 			"rm",
 			ballastFilePath,
 		); err != nil {
-			c.l.printf("Failed to remove ballast file on node %d due to error: %v\n", i, err)
+			c.l.Printf("Failed to remove ballast file on node %d due to error: %v\n", i, err)
 		}
 	}
 }

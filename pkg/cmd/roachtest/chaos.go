@@ -55,7 +55,7 @@ type Chaos struct {
 // duration.
 func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 	return func(ctx context.Context) error {
-		l, err := c.l.childLogger("CHAOS")
+		l, err := c.l.ChildLogger("CHAOS")
 		if err != nil {
 			return err
 		}
@@ -74,10 +74,10 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			m.ExpectDeath()
 
 			if ch.DrainAndQuit {
-				l.printf("stopping and draining %v\n", target)
+				l.Printf("stopping and draining %v\n", target)
 				c.Stop(ctx, target, stopArgs("--sig=15"))
 			} else {
-				l.printf("killing %v\n", target)
+				l.Printf("killing %v\n", target)
 				c.Stop(ctx, target)
 			}
 
@@ -89,7 +89,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			case <-time.After(downTime):
 			}
 
-			c.l.printf("restarting %v after %s of downtime\n", target, downTime)
+			c.l.Printf("restarting %v after %s of downtime\n", target, downTime)
 			c.Start(ctx, target)
 		}
 	}

@@ -19,9 +19,42 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 )
+
+type loggerConfig struct {
+	prefix         string
+	stdout, stderr io.Writer
+}
+
+type loggerOption interface {
+	apply(*loggerConfig)
+}
+
+type logPrefix string
+
+func (p logPrefix) apply(cfg *loggerConfig) {
+	cfg.prefix = string(p)
+}
+
+type quietStdoutOption struct {
+}
+
+func (quietStdoutOption) apply(cfg *loggerConfig) {
+	cfg.stdout = ioutil.Discard
+}
+
+type quietStderrOption struct {
+}
+
+func (quietStderrOption) apply(cfg *loggerConfig) {
+	cfg.stderr = ioutil.Discard
+}
+
+var quietStdout quietStdoutOption
+var quietStderr quietStderrOption
 
 // logger logs to a file in artifacts and stdio simultaneously. This makes it
 // possible to observe progress of multiple tests from the terminal (or the
@@ -33,9 +66,9 @@ type logger struct {
 	stdout, stderr io.Writer
 }
 
-// TODO(peter): put all of the logs for a test in a directory named by the
-// test.
-func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger, error) {
+// newLogger constructs a new logger object. Not intended for direct
+// use. Please use logger.ChildLogger instead.
+func (cfg *loggerConfig) newLogger(name, filename string) (*logger, error) {
 	if artifacts == "" {
 		// Log to stdout/stderr if there is no artifacts directory.
 		return &logger{
@@ -58,8 +91,8 @@ func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger
 		if w == nil {
 			return f
 		}
-		if prefix != "" {
-			w = &prefixWriter{out: w, prefix: []byte(prefix)}
+		if cfg.prefix != "" {
+			w = &prefixWriter{out: w, prefix: []byte(cfg.prefix)}
 		}
 		return io.MultiWriter(f, w)
 	}
@@ -67,8 +100,8 @@ func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger
 	return &logger{
 		name:   name,
 		file:   f,
-		stdout: newWriter(stdout),
-		stderr: newWriter(stderr),
+		stdout: newWriter(cfg.stdout),
+		stderr: newWriter(cfg.stderr),
 	}, nil
 }
 
@@ -79,7 +112,8 @@ func rootLogger(name string) (*logger, error) {
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
-	return newLogger(name, "test", "" /* prefix */, stdout, stderr)
+	cfg := &loggerConfig{stdout: stdout, stderr: stderr}
+	return cfg.newLogger(name, "test")
 }
 
 func (l *logger) close() {
@@ -88,7 +122,10 @@ func (l *logger) close() {
 	}
 }
 
-func (l *logger) childLogger(name string) (*logger, error) {
+// ChildLogger constructs a new logger which logs to the specified
+// file. Control of the prefix and teeing of stdout/stdout can be controlled by
+// logger options.
+func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error) {
 	if l.file == nil {
 		p := []byte(name + ": ")
 		return &logger{
@@ -97,14 +134,24 @@ func (l *logger) childLogger(name string) (*logger, error) {
 			stderr: &prefixWriter{out: l.stderr, prefix: p},
 		}, nil
 	}
-	return newLogger(l.name, name, name+": " /* prefix */, l.stdout, l.stderr)
+
+	cfg := &loggerConfig{
+		prefix: name + ": ",
+		stdout: l.stdout,
+		stderr: l.stderr,
+	}
+	for _, opt := range opts {
+		opt.apply(cfg)
+	}
+
+	return cfg.newLogger(l.name, name)
 }
 
-func (l *logger) printf(f string, args ...interface{}) {
+func (l *logger) Printf(f string, args ...interface{}) {
 	fmt.Fprintf(l.stdout, f, args...)
 }
 
-func (l *logger) errorf(f string, args ...interface{}) {
+func (l *logger) Errorf(f string, args ...interface{}) {
 	fmt.Fprintf(l.stderr, f, args...)
 }
 

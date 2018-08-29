@@ -728,7 +728,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 						if !debugEnabled || !t.Failed() {
 							c.Destroy(ctx)
 						} else {
-							c.l.printf("not destroying cluster to allow debugging\n")
+							c.l.Printf("not destroying cluster to allow debugging\n")
 						}
 					}()
 				}
