@@ -47,10 +47,7 @@ func registerVersion(r *registry) {
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 		// Force disable encryption.
 		// TODO(mberhault): allow it once version >= 2.1.
-		start := func() {
-			c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
-		}
-		start()
+		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
 
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
@@ -59,25 +56,6 @@ func registerVersion(r *registry) {
 			stageDuration = 10 * time.Second
 			buffer = time.Minute
 		}
-
-		// See https://github.com/cockroachdb/cockroach/pull/27639 for an explanation
-		// of this hack. There was a bug which would leave the "old" nodes that joined
-		// the initial bootstrap node with a persisted cluster version of 1.1 (i.e.
-		// the MinSupportedVersion of the "old", at the time of writing v2.0, binary).
-		// When restarting such a node after the upgrade, it would barf because v1.1
-		// is not compatible with v2.1. The problem has been fixed on master, but this
-		// is testing against v2.0, which doesn't have this backported yet.
-		//
-		// By stopping and restarting the cluster after it was first set up, we avoid
-		// the problem. Post restart, the new cluster version will be persisted on all
-		// nodes.
-		//
-		// TODO(tschottdorf): remove this hack again once we're running v2.0.5 with a
-		// backport for this.
-		time.Sleep(5 * time.Second)
-		c.Stop(ctx, c.Range(1, nodes))
-		start()
-		time.Sleep(5 * time.Second)
 
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
