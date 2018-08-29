@@ -92,7 +92,7 @@ func registerVersion(r *registry) {
 			//
 			// Perhaps the scatter invocation is wrong (it has FROM==TO), but this
 			// looks concerning.
-			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
+			"./workload run kv --splits=10000 --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -101,20 +101,11 @@ func registerVersion(r *registry) {
 			i := i     // ditto
 			m.Go(func(ctx context.Context) error {
 				cmd = fmt.Sprintf(cmd, nodes)
-				// TODO(tschottdorf): we need to be able to cleanly terminate processes we
-				// started. In this test, we'd like to send a signal to workload when the
-				// upgrade goroutine has decided the time has come. Perhaps context
-				// cancellation can be used for that purpose, but it doesn't seem quite
-				// right. For now, hold over water with durations, but those don't measure
-				// init time correctly (which can be quite substantial).
-				// TODO(tschottdorf): It's a bit silly that we use a dedicated load gen
-				// machine here, but `c.Stop` calls `roachprod stop` and that kills
-				// *everything* on that machine, not just the cockroach process.
-				quietL, err := c.l.childLogger("workload " + strconv.Itoa(i))
+				childL, err := c.l.childLogger("workload " + strconv.Itoa(i))
 				if err != nil {
 					return err
 				}
-				return c.RunL(ctx, quietL, c.Node(nodes+1), cmd)
+				return c.RunL(ctx, childL, c.Node(nodes+1), cmd)
 			})
 		}
 
