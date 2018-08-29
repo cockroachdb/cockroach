@@ -19,7 +19,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/pkg/errors"
@@ -60,7 +63,7 @@ func TestClusterMonitor(t *testing.T) {
 		c := &cluster{t: t, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error { return nil })
-		if err := m.wait(`sleep`, `100`); err != nil {
+		if err := m.wait(`echo`, `1`); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -92,10 +95,62 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := m.wait(`sleep`, `100`)
+		err := m.wait(`echo`, `1`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	// NB: the forker sleeps in these tests actually get leaked, so it's important to let
+	// them finish pretty soon (think stress testing). As a matter of fact, `make test` waits
+	// for these child goroutines to finish (so these tests take seconds).
+	t.Run(`worker-fd-error`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			defer func() {
+				fmt.Println("sleep returns")
+			}()
+			return execCmd(ctx, logger, "/bin/bash", "-c", "sleep 3& wait")
+		})
+		m.Go(func(ctx context.Context) error {
+			defer func() {
+				fmt.Println("failure returns")
+			}()
+			time.Sleep(30 * time.Millisecond)
+			return execCmd(ctx, logger, "/bin/bash", "-c", "echo hi && notthere")
+		})
+		expectedErr := regexp.QuoteMeta(`/bin/bash -c echo hi && notthere returned:
+stderr:
+/bin/bash: notthere: command not found
+
+stdout:
+hi
+: exit status 127`)
+		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
+			t.Error(err)
+		}
+	})
+	t.Run(`worker-fd-fatal`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			err := execCmd(ctx, logger, "/bin/bash", "-c", "echo foo && sleep 3& wait")
+			return err
+		})
+		m.Go(func(ctx context.Context) error {
+			time.Sleep(30 * time.Millisecond)
+			// Simulate c.t.Fatal for which there isn't enough mocking here.
+			// In reality t.Fatal adds text that is returned when the test fails,
+			// so the failing goroutine will be referenced (not like in the expected
+			// error below, where all you see is the other one being canceled).
+			runtime.Goexit()
+			return errors.New("unreachable")
+		})
+		expectedErr := regexp.QuoteMeta(`Goexit() was called`)
+		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
+			t.Error(err)
 		}
 	})
 }
