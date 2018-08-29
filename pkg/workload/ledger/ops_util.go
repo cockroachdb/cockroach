@@ -190,7 +190,7 @@ func insertEntries(q querier, config *ledger, rng *rand.Rand, cIDs [2]int, tID s
 	return err
 }
 
-func getSession(q querier, config *ledger, id int) error {
+func getSession(q querier, config *ledger, rng *rand.Rand) error {
 	stmt, args := maybeInlineStmtArgs(config, `
 		SELECT
 			session_id,
@@ -198,8 +198,9 @@ func getSession(q querier, config *ledger, id int) error {
 			data,
 			last_update
 		FROM session
-		WHERE session_id = ?`,
-		id,
+		WHERE session_id >= $1
+		LIMIT 1`,
+		randSessionID(rng),
 	)
 	rows, err := q.Query(stmt, args...)
 	if err != nil {
@@ -217,7 +218,7 @@ func insertSession(q querier, config *ledger, rng *rand.Rand) error {
 	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
 		INSERT INTO session (
 			data, expiry_timestamp, last_update, session_id
-		) VALUES (?, ?, ?, ?)`),
+		) VALUES ($1, $2, $3, $4)`),
 		randSessionData(rng), randTimestamp(rng), timeutil.Now(), randSessionID(rng),
 	)
 	_, err := q.Exec(stmt, args...)
