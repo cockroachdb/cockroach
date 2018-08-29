@@ -48,10 +48,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveTargetObject(ctx, p, name)
-	})
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +87,14 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, fmtErr
 	}
 
-	planDeps, sourceColumns, err := p.analyzeViewQuery(ctx, n.AsSource)
+	var planDeps planDependencies
+	var sourceColumns sqlbase.ResultColumns
+	// To avoid races with ongoing schema changes to tables that the view
+	// depends on, make sure we use the most recent versions of table
+	// descriptors rather than the copies in the lease cache.
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		planDeps, sourceColumns, err = p.analyzeViewQuery(ctx, n.AsSource)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +172,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			dep.ID = desc.ID
 			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
 		}
-		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, &backrefDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}

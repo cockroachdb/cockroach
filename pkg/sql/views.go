@@ -71,12 +71,6 @@ func (d planDependencies) String() string {
 func (p *planner) analyzeViewQuery(
 	ctx context.Context, viewSelect *tree.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
-	// To avoid races with ongoing schema changes to tables that the view
-	// depends on, make sure we use the most recent versions of table
-	// descriptors rather than the copies in the lease cache.
-	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
-	p.avoidCachedDescriptors = true
-
 	// Request dependency tracking.
 	defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
 	p.curPlan.deps = make(planDependencies)

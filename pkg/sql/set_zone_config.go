@@ -74,12 +74,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	var table *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		table, err = params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
-	})
+	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}

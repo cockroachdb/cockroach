@@ -31,13 +31,7 @@ var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index n
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
-	var tableDesc *TableDescriptor
-	var err error
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		_, tableDesc, err = expandIndexName(ctx, p, n.Index, true /* requireTable */)
-	})
+	_, tableDesc, err := expandMutableIndexName(ctx, p, n.Index, true /* requireTable */)
 	if err != nil {
 		return nil, err
 	}

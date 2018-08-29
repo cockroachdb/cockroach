@@ -206,7 +206,8 @@ func (sc *SchemaChanger) runBackfill(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID)
+	flags := ObjectLookupFlags{CommonLookupFlags{txn: txn}}
+	tableDesc, err := tc.getTableVersionByID(ctx, sc.tableID, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -485,8 +486,10 @@ func (sc *SchemaChanger) distBackfill(
 				if err != nil {
 					return err
 				}
+
+				flags := ObjectLookupFlags{CommonLookupFlags{txn: txn}}
 				for k := range fkTables {
-					table, err := tc.getTableVersionByID(ctx, txn, k)
+					table, err := tc.getTableVersionByID(ctx, k, flags)
 					if err != nil {
 						return err
 					}
