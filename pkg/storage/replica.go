@@ -2674,6 +2674,9 @@ func (r *Replica) executeAdminBatch(
 	var resp roachpb.Response
 	switch tArgs := args.(type) {
 	case *roachpb.AdminSplitRequest:
+		if MergeQueueEnabled.Get(&r.ClusterSettings().SV) {
+			return nil, roachpb.NewError(errors.New("merge queue enabled")	)
+		}
 		var reply roachpb.AdminSplitResponse
 		reply, pErr = r.AdminSplit(ctx, *tArgs)
 		resp = &reply
