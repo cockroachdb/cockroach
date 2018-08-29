@@ -43,11 +43,10 @@ func TestValidateAddrs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostAddrs, err := net.DefaultResolver.LookupIPAddr(context.Background(), hostname)
+	hostAddr, err := base.LookupAddr(context.Background(), net.DefaultResolver, hostname)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostAddr := hostAddrs[0].String()
 	if strings.Contains(hostAddr, ":") {
 		hostAddr = "[" + hostAddr + "]"
 	}
