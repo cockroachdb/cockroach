@@ -183,10 +183,11 @@ x  generate_series
 
 subtest unnest
 
-query I
+statement error could not determine polymorphic type
 SELECT * FROM unnest(NULL)
-----
 
+statement error could not determine polymorphic type
+SELECT unnest(NULL)
 
 query I colnames
 SELECT * from unnest(ARRAY[1,2])
@@ -259,6 +260,11 @@ query T colnames
 SELECT unnest((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
 ----
 unnest
+
+query T colnames
+SELECT information_schema._pg_expandarray((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
+----
+information_schema._pg_expandarray
 
 # Regression for #18021.
 query I colnames
@@ -339,6 +345,12 @@ SELECT information_schema._pg_expandarray(ARRAY[])
 
 query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
 SELECT * FROM information_schema._pg_expandarray(ARRAY[])
+
+statement error could not determine polymorphic type
+SELECT * FROM information_schema._pg_expandarray(NULL)
+
+statement error could not determine polymorphic type
+SELECT information_schema._pg_expandarray(NULL)
 
 query I colnames
 SELECT information_schema._pg_expandarray(ARRAY[]:::int[])
