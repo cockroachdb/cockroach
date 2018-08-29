@@ -18,14 +18,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"runtime"
 	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
@@ -85,7 +82,7 @@ func registerVersion(r *registry) {
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
 		workloads := []string{
-			"./workload run tpcc --tolerate-errors --init --warehouses=1" + loadDuration + " {pgurl:1-%d}",
+			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
 			// TODO(tschottdorf): adding `--splits=10000` results in a barrage of messages of the type:
 			//
 			// W180301 04:25:28.785116 21 workload/workload.go:323  ALTER TABLE kv
@@ -98,16 +95,11 @@ func registerVersion(r *registry) {
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
-		// TODO(tschottdorf): `c.newMonitor` is far from suitable for tests that actually restart nodes
-		// and trying to fix it up does not seem worth it. What would work well here is a monitor that
-		// connects directly to the nodes' PG endpoints and polls their uptime, informing a callback as
-		// needed.
-		var m *errgroup.Group
-		m, ctx = errgroup.WithContext(ctx)
+		m := newMonitor(ctx, c, c.Range(1, nodes))
 		for i, cmd := range workloads {
 			cmd := cmd // loop-local copy
 			i := i     // ditto
-			m.Go(func() error {
+			m.Go(func(ctx context.Context) error {
 				cmd = fmt.Sprintf(cmd, nodes)
 				// TODO(tschottdorf): we need to be able to cleanly terminate processes we
 				// started. In this test, we'd like to send a signal to workload when the
@@ -118,7 +110,7 @@ func registerVersion(r *registry) {
 				// TODO(tschottdorf): It's a bit silly that we use a dedicated load gen
 				// machine here, but `c.Stop` calls `roachprod stop` and that kills
 				// *everything* on that machine, not just the cockroach process.
-				quietL, err := newLogger(cmd, strconv.Itoa(i), "workload"+strconv.Itoa(i), ioutil.Discard, os.Stderr)
+				quietL, err := c.l.childLogger("workload " + strconv.Itoa(i))
 				if err != nil {
 					return err
 				}
@@ -126,7 +118,7 @@ func registerVersion(r *registry) {
 			})
 		}
 
-		m.Go(func() error {
+		m.Go(func(ctx context.Context) error {
 			l, err := c.l.childLogger("upgrader")
 			if err != nil {
 				return err
@@ -164,6 +156,7 @@ func registerVersion(r *registry) {
 			}
 
 			stop := func(node int) error {
+				m.ExpectDeath()
 				l.printf("stopping node %d\n", node)
 				port := fmt.Sprintf("{pgport:%d}", node)
 				// Note that the following command line needs to run against both v2.0
@@ -266,9 +259,7 @@ func registerVersion(r *registry) {
 
 			return sleepAndCheck()
 		})
-		if err := m.Wait(); err != nil {
-			t.Fatal(err)
-		}
+		m.Wait()
 	}
 
 	const version = "v2.0.5"
