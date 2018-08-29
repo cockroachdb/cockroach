@@ -302,7 +302,14 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Prevent the merge queue from immediately discarding our splits.
+				DisableMergeQueue: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
@@ -398,7 +405,14 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			})
 			defer s.Stopper().Stop(ctx)
 			ts := s.(*TestServer)
 			tds := db.NonTransactionalSender()
