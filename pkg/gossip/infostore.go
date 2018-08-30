@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -46,8 +47,9 @@ func (allMatcher) MatchString(string) bool {
 
 // callback holds regexp pattern match and GossipCallback method.
 type callback struct {
-	matcher stringMatcher
-	method  Callback
+	matcher   stringMatcher
+	method    Callback
+	redundant bool
 }
 
 // infoStore objects manage maps of Info objects. They maintain a
@@ -181,7 +183,8 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
-	if existingInfo, ok := is.Infos[key]; ok {
+	existingInfo, ok := is.Infos[key]
+	if ok {
 		iNanos := i.Value.Timestamp.WallTime
 		existingNanos := existingInfo.Value.Timestamp.WallTime
 		if iNanos < existingNanos || (iNanos == existingNanos && i.Hops >= existingInfo.Hops) {
@@ -204,7 +207,9 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 			is.highWaterStamps[nID] = i.OrigStamp
 		}
 	}
-	is.processCallbacks(key, i.Value)
+	changed := existingInfo == nil ||
+		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
+	is.processCallbacks(key, i.Value, changed)
 	return nil
 }
 
@@ -224,7 +229,9 @@ func (is *infoStore) getHighWaterStamps() map[roachpb.NodeID]int64 {
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
 // Note: the callback may fire after being unregistered.
-func (is *infoStore) registerCallback(pattern string, method Callback) func() {
+func (is *infoStore) registerCallback(
+	pattern string, method Callback, opts ...CallbackOption,
+) func() {
 	var matcher stringMatcher
 	if pattern == ".*" {
 		matcher = allMatcher{}
@@ -232,6 +239,10 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 		matcher = regexp.MustCompile(pattern)
 	}
 	cb := &callback{matcher: matcher, method: method}
+	for _, opt := range opts {
+		opt.apply(cb)
+	}
+
 	is.callbacks = append(is.callbacks, cb)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if matcher.MatchString(key) {
@@ -257,10 +268,10 @@ func (is *infoStore) registerCallback(pattern string, method Callback) func() {
 // processCallbacks processes callbacks for the specified key by
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content roachpb.Value) {
+func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed bool) {
 	var matches []Callback
 	for _, cb := range is.callbacks {
-		if cb.matcher.MatchString(key) {
+		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
 			matches = append(matches, cb.method)
 		}
 	}
