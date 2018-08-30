@@ -37,7 +37,7 @@ are all example bugs that Cockroach has had during its use of errgroup:
 			select {
 			case ch <- val:
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 		return nil
@@ -71,7 +71,7 @@ that doesn't shadow the original ctx:
 			select {
 			case ch <- val:
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 		return nil
@@ -103,7 +103,7 @@ exit early. Contrast with using this package:
 			select {
 			case ch <- val:
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 		return nil
@@ -157,6 +157,7 @@ package ctxgroup
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -187,7 +188,7 @@ func (g Group) GoCtx(f func(ctx context.Context) error) {
 
 // Err returns the Group's ctx.Err().
 func (g Group) Err() error {
-	return g.ctx.Err()
+	return errors.WithStack(g.ctx.Err())
 }
 
 // GroupWorkers runs num worker go routines in an errgroup.

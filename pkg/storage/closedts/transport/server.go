@@ -16,8 +16,9 @@ package transport
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
@@ -85,7 +86,7 @@ func (s *Server) Get(client ctpb.InboundClient) error {
 		var ok bool
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-s.stopper.ShouldQuiesce():
 			return errors.New("node is draining")
 		case entry, ok = <-ch:

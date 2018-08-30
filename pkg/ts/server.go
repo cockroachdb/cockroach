@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -305,7 +306,7 @@ func (s *Server) Query(
 				return nil, err
 			}
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, errors.WithStack(ctx.Err())
 		}
 	}
 

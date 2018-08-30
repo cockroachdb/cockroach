@@ -142,7 +142,7 @@ func (m *LeaseManager) timeRemaining(val *LeaseVal) time.Duration {
 func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case l.val.sem <- struct{}{}:
 	}
 	defer func() { <-l.val.sem }()
@@ -173,7 +173,7 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 func (m *LeaseManager) ReleaseLease(ctx context.Context, l *Lease) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case l.val.sem <- struct{}{}:
 	}
 	defer func() { <-l.val.sem }()

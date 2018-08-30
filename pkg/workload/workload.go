@@ -409,7 +409,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 					log.Infof(ctx, "performing split %d of %d", count, len(splitPoints))
 				}
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 
 			if p.lo < m {
@@ -447,7 +447,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 						log.Warningf(ctx, `%s: %s`, buf.String(), err)
 					}
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				}
 
 			}

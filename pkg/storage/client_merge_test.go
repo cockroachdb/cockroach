@@ -1209,7 +1209,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 			for {
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case <-doneCh:
 					return nil
 				default:

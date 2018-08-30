@@ -121,7 +121,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	send := func(reply *Response) error {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case syncChan <- struct{}{}:
 			defer func() { <-syncChan }()
 

@@ -48,7 +48,7 @@ func WriteCSVRows(
 
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return 0, errors.WithStack(ctx.Err())
 		default:
 		}
 		for _, row := range table.InitialRows.Batch(rowBatchIdx) {

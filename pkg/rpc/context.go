@@ -243,7 +243,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	case <-c.stopper.ShouldStop():
 		return nil, errors.Errorf("stopped")
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.WithStack(ctx.Err())
 	}
 
 	// If connection is invalid, return latest heartbeat error.
@@ -406,7 +406,7 @@ func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
 	case a.eventC <- e:
 		return nil
 	case <-a.ctx.Done():
-		return a.ctx.Err()
+		return errors.WithStack(a.ctx.Err())
 	}
 }
 

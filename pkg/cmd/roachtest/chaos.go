@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // ChaosTimer configures a chaos schedule.
@@ -66,7 +68,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			case <-ch.Stopper:
 				return nil
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case <-t.C:
 			}
 
@@ -85,7 +87,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			case <-ch.Stopper:
 				return nil
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case <-time.After(downTime):
 			}
 

@@ -73,7 +73,7 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 	if len(c.batch.r) > 0 {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case c.recordCh <- c.batch:
 		}
 	}

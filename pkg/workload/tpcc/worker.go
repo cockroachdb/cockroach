@@ -177,5 +177,5 @@ func (w *worker) run(ctx context.Context) error {
 		}
 		time.Sleep(time.Duration(thinkTime) * time.Second)
 	}
-	return ctx.Err()
+	return errors.WithStack(ctx.Err())
 }

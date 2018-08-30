@@ -144,7 +144,7 @@ func (p *poller) Run(ctx context.Context) error {
 			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case <-time.After(pollDuration):
 			}
 		}
@@ -219,7 +219,7 @@ func (p *poller) Run(ctx context.Context) error {
 
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case exportsSem <- struct{}{}:
 			}
 
@@ -392,7 +392,7 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case exportsSem <- struct{}{}:
 				}
 
@@ -463,7 +463,7 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 					log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
 				}
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 	})

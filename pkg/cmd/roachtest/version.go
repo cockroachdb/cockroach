@@ -23,6 +23,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
@@ -88,7 +89,7 @@ func registerVersion(r *registry) {
 				t.WorkerStatus("sleeping")
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case <-time.After(stageDuration):
 				}
 				// Make sure everyone is still running.

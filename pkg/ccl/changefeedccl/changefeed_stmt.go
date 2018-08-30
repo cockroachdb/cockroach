@@ -219,7 +219,7 @@ func changefeedPlanHook(
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case err := <-errCh:
 			return err
 		case <-startedCh:

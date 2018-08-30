@@ -20,6 +20,8 @@ import (
 
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -484,7 +485,7 @@ func (r *DistSQLReceiver) Push(
 		r.resultWriter.SetError(r.txnAbortedErr.Load().(errWrap).err)
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
-		r.resultWriter.SetError(r.ctx.Err())
+		r.resultWriter.SetError(errors.WithStack(r.ctx.Err()))
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.

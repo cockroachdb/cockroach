@@ -334,7 +334,7 @@ func loadTPCCBench(
 	select {
 	case <-time.After(rebalanceWait):
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 
 	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)

@@ -92,7 +92,7 @@ func (ia *Allocator) Allocate(ctx context.Context) (uint32, error) {
 		}
 		return id, nil
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return 0, errors.WithStack(ctx.Err())
 	}
 }
 

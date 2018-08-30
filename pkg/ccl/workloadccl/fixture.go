@@ -197,7 +197,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 	if err := func() error {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case c.sem <- struct{}{}:
 		}
 		defer func() { <-c.sem }()

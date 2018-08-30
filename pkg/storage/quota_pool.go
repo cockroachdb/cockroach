@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 type quotaPool struct {
@@ -160,7 +161,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			}
 
 			qp.Unlock()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-qp.done:
 			// We don't need to 'unregister' ourselves as in the case when the
 			// context is canceled. In fact, we want others waiters to only
@@ -191,7 +192,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			qp.Lock()
 			qp.notifyNextLocked()
 			qp.Unlock()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-qp.done:
 			// We don't need to release quota back as all ongoing and
 			// subsequent acquisitions will succeed immediately.

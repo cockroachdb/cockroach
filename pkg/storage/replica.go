@@ -2307,7 +2307,7 @@ func (r *Replica) beginCmds(
 		// command queue we'll need to transfer our prerequisites to all
 		// dependent commands if we want to cancel, so it's good to bail
 		// out early if we can.
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			log.VEventf(ctx, 2, "%s before command queue: %s", err, ba.Summary())
 			return nil, err
 		}
@@ -2381,7 +2381,7 @@ func (r *Replica) beginCmds(
 						// If the prereq still has pending dependencies, migrate them.
 						newCmd.ResolvePendingPrereq()
 					case <-ctxDone:
-						err := ctx.Err()
+						err := errors.WithStack(ctx.Err())
 						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
 
 						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
@@ -3510,7 +3510,7 @@ func (r *Replica) propose(
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		return nil, nil, 0, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(errors.WithStack(err))
 	}
 
 	// Only need to check that the request is in bounds at proposal time,

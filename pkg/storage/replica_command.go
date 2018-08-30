@@ -1060,7 +1060,7 @@ func RelocateRange(
 	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
 	for len(addTargets) > 0 {
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		target := addTargets[0]
@@ -1115,7 +1115,7 @@ func RelocateRange(
 	re.Reset()
 	for len(removeTargets) > 0 {
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		target := removeTargets[0]
@@ -1132,7 +1132,7 @@ func RelocateRange(
 		}
 		removeTargets = removeTargets[1:]
 	}
-	return ctx.Err()
+	return errors.WithStack(ctx.Err())
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.

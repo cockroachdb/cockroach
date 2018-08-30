@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/biogo/store/llrb"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -111,7 +112,7 @@ func (db *testDescriptorDB) RangeLookup(
 	select {
 	case <-db.pauseChan:
 	case <-ctx.Done():
-		return nil, nil, ctx.Err()
+		return nil, nil, errors.WithStack(ctx.Err())
 	}
 
 	atomic.AddInt64(&db.lookupCount, 1)

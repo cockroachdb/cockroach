@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func registerClearRange(r *registry) {
@@ -116,7 +117,7 @@ func registerClearRange(r *registry) {
 					select {
 					case <-after:
 					case <-ctx.Done():
-						return ctx.Err()
+						return errors.WithStack(ctx.Err())
 					}
 				}
 				// TODO(benesch): verify that every last range in the table has been

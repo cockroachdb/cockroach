@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 // Server implements PerReplicaServer.
@@ -105,7 +106,7 @@ func (is Server) WaitForApplication(
 		if ctx.Err() == nil {
 			log.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	})
 	return resp, err
 }

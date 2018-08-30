@@ -157,7 +157,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		for {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case <-tpccComplete:
 				return nil
 			case <-time.After(time.Second):
@@ -217,7 +217,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				case <-tpccComplete:
 					return nil
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case <-t.C:
 				}
 
@@ -227,7 +227,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				case <-tpccComplete:
 					return nil
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case <-time.After(downTime):
 				}
 

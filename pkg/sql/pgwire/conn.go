@@ -244,9 +244,9 @@ func (c *conn) serveImpl(
 	c.conn = newReadTimeoutConn(c.conn, func() error {
 		// If the context was closed, it's time to bail. Either a higher-level
 		// server or the command processor have canceled us.
-		if ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
 			ctxCanceled = true
-			return ctx.Err()
+			return errors.WithStack(err)
 		}
 		// If the server is draining, we'll let the processor know by pushing a
 		// DrainRequest. This will make the processor quit whenever it finds a good

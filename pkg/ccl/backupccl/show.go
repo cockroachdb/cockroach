@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // showBackupPlanHook implements PlanHookFn.
@@ -74,7 +75,7 @@ func showBackupPlanHook(
 		for _, row := range shower.fn(desc) {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			case resultsCh <- row:
 			}
 		}

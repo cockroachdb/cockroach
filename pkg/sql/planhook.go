@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -147,7 +148,7 @@ func (f *hookFnNode) startExec(params runParams) error {
 func (f *hookFnNode) Next(params runParams) (bool, error) {
 	select {
 	case <-params.ctx.Done():
-		return false, params.ctx.Err()
+		return false, errors.WithStack(params.ctx.Err())
 	case err := <-f.run.errCh:
 		return false, err
 	case f.run.row = <-f.run.resultsCh:

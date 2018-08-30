@@ -618,7 +618,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				return pErr.GoError()
 			case <-ctx.Done():
 				transfer.Cancel()
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 		// Wait for the in-progress extension without holding the mutex.
@@ -630,7 +630,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			continue
 		case <-ctx.Done():
 			extension.Cancel()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		}
 	}
 }

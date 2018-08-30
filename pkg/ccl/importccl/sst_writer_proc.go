@@ -356,7 +356,7 @@ func makeSSTs(
 		select {
 		case contentCh <- sc:
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		}
 		counts.Reset()
 		sst.Close()

@@ -785,7 +785,7 @@ func (pq *processTimeoutQueueImpl) process(
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
-	return ctx.Err()
+	return errors.WithStack(ctx.Err())
 }
 
 func TestBaseQueueProcessTimeout(t *testing.T) {

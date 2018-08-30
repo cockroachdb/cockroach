@@ -1038,7 +1038,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 	for {
 		ex.curStmt = nil
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		cmd, pos, err := ex.stmtBuf.curCmd()

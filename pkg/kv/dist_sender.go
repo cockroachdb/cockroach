@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -1167,7 +1168,7 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) *roachpb.Er
 		return roachpb.NewError(&roachpb.NodeUnavailableError{})
 	case <-ctx.Done():
 		// Happens when the client request is canceled.
-		return roachpb.NewError(ctx.Err())
+		return roachpb.NewError(errors.WithStack(ctx.Err()))
 	default:
 	}
 	return nil
@@ -1381,8 +1382,8 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		// Has the caller given up?
-		if ctx.Err() != nil {
-			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
+		if err := ctx.Err(); err != nil {
+			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", errors.WithStack(err))
 			log.Eventf(ctx, errMsg)
 			if ambiguousError != nil {
 				return nil, roachpb.NewAmbiguousResultError(errMsg)
@@ -1391,7 +1392,7 @@ func (ds *DistSender) sendToReplicas(
 			// were unable to reach a replica that could serve the request, and they
 			// cause range cache evictions. Context cancellations just mean the
 			// sender changed its mind or the request timed out.
-			return nil, ctx.Err()
+			return nil, errors.WithStack(err)
 		}
 
 		if transport.IsExhausted() {
