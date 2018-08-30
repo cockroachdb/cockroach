@@ -23,6 +23,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -2122,6 +2123,11 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 // and global command queues).
 type batchCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope]*cmd
 
+// prereqCmdSet holds the set of all *cmds that a batch command can depend on.
+// The prereq set is divided into seprate slices of *cmd for access type
+// (read-only or read/write) and key scope (local or global).
+type prereqCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope][]*cmd
+
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
@@ -2332,7 +2338,7 @@ func (r *Replica) beginCmds(
 		}
 
 		r.cmdQMu.Lock()
-		var prereqs [spanset.NumSpanAccess][spanset.NumSpanScope][]*cmd
+		var prereqs prereqCmdSet
 		var prereqCount int
 		// Collect all the channels to wait on before adding this batch to the
 		// command queue.
@@ -2347,20 +2353,27 @@ func (r *Replica) beginCmds(
 		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
 			readOnly := i == spanset.SpanReadOnly && !clocklessReads // ditto above
 			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				newCmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
+				cmd := r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
+				if cmd != nil {
+					cmd.SetDebugInfo(ba)
+					newCmds[i][j] = cmd
+				}
 			}
 		}
 		r.cmdQMu.Unlock()
 
-		ctxDone := ctx.Done()
-		beforeWait := timeutil.Now()
-		if prereqCount > 0 {
-			log.Eventf(ctx, "waiting for %d overlapping requests", prereqCount)
+		var beforeWait time.Time
+		var prereqSummary string
+		if prereqCount > 0 && log.ExpensiveLogEnabled(ctx, 2) {
+			beforeWait = timeutil.Now()
+			prereqSummary = prereqDebugSummary(prereqs)
+			log.VEventf(ctx, 2, "waiting for %d overlapping requests: %s", prereqCount, prereqSummary)
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueWaitForPrereqs)
 		}
 
+		ctxDone := ctx.Done()
 		for _, accessCmds := range newCmds {
 			for _, newCmd := range accessCmds {
 				// If newCmd is nil it means that the BatchRequest contains no spans for this
@@ -2408,8 +2421,9 @@ func (r *Replica) beginCmds(
 			}
 		}
 
-		if prereqCount > 0 {
-			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
+		if prereqSummary != "" {
+			dur := timeutil.Since(beforeWait)
+			log.VEventf(ctx, 2, "waited %s for overlapping requests: %s", dur, prereqSummary)
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueBeginExecuting)
@@ -2488,6 +2502,44 @@ func (r *Replica) beginCmds(
 		ba:   *ba,
 	}
 	return ec, nil
+}
+
+// prereqDebugSummary constructs a debug summary of a command's prerequisite.
+func prereqDebugSummary(prereqs prereqCmdSet) string {
+	var b strings.Builder
+	for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
+		for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
+			cmds := prereqs[i][j]
+			if len(cmds) == 0 {
+				continue
+			}
+
+			if b.Len() > 0 {
+				b.WriteString(" ")
+			}
+			fmt.Fprintf(&b, "{%s/%s: ", i, j)
+			const max = 4
+			var count int
+			for _, cmd := range cmds {
+				if count > 0 {
+					b.WriteString(", ")
+					if count > max {
+						b.WriteString("...")
+						break
+					}
+				}
+				b.WriteString("[")
+				cmd.debugInfo.WriteSummary(&b)
+				b.WriteString("]")
+				count++
+			}
+			b.WriteString("}")
+		}
+	}
+	if b.Len() == 0 {
+		return "no prereqs"
+	}
+	return b.String()
 }
 
 // removeCmdsFromCommandQueue removes a batch's set of commands for the
