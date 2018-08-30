@@ -73,9 +73,9 @@ type infoStore struct {
 	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
 
-	callbackMu     syncutil.Mutex // Serializes callbacks
 	callbackWorkMu syncutil.Mutex // Protects callbackWork
 	callbackWork   []func()
+	callbackCh     chan struct{} // Channel to signal the callback goroutine
 }
 
 var monoTime struct {
@@ -132,14 +132,40 @@ func newInfoStore(
 	nodeAddr util.UnresolvedAddr,
 	stopper *stop.Stopper,
 ) *infoStore {
-	return &infoStore{
+	is := &infoStore{
 		AmbientContext:  ambient,
 		nodeID:          nodeID,
 		stopper:         stopper,
 		Infos:           make(infoMap),
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[roachpb.NodeID]int64{},
+		callbackCh:      make(chan struct{}, 1),
 	}
+
+	is.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		for {
+			for {
+				is.callbackWorkMu.Lock()
+				work := is.callbackWork
+				is.callbackWork = nil
+				is.callbackWorkMu.Unlock()
+
+				if len(work) == 0 {
+					break
+				}
+				for _, w := range work {
+					w()
+				}
+			}
+
+			select {
+			case <-is.callbackCh:
+			case <-is.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+	return is
 }
 
 // newInfo allocates and returns a new info object using the specified
@@ -289,28 +315,13 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	is.callbackWork = append(is.callbackWork, f)
 	is.callbackWorkMu.Unlock()
 
-	// Run callbacks in a goroutine to avoid mutex reentry. We also guarantee
-	// callbacks are run in order such that if a key is updated twice in
-	// succession, the second callback will never be run before the first.
-	if err := is.stopper.RunAsyncTask(
-		context.Background(), "gossip.infoStore: callback", func(_ context.Context,
-		) {
-			// Grab the callback mutex to serialize execution of the callbacks.
-			is.callbackMu.Lock()
-			defer is.callbackMu.Unlock()
-
-			// Grab and execute the list of work.
-			is.callbackWorkMu.Lock()
-			work := is.callbackWork
-			is.callbackWork = nil
-			is.callbackWorkMu.Unlock()
-
-			for _, w := range work {
-				w()
-			}
-		}); err != nil {
-		ctx := is.AnnotateCtx(context.TODO())
-		log.Warning(ctx, err)
+	// Signal the callback goroutine. Callbacks run in a goroutine to avoid mutex
+	// reentry. We also guarantee callbacks are run in order such that if a key
+	// is updated twice in succession, the second callback will never be run
+	// before the first.
+	select {
+	case is.callbackCh <- struct{}{}:
+	default:
 	}
 }
 
