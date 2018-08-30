@@ -443,6 +443,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 				Capacity:         100,
 				Available:        50,
 				RangeCount:       5,
+				LeaseCount:       1,
 				LogicalBytes:     30,
 				QueriesPerSecond: 100,
 				WritesPerSecond:  30,
@@ -455,6 +456,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 				Capacity:         100,
 				Available:        55,
 				RangeCount:       4,
+				LeaseCount:       2,
 				LogicalBytes:     25,
 				QueriesPerSecond: 50,
 				WritesPerSecond:  25,
@@ -491,6 +493,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	QPS, _ := replica.leaseholderStats.avgQPS()
 	WPS, _ := replica.writeStats.avgQPS()
+	if expectedRangeCount := int32(6); desc.Capacity.RangeCount != expectedRangeCount {
+		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
+	}
 	if expectedBytes := int64(36); desc.Capacity.LogicalBytes != expectedBytes {
 		t.Errorf("expected logical bytes %d, but got %d", expectedBytes, desc.Capacity.LogicalBytes)
 	}
@@ -505,6 +510,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
+	}
+	if expectedRangeCount := int32(3); desc.Capacity.RangeCount != expectedRangeCount {
+		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
 	}
 	if expectedBytes := int64(19); desc.Capacity.LogicalBytes != expectedBytes {
 		t.Errorf("expected logical bytes %d, but got %d", expectedBytes, desc.Capacity.LogicalBytes)
@@ -521,12 +529,18 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
 	}
+	if expectedLeaseCount := int32(0); desc.Capacity.LeaseCount != expectedLeaseCount {
+		t.Errorf("expected LeaseCount %d, but got %d", expectedLeaseCount, desc.Capacity.LeaseCount)
+	}
 	if expectedQPS := 100 - QPS; desc.Capacity.QueriesPerSecond != expectedQPS {
 		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
 	}
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
+	}
+	if expectedLeaseCount := int32(3); desc.Capacity.LeaseCount != expectedLeaseCount {
+		t.Errorf("expected LeaseCount %d, but got %d", expectedLeaseCount, desc.Capacity.LeaseCount)
 	}
 	if expectedQPS := 50 + QPS; desc.Capacity.QueriesPerSecond != expectedQPS {
 		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
