@@ -19,7 +19,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/hex"
+	gohex "encoding/hex"
 	"fmt"
 	"io"
 	"math"
@@ -337,7 +337,7 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, arg := range args {
-			b, err := hex.DecodeString(arg)
+			b, err := gohex.DecodeString(arg)
 			if err != nil {
 				return err
 			}
@@ -364,7 +364,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var bs [][]byte
 		for _, arg := range args {
-			b, err := hex.DecodeString(arg)
+			b, err := gohex.DecodeString(arg)
 			if err != nil {
 				return err
 			}
