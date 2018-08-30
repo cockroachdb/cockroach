@@ -225,6 +225,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return 0
 	}
 	switch t := x.(type) {
+	case bool:
+		return 1
 	case int:
 		if t < 0 {
 			t = -t

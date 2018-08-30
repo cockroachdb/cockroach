@@ -1404,8 +1404,25 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						schemaChanger.execAfter = execAfter
 						schemaChanger.dropTime = 0
 
-						// If the table is dropped add table to map forGC.
-						if table.Dropped() {
+						// Keep track of outstanding schema changes.
+						// If all schema change commands always set UpVersion, why
+						// check for the presence of mutations?
+						// A schema change execution might fail soon after
+						// unsetting UpVersion, and we still want to process
+						// outstanding mutations.
+						if table.UpVersion || table.Adding() ||
+							table.HasDrainingNames() || len(table.Mutations) > 0 {
+							if log.V(2) {
+								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
+									kv.Key, table.ID, table.Version)
+							}
+
+							if len(table.Mutations) > 0 {
+								schemaChanger.mutationID = table.Mutations[0].MutationID
+							}
+							s.schemaChangers[table.ID] = schemaChanger
+						} else if table.Dropped() {
+							// If the table is dropped add table to map forGC.
 							if log.V(2) {
 								log.Infof(ctx,
 									"%s: queue up pending drop table GC; table: %d, version: %d",
@@ -1430,26 +1447,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// this table has been dropped and is only waiting
 							// to be GC-ed.
 							delete(s.schemaChangers, table.ID)
-							break
-						}
-
-						// Keep track of outstanding schema changes.
-						// If all schema change commands always set UpVersion, why
-						// check for the presence of mutations?
-						// A schema change execution might fail soon after
-						// unsetting UpVersion, and we still want to process
-						// outstanding mutations.
-						if table.UpVersion || table.Adding() ||
-							table.HasDrainingNames() || len(table.Mutations) > 0 {
-							if log.V(2) {
-								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
-									kv.Key, table.ID, table.Version)
-							}
-
-							if len(table.Mutations) > 0 {
-								schemaChanger.mutationID = table.Mutations[0].MutationID
-							}
-							s.schemaChangers[table.ID] = schemaChanger
 						}
 
 					case *sqlbase.Descriptor_Database:

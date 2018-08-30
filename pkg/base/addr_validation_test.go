@@ -50,11 +50,10 @@ func TestValidateAddrs(t *testing.T) {
 	if strings.Contains(hostAddr, ":") {
 		hostAddr = "[" + hostAddr + "]"
 	}
-	localAddrs, err := net.DefaultResolver.LookupIPAddr(context.Background(), "localhost")
+	localAddr, err := base.LookupAddr(context.Background(), net.DefaultResolver, "localhost")
 	if err != nil {
 		t.Fatal(err)
 	}
-	localAddr := localAddrs[0].String()
 	if strings.Contains(localAddr, ":") {
 		localAddr = "[" + localAddr + "]"
 	}
