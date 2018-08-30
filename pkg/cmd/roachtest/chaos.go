@@ -56,11 +56,14 @@ type Chaos struct {
 // setting off the monitor. The process returns without an error after the chaos
 // duration.
 func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
-	return func(ctx context.Context) error {
+	return func(ctx context.Context) (err error) {
 		l, err := c.l.childLogger("CHAOS")
 		if err != nil {
 			return err
 		}
+		defer func() {
+			l.printf("chaos stopping: %v", err)
+		}()
 		t := timeutil.Timer{}
 		// Disaster strikes immediately at first.
 		t.Reset(time.Nanosecond)
@@ -94,7 +97,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				return ctx.Err()
 			case <-time.After(downTime):
 			}
-			c.l.printf("restarting %v after %s of downtime\n", target, downTime)
+			l.printf("restarting %v after %s of downtime\n", target, downTime)
 			t.Reset(period)
 			c.Start(ctx, target)
 		}
