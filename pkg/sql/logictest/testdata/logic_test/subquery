@@ -514,3 +514,17 @@ CREATE TABLE a (a TEXT PRIMARY KEY)
 
 statement ok
 SELECT (SELECT repeat(a::STRING, 2) FROM [INSERT INTO a VALUES('foo') RETURNING a]);
+
+statement ok
+UPDATE abc SET a = 2, (b, c) = (SELECT 5, 6) WHERE a = 1;
+
+# Failure in outer query with mutations in the subquery do not take effect.
+statement error pq: bar
+SELECT crdb_internal.force_error('foo', 'bar') FROM [INSERT INTO abc VALUES (11,12,13) RETURNING a]
+
+query III
+SELECT * FROM abc WHERE a = 11
+----
+
+statement error pq: bar
+INSERT INTO abc VALUES (1,2, (SELECT crdb_internal.force_error('foo', 'bar')))
