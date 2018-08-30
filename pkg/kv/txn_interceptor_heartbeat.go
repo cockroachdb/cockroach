@@ -44,10 +44,11 @@ type txnHeartbeat struct {
 	// wrapped is the next sender in the stack
 	wrapped lockedSender
 	// gatekeeper is the sender to which heartbeat requests need to be sent. It is
-	// sent to the gatekeeper interceptor, so sending directly to it will bypass
-	// all the other interceptors - heartbeats don't need them and they can only
+	// set to the gatekeeper interceptor, so sending directly to it will bypass
+	// all the other interceptors; heartbeats don't need them and they can only
 	// heart - we don't want heartbeats to get sequence numbers or to check any
-	// intents.
+	// intents. Note that the async rollbacks that this interceptor sometimes
+	// sends got through `wrapped`, not directly through `gatekeeper`.
 	gatekeeper lockedSender
 
 	clock             *hlc.Clock
