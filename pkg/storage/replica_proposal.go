@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
@@ -294,13 +295,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	// renewer worker that we want it to keep proactively renewing the lease
 	// before it expires.
 	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
-		// It's not worth blocking on a full channel here since the worst that can
-		// happen is the lease times out and has to be reacquired when needed, but
-		// log an error since it's pretty unexpected.
+		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
 		select {
-		case r.store.expirationBasedLeaseChan <- r:
+		case r.store.renewableLeasesSignal <- struct{}{}:
 		default:
-			log.Warningf(ctx, "unable to kick off proactive lease renewal; channel full")
 		}
 	}
 
