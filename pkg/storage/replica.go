@@ -23,6 +23,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -2356,15 +2357,49 @@ func (r *Replica) beginCmds(
 		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
 			readOnly := i == spanset.SpanReadOnly && !clocklessReads // ditto above
 			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				newCmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
+				cmd := r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
+				if cmd != nil {
+					cmd.SetDebugInfo(ba)
+					newCmds[i][j] = cmd
+				}
 			}
 		}
 		r.cmdQMu.Unlock()
 
 		ctxDone := ctx.Done()
 		beforeWait := timeutil.Now()
-		if prereqCount > 0 {
-			log.Eventf(ctx, "waiting for %d overlapping requests", prereqCount)
+		var prereqSummary string
+		if prereqCount > 0 && log.ExpensiveLogEnabled(ctx, 2) {
+			var b strings.Builder
+			for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
+				for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
+					prereqCmds := prereqs[i][j]
+					if len(prereqCmds) == 0 {
+						continue
+					}
+
+					fmt.Fprintf(&b, " {%s/%s: ", i, j)
+					const max = 8
+					var count int
+					for _, prereqCmd := range prereqCmds {
+						if count > 0 {
+							b.WriteString(", ")
+							if count > max {
+								b.WriteString("...")
+								break
+							}
+						}
+						b.WriteString("[")
+						prereqCmd.debugInfo.WriteSummary(&b)
+						b.WriteString("]")
+						count++
+					}
+					b.WriteString("}")
+				}
+			}
+			prereqSummary = b.String()
+
+			log.VEventf(ctx, 2, "waiting for %d overlapping requests:%s", prereqCount, prereqSummary)
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueWaitForPrereqs)
@@ -2418,7 +2453,8 @@ func (r *Replica) beginCmds(
 		}
 
 		if prereqCount > 0 {
-			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
+			dur := timeutil.Since(beforeWait)
+			log.VEventf(ctx, 2, "waited %s for overlapping requests:%s", dur, prereqSummary)
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueBeginExecuting)
