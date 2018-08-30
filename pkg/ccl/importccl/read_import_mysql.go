@@ -302,7 +302,7 @@ func mysqlTableToCockroach(
 	seqVals map[sqlbase.ID]int64,
 ) ([]*sqlbase.TableDescriptor, []delayedFK, error) {
 	if in == nil {
-		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
+		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
 	}
 
 	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
@@ -598,13 +598,17 @@ func mysqlColToCockroach(
 	}
 
 	if col.Default != nil && !bytes.EqualFold(col.Default.Val, []byte("null")) {
-		expr, err := parser.ParseExpr(string(col.Default.Val))
-		if err != nil {
-			return nil, pgerror.Unimplemented("import.mysql.default", "unsupported default expression for column %q: %v", name, err)
+		exprString := string(col.Default.Val)
+		if col.Default.Type == mysql.StrVal {
+			def.DefaultExpr.Expr = tree.NewStrVal(exprString)
+		} else {
+			expr, err := parser.ParseExpr(exprString)
+			if err != nil {
+				return nil, pgerror.Unimplemented("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+			}
+			def.DefaultExpr.Expr = expr
 		}
-		def.DefaultExpr.Expr = expr
 	}
-
 	return def, nil
 }
 

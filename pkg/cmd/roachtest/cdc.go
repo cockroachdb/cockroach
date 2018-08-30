@@ -127,7 +127,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
-		l, err := c.l.childLogger(`changefeed`)
+		l, err := c.l.ChildLogger(`changefeed`)
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		if err := db.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&cursor); err != nil {
 			c.t.Fatal(err)
 		}
-		c.l.printf("starting cursor at %s\n", cursor)
+		c.l.Printf("starting cursor at %s\n", cursor)
 
 		var jobID int
 		createStmt := `CREATE CHANGEFEED FOR
@@ -183,7 +183,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 				}
 				if initialScanLatency == 0 {
 					initialScanLatency = timeutil.Since(timeutil.Unix(0, hwWallTime))
-					l.printf("initial scan latency %s\n", initialScanLatency)
+					l.Printf("initial scan latency %s\n", initialScanLatency)
 					t.Status("finished initial scan")
 					continue
 				}
@@ -197,14 +197,14 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 					// tracking the max latency once we seen a latency
 					// that's less than the max allowed. Verify at the end
 					// of the test that this happens at some point.
-					l.printf("end-to-end latency %s not yet below max allowed %s\n",
+					l.Printf("end-to-end latency %s not yet below max allowed %s\n",
 						latency, maxLatencyAllowed)
 					continue
 				}
 				if latency > maxSeenLatency {
 					maxSeenLatency = latency
 				}
-				l.printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
+				l.Printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
 			}
 		}
 	})

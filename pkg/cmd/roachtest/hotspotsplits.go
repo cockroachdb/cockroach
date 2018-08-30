@@ -18,9 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -49,12 +46,14 @@ func registerHotSpotSplits(r *registry) {
 		m, ctx = errgroup.WithContext(ctx)
 
 		m.Go(func() error {
-			c.l.printf("starting load generator\n")
+			c.l.Printf("starting load generator\n")
 
-			quietL, err := newLogger("run kv", strconv.Itoa(0), "workload"+strconv.Itoa(0), ioutil.Discard, os.Stderr)
+			quietL, err := c.l.ChildLogger("kv-0", quietStdout)
 			if err != nil {
 				return err
 			}
+			defer quietL.close()
+
 			const blockSize = 1 << 19 // 512 KB
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+

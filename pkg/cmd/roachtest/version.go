@@ -52,7 +52,7 @@ func registerVersion(r *registry) {
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
 		if local {
-			c.l.printf("local mode: speeding up test\n")
+			c.l.Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 			buffer = time.Minute
 		}
@@ -70,7 +70,7 @@ func registerVersion(r *registry) {
 			i := i     // ditto
 			m.Go(func(ctx context.Context) error {
 				cmd = fmt.Sprintf(cmd, nodes)
-				childL, err := c.l.childLogger("workload " + strconv.Itoa(i))
+				childL, err := c.l.ChildLogger("workload " + strconv.Itoa(i))
 				if err != nil {
 					return err
 				}
@@ -79,7 +79,7 @@ func registerVersion(r *registry) {
 		}
 
 		m.Go(func(ctx context.Context) error {
-			l, err := c.l.childLogger("upgrader")
+			l, err := c.l.ChildLogger("upgrader")
 			if err != nil {
 				return err
 			}
@@ -117,7 +117,7 @@ func registerVersion(r *registry) {
 
 			stop := func(node int) error {
 				m.ExpectDeath()
-				l.printf("stopping node %d\n", node)
+				l.Printf("stopping node %d\n", node)
 				port := fmt.Sprintf("{pgport:%d}", node)
 				// Note that the following command line needs to run against both v2.0
 				// and the current branch. Do not change it in a manner that is
@@ -142,12 +142,12 @@ func registerVersion(r *registry) {
 			if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&oldVersion); err != nil {
 				return err
 			}
-			l.printf("cluster version is %s\n", oldVersion)
+			l.Printf("cluster version is %s\n", oldVersion)
 
 			// Now perform a rolling restart into the new binary.
 			for i := 1; i < nodes; i++ {
 				t.WorkerStatus("upgrading ", i)
-				l.printf("upgrading %d\n", i)
+				l.Printf("upgrading %d\n", i)
 				if err := stop(i); err != nil {
 					return err
 				}
@@ -158,7 +158,7 @@ func registerVersion(r *registry) {
 				}
 			}
 
-			l.printf("stopping last node\n")
+			l.Printf("stopping last node\n")
 			// Stop the last node.
 			if err := stop(nodes); err != nil {
 				return err
@@ -166,7 +166,7 @@ func registerVersion(r *registry) {
 
 			// Set cluster.preserve_downgrade_option to be the old cluster version to
 			// prevent upgrade.
-			l.printf("preventing automatic upgrade\n")
+			l.Printf("preventing automatic upgrade\n")
 			if _, err := db.ExecContext(ctx,
 				fmt.Sprintf("SET CLUSTER SETTING cluster.preserve_downgrade_option = '%s';", oldVersion),
 			); err != nil {
@@ -174,7 +174,7 @@ func registerVersion(r *registry) {
 			}
 
 			// Do upgrade for the last node.
-			l.printf("upgrading last node\n")
+			l.Printf("upgrading last node\n")
 			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
 			c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
 			if err := sleepAndCheck(); err != nil {
@@ -183,7 +183,7 @@ func registerVersion(r *registry) {
 
 			// Changed our mind, let's roll that back.
 			for i := 1; i <= nodes; i++ {
-				l.printf("downgrading node %d\n", i)
+				l.Printf("downgrading node %d\n", i)
 				t.WorkerStatus("downgrading", i)
 				if err := stop(i); err != nil {
 					return err
@@ -197,7 +197,7 @@ func registerVersion(r *registry) {
 
 			// OK, let's go forward again.
 			for i := 1; i <= nodes; i++ {
-				l.printf("upgrading node %d (again)\n", i)
+				l.Printf("upgrading node %d (again)\n", i)
 				t.WorkerStatus("upgrading", i, "(again)")
 				if err := stop(i); err != nil {
 					return err
@@ -210,7 +210,7 @@ func registerVersion(r *registry) {
 			}
 
 			// Reset cluster.preserve_downgrade_option to allow auto upgrade.
-			l.printf("reenabling auto-upgrade\n")
+			l.Printf("reenabling auto-upgrade\n")
 			if _, err := db.ExecContext(ctx,
 				"RESET CLUSTER SETTING cluster.preserve_downgrade_option;",
 			); err != nil {
