@@ -62,20 +62,20 @@ func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 			// The default zone cannot be removed.
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE NULL", &zs))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", &zs))
 	}
 }
 
 // DeleteZoneConfig deletes the specified zone config through the SQL interface.
 func DeleteZoneConfig(t testing.TB, sqlDB *SQLRunner, target string) {
 	t.Helper()
-	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE NULL", target))
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", target))
 }
 
 // SetZoneConfig updates the specified zone config through the SQL interface.
 func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string) {
 	t.Helper()
-	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE %s",
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
 		target, lex.EscapeSQLString(config)))
 }
 
@@ -83,7 +83,7 @@ func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string)
 // using the provided transaction.
 func TxnSetZoneConfig(t testing.TB, sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
 	t.Helper()
-	_, err := txn.Exec(fmt.Sprintf("ALTER %s CONFIGURE ZONE %s",
+	_, err := txn.Exec(fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
 		target, lex.EscapeSQLString(config)))
 	if err != nil {
 		t.Fatal(err)

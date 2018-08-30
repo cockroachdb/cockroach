@@ -1195,11 +1195,23 @@ func (stmt *SetVar) walkStmt(v Visitor) Statement {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *SetZoneConfig) walkStmt(v Visitor) Statement {
 	ret := stmt
-	e, changed := WalkExpr(v, stmt.YAMLConfig)
-	if changed {
-		newStmt := *stmt
-		ret = &newStmt
-		ret.YAMLConfig = e
+	if stmt.YAMLConfig != nil {
+		e, changed := WalkExpr(v, stmt.YAMLConfig)
+		if changed {
+			newStmt := *stmt
+			ret = &newStmt
+			ret.YAMLConfig = e
+		}
+	}
+	if stmt.Options != nil {
+		newOpts, changed := walkKVOptions(v, stmt.Options)
+		if changed {
+			if ret == stmt {
+				newStmt := *stmt
+				ret = &newStmt
+			}
+			ret.Options = newOpts
+		}
 	}
 	return ret
 }

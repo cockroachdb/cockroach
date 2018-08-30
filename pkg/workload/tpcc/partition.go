@@ -41,7 +41,7 @@ func configureZone(db *gosql.DB, table, partition string, constraint int, zones 
 	// with 2.0 clusters we still need to try with it if the
 	// syntax without EXPERIMENTAL fails.
 	// TODO(knz): Remove this in 2.2.
-	sql := fmt.Sprintf(`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE 'constraints: %s'`,
+	sql := fmt.Sprintf(`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING constraints = '%s'`,
 		partition, table, constraints)
 	_, err := db.Exec(sql)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {

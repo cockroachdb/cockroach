@@ -186,7 +186,7 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", defaultRow)
 
 	// Verify we can use composite values.
-	sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE t CONFIGURE ZONE '' || %s || ''",
+	sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE t CONFIGURE ZONE = '' || %s || ''",
 		lex.EscapeSQLString(yamlOverride)))
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", tableRow)
 
@@ -223,31 +223,31 @@ func TestInvalidSetShowZones(t *testing.T) {
 		err   string
 	}{
 		{
-			"ALTER RANGE default CONFIGURE ZONE NULL",
+			"ALTER RANGE default CONFIGURE ZONE DISCARD",
 			"cannot remove default zone",
 		},
 		{
-			"ALTER RANGE default CONFIGURE ZONE '&!@*@&'",
+			"ALTER RANGE default CONFIGURE ZONE = '&!@*@&'",
 			"could not parse zone config",
 		},
 		{
-			"ALTER TABLE system.namespace CONFIGURE ZONE ''",
+			"ALTER TABLE system.namespace CONFIGURE ZONE USING DEFAULT",
 			"cannot set zone configs for system config tables",
 		},
 		{
-			"ALTER RANGE foo CONFIGURE ZONE ''",
+			"ALTER RANGE foo CONFIGURE ZONE USING DEFAULT",
 			`"foo" is not a built-in zone`,
 		},
 		{
-			"ALTER DATABASE foo CONFIGURE ZONE ''",
+			"ALTER DATABASE foo CONFIGURE ZONE USING DEFAULT",
 			`database "foo" does not exist`,
 		},
 		{
-			"ALTER TABLE system.foo CONFIGURE ZONE ''",
+			"ALTER TABLE system.foo CONFIGURE ZONE USING DEFAULT",
 			`relation "system.foo" does not exist`,
 		},
 		{
-			"ALTER TABLE foo CONFIGURE ZONE ''",
+			"ALTER TABLE foo CONFIGURE ZONE USING DEFAULT",
 			`relation "foo" does not exist`,
 		},
 		{

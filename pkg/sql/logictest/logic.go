@@ -945,6 +945,8 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 				},
 			},
 			UseDatabase: "test",
+			// Set Locality so we can use it in zone config tests.
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}}},
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.

@@ -221,7 +221,7 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 		err   string
 	}{
 		{
-			"ALTER INDEX foo CONFIGURE ZONE ''",
+			"ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
 			`index "foo" does not exist`,
 		},
 		{
@@ -229,7 +229,7 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 			`index "foo" does not exist`,
 		},
 		{
-			"USE system; ALTER INDEX foo CONFIGURE ZONE ''",
+			"USE system; ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
 			`index "foo" does not exist`,
 		},
 		{
@@ -237,7 +237,7 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 			`index "foo" does not exist`,
 		},
 		{
-			"ALTER PARTITION p0 OF TABLE system.jobs CONFIGURE ZONE 'foo'",
+			"ALTER PARTITION p0 OF TABLE system.jobs CONFIGURE ZONE = 'foo'",
 			`partition "p0" does not exist`,
 		},
 		{

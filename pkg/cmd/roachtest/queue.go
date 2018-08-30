@@ -102,7 +102,7 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 
 	// Set TTL on table queue.queue to 0, so that rows are deleted immediately
 	db := c.Conn(ctx, 1)
-	_, err := db.ExecContext(ctx, `ALTER TABLE queue.queue CONFIGURE ZONE 'gc: {ttlseconds: 30}'`)
+	_, err := db.ExecContext(ctx, `ALTER TABLE queue.queue CONFIGURE ZONE USING gc.ttlseconds = 30`)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {
 		// Pre-2.1 was EXPERIMENTAL.
 		// TODO(knz): Remove this in 2.2.

@@ -59,12 +59,12 @@ func registerDrop(r *registry) {
 				// syntax without EXPERIMENTAL fails.
 				// TODO(knz): Remove this in 2.2.
 				if maybeExperimental {
-					stmt = fmt.Sprintf(stmtStr, "")
+					stmt = fmt.Sprintf(stmtStr, "", "=")
 				}
 				t.WorkerStatus(stmt)
 				_, err := db.ExecContext(ctx, stmt)
 				if err != nil && maybeExperimental && strings.Contains(err.Error(), "syntax error") {
-					stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL")
+					stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
 					t.WorkerStatus(stmt)
 					_, err = db.ExecContext(ctx, stmt)
 				}
@@ -112,7 +112,7 @@ func registerDrop(r *registry) {
 			run(false, stmtDrop)
 			// The data has already been deleted, but changing the default zone config
 			// should take effect retroactively.
-			run(true, "ALTER RANGE default %[1]s CONFIGURE ZONE '\ngc:\n  ttlseconds: 1\n'")
+			run(true, "ALTER RANGE default %[1]s CONFIGURE ZONE %[2]s '\ngc:\n  ttlseconds: 1\n'")
 
 			var allNodesSpaceCleared bool
 			var sizeReport string
