@@ -1271,14 +1271,6 @@
   version = "v2.18.06"
 
 [[projects]]
-  branch = "master"
-  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
-  name = "github.com/shirou/w32"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
-
-[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1563,12 +1555,13 @@
   revision = "8f06f82ca394b1ac837d4b0c0cfa07188b0e9dee"
 
 [[projects]]
-  branch = "v2"
-  digest = "1:c46d0fb245dbc49cb816b3e2818d1830e29d03bee1663b1e201f3ed918ec6e60"
+  branch = "v2-encoding-style"
+  digest = "1:3e47b985755968aa935ff5785062f70dcc004a775d2dec1a04d0ec0269061781"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
   pruneopts = "UT"
-  revision = "287cf08546ab5e7e37d55a84f7ed3fd1db036de5"
+  revision = "0e28229486410d12d38f6d1288433104dc166775"
+  source = "https://github.com/cockroachdb/yaml"
 
 [[projects]]
   digest = "1:ce504fbb2b67961ac269fc0a9fcf16a48f638d622af3d87f5cdff766e2559161"
