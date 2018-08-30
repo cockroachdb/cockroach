@@ -99,14 +99,14 @@ func TestGossipOverwriteNode(t *testing.T) {
 		t.Errorf("expected node %d, got %+v", node3.NodeID, val)
 	}
 
-	// Quiesce the stopper now to ensure that the update has propagated before
-	// checking whether node 1 has been removed from the infoStore.
-	stopper.Quiesce(context.TODO())
-	expectedErr := "node.*has been removed from the cluster"
-	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
-		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
-			expectedErr, node1.NodeID, err, val)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		expectedErr := "node.*has been removed from the cluster"
+		if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
+			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+				expectedErr, node1.NodeID, err, val)
+		}
+		return nil
+	})
 }
 
 // TestGossipMoveNode verifies that if a node is moved to a new address, it
@@ -146,19 +146,19 @@ func TestGossipMoveNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Quiesce the stopper now to ensure that the update has propagated before
-	// checking on either node descriptor.
-	stopper.Quiesce(context.TODO())
-	if val, err := g.GetNodeDescriptor(movedNode.NodeID); err != nil {
-		t.Error(err)
-	} else if !proto.Equal(movedNode, val) {
-		t.Errorf("expected node %+v, got %+v", movedNode, val)
-	}
-	expectedErr := "node.*has been removed from the cluster"
-	if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
-		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
-			expectedErr, replacedNode.NodeID, err, val)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if val, err := g.GetNodeDescriptor(movedNode.NodeID); err != nil {
+			return err
+		} else if !proto.Equal(movedNode, val) {
+			return fmt.Errorf("expected node %+v, got %+v", movedNode, val)
+		}
+		expectedErr := "node.*has been removed from the cluster"
+		if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
+			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+				expectedErr, replacedNode.NodeID, err, val)
+		}
+		return nil
+	})
 }
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
@@ -183,7 +183,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(newInsecureRPCContext(stopper))
-	g := NewTest(0, nil, server, stop.NewStopper(), metric.NewRegistry())
+	g := NewTest(0, nil, server, stopper, metric.NewRegistry())
 	g.setResolvers(resolvers)
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
