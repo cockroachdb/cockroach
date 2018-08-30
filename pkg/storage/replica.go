@@ -4217,11 +4217,21 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// previously the leader.
 		r.mu.remoteProposals = nil
 	}
+	debugRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	r.mu.Unlock()
 
 	r.sendRaftMessages(ctx, otherMsgs)
 
 	for _, e := range rd.CommittedEntries {
+		{
+			// Assertions added for #28918.
+			if e.Index != debugRaftAppliedIndex+1 {
+				expl := fmt.Sprintf("applied index %d followed by entry at index %d", debugRaftAppliedIndex, e.Index)
+				return stats, expl, errors.Wrap(errors.Errorf("gap in applied indexes: %+v", rd.CommittedEntries), expl)
+			}
+			debugRaftAppliedIndex = e.Index
+		}
+
 		switch e.Type {
 		case raftpb.EntryNormal:
 			// Committed entries come straight from the Raft log. Consequently,
