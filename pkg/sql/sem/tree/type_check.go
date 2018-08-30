@@ -680,9 +680,9 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	return pgerror.NewErrorf(code, "%s functions are not allowed in %s", cat, context)
 }
 
-// checkFunctionUsage checks whether a given built-in function is
+// CheckFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
-func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+func (sc *SemaContext) CheckFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
 	if def.Private {
 		return errors.Wrapf(errPrivateFunction, "%s()", def.Name)
 	}
@@ -750,14 +750,14 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		return nil, err
 	}
 
-	if err := ctx.checkFunctionUsage(expr, def); err != nil {
+	if err := ctx.CheckFunctionUsage(expr, def); err != nil {
 		return nil, errors.Wrapf(err, "%s()", def.Name)
 	}
 	if ctx != nil {
 		// We'll need to remember we are in a function application to
-		// generate suitable errors in checkFunctionUsage().  We cannot
+		// generate suitable errors in CheckFunctionUsage().  We cannot
 		// set ctx.inFuncExpr earlier (in particular not before the call
-		// to checkFunctionUsage() above) because the top-level FuncExpr
+		// to CheckFunctionUsage() above) because the top-level FuncExpr
 		// must be acceptable even if it is a SRF and
 		// RejectNestedGenerators is set.
 		defer func(ctx *SemaContext, prev bool) {

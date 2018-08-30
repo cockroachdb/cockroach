@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/pkg/errors"
 )
 
 // groupby information stored in scopes.
@@ -107,9 +109,19 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 
 // TypeCheck is part of the tree.Expr interface.
 func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
-	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
+	var searchPath sessiondata.SearchPath
+	if ctx != nil {
+		searchPath = ctx.SearchPath
+	}
+	def, err := a.Func.Resolve(searchPath)
+	if err != nil {
 		return nil, err
 	}
+
+	if err := ctx.CheckFunctionUsage(a.FuncExpr, def); err != nil {
+		return nil, errors.Wrapf(err, "%s()", def.Name)
+	}
+
 	return a, nil
 }
 
@@ -118,8 +130,12 @@ func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("aggregateInfo must be replaced before evaluation")
 }
 
+// Variable implements the VariableExpr interface.
+func (a *aggregateInfo) Variable() {}
+
 var _ tree.Expr = &aggregateInfo{}
 var _ tree.TypedExpr = &aggregateInfo{}
+var _ tree.VariableExpr = &aggregateInfo{}
 
 func (b *Builder) needsAggregation(sel *tree.SelectClause, scope *scope) bool {
 	// We have an aggregation if:

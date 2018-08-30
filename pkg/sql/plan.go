@@ -420,6 +420,11 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 				"cached plan must not change result type")
 		}
 	}
+	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		// We need to close in case there were any subqueries created.
+		p.curPlan.close(ctx)
+		return err
+	}
 
 	return nil
 }

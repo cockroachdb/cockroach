@@ -467,15 +467,14 @@ SELECT count(*) FROM kv GROUP BY length('abc')
 project
  ├── columns: count:5(int)
  └── group-by
-      ├── columns: count_rows:5(int) column6:6(int)
-      ├── grouping columns: column6:6(int)
+      ├── columns: count_rows:5(int) column6:6(int!null)
+      ├── grouping columns: column6:6(int!null)
       ├── project
-      │    ├── columns: column6:6(int)
+      │    ├── columns: column6:6(int!null)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │    └── projections
-      │         └── function: length [type=int]
-      │              └── const: 'abc' [type=string]
+      │         └── const: 3 [type=int]
       └── aggregations
            └── count-rows [type=int]
 
@@ -1616,16 +1615,13 @@ project
  ├── scalar-group-by
  │    ├── columns: avg:2(decimal) avg:4(float) avg:6(decimal)
  │    ├── project
- │    │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
- │    │         ├── cast: INT [type=int]
- │    │         │    └── const: 1 [type=int]
- │    │         ├── cast: FLOAT8 [type=float]
- │    │         │    └── const: 2.0 [type=float]
- │    │         └── cast: DECIMAL [type=decimal]
- │    │              └── const: 3 [type=decimal]
+ │    │         ├── const: 1 [type=int]
+ │    │         ├── const: 2.0 [type=float]
+ │    │         └── const: 3 [type=decimal]
  │    └── aggregations
  │         ├── avg [type=decimal]
  │         │    └── variable: column1 [type=int]
@@ -1647,16 +1643,13 @@ SELECT count(2::int), count(3::float), count(4::decimal)
 scalar-group-by
  ├── columns: count:2(int) count:4(int) count:6(int)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
- │         │    └── const: 2 [type=int]
- │         ├── cast: FLOAT8 [type=float]
- │         │    └── const: 3.0 [type=float]
- │         └── cast: DECIMAL [type=decimal]
- │              └── const: 4 [type=decimal]
+ │         ├── const: 2 [type=int]
+ │         ├── const: 3.0 [type=float]
+ │         └── const: 4 [type=decimal]
  └── aggregations
       ├── count [type=int]
       │    └── variable: column1 [type=int]
@@ -1671,16 +1664,13 @@ SELECT sum(1::int), sum(2::float), sum(3::decimal)
 scalar-group-by
  ├── columns: sum:2(decimal) sum:4(float) sum:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
- │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT8 [type=float]
- │         │    └── const: 2.0 [type=float]
- │         └── cast: DECIMAL [type=decimal]
- │              └── const: 3 [type=decimal]
+ │         ├── const: 1 [type=int]
+ │         ├── const: 2.0 [type=float]
+ │         └── const: 3 [type=decimal]
  └── aggregations
       ├── sum [type=decimal]
       │    └── variable: column1 [type=int]
@@ -1695,16 +1685,13 @@ SELECT variance(1::int), variance(1::float), variance(1::decimal)
 scalar-group-by
  ├── columns: variance:2(decimal) variance:4(float) variance:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
- │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT8 [type=float]
- │         │    └── const: 1.0 [type=float]
- │         └── cast: DECIMAL [type=decimal]
- │              └── const: 1 [type=decimal]
+ │         ├── const: 1 [type=int]
+ │         ├── const: 1.0 [type=float]
+ │         └── const: 1 [type=decimal]
  └── aggregations
       ├── variance [type=decimal]
       │    └── variable: column1 [type=int]
@@ -1719,16 +1706,13 @@ SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 scalar-group-by
  ├── columns: stddev:2(decimal) stddev:4(float) stddev:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
- │         ├── cast: INT [type=int]
- │         │    └── const: 1 [type=int]
- │         ├── cast: FLOAT8 [type=float]
- │         │    └── const: 1.0 [type=float]
- │         └── cast: DECIMAL [type=decimal]
- │              └── const: 1 [type=decimal]
+ │         ├── const: 1 [type=int]
+ │         ├── const: 1.0 [type=float]
+ │         └── const: 1 [type=decimal]
  └── aggregations
       ├── std-dev [type=decimal]
       │    └── variable: column1 [type=int]

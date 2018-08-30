@@ -49,6 +49,7 @@ func TestNormRules(t *testing.T) {
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
+			tester.Flags.SkipFoldConstants = true
 			return tester.RunCommand(t, d)
 		})
 	})
