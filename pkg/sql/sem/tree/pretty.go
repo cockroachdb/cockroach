@@ -1037,7 +1037,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 		d = p.nestUnder(
 			pretty.Concat(
 				d,
-				pretty.Text(" AS"),
+				pretty.Text("AS"),
 			),
 			p.Doc(node.AsSource),
 		)
