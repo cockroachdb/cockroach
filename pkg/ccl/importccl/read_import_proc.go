@@ -423,7 +423,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup
 	var err error
 	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
+		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
