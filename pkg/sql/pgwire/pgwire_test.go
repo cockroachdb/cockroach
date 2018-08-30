@@ -951,9 +951,17 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`1101`).Results(`1101`),
 			baseTest.SetArgs(`1101001`).Results(`1101001`),
 		}},
-
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs("num_replicas: 1"),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = $1", []preparedQueryTest{
+			baseTest.SetArgs(1),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs(gosql.NullString{}),
 		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:

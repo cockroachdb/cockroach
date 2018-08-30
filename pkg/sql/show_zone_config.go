@@ -84,7 +84,7 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 	}
 
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
-		uint32(targetID), index, partition)
+		uint32(targetID), index, partition, false)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
