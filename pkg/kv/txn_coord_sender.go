@@ -419,6 +419,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		&tcs.mu.txn,
 		tcs.clock,
 		tcs.heartbeatInterval,
+		&tcs.interceptorAlloc.txnLockGatekeeper,
 		&tcs.metrics,
 		tcs.stopper,
 		tcs.cleanupTxnLocked,
