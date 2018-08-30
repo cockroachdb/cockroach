@@ -35,6 +35,7 @@ import (
 
 func TestClosedTimestampCanServe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/28607")
 
 	ctx := context.Background()
 	const numNodes = 3
