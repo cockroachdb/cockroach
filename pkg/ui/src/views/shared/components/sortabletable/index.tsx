@@ -52,6 +52,20 @@ interface TableProps {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (rowIndex: number) => string;
+  // Configuration for making rows in the table expandable. If this prop is not supplied,
+  // the rows are not expandable and the expansion control is not shown.
+  expandableConfig?: ExpandableConfig;
+}
+
+export interface ExpandableConfig {
+  // Called when the expand toggle is clicked. If this prop is not supplied,
+  // the table is not expandable and the expansion control is not shown.
+  onChangeExpansion: (rowIndex: number, expanded: boolean) => void;
+  // Given a row index, return whether that row is expanded.
+  rowIsExpanded: (rowIndex: number) => boolean;
+  // If a row is expanded, this function is called to get the content for the
+  // full-width expanded section.
+  expandedContent: (rowIndex: number) => React.ReactNode;
 }
 
 /**
@@ -63,7 +77,7 @@ interface TableProps {
  * SortableTable can indicate this to higher-level components through the
  * 'onChangeSortSetting' callback property.
  */
-export class SortableTable extends React.Component<TableProps, {}> {
+export class SortableTable extends React.Component<TableProps> {
   static defaultProps: TableProps = {
     count: 0,
     columns: [],
@@ -74,6 +88,14 @@ export class SortableTable extends React.Component<TableProps, {}> {
     onChangeSortSetting: (_ss) => { },
     rowClass: (_rowIndex) => "",
   };
+
+  constructor(props: TableProps) {
+    super(props);
+    // TODO(vilterp): use a LocalSetting instead
+    this.state = {
+      expandedRows: [],
+    };
+  }
 
   clickSort(clickedSortKey: any) {
     const { sortSetting, onChangeSortSetting } = this.props;
@@ -96,11 +118,28 @@ export class SortableTable extends React.Component<TableProps, {}> {
     });
   }
 
+  expansionControl(rowIndex: number) {
+    const { expandableConfig } = this.props;
+    const expanded = expandableConfig.rowIsExpanded(rowIndex);
+    const content = expanded ? "▼" : "▶";
+    return (
+      <td
+        className="sort-table__cell sort-table__cell__expansion-control"
+        onClick={() => expandableConfig.onChangeExpansion(rowIndex, !expanded)}
+      >
+        <div style={{ width: 15 }}>
+          {content}
+        </div>
+      </td>
+    );
+  }
+
   render() {
-    const { sortSetting, columns } = this.props;
+    const { sortSetting, columns, expandableConfig } = this.props;
     return <table className={classNames("sort-table", this.props.className)}>
       <thead>
         <tr className="sort-table__row sort-table__row--header">
+          {this.props.expandableConfig ? <th className="sort-table__cell" /> : null}
           {_.map(columns, (c: SortableColumn, colIndex: number) => {
             const classes = ["sort-table__cell"];
             let onClick: (e: any) => void = undefined;
@@ -129,15 +168,29 @@ export class SortableTable extends React.Component<TableProps, {}> {
             "sort-table__row--body",
             this.props.rowClass(rowIndex),
           );
-          return (
+          const output = [
             <tr key={rowIndex} className={classes}>
+              {expandableConfig ? this.expansionControl(rowIndex) : null}
               {
                 _.map(columns, (c: SortableColumn, colIndex: number) => {
                   return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
                 })
               }
-            </tr>
-          );
+            </tr>,
+          ];
+          if (expandableConfig && expandableConfig.rowIsExpanded(rowIndex)) {
+            output.push(
+              <tr>
+                <td
+                  className="sort-table__cell"
+                  colSpan={columns.length + 1}
+                >
+                  {expandableConfig.expandedContent(rowIndex)}
+                </td>
+              </tr>,
+            );
+          }
+          return output;
         })}
       </tbody>
     </table>;

@@ -3,6 +3,7 @@ import _ from "lodash";
 import { createSelector } from "reselect";
 
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
+import { ExpandableConfig } from "src/views/shared/components/sortabletable";
 
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
@@ -45,6 +46,16 @@ interface SortedTableProps<T> {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (obj: T) => string;
+  // Given an object, return the content for the full-width expanded section.
+  // If this prop is not supplied, the table is not expandable and the expansion control is
+  // not shown.
+  expandedContent?: (obj: T) => React.ReactNode;
+  // TODO(vilterp): bundle these two into another ExpansionConfig or something
+  expansionKey?: (obj: T) => string;
+}
+
+interface SortedTableState {
+  expandedRows: Set<string>;
 }
 
 /**
@@ -58,7 +69,7 @@ interface SortedTableProps<T> {
  * SortedTable should be preferred over the lower-level SortableTable when
  * all data rows to be displayed are available locally on the client side.
  */
-export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
+export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedTableState> {
   static defaultProps: Partial<SortedTableProps<any>> = {
     rowClass: (_obj: any) => "",
   };
@@ -120,16 +131,72 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
     },
   );
 
+  constructor(props: SortedTableProps<T>) {
+    super(props);
+    // TODO(vilterp): use a LocalSetting instead
+    this.state = {
+      expandedRows: new Set<string>(),
+    };
+  }
+
+  getItemAt(rowIndex: number): T {
+    const sorted = this.sorted(this.props);
+    return sorted[rowIndex];
+  }
+
+  getKeyAt(rowIndex: number): string {
+    return this.props.expansionKey(this.getItemAt((rowIndex)));
+  }
+
+  onChangeExpansion = (rowIndex: number, expanded: boolean) => {
+    console.log("onChangeExpansion", rowIndex, expanded);
+    const key = this.getKeyAt(rowIndex);
+    const expandedRows = this.state.expandedRows;
+    // TODO(vilterp): should I be using an immutable array or something
+    if (expanded) {
+      expandedRows.add(key);
+    } else {
+      expandedRows.delete(key);
+    }
+    this.setState({
+      expandedRows: expandedRows,
+    });
+  }
+
+  rowIsExpanded = (rowIndex: number): boolean => {
+    const key = this.getKeyAt(rowIndex);
+    return this.state.expandedRows.has(key);
+  }
+
+  expandedContent = (rowIndex: number): React.ReactNode => {
+    const item = this.getItemAt(rowIndex);
+    return (
+      <p>{this.props.expandedContent(item)}</p>
+    );
+  }
+
   render() {
     const { data, sortSetting, onChangeSortSetting } = this.props;
+
+    let expandableConfig: ExpandableConfig = null;
+    if (this.props.expandedContent) {
+      expandableConfig = {
+        expandedContent: this.expandedContent,
+        rowIsExpanded: this.rowIsExpanded,
+        onChangeExpansion: this.onChangeExpansion,
+      };
+    }
+
     if (data) {
       return (
-        <SortableTable count={data.length}
+        <SortableTable
+          count={data.length}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
           columns={this.columns(this.props)}
           rowClass={this.rowClass(this.props)}
           className={this.props.className}
+          expandableConfig={expandableConfig}
         />
       );
     }
