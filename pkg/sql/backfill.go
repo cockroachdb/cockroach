@@ -144,7 +144,7 @@ func (sc *SchemaChanger) runBackfill(
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
-				if columnNeedsBackfill(m.GetColumn()) {
+				if sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
@@ -582,10 +582,6 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		backfill.ColumnMutationFilter)
 }
 
-func columnNeedsBackfill(desc *sqlbase.ColumnDescriptor) bool {
-	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
-}
-
 // runSchemaChangesInTxn runs all the schema changes immediately in a
 // transaction. This is called when a CREATE TABLE is followed by
 // schema changes in the same transaction. The CREATE TABLE is
@@ -626,7 +622,7 @@ func runSchemaChangesInTxn(
 		case sqlbase.DescriptorMutation_ADD:
 			switch m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
-				if doneColumnBackfill || !columnNeedsBackfill(m.GetColumn()) {
+				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
 				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {

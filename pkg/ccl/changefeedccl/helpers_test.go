@@ -108,11 +108,19 @@ func createBenchmarkChangefeed(
 	poller := makePoller(
 		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf)
 
-	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
+	th := makeTableHistory(func(*sqlbase.TableDescriptor) error { return nil }, initialHighWater)
+	thUpdater := &tableHistoryUpdater{
+		settings: s.ClusterSettings(),
+		db:       s.DB(),
+		targets:  details.Targets,
+		m:        th,
+	}
+	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
 	tickFn := emitEntries(details, sink, rowsFn)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = poller.Run(ctx) }()
+	go func() { _ = thUpdater.PollTableDescs(ctx) }()
 
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
