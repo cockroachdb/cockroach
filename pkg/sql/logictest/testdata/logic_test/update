@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt
 
 statement ok
 CREATE TABLE kv (
@@ -264,13 +264,15 @@ CREATE TABLE xyz (
 statement count 1
 INSERT INTO xyz VALUES (111, 222, 333)
 
-statement count 1
-UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
 
-query III
-SELECT * from xyz
-----
-2 777 666
+# TODO(jordan): re-enable post #28716
+# statement count 1
+# UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
+# 
+# query III
+# SELECT * from xyz
+# ----
+# 2 777 666
 
 statement ok
 CREATE TABLE lots (
@@ -322,7 +324,7 @@ UPDATE pks SET k2 = 5 where k1 = 1
 statement count 1
 UPDATE pks SET k1 = 2 WHERE k1 = 1
 
-query III
+query III rowsort
 SELECT * FROM pks
 ----
 2  2  3
@@ -362,7 +364,7 @@ UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v
 ----
 1  1
 
-query II
+query II rowsort
 SELECT * FROM kv
 ----
 1  1
