@@ -115,7 +115,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	run := func(stmtStr string) {
 		db := c.Conn(ctx, nodes)
 		defer db.Close()
-		stmt := fmt.Sprintf(stmtStr, "")
+		stmt := fmt.Sprintf(stmtStr, "", "=")
 		// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
 		// with 2.0 clusters we still need to try with it if the
 		// syntax without EXPERIMENTAL fails.
@@ -123,7 +123,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		t.Status(stmt)
 		_, err := db.ExecContext(ctx, stmt)
 		if err != nil && strings.Contains(err.Error(), "syntax error") {
-			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL")
+			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
 			t.Status(stmt)
 			_, err = db.ExecContext(ctx, stmt)
 		}
@@ -180,7 +180,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			if err != nil {
 				return err
 			}
-			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE 'constraints: {"+node%d"}'`, node))
+			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE %%[2]s 'constraints: {"+node%d"}'`, node))
 
 			if err := waitUpReplicated(id); err != nil {
 				return err
@@ -192,7 +192,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 				}
 			}
 
-			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE 'constraints: {"-node%d"}'`, node))
+			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE %%[2]s 'constraints: {"-node%d"}'`, node))
 
 			if err := decom(id); err != nil {
 				return err

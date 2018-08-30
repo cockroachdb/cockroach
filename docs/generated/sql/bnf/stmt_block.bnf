@@ -430,8 +430,7 @@ set_session_stmt ::=
 	| 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list
 
 set_csetting_stmt ::=
-	'SET' 'CLUSTER' 'SETTING' var_name '=' var_value
-	| 'SET' 'CLUSTER' 'SETTING' var_name 'TO' var_value
+	'SET' 'CLUSTER' 'SETTING' var_name to_or_eq var_value
 
 set_transaction_stmt ::=
 	'SET' 'TRANSACTION' transaction_mode_list
@@ -1062,6 +1061,10 @@ set_rest_more ::=
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
+to_or_eq ::=
+	'='
+	| 'TO'
+
 var_value ::=
 	a_expr
 	| 'ON'
@@ -1131,8 +1134,8 @@ alter_scatter_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
 
 alter_zone_table_stmt ::=
-	'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' a_expr
-	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' a_expr
+	'ALTER' 'TABLE' table_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 
 alter_rename_table_stmt ::=
 	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' table_name
@@ -1156,7 +1159,7 @@ alter_rename_index_stmt ::=
 	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index 'RENAME' 'TO' index_name
 
 alter_zone_index_stmt ::=
-	'ALTER' 'INDEX' table_name_with_index 'CONFIGURE' 'ZONE' a_expr
+	'ALTER' 'INDEX' table_name_with_index set_zone_config
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
@@ -1174,10 +1177,10 @@ alter_rename_database_stmt ::=
 	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_name
 
 alter_zone_database_stmt ::=
-	'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' a_expr
+	'ALTER' 'DATABASE' database_name set_zone_config
 
 alter_zone_range_stmt ::=
-	'ALTER' 'RANGE' zone_name 'CONFIGURE' 'ZONE' a_expr
+	'ALTER' 'RANGE' zone_name set_zone_config
 
 complex_db_object_name ::=
 	name '.' unrestricted_name
@@ -1423,8 +1426,7 @@ attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
 
 generic_set ::=
-	var_name 'TO' var_list
-	| var_name '=' var_list
+	var_name to_or_eq var_list
 
 transaction_mode ::=
 	transaction_iso_level
@@ -1450,6 +1452,11 @@ multiple_set_clause ::=
 
 alter_table_cmds ::=
 	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*
+
+set_zone_config ::=
+	'CONFIGURE' 'ZONE' 'USING' var_set_list
+	| 'CONFIGURE' 'ZONE' 'USING' 'DEFAULT'
+	| 'CONFIGURE' 'ZONE' 'DISCARD'
 
 opt_column ::=
 	'COLUMN'
@@ -1791,6 +1798,9 @@ alter_table_cmd ::=
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by
 	| 'INJECT' 'STATISTICS' a_expr
+
+var_set_list ::=
+	( var_name '=' var_value ) ( ( ',' var_name '=' var_value ) )*
 
 alter_index_cmd ::=
 	partition_by

@@ -118,6 +118,10 @@ func (*LeasePreference) ProtoMessage()               {}
 func (*LeasePreference) Descriptor() ([]byte, []int) { return fileDescriptorZone, []int{3} }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
+//
+// Note: when adding.removing fields here, be sure to update
+// supportedZoneConfigOptions in the sql package, to synchronize
+// with the code for ALTER ... CONFIGURE ZONE.
 type ZoneConfig struct {
 	RangeMinBytes int64 `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
 	RangeMaxBytes int64 `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
