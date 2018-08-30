@@ -980,6 +980,72 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	})
 }
 
+// TestStoreRangeMergeConcurrentSplit (occasionally) reproduces a race where a
+// concurrent merge and split could deadlock.
+//
+// The bug works like this. A merge of adjacent ranges P and Q and a split of Q
+// execute concurrently. The merge updates Q's meta2 range descriptor. The split
+// updates Q's local range descriptor, then tries to update Q's meta2 range
+// descriptor, but runs into the merge's intent and waits for the merge to
+// complete. The merge then tries to update Q's local range descriptor but runs
+// into the split's intent. The merge realizes that waiting for the split to
+// complete would cause deadlock, so it aborts the split. But before the split
+// can clean up its transaction record and intents, the merge locks Q and
+// launches a goroutine to unlock Q when the merge commits.
+//
+// In the past, this watcher goroutine would perform a range lookup for Q; this
+// would indirectly wait for the merge to complete by waiting for its intent in
+// meta2 to be resolved. Unfortunately, in this case, the range lookup would see
+// the merge's intent, but rather than resolving the intent directly, it would
+// notice that the split was already atte50mpting to resolve the intent, and so it
+// would enter the contention queue and wait for the split transaction to
+// complete. But the split transaction was waiting for the watcher to complete!
+// And thus, deadlock.
+//
+// Now, the watcher goroutine sends a PushTransaction directly to the merge
+// transaction to avoid deadlock.
+//
+// Attempting a foolproof reproduction of the bug proved challenging and would
+// have required a mess of store filters. This test takes a simpler approach of
+// running the necessary split and a merge concurrently and allowing the race
+// scheduler to occasionally strike the right interleaving. At the time of
+// writing, the test would reliably reproduce the bug in about 50 runs (about
+// ten seconds of stress on an eight core laptop).
+func TestStoreRangeMergeConcurrentSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	distSender := mtc.distSenders[0]
+
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, mtc.Store(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	splitErrCh := make(chan error)
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		splitArgs := adminSplitArgs(rhsDesc.StartKey.AsRawKey().Next())
+		_, pErr := client.SendWrapped(ctx, distSender, splitArgs)
+		splitErrCh <- pErr.GoError()
+	}()
+
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, distSender, mergeArgs)
+	if pErr != nil && !testutils.IsPError(pErr, "range changed during merge") {
+		t.Fatal(pErr)
+	}
+
+	if err := <-splitErrCh; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestStoreRangeMergeRHSLeaseExpiration verifies that, if the right-hand range
 // in a merge loses its lease while a merge is in progress, the new leaseholder
 // does not incorrectly serve traffic before the merge completes.
