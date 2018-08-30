@@ -67,7 +67,7 @@ ignored = [
 [[constraint]]
   name = "vitess.io/vitess"
   source = "https://github.com/cockroachdb/vitess"
-  branch = "no-flag-on-delete"
+  branch = "no-flag-names-parens"
 
 # The master version of go.uuid has an incompatible interface and (as
 # of 2018-06-06) a serious bug. Don't upgrade without making sure
