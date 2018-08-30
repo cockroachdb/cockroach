@@ -56,18 +56,24 @@ func registerTPCC(r *registry) {
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 
-		t.Status("loading dataset")
-		if !opts.UseFixture {
-			// Init first so that we can set off chaos and workload at the same time.
-			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d --duration=1ms {pgurl:1-%d}",
-				opts.Warehouses, nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
-		} else {
-			cmd := fmt.Sprintf(
-				"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", opts.Warehouses)
-			c.Run(ctx, c.Node(c.nodes), cmd)
-		}
+		func() {
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+			if _, err := db.ExecContext(ctx, `USE tpcc`); err != nil {
+				t.Status("loading dataset")
+				if !opts.UseFixture {
+					// Init first so that we can set off chaos and workload at the same time.
+					cmd := fmt.Sprintf(
+						"./workload run tpcc --init --warehouses=%d --duration=1ms {pgurl:1-%d}",
+						opts.Warehouses, nodes)
+					c.Run(ctx, c.Node(nodes+1), cmd)
+				} else {
+					cmd := fmt.Sprintf(
+						"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", opts.Warehouses)
+					c.Run(ctx, c.Node(c.nodes), cmd)
+				}
+			}
+		}()
 		t.Status("waiting")
 
 		m.Go(func(ctx context.Context) error {
