@@ -16,6 +16,7 @@ package cli
 
 import (
 	"context"
+	gohex "encoding/hex"
 	"fmt"
 	"math"
 	"regexp"
@@ -166,6 +167,19 @@ func (k *mvccKey) Set(value string) error {
 	}
 
 	switch typ {
+	case hex:
+		b, err := gohex.DecodeString(keyStr)
+		if err != nil {
+			return err
+		}
+		newK, err := engine.DecodeKey(b)
+		if err != nil {
+			encoded := gohex.EncodeToString(engine.EncodeKey(engine.MakeMVCCMetadataKey(roachpb.Key(b))))
+			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
+				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
+				encoded)
+		}
+		*k = mvccKey(newK)
 	case raw:
 		unquoted, err := unquoteArg(keyStr)
 		if err != nil {
@@ -208,6 +222,7 @@ const (
 	raw keyType = iota
 	human
 	rangeID
+	hex
 )
 
 // _keyTypes stores the names of all the possible key types.
