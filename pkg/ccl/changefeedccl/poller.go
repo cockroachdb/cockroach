@@ -82,21 +82,9 @@ func fetchSpansForTargets(
 			txn.SetFixedTimestamp(ctx, ts)
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID, origName := range targets {
+		for tableID := range targets {
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 			if err != nil {
-				if errors.Cause(err) == sqlbase.ErrDescriptorNotFound {
-					return errors.Errorf(`"%s" was dropped or truncated`, origName)
-				}
-				return err
-			}
-			if tableDesc.State == sqlbase.TableDescriptor_DROP {
-				return errors.Errorf(`"%s" was dropped or truncated`, origName)
-			}
-			if tableDesc.Name != origName {
-				return errors.Errorf(`"%s" was renamed to "%s"`, origName, tableDesc.Name)
-			}
-			if err := validateChangefeedTable(tableDesc); err != nil {
 				return err
 			}
 			spans = append(spans, tableDesc.PrimaryIndexSpan())
@@ -136,11 +124,6 @@ func (p *poller) Run(ctx context.Context) error {
 		nextHighWater := p.clock.Now()
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
-
-		_, err := fetchSpansForTargets(ctx, p.db, p.targets, nextHighWater)
-		if err != nil {
-			return err
-		}
 
 		var ranges []roachpb.RangeDescriptor
 		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

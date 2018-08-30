@@ -144,7 +144,7 @@ func (sc *SchemaChanger) runBackfill(
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
-				if columnNeedsBackfill(m.GetColumn()) {
+				if ColumnNeedsBackfill(m.GetColumn()) {
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
@@ -582,7 +582,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		backfill.ColumnMutationFilter)
 }
 
-func columnNeedsBackfill(desc *sqlbase.ColumnDescriptor) bool {
+// ColumnNeedsBackfill returns true if adding the given column requires a
+// backfill (dropping a column always requires a backfill).
+func ColumnNeedsBackfill(desc *sqlbase.ColumnDescriptor) bool {
 	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
 }
 
@@ -626,7 +628,7 @@ func runSchemaChangesInTxn(
 		case sqlbase.DescriptorMutation_ADD:
 			switch m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
-				if doneColumnBackfill || !columnNeedsBackfill(m.GetColumn()) {
+				if doneColumnBackfill || !ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
 				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {

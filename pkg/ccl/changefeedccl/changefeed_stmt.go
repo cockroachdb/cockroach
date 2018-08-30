@@ -169,10 +169,10 @@ func changefeedPlanHook(
 		targets := make(map[sqlbase.ID]string, len(targetDescs))
 		for _, desc := range targetDescs {
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				if err := validateChangefeedTable(tableDesc); err != nil {
+				targets[tableDesc.ID] = tableDesc.Name
+				if err := validateChangefeedTable(targets, tableDesc); err != nil {
 					return err
 				}
-				targets[tableDesc.ID] = tableDesc.Name
 			}
 		}
 
@@ -275,7 +275,14 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	return details, nil
 }
 
-func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
+func validateChangefeedTable(
+	targets map[sqlbase.ID]string, tableDesc *sqlbase.TableDescriptor,
+) error {
+	origName, ok := targets[tableDesc.ID]
+	if !ok {
+		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+	}
+
 	// Technically, the only non-user table known not to work is system.jobs
 	// (which creates a cycle since the resolved timestamp high-water mark is
 	// saved in it), but there are subtle differences in the way many of them
@@ -298,6 +305,28 @@ func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
 			tableDesc.Name, len(tableDesc.Families))
 	}
+
+	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+		return errors.Errorf(`"%s" was dropped or truncated`, origName)
+	}
+	if tableDesc.Name != origName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, origName, tableDesc.Name)
+	}
+
+	for _, m := range tableDesc.Mutations {
+		col := m.GetColumn()
+		if col == nil {
+			// Index backfills don't affect changefeeds.
+			continue
+		}
+		// It's unfortunate that there's no one method we can call to check if a
+		// mutation will be a backfill or not, but this logic was extracted from
+		// backfill.go.
+		if m.Direction == sqlbase.DescriptorMutation_DROP || sql.ColumnNeedsBackfill(col) {
+			return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
+		}
+	}
+
 	return nil
 }
 
