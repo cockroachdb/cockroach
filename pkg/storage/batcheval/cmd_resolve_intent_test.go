@@ -130,7 +130,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	abortSpanKey := fmt.Sprintf(`1 1: /Local/RangeID/99/r/AbortSpan/"%s"`, id)
+	abortSpanKey := fmt.Sprintf(`write local: /Local/RangeID/99/r/AbortSpan/"%s"`, id)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
 		StartKey: roachpb.RKey("a"),
