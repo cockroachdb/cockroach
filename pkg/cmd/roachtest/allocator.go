@@ -58,7 +58,7 @@ func registerAllocator(r *registry) {
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
 				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128`
-				l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
+				l, err := c.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -108,7 +108,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
-		l.printf("cluster took %s to rebalance\n", rebalanceIntervalStr)
+		l.Printf("cluster took %s to rebalance\n", rebalanceIntervalStr)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -119,7 +119,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		l.printf("%d range events\n", rangeEvents)
+		l.Printf("%d range events\n", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
@@ -130,7 +130,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 		).Scan(&stdDev); err != nil {
 			return err
 		}
-		l.printf("stdDev(replica count) = %.2f\n", stdDev)
+		l.Printf("stdDev(replica count) = %.2f\n", stdDev)
 	}
 
 	// Output the number of ranges on each store.
@@ -145,7 +145,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 			if err := rows.Scan(&storeID, &rangeCount); err != nil {
 				return err
 			}
-			l.printf("s%d has %d ranges\n", storeID, rangeCount)
+			l.Printf("s%d has %d ranges\n", storeID, rangeCount)
 		}
 	}
 
@@ -229,9 +229,9 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 				return err
 			}
 
-			l.printf("%v\n", stats)
+			l.Printf("%v\n", stats)
 			if stableSeconds <= stats.SecondsSinceLastEvent {
-				l.printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
+				l.Printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
 				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = printRebalanceStats(l, db)
 					return errors.Errorf(

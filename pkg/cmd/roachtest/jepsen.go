@@ -65,10 +65,10 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
-		c.l.printf("cluster already initialized\n")
+		c.l.Printf("cluster already initialized\n")
 		return
 	}
-	c.l.printf("initializing cluster\n")
+	c.l.Printf("initializing cluster\n")
 	t.Status("initializing cluster")
 	defer func() {
 		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
@@ -136,9 +136,9 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	// Wrap roachtest's primitive logging in something more like util/log
 	logf := func(f string, args ...interface{}) {
 		// This log prefix matches the one (sometimes) used in roachprod
-		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
-		c.l.printf(f, args...)
-		c.l.printf("\n")
+		c.l.Printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
+		c.l.Printf(f, args...)
+		c.l.Printf("\n")
 	}
 	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
@@ -146,14 +146,14 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 			return
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		c.l.Printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		c.l.Printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
 

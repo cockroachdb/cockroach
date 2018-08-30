@@ -74,7 +74,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 			if reflect.DeepEqual(expected, actual) {
 				break
 			}
-			c.l.printf("not done: %s vs %s\n", expected, actual)
+			c.l.Printf("not done: %s vs %s\n", expected, actual)
 			time.Sleep(time.Second)
 		}
 		if !reflect.DeepEqual(expected, actual) {
