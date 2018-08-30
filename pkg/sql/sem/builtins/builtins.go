@@ -2873,8 +2873,11 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
 			},
-			Info: "This function is used for internal debugging purposes. " +
-				"Incorrect use can severely impact performance.",
+			Info: "Set the equivalent of the --vmodule flag on the gateway node processing this request; " +
+				"it affords control the logging verbosity of different files. " +
+				"Example syntax: crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3'). " +
+				"Reset with: crdb_internal.set_vmodule(''). " +
+				"Raising the verbosity can severely affect performance.",
 		},
 	),
 }
