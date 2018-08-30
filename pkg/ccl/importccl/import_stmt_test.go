@@ -199,6 +199,15 @@ d
 				`SELECT * FROM t ORDER BY a`: {{"1"}, {"3"}, {"5"}},
 			},
 		},
+		{
+			name:   "collated strings",
+			create: `s string collate en_u_ks_level1`,
+			typ:    "CSV",
+			data:   strings.Repeat("1\n", 2000),
+			query: map[string][][]string{
+				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
+			},
+		},
 
 		// MySQL OUTFILE
 		{
