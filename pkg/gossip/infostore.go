@@ -357,7 +357,17 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error, deleteExpir
 func (is *infoStore) combine(
 	infos map[string]*Info, nodeID roachpb.NodeID,
 ) (freshCount int, err error) {
+	localNodeID := is.nodeID.Get()
 	for key, i := range infos {
+		if i.NodeID == localNodeID {
+			// Ignore infos received from the remote node which originated at the
+			// local node. These infos will usually be ignored by addInfo due to
+			// having a hops value that is too large, but during startup we might
+			// inadvertently accept one of these infos until the local node has
+			// gossiped the same info.
+			continue
+		}
+
 		infoCopy := *i
 		infoCopy.Hops++
 		infoCopy.PeerID = nodeID
