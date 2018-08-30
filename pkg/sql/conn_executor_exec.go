@@ -150,7 +150,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// sorts of errors on the result. Rather than trying to impose discipline
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
-		if ctx.Err() != nil && res.Err() != nil {
+		if errors.WithStack(ctx.Err()) != nil && res.Err() != nil {
 			if queryTimedOut {
 				res.OverwriteError(sqlbase.QueryTimeoutError)
 			} else {

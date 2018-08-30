@@ -3046,7 +3046,7 @@ func (s *Store) Send(
 	// Add the command to the range for execution; exit retry loop on success.
 	for {
 		// Exit loop if context has been canceled or timed out.
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
@@ -3180,7 +3180,7 @@ func (s *Store) Send(
 				case <-mergeCompleteCh:
 					// Merge complete. Retry the command.
 				case <-ctx.Done():
-					return nil, roachpb.NewError(ctx.Err())
+					return nil, roachpb.NewError(errors.WithStack(ctx.Err()))
 				case <-s.stopper.ShouldQuiesce():
 					return nil, roachpb.NewError(&roachpb.NodeUnavailableError{})
 				}

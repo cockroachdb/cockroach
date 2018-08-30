@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -95,7 +96,7 @@ func (mhs *ManualHeartbeatService) Ping(
 			return nil, err
 		}
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.WithStack(ctx.Err())
 	case <-mhs.stopper.ShouldStop():
 	}
 	hs := HeartbeatService{

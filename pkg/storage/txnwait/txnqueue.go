@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
@@ -470,7 +471,7 @@ func (q *Queue) MaybeWaitForPush(
 		case <-ctx.Done():
 			// Caller has given up.
 			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
-			return nil, roachpb.NewError(ctx.Err())
+			return nil, roachpb.NewError(errors.WithStack(ctx.Err()))
 
 		case txn := <-push.pending:
 			log.VEventf(ctx, 2, "result of pending push: %v", txn)
@@ -653,7 +654,7 @@ func (q *Queue) MaybeWaitForQuery(
 	select {
 	case <-ctx.Done():
 		// Caller has given up.
-		return roachpb.NewError(ctx.Err())
+		return roachpb.NewError(errors.WithStack(ctx.Err()))
 	case <-maxWaitCh:
 		return nil
 	case <-query.pending:
@@ -732,14 +733,14 @@ func (q *Queue) startQueryPusherTxn(
 				// push waiter requires another query of the pusher txn.
 				select {
 				case <-ctx.Done():
-					errCh <- roachpb.NewError(ctx.Err())
+					errCh <- roachpb.NewError(errors.WithStack(ctx.Err()))
 					return
 				case <-readyCh:
 				}
 				// Reset the retry to query again immediately.
 				r.Reset()
 			}
-			errCh <- roachpb.NewError(ctx.Err())
+			errCh <- roachpb.NewError(errors.WithStack(ctx.Err()))
 		}); err != nil {
 		errCh <- roachpb.NewError(err)
 	}

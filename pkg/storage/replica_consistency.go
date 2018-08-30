@@ -295,7 +295,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 			errors.Errorf("store has stopped while waiting for compute checksum (ID = %s)", id)
 	case <-ctx.Done():
 		return ReplicaChecksum{},
-			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+			errors.Wrapf(errors.WithStack(ctx.Err()), "while waiting for compute checksum (ID = %s)", id)
 	case <-c.notify:
 	}
 	if log.V(1) {

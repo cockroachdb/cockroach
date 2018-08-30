@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/pkg/errors"
 )
 
 func (s *statusServer) ProblemRanges(
@@ -143,7 +144,7 @@ func (s *statusServer) ProblemRanges(
 			sort.Sort(roachpb.RangeIDSlice(problems.RaftLogTooLargeRangeIDs))
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
-			return nil, status.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
+			return nil, status.Errorf(codes.DeadlineExceeded, errors.WithStack(ctx.Err()).Error())
 		}
 	}
 

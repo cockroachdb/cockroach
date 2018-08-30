@@ -925,7 +925,7 @@ func (ir *intentResolver) resolveIntents(
 	}
 	// Avoid doing any work on behalf of expired contexts. See
 	// https://github.com/cockroachdb/cockroach/issues/15997.
-	if err := ctx.Err(); err != nil {
+	if err := errors.WithStack(ctx.Err()); err != nil {
 		return err
 	}
 	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)

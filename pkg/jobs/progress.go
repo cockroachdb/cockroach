@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // For both backups and restores, we compute progress as the number of completed
@@ -90,7 +91,7 @@ func (jpl *ProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{}) er
 				return nil
 			}
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		}
 	}
 }

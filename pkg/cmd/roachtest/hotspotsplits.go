@@ -85,7 +85,7 @@ func registerHotSpotSplits(r *registry) {
 
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.WithStack(ctx.Err())
 				case <-time.After(5 * time.Second):
 				}
 			}

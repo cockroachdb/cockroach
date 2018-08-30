@@ -1037,7 +1037,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 	var draining bool
 	for {
 		ex.curStmt = nil
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			return err
 		}
 

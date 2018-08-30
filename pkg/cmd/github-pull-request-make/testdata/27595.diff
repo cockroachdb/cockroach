@@ -2237,7 +2237,7 @@ index 00000000000..9cfe2614f13
 +		p.cond.Wait()
 +		p.cond.L.Unlock()
 +
-+		if err := ctx.Err(); err != nil {
++		if err := errors.WithStack(ctx.Err()); err != nil {
 +			if log.V(1) {
 +				log.Info(ctx, err)
 +			}
@@ -3377,7 +3377,7 @@ index 00000000000..a72fca8358e
 +		var ok bool
 +		select {
 +		case <-ctx.Done():
-+			return ctx.Err()
++			return errors.WithStack(ctx.Err())
 +		case <-s.stopper.ShouldQuiesce():
 +			return errors.New("node is draining")
 +		case entry, ok = <-ch:

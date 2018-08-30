@@ -342,7 +342,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case <-s.ShouldQuiesce():
 		return ErrUnavailable
 	default:
@@ -354,7 +354,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-s.ShouldQuiesce():
 			return ErrUnavailable
 		}
@@ -365,7 +365,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	select {
 	case <-ctx.Done():
 		<-sem
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	default:
 	}
 

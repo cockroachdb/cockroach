@@ -85,7 +85,7 @@ func readInputFiles(
 		currentFile++
 		select {
 		case <-done:
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		default:
 		}
 		if err := func() error {
@@ -324,7 +324,7 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 	select {
 	case c.kvCh <- c.kvBatch:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 	c.kvBatch = make(kvBatch, 0, c.batchCap)
 	return nil

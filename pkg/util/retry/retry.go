@@ -166,7 +166,7 @@ func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) 
 		}
 	}
 	if err == nil {
-		err = errors.Wrap(ctx.Err(), "did not run function")
+		err = errors.Wrap(errors.WithStack(ctx.Err()), "did not run function")
 	}
 	return err
 }

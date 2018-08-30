@@ -182,14 +182,14 @@ func workerRun(
 	}
 
 	for {
-		if ctx.Err() != nil {
+		if errors.WithStack(ctx.Err()) != nil {
 			return
 		}
 
 		// Limit how quickly the load generator sends requests based on --max-rate.
 		if limiter != nil {
 			if err := limiter.Wait(ctx); err != nil {
-				if err == ctx.Err() {
+				if err == errors.WithStack(ctx.Err()) {
 					return
 				}
 				panic(err)
@@ -197,7 +197,7 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			if errors.Cause(err) == ctx.Err() {
+			if errors.Cause(err) == errors.WithStack(ctx.Err()) {
 				return
 			}
 			errCh <- err

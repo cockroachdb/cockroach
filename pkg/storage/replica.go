@@ -1556,7 +1556,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
-					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
+					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", errors.WithStack(ctx.Err()))
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				case <-r.store.Stopper().ShouldStop():
 					llHandle.Cancel()
@@ -2307,7 +2307,7 @@ func (r *Replica) beginCmds(
 		// command queue we'll need to transfer our prerequisites to all
 		// dependent commands if we want to cancel, so it's good to bail
 		// out early if we can.
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			log.VEventf(ctx, 2, "%s before command queue: %s", err, ba.Summary())
 			return nil, err
 		}
@@ -2381,7 +2381,7 @@ func (r *Replica) beginCmds(
 						// If the prereq still has pending dependencies, migrate them.
 						newCmd.ResolvePendingPrereq()
 					case <-ctxDone:
-						err := ctx.Err()
+						err := errors.WithStack(ctx.Err())
 						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
 
 						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
@@ -3215,7 +3215,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			defer func() {
 				r.store.metrics.SlowRaftRequests.Dec(1)
 				contextStr := ""
-				if err := ctx.Err(); err != nil {
+				if err := errors.WithStack(ctx.Err()); err != nil {
 					contextStr = " with context cancellation"
 				}
 				log.Infof(ctx, "slow command %s finished after %s%s", ba, timeutil.Since(tBegin), contextStr)
@@ -3230,7 +3230,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			if tryAbandon() {
 				log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(errors.WithStack(ctx.Err()).Error())), proposalNoRetry
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
@@ -3507,7 +3507,7 @@ func (r *Replica) propose(
 	}
 
 	// Checking the context just before proposing can help avoid ambiguous errors.
-	if err := ctx.Err(); err != nil {
+	if err := errors.WithStack(ctx.Err()); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
 		return nil, nil, 0, roachpb.NewError(err)

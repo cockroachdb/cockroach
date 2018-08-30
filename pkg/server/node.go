@@ -699,7 +699,7 @@ func (n *Node) connectGossip(ctx context.Context) error {
 	case <-n.stopper.ShouldStop():
 		return errors.New("stop called before we could connect to gossip")
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case <-n.storeCfg.Gossip.Connected:
 	}
 

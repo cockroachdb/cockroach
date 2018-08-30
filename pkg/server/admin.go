@@ -697,7 +697,7 @@ func (s *adminServer) tableStatsForSpan(
 			}
 		case <-ctx.Done():
 			// Caller gave up, stop doing work.
-			return nil, ctx.Err()
+			return nil, errors.WithStack(ctx.Err())
 		}
 	}
 
@@ -1316,7 +1316,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	case <-s.server.stopper.IsStopped():
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 }
 

@@ -877,7 +877,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			first = false
 			if tc.canceledCtx {
 				cancel()
-				return nil, ctx.Err()
+				return nil, errors.WithStack(ctx.Err())
 			}
 			if tc.rpcError {
 				return nil, roachpb.NewSendError(errString)
@@ -907,7 +907,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-		if _, pErr := client.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
+		if _, pErr := client.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), errors.WithStack(ctx.Err()).Error()) {
 			t.Errorf("put encountered unexpected error: %s", pErr)
 		}
 		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {

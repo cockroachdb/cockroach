@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 type bufferEntry struct {
@@ -51,7 +52,7 @@ func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
 	// TODO(dan): Spill to a temp rocksdb if entriesCh would block.
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case b.entriesCh <- e:
 		return nil
 	}
@@ -62,7 +63,7 @@ func (b *buffer) addEntry(ctx context.Context, e bufferEntry) error {
 func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
 	select {
 	case <-ctx.Done():
-		return bufferEntry{}, ctx.Err()
+		return bufferEntry{}, errors.WithStack(ctx.Err())
 	case e := <-b.entriesCh:
 		return e, nil
 	}

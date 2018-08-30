@@ -453,8 +453,8 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 func (t *multiTestContextKVTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	if ctx.Err() != nil {
-		return nil, errors.Wrap(ctx.Err(), "send context is canceled")
+	if errors.WithStack(ctx.Err()) != nil {
+		return nil, errors.Wrap(errors.WithStack(ctx.Err()), "send context is canceled")
 	}
 	rep := t.replicas[t.idx]
 	t.idx++

@@ -251,7 +251,7 @@ func RangeLookup(
 			key, prefetchedRanges)
 	}
 
-	ctxErr := ctx.Err()
+	ctxErr := errors.WithStack(ctx.Err())
 	if ctxErr == nil {
 		log.Fatalf(ctx, "retry loop broke before context expired")
 	}

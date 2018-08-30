@@ -149,7 +149,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 				return errors.Errorf("nothing emitted after %v", sl)
 			case entry, ok := <-ch: // implies runtime.Gosched
 				if !ok {
-					if ctx.Err() != nil {
+					if errors.WithStack(ctx.Err()) != nil {
 						// Expected, we must've canceled the context below earlier, which means the
 						// checks were successful.
 						return nil
@@ -172,7 +172,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 					m[entry.Epoch] = 2
 				}
 
-				if reflect.DeepEqual(expM, m) && ctx.Err() == nil {
+				if reflect.DeepEqual(expM, m) && errors.WithStack(ctx.Err()) == nil {
 					log.Info(ctx, "canceling subscription")
 					cancel()
 					// As a little gotcha, we need to work around the implementation a tiny bit.

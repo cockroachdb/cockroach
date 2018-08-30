@@ -466,7 +466,7 @@ func (r *Registry) resume(
 		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 		defer span.Finish()
 		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
-		if resumeErr != nil && ctx.Err() != nil {
+		if resumeErr != nil && errors.WithStack(ctx.Err()) != nil {
 			// The context was canceled. Tell the user, but don't attempt to mark the
 			// job as failed because it can be resumed by another node.
 			resumeErr = NewRetryJobError("node liveness error")

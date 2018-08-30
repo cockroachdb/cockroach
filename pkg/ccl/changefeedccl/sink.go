@@ -241,7 +241,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case <-flushCh:
 		s.mu.Lock()
 		flushErr := s.mu.flushErr
@@ -259,7 +259,7 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case s.producer.Input() <- msg:
 	}
 

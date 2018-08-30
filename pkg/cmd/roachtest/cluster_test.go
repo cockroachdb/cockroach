@@ -74,7 +74,7 @@ func TestClusterMonitor(t *testing.T) {
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			fmt.Printf("worker done\n")
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		})
 
 		err := m.wait(`echo`, "1: 100\n1: dead")
@@ -92,7 +92,7 @@ func TestClusterMonitor(t *testing.T) {
 		})
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		})
 
 		err := m.wait(`echo`, `1`)

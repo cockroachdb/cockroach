@@ -355,7 +355,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	select {
 	case res = <-resC:
 	case <-ctxDone:
-		return nil, nil, ctx.Err()
+		return nil, nil, errors.WithStack(ctx.Err())
 	}
 
 	if res.Shared {

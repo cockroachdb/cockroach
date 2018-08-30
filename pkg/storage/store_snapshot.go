@@ -352,7 +352,7 @@ func (s *Store) reserveSnapshot(
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
-			return nil, "", ctx.Err()
+			return nil, "", errors.WithStack(ctx.Err())
 		case <-s.stopper.ShouldStop():
 			return nil, "", errors.Errorf("stopped")
 		default:
@@ -362,7 +362,7 @@ func (s *Store) reserveSnapshot(
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
-			return nil, "", ctx.Err()
+			return nil, "", errors.WithStack(ctx.Err())
 		case <-s.stopper.ShouldStop():
 			return nil, "", errors.Errorf("stopped")
 		}

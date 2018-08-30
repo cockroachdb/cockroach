@@ -598,7 +598,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
 	sync := true
-	if ctx.Err() != nil {
+	if errors.WithStack(ctx.Err()) != nil {
 		sync = false
 	}
 	if sync {
@@ -610,7 +610,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		}
 		// If ctx has been canceled, assume that caused the error and try again
 		// async below.
-		if ctx.Err() == nil {
+		if errors.WithStack(ctx.Err()) == nil {
 			return pErr
 		}
 	}
@@ -686,7 +686,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			return err
 		}
 		err = fn(ctx, txn)

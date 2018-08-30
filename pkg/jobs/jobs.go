@@ -647,7 +647,7 @@ func RunAndWaitForTerminalState(
 	for r := retry.StartWithCtx(ctx, retry.Options{}); ; {
 		select {
 		case <-ctx.Done():
-			return 0, "", ctx.Err()
+			return 0, "", errors.WithStack(ctx.Err())
 		case execErr = <-execErrCh:
 			// The closure finished, try to fetch a job id one more time. Close
 			// and nil out execErrCh so it blocks from now on.
@@ -671,7 +671,7 @@ func RunAndWaitForTerminalState(
 	for r := retry.StartWithCtx(ctx, retry.Options{}); ; {
 		select {
 		case <-ctx.Done():
-			return jobID, "", ctx.Err()
+			return jobID, "", errors.WithStack(ctx.Err())
 		case execErr = <-execErrCh:
 			// The closure finished, this is a nice hint to wake up, but it only
 			// works once. Close and nil out execErrCh so it blocks from now on.

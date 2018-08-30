@@ -319,7 +319,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 
 			p.repl.mu.Lock()
 			defer p.repl.mu.Unlock()
-			if ctx.Err() != nil {
+			if errors.WithStack(ctx.Err()) != nil {
 				// We were canceled and this request was already cleaned up
 				// under lock. At this point, another async request could be
 				// active so we don't want to do anything else.
@@ -618,7 +618,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				return pErr.GoError()
 			case <-ctx.Done():
 				transfer.Cancel()
-				return ctx.Err()
+				return errors.WithStack(ctx.Err())
 			}
 		}
 		// Wait for the in-progress extension without holding the mutex.
@@ -630,7 +630,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			continue
 		case <-ctx.Done():
 			extension.Cancel()
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		}
 	}
 }

@@ -483,8 +483,8 @@ func (r *DistSQLReceiver) Push(
 	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
 		r.resultWriter.SetError(r.txnAbortedErr.Load().(errWrap).err)
 	}
-	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
-		r.resultWriter.SetError(r.ctx.Err())
+	if r.resultWriter.Err() == nil && r.errors.WithStack(ctx.Err()) != nil {
+		r.resultWriter.SetError(r.errors.WithStack(ctx.Err()))
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.

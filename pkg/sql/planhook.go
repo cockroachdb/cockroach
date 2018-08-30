@@ -147,7 +147,7 @@ func (f *hookFnNode) startExec(params runParams) error {
 func (f *hookFnNode) Next(params runParams) (bool, error) {
 	select {
 	case <-params.ctx.Done():
-		return false, params.ctx.Err()
+		return false, params.errors.WithStack(ctx.Err())
 	case err := <-f.run.errCh:
 		return false, err
 	case f.run.row = <-f.run.resultsCh:

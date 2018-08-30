@@ -281,7 +281,7 @@ func (nl *NodeLiveness) SetDecommissioning(
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return false, errors.WithStack(ctx.Err())
 		}
 		defer func() {
 			<-sem
@@ -339,7 +339,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 	defer func() {
 		<-sem
@@ -565,7 +565,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 	defer func() {
 		<-sem
@@ -727,7 +727,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	}
 	defer func() {
 		<-sem
@@ -793,7 +793,7 @@ func (nl *NodeLiveness) updateLiveness(
 ) error {
 	for {
 		// Before each attempt, ensure that the context has not expired.
-		if err := ctx.Err(); err != nil {
+		if err := errors.WithStack(ctx.Err()); err != nil {
 			return err
 		}
 		for _, eng := range nl.engines {

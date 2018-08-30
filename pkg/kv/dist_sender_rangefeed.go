@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
@@ -221,7 +222,7 @@ func (ds *DistSender) singleRangeFeed(
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				return argsCopy.Timestamp, roachpb.NewError(ctx.Err())
+				return argsCopy.Timestamp, roachpb.NewError(errors.WithStack(ctx.Err()))
 			}
 		}
 	}

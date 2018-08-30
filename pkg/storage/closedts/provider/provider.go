@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // Config holds the information necessary to create a Provider.
@@ -268,7 +269,7 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 		p.mu.RLock()
 		var done bool
 		for len(p.mu.subscribers[i].queue) == 0 {
-			if ctx.Err() != nil || p.mu.draining {
+			if errors.WithStack(ctx.Err()) != nil || p.mu.draining {
 				done = true
 				break
 			}

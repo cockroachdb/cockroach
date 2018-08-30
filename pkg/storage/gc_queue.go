@@ -831,7 +831,7 @@ func RunGC(
 			return GCInfo{}, err
 		} else if !ok {
 			break
-		} else if ctx.Err() != nil {
+		} else if errors.WithStack(ctx.Err()) != nil {
 			// Stop iterating if our context has expired.
 			return GCInfo{}, err
 		}

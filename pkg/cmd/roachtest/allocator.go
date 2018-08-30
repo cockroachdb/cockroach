@@ -221,7 +221,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.WithStack(ctx.Err())
 		case <-statsTimer.C:
 			statsTimer.Read = true
 			stats, err := allocatorStats(db)
