@@ -42,7 +42,7 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`SET EXPERIMENTAL_OPT=OFF`); err != nil {
+	if _, err := db.Exec(`SET OPTIMIZER=OFF`); err != nil {
 		b.Fatal(err)
 	}
 
@@ -58,7 +58,7 @@ func benchmarkCockroachOpt(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`SET EXPERIMENTAL_OPT=ON`); err != nil {
+	if _, err := db.Exec(`SET OPTIMIZER=ON`); err != nil {
 		b.Fatal(err)
 	}
 
