@@ -522,6 +522,13 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.mu.Lock()
 	r.mu.state.Stats.Add(deltaStats)
 	if raftAppliedIndex != 0 {
+		if raftAppliedIndex != r.mu.state.RaftAppliedIndex+1 {
+			r.mu.Unlock()
+			log.Fatal(ctx, log.Safe(fmt.Sprintf(
+				"applied index updated from %d to %d, leaving a gap",
+				r.mu.state.RaftAppliedIndex, raftAppliedIndex,
+			)))
+		}
 		r.mu.state.RaftAppliedIndex = raftAppliedIndex
 	}
 	if leaseAppliedIndex != 0 {
