@@ -173,6 +173,11 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver distsqlplan.SpanResolver
 	dsp.spanResolver = spanResolver
 }
 
+// SpanResolver returns the planner's SpanResolver.
+func (dsp *DistSQLPlanner) SpanResolver() distsqlplan.SpanResolver {
+	return dsp.spanResolver
+}
+
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {

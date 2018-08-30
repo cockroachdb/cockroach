@@ -106,22 +106,6 @@ func fetchSpansForTargets(
 	return spans, err
 }
 
-func equalSpanSets(a, b roachpb.Spans) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	a = append(roachpb.Spans(nil), a...)
-	b = append(roachpb.Spans(nil), b...)
-	sort.Sort(a)
-	sort.Sort(b)
-	for i := range a {
-		if !a[i].EqualValue(b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a
 // buffer. It blocks forever and is intended to be run in a goroutine.
 //
@@ -153,16 +137,9 @@ func (p *poller) Run(ctx context.Context) error {
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
-		newSpans, err := fetchSpansForTargets(ctx, p.db, p.targets, nextHighWater)
+		_, err := fetchSpansForTargets(ctx, p.db, p.targets, nextHighWater)
 		if err != nil {
 			return err
-		}
-		if !equalSpanSets(p.spans, newSpans) {
-			// The SpanFrontier at the end of this changefeed flow currently
-			// depends on the set of tracked spans being static. We may have to
-			// support it changing eventually, but for now we don't, so error
-			// defensively.
-			return errors.Errorf(`the set of tracked spans changed: %v to %v`, p.spans, newSpans)
 		}
 
 		var ranges []roachpb.RangeDescriptor
