@@ -329,7 +329,7 @@ func (p *planner) initiateDropTable(
 	//
 	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
 	// able to use this faster mechanism.
-	if !tableDesc.IsInterleaved() &&
+	if tableDesc.IsTable() && !tableDesc.IsInterleaved() &&
 		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.

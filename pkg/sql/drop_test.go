@@ -917,3 +917,56 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 }
+
+// Tests name reuse if a DROP VIEW|TABLE succeeds but fails
+// before running the schema changer. Tests name GC via the
+// asynchrous schema change path.
+func TestDropNameReuse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Block schema changes through synchronous path.
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecQuickly: true,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	sql := `
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+CREATE VIEW test.acol(a) AS SELECT a FROM test.t;
+`
+	if _, err := db.Exec(sql); err != nil {
+		t.Fatal(err)
+	}
+
+	// DROP the view.
+	if _, err := db.Exec(`DROP VIEW test.acol`); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		_, err := db.Exec(`CREATE TABLE test.acol(a INT PRIMARY KEY);`)
+		return err
+	})
+
+	// DROP the table.
+	if _, err := db.Exec(`DROP TABLE test.t`); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		_, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY);`)
+		return err
+	})
+}
