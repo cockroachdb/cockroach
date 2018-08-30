@@ -3,7 +3,7 @@ import React from "react";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
-import {GraphDashboardProps, nodeDisplayName, storeIDsForNode} from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 // TODO(vilterp): tooltips
 
