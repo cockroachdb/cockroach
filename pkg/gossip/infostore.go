@@ -409,6 +409,7 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 func (is *infoStore) mostDistant(
 	hasOutgoingConn func(roachpb.NodeID) bool,
 ) (roachpb.NodeID, uint32) {
+	localNodeID := is.nodeID.Get()
 	var nodeID roachpb.NodeID
 	var maxHops uint32
 	if err := is.visitInfos(func(key string, i *Info) error {
@@ -417,7 +418,8 @@ func (is *infoStore) mostDistant(
 		// likely to be accurate than keys which are rarely re-gossiped, which can
 		// acquire unreliably high Hops values in some pathological cases such as
 		// those described in #9819.
-		if i.Hops > maxHops && IsNodeIDKey(key) && !hasOutgoingConn(i.NodeID) {
+		if i.NodeID != localNodeID && i.Hops > maxHops &&
+			IsNodeIDKey(key) && !hasOutgoingConn(i.NodeID) {
 			maxHops = i.Hops
 			nodeID = i.NodeID
 		}
