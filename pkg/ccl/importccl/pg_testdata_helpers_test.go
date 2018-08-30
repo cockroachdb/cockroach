@@ -92,6 +92,13 @@ func getMultiTablePostgresDumpTestdata(t *testing.T) string {
 			})
 		})
 	}
+	_ = os.Remove(dest + ".bz2")
+	out, err := exec.Command("bzip2", "-k", dest).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(out))
+	}
+	gzipFile(t, dest)
+
 	return dest
 }
 
