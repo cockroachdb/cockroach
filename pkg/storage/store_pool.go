@@ -332,9 +332,11 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 	}
 	switch changeType {
 	case roachpb.ADD_REPLICA:
+		detail.desc.Capacity.RangeCount++
 		detail.desc.Capacity.LogicalBytes += rangeInfo.LogicalBytes
 		detail.desc.Capacity.WritesPerSecond += rangeInfo.WritesPerSecond
 	case roachpb.REMOVE_REPLICA:
+		detail.desc.Capacity.RangeCount--
 		if detail.desc.Capacity.LogicalBytes <= rangeInfo.LogicalBytes {
 			detail.desc.Capacity.LogicalBytes = 0
 		} else {
@@ -359,6 +361,7 @@ func (sp *StorePool) updateLocalStoresAfterLeaseTransfer(
 
 	fromDetail := *sp.getStoreDetailLocked(from)
 	if fromDetail.desc != nil {
+		fromDetail.desc.Capacity.LeaseCount--
 		if fromDetail.desc.Capacity.QueriesPerSecond < rangeQPS {
 			fromDetail.desc.Capacity.QueriesPerSecond = 0
 		} else {
@@ -369,6 +372,7 @@ func (sp *StorePool) updateLocalStoresAfterLeaseTransfer(
 
 	toDetail := *sp.getStoreDetailLocked(to)
 	if toDetail.desc != nil {
+		toDetail.desc.Capacity.LeaseCount++
 		toDetail.desc.Capacity.QueriesPerSecond += rangeQPS
 		sp.detailsMu.storeDetails[to] = &toDetail
 	}
