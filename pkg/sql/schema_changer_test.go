@@ -3560,3 +3560,48 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 		t.Fatal("didnt see context cancel error")
 	}
 }
+
+func TestSchemaChangeGRPCError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	params, _ := tests.CreateTestServerParams()
+	seenNodeUnavailable := false
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if !seenNodeUnavailable {
+					seenNodeUnavailable = true
+					return errors.Errorf("node unavailable")
+				}
+				return nil
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`CREATE INDEX foo ON t.public.test (v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+}
