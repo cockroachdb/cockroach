@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"strings"
 	"sync"
@@ -104,22 +105,11 @@ func readInputFiles(
 			}
 			defer f.Close()
 			bc := &byteCounter{r: f}
-
-			var src io.Reader
-			compression := guessCompressionFromName(dataFile, format.Compression)
-			switch compression {
-			case roachpb.IOFileFormat_Gzip:
-				r, err := gzip.NewReader(bc)
-				if err != nil {
-					return err
-				}
-				defer r.Close()
-				src = r
-			case roachpb.IOFileFormat_Bzip:
-				src = bzip2.NewReader(bc)
-			default:
-				src = bc
+			src, err := decompressingReader(bc, dataFile, format.Compression)
+			if err != nil {
+				return err
 			}
+			defer src.Close()
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
@@ -153,6 +143,19 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func decompressingReader(
+	in io.Reader, name string, hint roachpb.IOFileFormat_Compression,
+) (io.ReadCloser, error) {
+	switch guessCompressionFromName(name, hint) {
+	case roachpb.IOFileFormat_Gzip:
+		return gzip.NewReader(in)
+	case roachpb.IOFileFormat_Bzip:
+		return ioutil.NopCloser(bzip2.NewReader(in)), nil
+	default:
+		return ioutil.NopCloser(in), nil
+	}
 }
 
 func guessCompressionFromName(
