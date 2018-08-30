@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +48,7 @@ type Sink interface {
 	Close() error
 }
 
-func getSink(sinkURI string, targets map[sqlbase.ID]string) (Sink, error) {
+func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
@@ -96,14 +97,14 @@ type kafkaSink struct {
 }
 
 func getKafkaSink(
-	kafkaTopicPrefix string, bootstrapServers string, targets map[sqlbase.ID]string,
+	kafkaTopicPrefix string, bootstrapServers string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
 	sink := &kafkaSink{
 		kafkaTopicPrefix: kafkaTopicPrefix,
 	}
 	sink.topics = make(map[string]struct{})
-	for _, tableName := range targets {
-		sink.topics[kafkaTopicPrefix+tableName] = struct{}{}
+	for _, t := range targets {
+		sink.topics[kafkaTopicPrefix+t.StatementTimeName] = struct{}{}
 	}
 
 	config := sarama.NewConfig()
@@ -354,7 +355,7 @@ type sqlSink struct {
 	rowBuf []interface{}
 }
 
-func makeSQLSink(uri, tableName string, targets map[sqlbase.ID]string) (*sqlSink, error) {
+func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlSink, error) {
 	if u, err := url.Parse(uri); err != nil {
 		return nil, err
 	} else if u.Path == `` {
@@ -374,8 +375,8 @@ func makeSQLSink(uri, tableName string, targets map[sqlbase.ID]string) (*sqlSink
 		topics:    make(map[string]struct{}),
 		hasher:    fnv.New32a(),
 	}
-	for _, tableName := range targets {
-		s.topics[tableName] = struct{}{}
+	for _, t := range targets {
+		s.topics[t.StatementTimeName] = struct{}{}
 	}
 	return s, nil
 }

@@ -19,8 +19,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -141,7 +141,10 @@ func TestSQLSink(t *testing.T) {
 	defer cleanup()
 	sinkURL.Path = `d`
 
-	targets := map[sqlbase.ID]string{0: `foo`, 1: `bar`}
+	targets := jobspb.ChangefeedTargets{
+		0: jobspb.ChangefeedTarget{StatementTimeName: `foo`},
+		1: jobspb.ChangefeedTarget{StatementTimeName: `bar`},
+	}
 	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, sink.Close()) }()
