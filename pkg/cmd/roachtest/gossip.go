@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -38,18 +39,21 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 
 			db := c.Conn(ctx, node)
 			defer db.Close()
-			var s string
+			var s gosql.NullString
 			if err := db.QueryRow(query).Scan(&s); err != nil {
 				t.Fatal(err)
 			}
-			return s
+			if s.Valid {
+				return s.String
+			}
+			return ""
 		}
 
 		var deadNode int
 		gossipOK := func(start time.Time) bool {
 			var expected string
 			var initialized bool
-			for i := 1; i < c.nodes; i++ {
+			for i := 1; i <= c.nodes; i++ {
 				if elapsed := timeutil.Since(start); elapsed >= 20*time.Second {
 					t.Fatalf("gossip did not stabilize in %.1fs", elapsed.Seconds())
 				}
