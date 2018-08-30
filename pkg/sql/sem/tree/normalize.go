@@ -427,6 +427,10 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				if err != nil {
 					break
 				}
+				// Check that we still have a string after evaluation.
+				if _, ok := str.(*DString); !ok {
+					break
+				}
 
 				rhs, err := expr.TypedRight().Eval(v.ctx)
 				if err != nil {
