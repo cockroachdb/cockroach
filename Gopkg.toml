@@ -83,6 +83,12 @@ ignored = [
   name = "github.com/Azure/azure-storage-blob-go"
   branch = "master"
 
+# We want https://github.com/go-yaml/yaml/pull/381
+[[constraint]]
+  name = "gopkg.in/yaml.v2"
+  source = "https://github.com/cockroachdb/yaml"
+  branch = "v2-encoding-style"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
