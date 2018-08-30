@@ -504,7 +504,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 				return jrStateUnknown, jr.DrainHelper()
 			}
 			if renderedRow != nil {
-				if row := jr.processRowHelper(renderedRow); row != nil {
+				if row := jr.ProcessRowHelper(renderedRow); row != nil {
 					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 					if jr.emitted != nil {
 						jr.emitted[inputRowIdx] = true
@@ -528,7 +528,7 @@ func (jr *joinReader) collectUnmatched() joinReaderState {
 		for i := 0; i < len(jr.inputRows); i++ {
 			if !jr.emitted[i] {
 				if renderedRow := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); renderedRow != nil {
-					if row := jr.processRowHelper(renderedRow); row != nil {
+					if row := jr.ProcessRowHelper(renderedRow); row != nil {
 						jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 					}
 				}

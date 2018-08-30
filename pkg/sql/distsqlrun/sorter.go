@@ -137,7 +137,7 @@ func (s *sorterBase) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		s.i.Next()
 
-		if outRow := s.processRowHelper(row); outRow != nil {
+		if outRow := s.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
@@ -618,7 +618,7 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		s.i.Next()
 
-		if outRow := s.processRowHelper(row); outRow != nil {
+		if outRow := s.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
