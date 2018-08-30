@@ -678,17 +678,17 @@ database, insecure, certs).`,
 	From = FlagInfo{
 		Name: "from",
 		Description: `
-Start key and format as [<format>:]<key>. Supported formats: raw, human,
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, human,
 rangeID. The raw format supports escaped text. For example, "raw:\x01k" is the
-prefix for range local keys.`,
+prefix for range local keys. The hex format takes an encoded MVCCKey.`,
 	}
 
 	To = FlagInfo{
 		Name: "to",
 		Description: `
-Exclusive end key and format as [<format>:]<key>. Supported formats: raw,
+Exclusive end key and format as [<format>:]<key>. Supported formats: raw, hex,
 human, rangeID. The raw format supports escaped text. For example, "raw:\x01k"
-is the prefix for range local keys.`}
+is the prefix for range local keys. The hex format takes an encoded MVCCKey.`}
 
 	Values = FlagInfo{
 		Name:        "values",
