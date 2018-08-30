@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -149,6 +150,11 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 	err = errors.Cause(err)
+
+	if grpcutil.IsClosedConnection(err) {
+		return false
+	}
+
 	switch err {
 	case
 		context.Canceled,
