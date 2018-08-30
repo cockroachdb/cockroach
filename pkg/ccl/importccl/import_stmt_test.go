@@ -789,14 +789,14 @@ func nodelocalPrefix(in []string) []string {
 	return res
 }
 
-func gzipFile(t *testing.T, dir, in string) string {
-	r, err := os.Open(filepath.Join(dir, in))
+func gzipFile(t *testing.T, in string) string {
+	r, err := os.Open(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
 	name := in + ".gz"
-	f, err := os.Create(filepath.Join(dir, name))
+	f, err := os.Create(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -871,7 +871,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 	gzip := make([]string, len(files))
 	for i := range files {
-		gzip[i] = gzipFile(t, dir, files[i])
+		gzip[i] = strings.TrimPrefix(gzipFile(t, filepath.Join(dir, files[i])), dir)
 	}
 	gzip = nodelocalPrefix(gzip)
 
@@ -1929,6 +1929,8 @@ func TestImportMysql(t *testing.T) {
 	simple := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.simple, baseDir))}
 	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.second, baseDir))}
 	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB, baseDir))}
+	multitableGz := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB+".gz", baseDir))}
+	multitableBz := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(files.wholeDB+".bz2", baseDir))}
 
 	const expectSimple, expectSecond, expectEverything = 1 << 0, 1 << 2, 1 << 3
 	const expectAll = -1
@@ -1944,10 +1946,12 @@ func TestImportMysql(t *testing.T) {
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM MYSQLDUMP ($1)`, multitable},
 		{`second from multi`, expectSecond, `IMPORT TABLE second FROM MYSQLDUMP ($1) WITH skip_foreign_keys`, multitable},
 		{`all from multi`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitable},
+		{`all from multi gzip`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitableGz},
+		{`all from multi bzip`, expectAll, `IMPORT MYSQLDUMP ($1)`, multitableBz},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, everything`)
-			sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS simple_auto_inc`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, third, everything CASCADE`)
+			sqlDB.Exec(t, `DROP SEQUENCE IF EXISTS simple_auto_inc, third_auto_inc`)
 			sqlDB.Exec(t, c.query, c.args...)
 
 			if c.expected&expectSimple != 0 {

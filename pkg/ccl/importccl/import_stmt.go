@@ -714,7 +714,12 @@ func importPlanHook(
 				return err
 			}
 			defer store.Close()
-			reader, err := store.ReadFile(ctx, "")
+			raw, err := store.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer raw.Close()
+			reader, err := decompressingReader(raw, files[0], format.Compression)
 			if err != nil {
 				return err
 			}
