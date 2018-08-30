@@ -551,7 +551,6 @@ func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) *l
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaseHolderError is returned.
 func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
-	log.Infof(ctx, "transferring lease to s%d", target)
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -614,7 +613,6 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			}
 			select {
 			case pErr := <-transfer.C():
-				log.Infof(ctx, "done transferring lease to s%d: %v", target, pErr)
 				return pErr.GoError()
 			case <-ctx.Done():
 				transfer.Cancel()
