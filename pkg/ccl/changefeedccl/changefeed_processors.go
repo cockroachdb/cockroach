@@ -115,7 +115,7 @@ func newChangeAggregatorProcessor(
 	buf := makeBuffer()
 	ca.poller = makePoller(
 		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip, spans,
-		spec.Feed.Targets, initialHighWater, buf)
+		spec.Feed, initialHighWater, buf)
 	rowsFn := kvsToRows(flowCtx.LeaseManager.(*sql.LeaseManager), spec.Feed, buf.Get)
 	ca.tickFn = emitEntries(spec.Feed, ca.sink, rowsFn)
 
