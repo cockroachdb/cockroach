@@ -60,6 +60,7 @@ func registerTPCC(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 			if _, err := db.ExecContext(ctx, `USE tpcc`); err != nil {
+				c.l.printf("%s", err)
 				t.Status("loading dataset")
 				if !opts.UseFixture {
 					// Init first so that we can set off chaos and workload at the same time.
