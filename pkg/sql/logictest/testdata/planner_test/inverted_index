@@ -97,6 +97,23 @@ index-join  ·      ·                            (a, b)           b=CONST; a!=N
 ·           table  d@primary                    ·                ·
 
 query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
+----
+index-join  ·      ·                                    (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   ·      ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          table  d@foo_inv                            ·                ·
+ │          spans  /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·                ·
+ └── scan   ·      ·                                    (a, b)           ·
+·           table  d@primary                            ·                ·
+
+# Regression test for #29399. Do not panic when NULL::STRING is on the right
+# hand side of ->.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
+----
+norows  ·  ·  (a, b)  ·
+
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
 index-join  ·      ·                            (a, b)           b=CONST; a!=NULL; key(a)
