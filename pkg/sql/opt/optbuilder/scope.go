@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -72,6 +73,9 @@ type scope struct {
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+
+	// foldConstantsVisitor is used for constant folding.
+	foldConstantsVisitor foldConstantsVisitor
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -252,6 +256,11 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 		panic(builderError{err})
 	}
 
+	texpr, err = s.foldConstants(s.builder.evalCtx, texpr)
+	if err != nil {
+		panic(builderError{err})
+	}
+
 	return texpr
 }
 
@@ -266,6 +275,11 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 func (s *scope) resolveAndRequireType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	texpr, err = s.foldConstants(s.builder.evalCtx, texpr)
 	if err != nil {
 		panic(builderError{err})
 	}
@@ -731,6 +745,11 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 		return false, colI.(*scopeColumn)
 
+	case *tree.CastExpr:
+		if t.Type == coltypes.RegClass {
+			s.builder.SkipFoldConstants = true
+		}
+
 	case *tree.FuncExpr:
 		if t.WindowDef != nil {
 			panic(unimplementedf("window functions are not supported"))
@@ -855,7 +874,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 // the variables referenced by the aggregate (or the current scope if the
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
-func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) *aggregateInfo {
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.Filter != nil {
 		panic(unimplementedf("aggregates with FILTER are not supported yet"))
 	}
@@ -875,7 +894,17 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	if err != nil {
 		panic(builderError{err})
 	}
-	f = typedFunc.(*tree.FuncExpr)
+
+	typedFunc, err = s.foldConstants(s.builder.evalCtx, typedFunc)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	// If the aggregate was folded to a constant, return the new expression.
+	f, ok := typedFunc.(*tree.FuncExpr)
+	if !ok {
+		return typedFunc
+	}
 
 	funcDef := memo.FuncOpDef{
 		Name:       def.Name,
@@ -954,8 +983,8 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	}
 
 	subq := subquery{
+		Subquery: sub,
 		multiRow: multiRow,
-		expr:     sub,
 	}
 
 	// Save and restore the previous value of s.builder.subquery in case we are
@@ -1029,6 +1058,20 @@ func (s *scope) IndexedVarResolvedType(idx int) types.T {
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented: scope.IndexedVarNodeFormatter")
+}
+
+func (s *scope) foldConstants(
+	ctx *tree.EvalContext, typedExpr tree.TypedExpr,
+) (tree.TypedExpr, error) {
+	if s.builder.SkipFoldConstants {
+		return typedExpr, nil
+	}
+	s.foldConstantsVisitor = makeFoldConstantsVisitor(ctx)
+	expr, _ := tree.WalkExpr(&s.foldConstantsVisitor, typedExpr)
+	if err := s.foldConstantsVisitor.Err(); err != nil {
+		return nil, err
+	}
+	return expr.(tree.TypedExpr), nil
 }
 
 // newAmbiguousColumnError returns an error with a helpful error message to be

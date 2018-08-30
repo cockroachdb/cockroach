@@ -118,8 +118,12 @@ func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("aggregateInfo must be replaced before evaluation")
 }
 
+// Variable implements the VariableExpr interface.
+func (a *aggregateInfo) Variable() {}
+
 var _ tree.Expr = &aggregateInfo{}
 var _ tree.TypedExpr = &aggregateInfo{}
+var _ tree.VariableExpr = &aggregateInfo{}
 
 func (b *Builder) needsAggregation(sel *tree.SelectClause, scope *scope) bool {
 	// We have an aggregation if:

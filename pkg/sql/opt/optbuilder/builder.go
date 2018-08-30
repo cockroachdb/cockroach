@@ -83,6 +83,9 @@ type Builder struct {
 	// be used with care.
 	skipSelectPrivilegeChecks bool
 
+	// SkipFoldConstants tells the optbuilder to skip folding of constants.
+	SkipFoldConstants bool
+
 	// views contains a cache of views that have already been parsed, in case they
 	// are referenced multiple times in the same query.
 	views map[opt.View]*tree.Select
