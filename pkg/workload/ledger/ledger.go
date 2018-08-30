@@ -95,6 +95,8 @@ func (w *ledger) Hooks() workload.Hooks {
 		PostLoad: func(sqlDB *gosql.DB) error {
 			if w.fks {
 				fkStmts := []string{
+					`create index entry_auto_index_fk_customer on entry (customer_id ASC)`,
+					`create index entry_auto_index_fk_transaction on entry (transaction_id ASC)`,
 					`alter table entry add foreign key (customer_id) references customer (id)`,
 					`alter table entry add foreign key (transaction_id) references transaction (external_id)`,
 				}
