@@ -173,9 +173,7 @@ SELECT * from unnest(ARRAY[1,2])
 zip
  ├── columns: unnest:1(int)
  └── function: unnest [type=int]
-      └── array: [type=int[]]
-           ├── const: 1 [type=int]
-           └── const: 2 [type=int]
+      └── const: ARRAY[1,2] [type=int[]]
 
 build
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
@@ -417,8 +415,7 @@ limit
  │    │    ├── zip
  │    │    │    ├── columns: unnest:2(int)
  │    │    │    └── function: unnest [type=int]
- │    │    │         └── array: [type=int[]]
- │    │    │              └── const: 1 [type=int]
+ │    │    │         └── const: ARRAY[1] [type=int[]]
  │    │    └── true [type=bool]
  │    ├── zip
  │    │    ├── columns: word:3(string) catcode:4(string) catdesc:5(string)
@@ -504,8 +501,7 @@ SELECT * FROM upper('abc')
 ----
 zip
  ├── columns: upper:1(string)
- └── function: upper [type=string]
-      └── const: 'abc' [type=string]
+ └── const: 'ABC' [type=string]
 
 # current_schema
 
@@ -516,7 +512,8 @@ row-number
  ├── columns: b:1(string) ordinality:2(int!null)
  └── zip
       ├── columns: current_schema:1(string)
-      └── function: current_schema [type=string]
+      └── cast: STRING [type=string]
+           └── null [type=unknown]
 
 # expandArray
 
@@ -547,9 +544,7 @@ SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
 zip
  ├── columns: x:1(string) n:2(int)
  └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+      └── const: ARRAY['b','a'] [type=string[]]
 
 # srf_accessor
 
@@ -631,10 +626,7 @@ project
  └── zip
       ├── columns: x:1(string) n:2(int)
       └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-           └── array: [type=string[]]
-                ├── const: 'c' [type=string]
-                ├── const: 'b' [type=string]
-                └── const: 'a' [type=string]
+           └── const: ARRAY['c','b','a'] [type=string[]]
 
 build
 SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
@@ -642,10 +634,7 @@ SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS tem
 zip
  ├── columns: x:1(string) n:2(int)
  └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+      └── const: ARRAY['c','b','a'] [type=string[]]
 
 build
 SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
@@ -653,10 +642,7 @@ SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 zip
  ├── columns: x:1(string) n:2(int)
  └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+      └── const: ARRAY['c','b','a'] [type=string[]]
 
 # generate_subscripts
 
@@ -666,10 +652,7 @@ SELECT * FROM generate_subscripts(ARRAY[3,2,1])
 zip
  ├── columns: generate_subscripts:1(int)
  └── function: generate_subscripts [type=int]
-      └── array: [type=int[]]
-           ├── const: 3 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 1 [type=int]
+      └── const: ARRAY[3,2,1] [type=int[]]
 
 # Zip with multiple SRFs.
 build
@@ -686,10 +669,7 @@ zip
  │    └── const: 3 [type=int]
  ├── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  └── function: unnest [type=string]
-      └── array: [type=string[]]
-           ├── const: 'a' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'c' [type=string]
+      └── const: ARRAY['a','b','c'] [type=string[]]
 
 # Don't rename columns if the zip contains two functions.
 build
@@ -703,12 +683,10 @@ inner-join
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
  │    ├── zip
  │    │    ├── columns: upper:1(string)
- │    │    └── function: upper [type=string]
- │    │         └── const: 'abc' [type=string]
+ │    │    └── const: 'ABC' [type=string]
  │    ├── zip
  │    │    ├── columns: upper:2(string) generate_series:3(int)
- │    │    ├── function: upper [type=string]
- │    │    │    └── const: 'def' [type=string]
+ │    │    ├── const: 'DEF' [type=string]
  │    │    └── function: generate_series [type=int]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 3 [type=int]
