@@ -947,7 +947,7 @@ may increase either contention or retry errors, or both.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.pretty_key(raw_key: <a href="bytes.html">bytes</a>, skip_fields: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
-<tr><td><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used for internal debugging purposes. Incorrect use can severely impact performance.</p>
+<tr><td><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the –vmodule flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: crdb_internal.set_vmodule(‘recordio=2,file=1,gfs*=3’). Reset with: crdb_internal.set_vmodule(’’). Raising the verbosity can severely affect performance.</p>
 </span></td></tr>
 <tr><td><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td></tr>
