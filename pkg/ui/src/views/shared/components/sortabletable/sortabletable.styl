@@ -19,28 +19,45 @@
   @extend $table-base
 
   &__row--header
-      // Display the sort direction arrow in header cells.
-      .sort-table__cell
-        padding 18px 20px
-        color $tooltip-color
+    // Display the sort direction arrow in header cells.
+    .sort-table__cell
+      padding 18px 20px
+      color $tooltip-color
 
-        &--sortable:after
-          display inline-block
-          width 20px
-          line-height 12px
-          font-size 10px
-          vertical-align middle
-          text-align center
-          content "▼"
+      &--sortable:after
+        display inline-block
+        width 20px
+        line-height 12px
+        font-size 10px
+        vertical-align middle
+        text-align center
+        content "▼"
 
-        &--descending
-          color $body-color
+      &--descending
+        color $body-color
 
-        &--ascending
-          color $body-color
-          &:after
-            content "▲"
+      &--ascending
+        color $body-color
+        &:after
+          content "▲"
 
   &__unbounded-column
     white-space normal
     word-break break-all
+
+  &__row
+    &--expandable
+      border-top: none
+      cursor pointer
+
+    &--expanded-area
+      background-color #E2E5EE !important // TODO(vilterp): palette-ize
+
+  &__cell__expansion-control
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+/Edge */
+    user-select: none; /* Standard */
+
+    div
+      width 15px
