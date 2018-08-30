@@ -37,13 +37,17 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 
 	switch opts.Mode {
 	case tree.ExplainDistSQL:
+		analyze := opts.Flags.Contains(tree.ExplainFlagAnalyze)
+		if analyze && IsStmtParallelized(n.Statement) {
+			return nil, errors.New("EXPLAIN ANALYZE does not support RETURNING NOTHING statements")
+		}
 		plan, err := p.newPlan(ctx, n.Statement, nil)
 		if err != nil {
 			return nil, err
 		}
 		return &explainDistSQLNode{
 			plan:     plan,
-			analyze:  opts.Flags.Contains(tree.ExplainFlagAnalyze),
+			analyze:  analyze,
 			stmtType: n.Statement.StatementType(),
 		}, nil
 
