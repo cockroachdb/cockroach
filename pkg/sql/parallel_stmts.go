@@ -365,12 +365,12 @@ func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
 // parallelized. This means that its results should be mocked out, and that
 // it should be run asynchronously and in parallel with other statements that
 // are independent.
-func IsStmtParallelized(stmt Statement) bool {
+func IsStmtParallelized(stmt tree.Statement) bool {
 	parallelizedRetClause := func(ret tree.ReturningClause) bool {
 		_, ok := ret.(*tree.ReturningNothing)
 		return ok
 	}
-	switch s := stmt.AST.(type) {
+	switch s := stmt.(type) {
 	case *tree.Delete:
 		return parallelizedRetClause(s.Returning)
 	case *tree.Insert:
