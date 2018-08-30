@@ -37,7 +37,7 @@ export default function (props: GraphDashboardProps) {
       title="SQL Queries"
       sources={nodeSources}
       tooltip={
-        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
+        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
         started per second ${tooltipSelection}.`
       }
     >
@@ -46,6 +46,16 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
         <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
         <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="SQL Query Errors"
+      sources={nodeSources}
+      tooltip={"The number of statements which returned a planning or runtime error."}
+    >
+      <Axis label="errors">
+        <Metric name="cr.node.sql.failure.count" title="Errors" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
