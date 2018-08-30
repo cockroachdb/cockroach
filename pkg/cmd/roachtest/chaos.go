@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // ChaosTimer configures a chaos schedule.
@@ -59,8 +61,9 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 		if err != nil {
 			return err
 		}
-		period, downTime := ch.Timer.Timing()
-		t := time.NewTicker(period)
+		t := timeutil.Timer{}
+		// Disaster strikes immediately at first.
+		t.Reset(time.Nanosecond)
 		for {
 			select {
 			case <-ch.Stopper:
@@ -68,7 +71,10 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-t.C:
+				t.Read = true
 			}
+
+			period, downTime := ch.Timer.Timing()
 
 			target := ch.Target()
 			m.ExpectDeath()
@@ -88,8 +94,8 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				return ctx.Err()
 			case <-time.After(downTime):
 			}
-
 			c.l.printf("restarting %v after %s of downtime\n", target, downTime)
+			t.Reset(period)
 			c.Start(ctx, target)
 		}
 	}

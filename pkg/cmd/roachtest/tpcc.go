@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +35,16 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
+type tpccOptions struct {
+	Warehouses int
+	Extra      string
+	Chaos      func() Chaos // for late binding of stopper
+	Duration   time.Duration
+	UseFixture bool
+}
+
 func registerTPCC(r *registry) {
-	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
+	runTPCC := func(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		if !c.isLocal() {
 			c.RemountNoBarrier(ctx)
 		}
@@ -45,26 +54,74 @@ func registerTPCC(r *registry) {
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
-		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
+
+		t.Status("loading dataset")
+		if !opts.UseFixture {
+			// Init first so that we can set off chaos and workload at the same time.
 			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d --histograms=logs/stats.json"+
-					extra+duration+" {pgurl:1-%d}",
-				warehouses, nodes)
+				"./workload run tpcc --init --warehouses=%d --duration=1ms {pgurl:1-%d}",
+				opts.Warehouses, nodes)
+			c.Run(ctx, c.Node(nodes+1), cmd)
+		} else {
+			cmd := fmt.Sprintf(
+				"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", opts.Warehouses)
+			c.Run(ctx, c.Node(c.nodes), cmd)
+		}
+		t.Status("waiting")
+
+		m.Go(func(ctx context.Context) error {
+			t.WorkerStatus("running workload")
+			cmd := fmt.Sprintf(
+				"./workload run tpcc --warehouses=%d --histograms=logs/stats.json"+
+					opts.Extra+" --duration=%s {pgurl:1-%d}",
+				opts.Warehouses, opts.Duration, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
+		if opts.Chaos != nil {
+			chaos := opts.Chaos()
+			m.Go(chaos.Runner(c, m))
+		}
 		m.Wait()
 	}
+
+	r.Add(testSpec{
+		Name:   "tpccchaos/w=100/nodes=3",
+		Nodes:  nodes(4),
+		Stable: false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			duration := 6 * time.Hour
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: 100,
+				UseFixture: true,
+				Duration:   duration,
+				Extra:      " --wait=false --tolerate-errors --scatter --split",
+				Chaos: func() Chaos {
+					return Chaos{
+						Timer: Periodic{
+							Period:   45 * time.Second,
+							DownTime: 10 * time.Second,
+						},
+						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.nodes-1)) },
+						Stopper:      time.After(duration),
+						DrainAndQuit: false,
+					}
+				},
+			})
+		},
+	})
 
 	r.Add(testSpec{
 		Name:   "tpcc/w=1/nodes=3",
 		Nodes:  nodes(4),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, " --wait=false")
+			duration := 10 * time.Minute
+			if local {
+				duration = 10 * time.Second
+			}
+			runTPCC(ctx, t, c, tpccOptions{Warehouses: 1, Duration: duration, Extra: " --wait=false"})
 		},
 	})
 	r.Add(testSpec{
@@ -72,7 +129,11 @@ func registerTPCC(r *registry) {
 		Nodes:  nodes(4),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, "")
+			duration := 10 * time.Minute
+			if local {
+				duration = 10 * time.Second
+			}
+			runTPCC(ctx, t, c, tpccOptions{Warehouses: 1, Duration: duration})
 		},
 	})
 
