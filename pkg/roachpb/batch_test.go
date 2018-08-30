@@ -256,12 +256,13 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 	var readSpans []Span
 	var writeSpans []Span
-	fn := func(span Span, write bool) {
+	fn := func(span Span, write bool) bool {
 		if write {
 			writeSpans = append(writeSpans, span)
 		} else {
 			readSpans = append(readSpans, span)
 		}
+		return true
 	}
 	ba.RefreshSpanIterate(&br, fn)
 	// Only the conditional put isn't considered a read span.

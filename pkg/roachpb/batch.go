@@ -285,7 +285,10 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 // minimal span of keys affected by the request. The supplied function
 // is called with each span and a bool indicating whether the span
 // updates the write timestamp cache.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
+//
+// The function can return false if it wants the iteration to break. In that
+// case, RefreshSpanIterate also returns false.
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool) bool) bool {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -296,9 +299,12 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 			resp = br.Responses[i].GetInner()
 		}
 		if span, ok := actualSpan(req, resp); ok {
-			fn(span, UpdatesWriteTimestampCache(req))
+			if !fn(span, UpdatesWriteTimestampCache(req)) {
+				return false
+			}
 		}
 	}
+	return true
 }
 
 // actualSpan returns the actual request span which was operated on,
