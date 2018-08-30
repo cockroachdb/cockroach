@@ -272,9 +272,9 @@ func (h *harness) prepareUsingServer(tb testing.TB, bmType BenchmarkType) {
 
 	// Set session state.
 	if bmType == ExecPlan {
-		h.sr.Exec(tb, `SET EXPERIMENTAL_OPT=OFF`)
+		h.sr.Exec(tb, `SET OPTIMIZER=OFF`)
 	} else {
-		h.sr.Exec(tb, `SET EXPERIMENTAL_OPT=ON`)
+		h.sr.Exec(tb, `SET OPTIMIZER=ON`)
 	}
 }
 

@@ -324,18 +324,18 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_opt`: {
+	`optimizer`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
 			evalCtx *extendedEvalContext, values []tree.TypedExpr,
 		) error {
-			s, err := getStringVal(&evalCtx.EvalContext, `experimental_opt`, values)
+			s, err := getStringVal(&evalCtx.EvalContext, `optimizer`, values)
 			if err != nil {
 				return err
 			}
 			mode, ok := sessiondata.OptimizerModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_opt`, s, "on", "off", "local", "always")
+				return newVarValueError(`optimizer`, s, "on", "off", "local", "always")
 			}
 			m.SetOptimizerMode(mode)
 

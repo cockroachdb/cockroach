@@ -904,7 +904,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	// Enable the cost-based optimizer rather than the heuristic planner.
 	if optMode := t.cfg.overrideOptimizerMode; optMode != "" {
-		if _, err := db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", optMode)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
 			t.Fatal(err)
 		}
 	}
