@@ -27,7 +27,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
@@ -51,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2824,33 +2825,45 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
-		rs, _, err := client.RangeLookup(ctx, r.DB().NonTransactionalSender(), desc.StartKey.AsRawKey(),
-			roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
-		if err != nil {
-			select {
-			case <-r.store.stopper.ShouldQuiesce():
-				// The server is shutting down. The error while fetching the range
-				// descriptor was probably caused by the shutdown, so ignore it.
-				return
-			default:
-				// Otherwise, this replica is good and truly hosed because we couldn't
-				// determine its true range descriptor.
-				//
-				// TODO(benesch): a retry loop would be better than fataling, but we
-				// want to smoke out any unexpected errors at first.
-				log.Fatal(ctx, err)
+		for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
+			// Wait for the merge transaction to complete by attempting to push it. We
+			// don't want to accidentally abort the merge transaction, so we use the
+			// minimum transaction priority. Note that a push type of
+			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
+			// returns immediately and causes us to spin hot, whereas
+			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
+			_, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
+				RequestHeader: roachpb.RequestHeader{Key: intents[0].Txn.Key},
+				PusherTxn: roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
+				},
+				PusheeTxn: intents[0].Txn,
+				Now:       r.Clock().Now(),
+				PushType:  roachpb.PUSH_ABORT,
+			})
+			if pErr != nil {
+				select {
+				case <-r.store.stopper.ShouldQuiesce():
+					// The server is shutting down. The error while fetching the range
+					// descriptor was probably caused by the shutdown, so ignore it.
+					return
+				default:
+					log.Warningf(ctx, "error while watching for merge to complete: %s", pErr)
+					// We can't safely unblock traffic until we can prove that the merge
+					// transaction is committed or aborted. Nothing to do but try again.
+					continue
+				}
 			}
+			// Unblock pending requests. If the merge committed, the requests will
+			// notice that the replica has been destroyed and return an appropriate
+			// error. If the merge aborted, the requests will be handled normally.
+			r.mu.Lock()
+			r.mu.mergeComplete = nil
+			close(mergeCompleteCh)
+			r.mu.Unlock()
+			return
 		}
-		if len(rs) != 1 {
-			log.Fatalf(ctx, "expected 1 range descriptor, got %d", len(rs))
-		}
-		// Unblock pending requests. If the merge committed, the requests will
-		// notice that the replica has been destroyed and return an appropriate
-		// error. If the merge aborted, the requests will be handled normally.
-		r.mu.Lock()
-		r.mu.mergeComplete = nil
-		close(mergeCompleteCh)
-		r.mu.Unlock()
+		log.Fatal(ctx, "unreachable")
 	})
 	if err == stop.ErrUnavailable {
 		// We weren't able to launch a goroutine to watch for the merge's completion
