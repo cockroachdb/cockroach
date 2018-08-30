@@ -127,6 +127,12 @@ message SchemaChangeProgress {
 
 }
 
+message ChangefeedTarget {
+  string statement_time_name = 1;
+
+  // TODO(dan): Add partition name, ranges of primary keys.
+}
+
 message ChangefeedDetails {
   // Targets contains the user-specified tables and databases to watch, mapping
   // the descriptor id to the name at the time of changefeed creating. There is
@@ -145,13 +151,16 @@ message ChangefeedDetails {
   // renames can be detected. They are also used to construct an error message
   // if the descriptor id no longer exists when the jobs is unpaused (which can
   // happen if it was dropped or truncated).
-  map<uint32, string> targets = 5 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  map<uint32, ChangefeedTarget> targets = 6 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID",
+    (gogoproto.casttype) = "ChangefeedTargets",
+    (gogoproto.nullable) = false
   ];
   string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
   map<string, string> opts = 4;
+  util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
 
-  reserved 1, 2;
+  reserved 1, 2, 5;
 }
 
 message ResolvedSpan {
