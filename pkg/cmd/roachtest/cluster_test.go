@@ -95,7 +95,7 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := m.wait(`echo`, `1`)
+		err := m.wait(`sleep`, `100`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
