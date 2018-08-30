@@ -102,6 +102,45 @@ func TestClusterMonitor(t *testing.T) {
 		}
 	})
 
+	t.Run(`wait-fail`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		// Returned error should be that from the wait command.
+		err := m.wait(`false`)
+		expectedErr := `exit status`
+		if !testutils.IsError(err, expectedErr) {
+			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	t.Run(`wait-ok`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		// If wait terminates, context gets canceled.
+		err := m.wait(`true`)
+		if err != context.Canceled {
+			t.Errorf(`expected context canceled, got: %+v`, err)
+		}
+	})
+
 	// NB: the forker sleeps in these tests actually get leaked, so it's important to let
 	// them finish pretty soon (think stress testing). As a matter of fact, `make test` waits
 	// for these child goroutines to finish (so these tests take seconds).
