@@ -5691,8 +5691,8 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return enginepb.MVCCStats{}, errors.Errorf("applied index jumped from %d to %d",
-			oldRaftAppliedIndex, raftAppliedIndex)
+		return enginepb.MVCCStats{}, log.Safe(fmt.Sprintf("applied index jumped from %d to %d",
+			oldRaftAppliedIndex, raftAppliedIndex))
 	}
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
