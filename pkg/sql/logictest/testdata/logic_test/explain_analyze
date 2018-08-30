@@ -30,7 +30,7 @@ EXPLAIN ANALYZE (DISTSQL) UPDATE a SET a = a*3 RETURNING a
 statement ok
 EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(10)
 
-statement ok
+statement error "parallel statements not supported"
 EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(11) RETURNING NOTHING
 
 statement ok
