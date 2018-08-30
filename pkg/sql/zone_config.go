@@ -43,26 +43,32 @@ var getSubzoneNoop = func(config.ZoneConfig) *config.Subzone { return nil }
 // that applies to the object with the specified id is found.
 //
 // This function must be kept in sync with ascendZoneSpecifier.
+//
+// if getInheritedDefault is true, the direct zone configuration, if it exists, is
+// ignored, and the default that would apply if it did not exist is returned instead.
 func getZoneConfig(
 	id uint32,
 	getKey func(roachpb.Key) (*roachpb.Value, error),
 	getSubzone func(config.ZoneConfig) *config.Subzone,
+	getInheritedDefault bool,
 ) (uint32, config.ZoneConfig, *config.Subzone, error) {
-	// Look in the zones table.
-	if zoneVal, err := getKey(config.MakeZoneKey(id)); err != nil {
-		return 0, config.ZoneConfig{}, nil, err
-	} else if zoneVal != nil {
-		// We found a matching entry.
-		var zone config.ZoneConfig
-		if err := zoneVal.GetProto(&zone); err != nil {
+	if !getInheritedDefault {
+		// Look in the zones table.
+		if zoneVal, err := getKey(config.MakeZoneKey(id)); err != nil {
 			return 0, config.ZoneConfig{}, nil, err
+		} else if zoneVal != nil {
+			// We found a matching entry.
+			var zone config.ZoneConfig
+			if err := zoneVal.GetProto(&zone); err != nil {
+				return 0, config.ZoneConfig{}, nil, err
+			}
+			subzone := getSubzone(zone)
+			if !zone.IsSubzonePlaceholder() || subzone != nil {
+				return id, zone, subzone, nil
+			}
+			// No subzone matched, and the zone is just a placeholder for subzones. Keep
+			// recursing up the hierarchy.
 		}
-		subzone := getSubzone(zone)
-		if !zone.IsSubzonePlaceholder() || subzone != nil {
-			return id, zone, subzone, nil
-		}
-		// No subzone matched, and the zone is just a placeholder for subzones. Keep
-		// recursing up the hierarchy.
 	}
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
@@ -77,14 +83,14 @@ func getZoneConfig(
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
 			// Don't forward getSubzone, because only tables can have subzones.
-			return getZoneConfig(uint32(tableDesc.ParentID), getKey, getSubzoneNoop)
+			return getZoneConfig(uint32(tableDesc.ParentID), getKey, getSubzoneNoop, false /* getInheritedDefault */)
 		}
 	}
 
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		return getZoneConfig(keys.RootNamespaceID, getKey, getSubzoneNoop)
+		return getZoneConfig(keys.RootNamespaceID, getKey, getSubzoneNoop, false /* getInheritedDefault */)
 	}
 
 	// No descriptor or not a table.
@@ -105,6 +111,7 @@ func ZoneConfigHook(
 		func(zone config.ZoneConfig) *config.Subzone {
 			return zone.GetSubzoneForKeySuffix(keySuffix)
 		},
+		false, /* getInheritedDefault */
 	)
 	if err == errNoZoneConfigApplies {
 		return config.ZoneConfig{}, false, nil
@@ -119,7 +126,12 @@ func ZoneConfigHook(
 // GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,
 // index, and partition.
 func GetZoneConfigInTxn(
-	ctx context.Context, txn *client.Txn, id uint32, index *sqlbase.IndexDescriptor, partition string,
+	ctx context.Context,
+	txn *client.Txn,
+	id uint32,
+	index *sqlbase.IndexDescriptor,
+	partition string,
+	getInheritedDefault bool,
 ) (uint32, config.ZoneConfig, *config.Subzone, error) {
 	return getZoneConfig(
 		id,
@@ -136,6 +148,7 @@ func GetZoneConfigInTxn(
 			}
 			return zone.GetSubzone(uint32(index.ID), partition)
 		},
+		getInheritedDefault,
 	)
 }
 

@@ -135,12 +135,12 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	// with 2.0 clusters we still need to try with it if the
 	// syntax without EXPERIMENTAL fails.
 	// TODO(knz): Remove this in 2.2.
-	const stmtZone = "ALTER RANGE default %[1]s CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
-	stmt := fmt.Sprintf(stmtZone, "")
+	makeStmt := func(s string) string { return fmt.Sprintf(s, "RANGE default", "'gc: {ttlseconds: 10}'") }
+	stmt := makeStmt("ALTER %[1]s CONFIGURE ZONE TO %[2]s")
 	t.Status(stmt)
 	_, err = dbOne.ExecContext(ctx, stmt)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {
-		stmt = fmt.Sprintf(stmtZone, "EXPERIMENTAL")
+		stmt = makeStmt("ALTER %[1]s EXPERIMENTAL CONFIGURE ZONE %[2]s")
 		_, err = dbOne.ExecContext(ctx, stmt)
 	}
 	if err != nil {

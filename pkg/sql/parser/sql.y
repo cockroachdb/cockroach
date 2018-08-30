@@ -380,6 +380,9 @@ func (u *sqlSymUnion) rangePartition() tree.RangePartition {
 func (u *sqlSymUnion) rangePartitions() []tree.RangePartition {
     return u.val.([]tree.RangePartition)
 }
+func (u *sqlSymUnion) setZoneConfig() *tree.SetZoneConfig {
+    return u.val.(*tree.SetZoneConfig)
+}
 func (u *sqlSymUnion) tuples() []*tree.Tuple {
     return u.val.([]*tree.Tuple)
 }
@@ -730,7 +733,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
-%type <[]tree.KVOption> kv_option_list opt_with_options
+%type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
 %type <str> import_format
 
 %type <*tree.Select> select_no_parens
@@ -952,6 +955,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> relocate_kw ranges_kw
 
+%type <*tree.SetZoneConfig> set_zone_config
+
 %type <tree.Expr> opt_alter_column_using
 
 // Precedence: lowest to highest
@@ -1126,14 +1131,19 @@ alter_ddl_stmt:
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
-//   ALTER TABLE ... CONFIGURE ZONE <expr>
-//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <expr>
+//   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   { TO | = } <expr>
 //
 // %SeeAlso: WEBDOCS/alter-table.html
 alter_table_stmt:
@@ -1212,7 +1222,12 @@ alter_database_stmt:
 // ALTER RANGE <zonename> <command>
 //
 // Commands:
-//   ALTER RANGE ... CONFIGURE ZONE <expr>
+//   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   { TO | = } <expr>
 //
 // %SeeAlso: ALTER TABLE
 alter_range_stmt:
@@ -1307,53 +1322,78 @@ alter_relocate_index_lease_stmt:
   }
 
 alter_zone_range_stmt:
-  ALTER RANGE zone_name CONFIGURE ZONE a_expr
+  ALTER RANGE zone_name set_zone_config
   {
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)},
-      YAMLConfig: $6.expr(),
-    }
+     s := $4.setZoneConfig()
+     s.ZoneSpecifier = tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)}
+     $$.val = s
+  }
+
+set_zone_config:
+  CONFIGURE ZONE to_or_eq a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetZoneConfig{YAMLConfig: $4.expr()}
+  }
+| CONFIGURE ZONE USING var_set_list
+  {
+    $$.val = &tree.SetZoneConfig{Options: $4.kvOptions()}
+  }
+| CONFIGURE ZONE USING DEFAULT
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetZoneConfig{SetDefault: true}
+  }
+| CONFIGURE ZONE DISCARD
+  {
+    $$.val = &tree.SetZoneConfig{YAMLConfig: tree.DNull}
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name CONFIGURE ZONE a_expr
+  ALTER DATABASE database_name set_zone_config
   {
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($3)},
-      YAMLConfig: $6.expr(),
-    }
+     s := $4.setZoneConfig()
+     s.ZoneSpecifier = tree.ZoneSpecifier{Database: tree.Name($3)}
+     $$.val = s
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE table_name CONFIGURE ZONE a_expr
+  ALTER TABLE table_name set_zone_config
   {
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
-      },
-      YAMLConfig: $6.expr(),
+    s := $4.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
     }
+    $$.val = s
   }
-| ALTER PARTITION partition_name OF TABLE table_name CONFIGURE ZONE a_expr
+| ALTER PARTITION partition_name OF TABLE table_name set_zone_config
   {
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
-        Partition: tree.Name($3),
-      },
-      YAMLConfig: $9.expr(),
+    s := $7.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
+       Partition: tree.Name($3),
     }
+    $$.val = s
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index CONFIGURE ZONE a_expr
+  ALTER INDEX table_name_with_index set_zone_config
   {
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: $3.tableWithIdx(),
-      },
-      YAMLConfig: $6.expr(),
+    s := $4.setZoneConfig()
+	s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: $3.tableWithIdx(),
     }
+    $$.val = s
+  }
+
+var_set_list:
+  var_name '=' var_value
+  {
+    $$.val = []tree.KVOption{tree.KVOption{Key: tree.Name(strings.Join($1.strs(), ".")), Value: $3.expr()}}
+  }
+| var_set_list ',' var_name '=' var_value
+  {
+    $$.val = append($1.kvOptions(), tree.KVOption{Key: tree.Name(strings.Join($3.strs(), ".")), Value: $5.expr()})
   }
 
 alter_scatter_stmt:
@@ -2596,15 +2636,15 @@ scrub_option:
 // %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
 // WEBDOCS/cluster-settings.html
 set_csetting_stmt:
-  SET CLUSTER SETTING var_name '=' var_value
-  {
-    $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
-  }
-| SET CLUSTER SETTING var_name TO var_value
+  SET CLUSTER SETTING var_name to_or_eq var_value
   {
     $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
+
+to_or_eq:
+  '='
+| TO
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -2663,19 +2703,10 @@ set_transaction_stmt:
 | SET SESSION TRANSACTION error // SHOW HELP: SET TRANSACTION
 
 generic_set:
-  var_name TO var_list
+  var_name to_or_eq var_list
   {
     // We need to recognize the "set tracing" specially here; couldn't make "set
     // tracing" a different grammar rule because of ambiguity.
-    varName := $1.strs()
-    if len(varName) == 1 && varName[0] == "tracing" {
-      $$.val = &tree.SetTracing{Values: $3.exprs()}
-    } else {
-      $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
-    }
-  }
-| var_name '=' var_list
-  {
     varName := $1.strs()
     if len(varName) == 1 && varName[0] == "tracing" {
       $$.val = &tree.SetTracing{Values: $3.exprs()}

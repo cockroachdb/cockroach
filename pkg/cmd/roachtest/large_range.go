@@ -81,7 +81,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 
 		t.Status("increasing range_max_bytes")
 		setRangeMaxBytes := func(maxBytes int) {
-			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE '\nrange_max_bytes: %d\n'", maxBytes)
+			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
 			_, err := db.Exec(stmtZone)
 			if err != nil && strings.Contains(err.Error(), "syntax error") {
 				// Pre-2.1 was EXPERIMENTAL.

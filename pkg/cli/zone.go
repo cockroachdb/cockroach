@@ -38,14 +38,16 @@ type runQueryRawFn func(q string, parameters ...driver.Value) ([]string, [][]str
 // TODO(knz): Remove this post-2.2.
 func runQueryRawMaybeExperimental(conn *sqlConn, txnFn func(runQuery runQueryRawFn) error) error {
 	withExecute := ""
+	eqSign := "="
 	runQueryFn := func(q string, parameters ...driver.Value) ([]string, [][]string, error) {
-		return runQueryRaw(conn, makeQuery(fmt.Sprintf(q, withExecute), parameters...))
+		return runQueryRaw(conn, makeQuery(fmt.Sprintf(q, withExecute, eqSign), parameters...))
 	}
 	queryFn := func(_ *sqlConn) error { return txnFn(runQueryFn) }
 
 	err := conn.ExecTxn(queryFn)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {
 		withExecute = "EXPERIMENTAL"
+		eqSign = ""
 		err = conn.ExecTxn(queryFn)
 	}
 	return err
@@ -203,7 +205,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	return runQueryRawMaybeExperimental(conn,
 		func(runQuery runQueryRawFn) (err error) {
 			_, _, err = runQuery(fmt.Sprintf(
-				`ALTER %s %%[1]s CONFIGURE ZONE NULL`, &zs))
+				`ALTER %s %%[1]s CONFIGURE ZONE %%[2]s NULL`, &zs))
 			return
 		})
 }
@@ -287,7 +289,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err := runQueryRawMaybeExperimental(conn,
 		func(runQuery runQueryRawFn) (err error) {
 			if _, _, err := runQuery(fmt.Sprintf(
-				`ALTER %s %%[1]s CONFIGURE ZONE %s`,
+				`ALTER %s %%[1]s CONFIGURE ZONE %%[2]s %s`,
 				&zs, lex.EscapeSQLString(string(configYAML)))); err != nil {
 				return err
 			}

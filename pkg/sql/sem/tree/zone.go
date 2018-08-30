@@ -81,7 +81,9 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 // statement.
 type SetZoneConfig struct {
 	ZoneSpecifier
+	SetDefault bool
 	YAMLConfig Expr
+	Options    KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -89,5 +91,17 @@ func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	ctx.FormatNode(&node.ZoneSpecifier)
 	ctx.WriteString(" CONFIGURE ZONE ")
-	ctx.FormatNode(node.YAMLConfig)
+	if node.SetDefault {
+		ctx.WriteString("USING DEFAULT")
+	} else if node.YAMLConfig != nil {
+		if node.YAMLConfig == DNull {
+			ctx.WriteString("DISCARD")
+		} else {
+			ctx.WriteString("= ")
+			ctx.FormatNode(node.YAMLConfig)
+		}
+	} else {
+		ctx.WriteString("USING ")
+		ctx.FormatNode(&node.Options)
+	}
 }
