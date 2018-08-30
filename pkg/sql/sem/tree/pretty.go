@@ -1121,3 +1121,18 @@ func (node *IfErrExpr) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return pretty.Bracket(s, pretty.Join(",", d...), ")")
 }
+
+func (node *IfExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.Bracket("IF(", pretty.Join(",",
+		p.Doc(node.Cond),
+		p.Doc(node.True),
+		p.Doc(node.Else),
+	), ")")
+}
+
+func (node *NullIfExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.Bracket("NULLIF(", pretty.Join(",",
+		p.Doc(node.Expr1),
+		p.Doc(node.Expr2),
+	), ")")
+}
