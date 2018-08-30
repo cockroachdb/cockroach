@@ -21,8 +21,10 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -99,8 +101,21 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 		val, err := e.evalCtx.Planner.EvalSubquery(expr)
 		if err != nil {
 			e.err = err
+			return false, expr
 		}
-		return false, val
+		var newExpr tree.Expr = val
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType() != types.Unknown {
+			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
+			if err != nil {
+				e.err = err
+				return false, expr
+			}
+			newExpr = &tree.CastExpr{
+				Expr: val,
+				Type: colType,
+			}
+		}
+		return false, newExpr
 	default:
 		return true, expr
 	}
