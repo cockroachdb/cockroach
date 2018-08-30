@@ -735,8 +735,6 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 	ctx := context.Background()
 	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 
 	cleanup, cache, eng := newRocksDB(t)
 	tc.engine = eng
@@ -744,6 +742,8 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	defer cache.Release()
 	defer eng.Close()
 
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	var ba roachpb.BatchRequest
