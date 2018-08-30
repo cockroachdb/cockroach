@@ -52,7 +52,9 @@ func createBenchmarkChangefeed(
 	}
 	tableDesc := sqlbase.GetTableDescriptor(execCfg.DB, database, table)
 	details := jobspb.ChangefeedDetails{
-		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
+		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.Name,
+		}},
 	}
 	progress := jobspb.Progress{}
 
