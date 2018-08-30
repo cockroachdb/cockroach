@@ -129,6 +129,13 @@ func getMysqldumpTestdata(t *testing.T) testFiles {
 			mysqldump(t, files.everything, "everything")
 			mysqldump(t, files.wholeDB, "")
 		})
+
+		_ = os.Remove(files.wholeDB + ".bz2")
+		out, err := exec.Command("bzip2", "-k", files.wholeDB).CombinedOutput()
+		if err != nil {
+			t.Fatal(err, string(out))
+		}
+		gzipFile(t, files.wholeDB)
 	}
 	return files
 }
