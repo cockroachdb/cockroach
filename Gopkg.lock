@@ -1592,8 +1592,8 @@
   version = "2017.2.2"
 
 [[projects]]
-  branch = "no-flag-on-delete"
-  digest = "1:6bb9595c618513fb891816ffe5693278f03a990333d6138ad2d7bedab0256bc8"
+  branch = "no-flag-names-parens"
+  digest = "1:6e89f05e68e4ea82a79459599d20ad0ec7a8c6d6110c3a926b1efd509f65dd85"
   name = "vitess.io/vitess"
   packages = [
     "go/bytes2",
@@ -1607,7 +1607,7 @@
     "go/vt/vterrors",
   ]
   pruneopts = "UT"
-  revision = "0ce4a891bcc56213538df72f3b6d85d30e43ceb8"
+  revision = "1740ce8b3188b99cd3c88fb38ad734eda711519f"
   source = "https://github.com/cockroachdb/vitess"
 
 [solve-meta]
