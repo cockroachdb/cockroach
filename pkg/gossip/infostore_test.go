@@ -278,6 +278,8 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	}
 
 	// Add info from each address, with hop count equal to index+1.
+	var expectedNodeID roachpb.NodeID
+	var expectedHops uint32
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
 		inf.Hops = uint32(i + 1)
@@ -285,12 +287,16 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		if err := is.addInfo(MakeNodeIDKey(inf.NodeID), inf); err != nil {
 			t.Fatal(err)
 		}
-		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
-		if nodeID != inf.NodeID {
-			t.Errorf("%d: expected node %d; got %d", i, inf.NodeID, nodeID)
+		if inf.NodeID != 1 {
+			expectedNodeID = inf.NodeID
+			expectedHops = inf.Hops
 		}
-		if hops != inf.Hops {
-			t.Errorf("%d: expected node %d; got %d", i, inf.Hops, hops)
+		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
+		if expectedNodeID != nodeID {
+			t.Errorf("%d: expected node %d; got %d", i, expectedNodeID, nodeID)
+		}
+		if expectedHops != hops {
+			t.Errorf("%d: expected node %d; got %d", i, expectedHops, hops)
 		}
 	}
 
@@ -299,14 +305,14 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	// it's the furthest node away.
 	filteredNode := nodes[len(nodes)-1]
 	expectedNode := nodes[len(nodes)-2]
-	expectedHops := expectedNode
+	expectedHops = uint32(expectedNode)
 	nodeID, hops := is.mostDistant(func(nodeID roachpb.NodeID) bool {
 		return nodeID == filteredNode
 	})
 	if nodeID != expectedNode {
 		t.Errorf("expected node %d; got %d", expectedNode, nodeID)
 	}
-	if hops != uint32(expectedHops) {
+	if hops != expectedHops {
 		t.Errorf("expected node %d; got %d", expectedHops, hops)
 	}
 }
