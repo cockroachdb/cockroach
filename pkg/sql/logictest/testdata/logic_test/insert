@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt
 
 statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
