@@ -63,7 +63,10 @@ class AxisDomain {
     const max = extent[1];
     if (alignMinMax) {
       const alignedMin = min - min % increment;
-      const alignedMax = max - max % increment + increment;
+      let alignedMax = max;
+      if (max % increment !== 0) {
+        alignedMax = max - max % increment + increment;
+      }
       this.extent = [alignedMin, alignedMax];
     } else {
       this.extent = extent;
