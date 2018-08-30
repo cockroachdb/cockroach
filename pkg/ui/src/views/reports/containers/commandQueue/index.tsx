@@ -42,7 +42,7 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     this.refresh();
   }
 
-  renderReportBody() {
+  renderReportBody = () => {
     const commandQueue = this.props.commandQueue;
     if (_.isNil(commandQueue)) {
       return null;
