@@ -739,8 +739,9 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	return nil
 }
 
-// TypeCheck implements the Expr interface.
-func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+// ResolveAndCheck resolves the function definition of expr and
+// checks that expr is allowed in the current context.
+func (expr *FuncExpr) ResolveAndCheck(ctx *SemaContext) (*FunctionDefinition, error) {
 	var searchPath sessiondata.SearchPath
 	if ctx != nil {
 		searchPath = ctx.SearchPath
@@ -753,11 +754,22 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if err := ctx.checkFunctionUsage(expr, def); err != nil {
 		return nil, errors.Wrapf(err, "%s()", def.Name)
 	}
+
+	return def, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	def, err := expr.ResolveAndCheck(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	if ctx != nil {
 		// We'll need to remember we are in a function application to
 		// generate suitable errors in checkFunctionUsage().  We cannot
 		// set ctx.inFuncExpr earlier (in particular not before the call
-		// to checkFunctionUsage() above) because the top-level FuncExpr
+		// to ResolveAndCheck() above) because the top-level FuncExpr
 		// must be acceptable even if it is a SRF and
 		// RejectNestedGenerators is set.
 		defer func(ctx *SemaContext, prev bool) {

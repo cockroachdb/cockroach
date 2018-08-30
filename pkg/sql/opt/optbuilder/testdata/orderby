@@ -505,12 +505,11 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
+      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
-           └── function: length [type=int]
-                └── const: 'abc' [type=string]
+           └── const: 3 [type=int]
 
 build
 SELECT b+2 AS r FROM t ORDER BY b+2

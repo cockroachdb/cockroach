@@ -109,6 +109,9 @@ type OptTesterFlags struct {
 	UnexpectedRules RuleSet
 
 	ColStats []opt.ColSet
+
+	// SkipFoldConstants causes the optbuilder to skip folding of constants.
+	SkipFoldConstants bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -197,6 +200,8 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //  - colstat: requests the calculation of a column statistic on the top-level
 //    expression. The value is a column or a list of columns. The flag can
 //    be used multiple times to request different statistics.
+//
+//  - skip-fold-constants: skip the folding of constants in the optbuilder.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -441,6 +446,9 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			cols.Add(col)
 		}
 		f.ColStats = append(f.ColStats, cols)
+
+	case "skip-fold-constants":
+		f.SkipFoldConstants = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -780,6 +788,7 @@ func (ot *OptTester) buildExpr(
 	if ot.Flags.FullyQualifyNames {
 		b.FmtFlags = tree.FmtAlwaysQualifyTableNames
 	}
+	b.SkipFoldConstants = ot.Flags.SkipFoldConstants
 	return b.Build()
 }
 

@@ -307,12 +307,13 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
+			// We need to close in case there were any subqueries created.
+			p.curPlan.close(ctx)
 			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
-		// We need to close in case there were any subqueries created.
 		p.curPlan.close(ctx)
 		return err
 	}
@@ -416,9 +417,16 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
+			// We need to close in case there were any subqueries created.
+			p.curPlan.close(ctx)
 			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
+	}
+	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		// We need to close in case there were any subqueries created.
+		p.curPlan.close(ctx)
+		return err
 	}
 
 	return nil

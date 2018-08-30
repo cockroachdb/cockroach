@@ -26,6 +26,9 @@ import (
 // subquery represents a subquery expression in an expression tree
 // after it has been type-checked and added to the memo.
 type subquery struct {
+	// The AST Subquery expression.
+	*tree.Subquery
+
 	// cols contains the output columns of the subquery.
 	cols []scopeColumn
 
@@ -43,23 +46,10 @@ type subquery struct {
 	// typ is the lazily resolved type of the subquery.
 	typ types.T
 
-	// expr is the AST Subquery expression.
-	expr *tree.Subquery
-
 	// outerCols stores the set of outer columns in the subquery. These are
 	// columns which are referenced within the subquery but are bound in an
 	// outer scope.
 	outerCols opt.ColSet
-}
-
-// String is part of the tree.Expr interface.
-func (s *subquery) String() string {
-	return s.expr.String()
-}
-
-// Format is part of the tree.Expr interface.
-func (s *subquery) Format(ctx *tree.FmtCtx) {
-	s.expr.Format(ctx)
 }
 
 // Walk is part of the tree.Expr interface.
@@ -129,7 +119,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 	// Without that auto-unwrapping of single-column subqueries, this query would
 	// type check as "<int> IN <tuple{tuple{int}}>" which would fail.
 
-	if s.expr.Exists {
+	if s.Exists {
 		s.typ = types.Bool
 		return s, nil
 	}
@@ -225,7 +215,7 @@ func (b *Builder) buildSubqueryProjection(
 func (b *Builder) buildSingleRowSubquery(
 	s *subquery, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
-	if s.expr.Exists {
+	if s.Exists {
 		return b.factory.ConstructExists(s.group), inScope
 	}
 
