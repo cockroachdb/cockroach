@@ -89,12 +89,14 @@ func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 // It does not close the output.
 func (b *backfiller) mainLoop(ctx context.Context) error {
 	var mutations []sqlbase.DescriptorMutation
-	const noNewIndex = -1
-	addedIndexMutationIdx := noNewIndex
 	desc := b.spec.Table
 	if len(desc.Mutations) == 0 {
 		return errors.Errorf("no schema changes for table ID=%d", desc.ID)
 	}
+	const noNewIndex = -1
+	// The first index of a mutation in the mutation list that will be
+	// processed.
+	firstMutationIdx := noNewIndex
 	mutationID := desc.Mutations[0].MutationID
 	for i, m := range desc.Mutations {
 		if m.MutationID != mutationID {
@@ -102,13 +104,13 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 		}
 		if b.filter(m) {
 			mutations = append(mutations, m)
-			if addedIndexMutationIdx == noNewIndex {
-				addedIndexMutationIdx = i
+			if firstMutationIdx == noNewIndex {
+				firstMutationIdx = i
 			}
 		}
 	}
 
-	if addedIndexMutationIdx == noNewIndex ||
+	if firstMutationIdx == noNewIndex ||
 		len(b.spec.Spans) == 0 {
 		return errors.Errorf("completed processing all spans for %s backfill (%d, %d)", b.name, desc.ID, mutationID)
 	}
@@ -139,57 +141,77 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	return WriteResumeSpan(ctx,
 		b.flowCtx.ClientDB,
 		b.spec.Table.ID,
+		mutationID,
+		b.filter,
 		work,
 		resume,
-		addedIndexMutationIdx,
 		b.flowCtx.JobRegistry,
 	)
 }
 
-// GetResumeSpansFromJob returns a ResumeSpanList from a job given a job id and index.
-func GetResumeSpansFromJob(
-	ctx context.Context, jobsRegistry *jobs.Registry, txn *client.Txn, jobID int64, mutationIdx int,
-) ([]roachpb.Span, error) {
-	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
+// GetResumeSpans returns a ResumeSpanList from a job.
+func GetResumeSpans(
+	ctx context.Context,
+	jobsRegistry *jobs.Registry,
+	txn *client.Txn,
+	tableID sqlbase.ID,
+	mutationID sqlbase.MutationID,
+	filter backfill.MutationFilter,
+) ([]roachpb.Span, *jobs.Job, int, error) {
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "can't find job %d", jobID)
+		return nil, nil, 0, err
 	}
-	details, ok := job.Details().(jobspb.SchemaChangeDetails)
-	if !ok {
-		return nil, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
-	}
-	return details.ResumeSpanList[mutationIdx].ResumeSpans, nil
-}
 
-// GetResumeSpanIndexofMutationID returns the index of a resume span within a job
-// that corresponds to the given mutation index and table descriptor.
-func GetResumeSpanIndexofMutationID(tableDesc *sqlbase.TableDescriptor, mutationIdx int) int {
-	if len(tableDesc.MutationJobs) > 0 {
-		mutationID := tableDesc.Mutations[mutationIdx].MutationID
-		for i, job := range tableDesc.Mutations {
-			if job.MutationID == mutationID {
-				return mutationIdx - i
+	// Find the index of the first mutation that is being worked on.
+	const noIndex = -1
+	mutationIdx := noIndex
+	if len(tableDesc.Mutations) > 0 {
+		for i, m := range tableDesc.Mutations {
+			if m.MutationID != mutationID {
+				break
+			}
+			if mutationIdx == noIndex && filter(m) {
+				mutationIdx = i
 			}
 		}
 	}
-	return -1
+
+	if mutationIdx == noIndex {
+		return nil, nil, 0, errors.Errorf("mutation %d has completed", mutationID)
+	}
+
+	// Find the job.
+	var jobID int64
+	if len(tableDesc.MutationJobs) > 0 {
+		for _, job := range tableDesc.MutationJobs {
+			if job.MutationID == mutationID {
+				jobID = job.JobID
+				break
+			}
+		}
+	}
+
+	if jobID == 0 {
+		return nil, nil, 0, errors.Errorf("no job found for mutation %d", mutationID)
+	}
+
+	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
+	if err != nil {
+		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", jobID)
+	}
+	details, ok := job.Details().(jobspb.SchemaChangeDetails)
+	if !ok {
+		return nil, nil, 0, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
+	}
+	// Return the resume spans from the job using the mutation idx.
+	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
 }
 
 // SetResumeSpansInJob addeds a list of resume spans into a job details field.
 func SetResumeSpansInJob(
-	ctx context.Context,
-	spans []roachpb.Span,
-	jobsRegistry *jobs.Registry,
-	mutationIdx int,
-	txn *client.Txn,
-	jobID int64,
+	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn *client.Txn, job *jobs.Job,
 ) error {
-
-	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return errors.Wrapf(err, "can't find job %d", jobID)
-	}
-
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
@@ -205,9 +227,10 @@ func WriteResumeSpan(
 	ctx context.Context,
 	db *client.DB,
 	id sqlbase.ID,
+	mutationID sqlbase.MutationID,
+	filter backfill.MutationFilter,
 	origSpan roachpb.Span,
 	resume roachpb.Span,
-	mutationIdx int,
 	jobsRegistry *jobs.Registry,
 ) error {
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
@@ -215,31 +238,9 @@ func WriteResumeSpan(
 	if resume.Key != nil && !resume.EndKey.Equal(origSpan.EndKey) {
 		panic("resume must end on the same key as origSpan")
 	}
-	cnt := 0
+
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		cnt++
-		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, id)
-		if err != nil {
-			return err
-		}
-		if cnt > 1 {
-			log.Infof(ctx, "retrying adding checkpoint %s to table %s", resume, tableDesc.Name)
-		}
-
-		mutationID := tableDesc.Mutations[mutationIdx].MutationID
-		var jobID int64
-
-		if len(tableDesc.MutationJobs) > 0 {
-			for _, job := range tableDesc.MutationJobs {
-				if job.MutationID == mutationID {
-					jobID = job.JobID
-					break
-				}
-			}
-		}
-
-		resumeSpanIndex := GetResumeSpanIndexofMutationID(tableDesc, mutationIdx)
-		resumeSpans, error := GetResumeSpansFromJob(ctx, jobsRegistry, txn, jobID, resumeSpanIndex)
+		resumeSpans, job, mutationIdx, error := GetResumeSpans(ctx, jobsRegistry, txn, id, mutationID, filter)
 		if error != nil {
 			return error
 		}
@@ -281,7 +282,7 @@ func WriteResumeSpan(
 
 				log.VEventf(ctx, 2, "ckpt %+v", resumeSpans)
 
-				return SetResumeSpansInJob(ctx, resumeSpans, jobsRegistry, mutationIdx, txn, jobID)
+				return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
 			}
 		}
 		// Unable to find a span containing origSpan.
