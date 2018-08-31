@@ -260,7 +260,7 @@ func (s *destroyStatus) Reset() {
 // as appropriate.
 type Replica struct {
 	readyCount int
-	lastReady  raft.Ready
+	lastReady  [10]*raft.Ready
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
@@ -4015,8 +4015,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
-			r.readyCount++
 			rd = raftGroup.Ready()
+			r.lastReady[r.readyCount%len(r.lastReady)] = &rd
+			r.readyCount++
 		}
 		return hasReady /* unquiesceAndWakeLeader */, nil
 	})
@@ -4248,8 +4249,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					"at %dth ready, applied index %d (fresh %d) followed by entry at index %d (index %d in batch)",
 					r.readyCount, debugRaftAppliedIndex, fresh, e.Index, i,
 				)
-				logRaftReady(ctx, r.lastReady, true)
-				logRaftReady(ctx, rd, true)
+				for i := 0; i < len(r.lastReady); i++ {
+					oldReady := r.lastReady[(r.readyCount+i)%len(r.lastReady)]
+					if oldReady == nil {
+						log.Info(ctx, "skipping empty ready %d", i)
+						continue
+					}
+					logRaftReady(ctx, *oldReady, true)
+				}
 				return stats, expl, errors.Wrap(errors.Errorf("gap in applied indexes"), expl)
 			}
 			debugRaftAppliedIndex = e.Index
@@ -4378,7 +4385,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// ID cannot change during handleRaftReady?
 	const expl = "during advance"
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-		r.lastReady = rd
 		raftGroup.Advance(rd)
 		return true, nil
 	}); err != nil {
