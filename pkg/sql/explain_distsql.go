@@ -69,12 +69,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.stmtType = n.stmtType
 	planCtx.validExtendedEvalCtx = true
 
-	// This stanza ensures that EXPLAIN(DISTSQL) won't include metadata test
-	// senders or receivers.
-	curTol := distSQLPlanner.metadataTestTolerance
-	distSQLPlanner.metadataTestTolerance = distsqlrun.On
-	defer func() { distSQLPlanner.metadataTestTolerance = curTol }()
-
 	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
