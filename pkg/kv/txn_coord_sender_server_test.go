@@ -117,7 +117,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	// Now wait until the heartbeat loop notices that the transaction is aborted.
 	testutils.SucceedsSoon(t, func() error {
-		if txn.GetTxnCoordMeta().Txn.Status != roachpb.ABORTED {
+		if txn.GetTxnCoordMeta(ctx).Txn.Status != roachpb.ABORTED {
 			return fmt.Errorf("txn not aborted yet")
 		}
 		return nil

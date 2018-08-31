@@ -33,9 +33,10 @@ import (
 func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.Background())
+	defer s.Stopper().Stop(ctx)
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +62,7 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
-	txnCoordMeta := txn.GetTxnCoordMeta()
+	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
 	txnCoordMeta.StripRootToLeaf()
 
 	req := &SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
@@ -77,7 +78,7 @@ func TestServer(t *testing.T) {
 	}
 
 	distSQLClient := NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSyncFlow(context.Background())
+	stream, err := distSQLClient.RunSyncFlow(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
