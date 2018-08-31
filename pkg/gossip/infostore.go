@@ -357,7 +357,17 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error, deleteExpir
 func (is *infoStore) combine(
 	infos map[string]*Info, nodeID roachpb.NodeID,
 ) (freshCount int, err error) {
+	localNodeID := is.nodeID.Get()
 	for key, i := range infos {
+		if i.NodeID == localNodeID {
+			// Ignore infos received from the remote node which originated at the
+			// local node. These infos will usually be ignored by addInfo due to
+			// having a hops value that is too large, but during startup we might
+			// inadvertently accept one of these infos until the local node has
+			// gossiped the same info.
+			continue
+		}
+
 		infoCopy := *i
 		infoCopy.Hops++
 		infoCopy.PeerID = nodeID
@@ -409,6 +419,7 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 func (is *infoStore) mostDistant(
 	hasOutgoingConn func(roachpb.NodeID) bool,
 ) (roachpb.NodeID, uint32) {
+	localNodeID := is.nodeID.Get()
 	var nodeID roachpb.NodeID
 	var maxHops uint32
 	if err := is.visitInfos(func(key string, i *Info) error {
@@ -417,7 +428,8 @@ func (is *infoStore) mostDistant(
 		// likely to be accurate than keys which are rarely re-gossiped, which can
 		// acquire unreliably high Hops values in some pathological cases such as
 		// those described in #9819.
-		if i.Hops > maxHops && IsNodeIDKey(key) && !hasOutgoingConn(i.NodeID) {
+		if i.NodeID != localNodeID && i.Hops > maxHops &&
+			IsNodeIDKey(key) && !hasOutgoingConn(i.NodeID) {
 			maxHops = i.Hops
 			nodeID = i.NodeID
 		}
