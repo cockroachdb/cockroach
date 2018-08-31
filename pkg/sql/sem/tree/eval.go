@@ -328,6 +328,9 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
+		if v == DNull {
+			return DNull, nil
+		}
 		path[i] = string(MustBeDString(v))
 	}
 	result, err := json.FetchPath(j.JSON, path)
@@ -1851,6 +1854,9 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
+					if k == DNull {
+						continue
+					}
 					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
 					if err != nil {
 						return nil, err
@@ -1871,6 +1877,9 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
+					if k == DNull {
+						continue
+					}
 					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
 					if err != nil {
 						return nil, err
