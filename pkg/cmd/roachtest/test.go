@@ -293,6 +293,8 @@ func (r *registry) Run(filter []string) int {
 	ticker := time.NewTicker(r.statusInterval)
 	defer ticker.Stop()
 
+	globalCtx, globalCancel = context.WithCancel(context.Background())
+
 	// Shut down test clusters when interrupted (for example CTRL+C).
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -719,7 +721,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 			return
 		}
 
-		ctx := context.Background()
+		ctx := globalCtx
 		if !dryrun {
 			if c == nil {
 				c = newCluster(ctx, t, t.spec.Nodes)

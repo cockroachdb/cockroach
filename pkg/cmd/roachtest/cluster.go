@@ -161,8 +161,11 @@ func initBinaries() {
 var clusters = map[*cluster]struct{}{}
 var clustersMu syncutil.Mutex
 var interrupted int32
+var globalCtx context.Context
+var globalCancel context.CancelFunc
 
 func destroyAllClusters() {
+	globalCancel()
 	atomic.StoreInt32(&interrupted, 1)
 
 	// Fire off a goroutine to destroy all of the clusters.

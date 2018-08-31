@@ -80,7 +80,12 @@ type bankState struct {
 	clients  []bankClient
 }
 
-func (s *bankState) done() bool {
+func (s *bankState) done(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+	}
 	return !timeutil.Now().Before(s.deadline) || atomic.LoadInt32(&s.stalled) == 1
 }
 
@@ -142,7 +147,7 @@ func (s *bankState) transferMoney(
 	ctx context.Context, c *cluster, idx, numAccounts, maxTransfer int,
 ) {
 	client := &s.clients[idx]
-	for !s.done() {
+	for !s.done(ctx) {
 		if err := client.transferMoney(numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
 			if !testutils.IsSQLRetryableError(err) {
@@ -157,7 +162,13 @@ func (s *bankState) transferMoney(
 }
 
 // Verify accounts.
-func (s *bankState) verifyAccounts(t *test) {
+func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
 	client := &s.clients[0]
 
 	var sum int
@@ -191,13 +202,8 @@ func (s *bankState) chaosMonkey(
 	consistentIdx int,
 ) {
 	defer close(s.teardown)
-	for curRound := uint64(1); !s.done(); curRound++ {
+	for curRound := uint64(1); !s.done(ctx); curRound++ {
 		atomic.StoreUint64(&s.monkeyIteration, curRound)
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
 
 		// Pick nodes to be restarted.
 		nodes := pickNodes()
@@ -209,15 +215,8 @@ func (s *bankState) chaosMonkey(
 			}
 		}
 		c.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
-	outer:
 		for _, i := range nodes {
-			// Two early exit conditions.
-			select {
-			case <-ctx.Done():
-				break outer
-			default:
-			}
-			if s.done() {
+			if s.done(ctx) {
 				break
 			}
 			c.l.Printf("round %d: restarting %d\n", curRound, i)
@@ -251,10 +250,10 @@ func (s *bankState) chaosMonkey(
 
 		// Sleep until at least one client is writing successfully.
 		c.l.Printf("round %d: monkey sleeping while cluster recovers...\n", curRound)
-		for !s.done() && !madeProgress() {
+		for !s.done(ctx) && !madeProgress() {
 			time.Sleep(time.Second)
 		}
-		if s.done() {
+		if s.done(ctx) {
 			c.l.Printf("round %d: not waiting for recovery due to signal that we're done\n",
 				curRound)
 			return
@@ -363,7 +362,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
 	// Verify accounts.
-	s.verifyAccounts(t)
+	s.verifyAccounts(ctx, t)
 
 	elapsed := timeutil.Since(start).Seconds()
 	var count uint64
@@ -408,7 +407,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
 	// Verify accounts.
-	s.verifyAccounts(t)
+	s.verifyAccounts(ctx, t)
 
 	elapsed := timeutil.Since(start).Seconds()
 	count := atomic.LoadUint64(&client.count)
