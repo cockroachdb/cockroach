@@ -2079,10 +2079,10 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if nodeCtx.statusShowStats || nodeCtx.statusShowAll {
 		testcases = append(testcases,
 			testCase{"live_bytes", baseIdx, 100000},
-			testCase{"key_bytes", baseIdx + 1, 30000},
+			testCase{"key_bytes", baseIdx + 1, 50000},
 			testCase{"value_bytes", baseIdx + 2, 100000},
-			testCase{"intent_bytes", baseIdx + 3, 30000},
-			testCase{"system_bytes", baseIdx + 4, 30000},
+			testCase{"intent_bytes", baseIdx + 3, 50000},
+			testCase{"system_bytes", baseIdx + 4, 50000},
 		)
 		baseIdx += len(statusNodesColumnHeadersForStats)
 	}
