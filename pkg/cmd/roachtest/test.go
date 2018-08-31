@@ -267,12 +267,15 @@ func (r *registry) Run(filter []string) int {
 	r.status.pass = make(map[*test]struct{})
 	r.status.fail = make(map[*test]struct{})
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
 		sem := make(chan struct{}, parallelism)
 		for j := 0; j < count; j++ {
 			for i := range tests {
 				sem <- struct{}{}
-				r.run(tests[i], filterRE, nil, func() {
+				r.run(ctx, tests[i], filterRE, nil, func() {
 					wg.Done()
 					<-sem
 				})
@@ -396,6 +399,7 @@ func (r *registry) Run(filter []string) int {
 
 		case <-sig:
 			if !debugEnabled {
+				cancel()
 				destroyAllClusters()
 			}
 		}
@@ -591,7 +595,9 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return !t.registry.buildVersion.LessThan(vers)
 }
 
-func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done func()) {
+func (r *registry) run(
+	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(),
+) {
 	t := &test{
 		spec:     spec,
 		registry: r,
@@ -719,7 +725,6 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 			return
 		}
 
-		ctx := context.Background()
 		if !dryrun {
 			if c == nil {
 				c = newCluster(ctx, t, t.spec.Nodes)
@@ -787,7 +792,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.run(&t.spec.SubTests[i], filter, c, func() {
+					r.run(ctx, &t.spec.SubTests[i], filter, c, func() {
 						wg.Done()
 					})
 					wg.Wait()
