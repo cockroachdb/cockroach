@@ -2544,7 +2544,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"val", types.JSON}, {"path", types.TArray{Typ: types.String}}},
 			ReturnType: tree.FixedReturnType(types.JSON),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+				ary := *tree.MustBeDArray(args[1])
+				if err := checkHasNulls(ary); err != nil {
+					return nil, err
+				}
+				path, _ := darrayToStringSlice(ary)
 				s, _, err := tree.MustBeDJSON(args[0]).JSON.RemovePath(path)
 				if err != nil {
 					return nil, err
@@ -3078,6 +3082,8 @@ var (
 		"null value not allowed for object key")
 	errJSONObjectMismatchedArrayDim = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 		"mismatched array dimensions")
+	errNullAtPositionOne = pgerror.NewError(pgerror.CodeNullValueNotAllowedError,
+		"path element at position 1 is null")
 )
 
 var jsonExtractPathImpl = tree.Overload{
@@ -3089,6 +3095,9 @@ var jsonExtractPathImpl = tree.Overload{
 		for i, v := range args {
 			if i == 0 {
 				continue
+			}
+			if v == tree.DNull {
+				return tree.DNull, nil
 			}
 			path[i-1] = string(tree.MustBeDString(v))
 		}
@@ -3104,12 +3113,38 @@ var jsonExtractPathImpl = tree.Overload{
 	Info: "Returns the JSON value pointed to by the variadic arguments.",
 }
 
-func darrayToStringSlice(d tree.DArray) []string {
-	result := make([]string, len(d.Array))
+// darrayToStringSlice converts an array of string datums to a Go array of
+// strings. If any of the elements are NULL, then ok will be returned as false.
+func darrayToStringSlice(d tree.DArray) (result []string, ok bool) {
+	result = make([]string, len(d.Array))
 	for i, s := range d.Array {
+		if s == tree.DNull {
+			return nil, false
+		}
 		result[i] = string(tree.MustBeDString(s))
 	}
-	return result
+	return result, true
+}
+
+// checkHasNullAtPositionOne returns an error if the given array has a NULL at
+// the first position. This mimics the error behavior of jsonb_set.
+func checkHasNullAtPositionOne(ary tree.DArray) error {
+	if len(ary.Array) > 0 && ary.Array[0] == tree.DNull {
+		return errNullAtPositionOne
+	}
+	return nil
+}
+
+// checkHasNulls returns an appropriate error if the array contains a NULL.
+func checkHasNulls(ary tree.DArray) error {
+	if ary.HasNulls {
+		for i := range ary.Array {
+			if ary.Array[i] == tree.DNull {
+				return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "path element at position %d is null", i+1)
+			}
+		}
+	}
+	return nil
 }
 
 var jsonSetImpl = tree.Overload{
@@ -3120,7 +3155,16 @@ var jsonSetImpl = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		ary := *tree.MustBeDArray(args[1])
+		// jsonb_set only errors if there is a null at the first position, but not
+		// at any other positions.
+		if err := checkHasNullAtPositionOne(ary); err != nil {
+			return nil, err
+		}
+		path, ok := darrayToStringSlice(ary)
+		if !ok {
+			return args[0], nil
+		}
 		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, true)
 		if err != nil {
 			return nil, err
@@ -3139,7 +3183,17 @@ var jsonSetWithCreateMissingImpl = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		ary := *tree.MustBeDArray(args[1])
+		// jsonb_set only errors if there is a null at the first position, but not
+		// at any other positions.
+		if err := checkHasNullAtPositionOne(ary); err != nil {
+			return nil, err
+		}
+		path, ok := darrayToStringSlice(ary)
+		// If any other NULLs appeared, this function is a no-op.
+		if !ok {
+			return args[0], nil
+		}
 		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, bool(*(args[3].(*tree.DBool))))
 		if err != nil {
 			return nil, err
