@@ -23,7 +23,7 @@ tc_end_block "Compile workload/roachtest"
 
 tc_start_block "Run local roachtests"
 # TODO(peter,dan): curate a suite of the tests that works locally.
-run build/builder.sh ./bin/roachtest run '(cli|kv/splits)' \
+run build/builder.sh ./bin/roachtest run '(acceptance|kv/splits)' \
   --local \
   --cockroach "cockroach" \
   --workload "bin/workload" \
