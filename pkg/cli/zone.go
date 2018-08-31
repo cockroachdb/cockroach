@@ -61,8 +61,9 @@ var getZoneCmd = &cobra.Command{
 Fetches and displays the zone configuration for the specified database or
 table.
 `,
-	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runGetZone),
+	Args:       cobra.ExactArgs(1),
+	RunE:       MaybeDecorateGRPCError(runGetZone),
+	Deprecated: "use SHOW ZONE CONFIGURATION FOR ... in a SQL client instead.",
 }
 
 // runGetZone retrieves the zone config for a given object id,
@@ -126,8 +127,9 @@ var lsZonesCmd = &cobra.Command{
 	Long: `
 List zone configs.
 `,
-	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runLsZones),
+	Args:       cobra.NoArgs,
+	RunE:       MaybeDecorateGRPCError(runLsZones),
+	Deprecated: "use SHOW ZONE CONFIGURATIONS in a SQL client instead.",
 }
 
 func runLsZones(cmd *cobra.Command, args []string) error {
@@ -179,8 +181,9 @@ var rmZoneCmd = &cobra.Command{
 	Long: `
 Remove an existing zone config for the specified database or table.
 `,
-	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runRmZone),
+	Args:       cobra.ExactArgs(1),
+	RunE:       MaybeDecorateGRPCError(runRmZone),
+	Deprecated: "use ALTER ... CONFIGURE ZONE DISCARD in a SQL client instead.",
 }
 
 func runRmZone(cmd *cobra.Command, args []string) error {
@@ -236,8 +239,9 @@ EOF
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
-	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runSetZone),
+	Args:       cobra.ExactArgs(1),
+	RunE:       MaybeDecorateGRPCError(runSetZone),
+	Deprecated: "use ALTER ... CONFIGURE ZONE in a SQL client instead.",
 }
 
 func readZoneConfig() (conf []byte, err error) {
