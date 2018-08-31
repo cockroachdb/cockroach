@@ -553,7 +553,6 @@ func (ef *execFactory) ConstructLookupJoin(
 
 	tableScan.index = indexDesc
 	tableScan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
-	tableScan.disableBatchLimit()
 
 	n := &lookupJoinNode{
 		input:    input.(planNode),
