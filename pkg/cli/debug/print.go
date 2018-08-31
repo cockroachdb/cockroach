@@ -103,6 +103,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 			if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 				return "", err
 			}
+			size := ent.Size() // grab before we mutate `ent`
 			ent.Data = nil
 			var leaseStr string
 			if l := cmd.DeprecatedProposerLease; l != nil {
@@ -111,7 +112,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 			} else {
 				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
 			}
-			return fmt.Sprintf("%s by %s (size %d)\n%s\n", &ent, leaseStr, ent.Size(), &cmd), nil
+			return fmt.Sprintf("%s by %s (size %d)\n%s\n", &ent, leaseStr, size, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
