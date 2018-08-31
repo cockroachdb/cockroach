@@ -16,24 +16,24 @@ package cli
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 
-	"io/ioutil"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 )
 
 var haProxyPath string
@@ -72,8 +72,12 @@ type haProxyNodeInfo struct {
 }
 
 func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
-	fs := flag.NewFlagSet("haproxy", flag.ContinueOnError)
-	checkPort := fs.String(cliflags.ListenHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
+	fs := pflag.NewFlagSet("haproxy", pflag.ContinueOnError)
+
+	httpAddr := ""
+	httpPort := base.DefaultHTTPPort
+	fs.Var(addrSetter{&httpAddr, &httpPort}, cliflags.ListenHTTPAddr.Name, "" /* usage */)
+	fs.Var(aliasStrVar{&httpPort}, cliflags.ListenHTTPPort.Name, "" /* usage */)
 
 	// Discard parsing output.
 	fs.SetOutput(ioutil.Discard)
@@ -84,18 +88,19 @@ func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 		nodeInfos[i].NodeAddr = status.Desc.Address.AddressField
 		nodeInfos[i].Locality = status.Desc.Locality
 
-		*checkPort = base.DefaultHTTPPort
+		httpPort = base.DefaultHTTPPort
 		// Iterate over the arguments until the ServerHTTPPort flag is found and
 		// parse the remainder of the arguments. This is done because Parse returns
 		// when it encounters an undefined flag and we do not want to define all
 		// possible flags.
 		for i, arg := range status.Args {
-			if strings.Contains(arg, cliflags.ListenHTTPPort.Name) {
+			if strings.Contains(arg, cliflags.ListenHTTPPort.Name) ||
+				strings.Contains(arg, cliflags.ListenHTTPAddr.Name) {
 				_ = fs.Parse(status.Args[i:])
 			}
 		}
 
-		nodeInfos[i].CheckPort = *checkPort
+		nodeInfos[i].CheckPort = httpPort
 	}
 	return nodeInfos
 }
