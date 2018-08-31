@@ -135,7 +135,11 @@ func (dsp *DistSQLPlanner) Run(
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
-		meta := txn.GetStrippedTxnCoordMeta()
+		meta, err := txn.GetStrippedTxnCoordMeta(ctx, client.OnlyPending)
+		if err != nil {
+			recv.SetError(err)
+			return
+		}
 		txnCoordMeta = &meta
 	}
 

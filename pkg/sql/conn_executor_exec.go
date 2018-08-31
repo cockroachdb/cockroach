@@ -244,7 +244,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
 		// started running. The client txn's statement count indicates how many
 		// statements have been executed as part of this transaction.
-		if ex.state.mu.txn.GetTxnCoordMeta().CommandCount > 0 {
+		meta, err := ex.state.mu.txn.GetTxnCoordMeta(ctx, client.AnyTxnStatus)
+		if err != nil {
+			log.Fatalf(ctx, "unexpected error from GetTxnCoordMeta(AnyTxnStatus): %s", err)
+		}
+		if meta.CommandCount > 0 {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", tree.RestartSavepointName)
 			return makeErrEvent(err)

@@ -819,17 +819,24 @@ func (txn *Txn) Send(
 // transaction for use with AugmentTxnCoordMeta(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
+func (txn *Txn) GetTxnCoordMeta(
+	ctx context.Context, opt TxnStatusOpt,
+) (roachpb.TxnCoordMeta, error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.GetMeta()
+	return txn.mu.sender.GetMeta(ctx, opt)
 }
 
 // GetStrippedTxnCoordMeta is like GetTxnCoordMeta, but it strips out all
 // information that is unnecessary to communicate to other distributed
 // transaction coordinators that are all operating on the same transaction.
-func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
-	meta := txn.GetTxnCoordMeta()
+func (txn *Txn) GetStrippedTxnCoordMeta(
+	ctx context.Context, opt TxnStatusOpt,
+) (roachpb.TxnCoordMeta, error) {
+	meta, err := txn.GetTxnCoordMeta(ctx, opt)
+	if err != nil {
+		return roachpb.TxnCoordMeta{}, err
+	}
 	switch txn.typ {
 	case RootTxn:
 		meta.Intents = nil
@@ -839,7 +846,7 @@ func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
 	case LeafTxn:
 		meta.OutstandingWrites = nil
 	}
-	return meta
+	return meta, nil
 }
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
