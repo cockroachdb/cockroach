@@ -543,7 +543,9 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)
+	allEngines := append([]engine.Engine(nil), bootstrappedEngines...)
+	allEngines = append(allEngines, emptyEngines...)
+	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
 }
 
