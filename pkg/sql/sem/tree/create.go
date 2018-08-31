@@ -886,6 +886,62 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 	}
 }
 
+// HoistConstraints finds column constraints defined inline with their columns
+// and makes them table-level constraints, stored in n.Defs. For example, the
+// foreign key constraint in
+//
+//     CREATE TABLE foo (a INT REFERENCES bar(a))
+//
+// gets pulled into a top-level constraint like:
+//
+//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
+//
+// Similarly, the CHECK constraint in
+//
+//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
+//
+// gets pulled into a top-level constraint like:
+//
+//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
+//
+// Note that some SQL databases require that a constraint attached to a column
+// to refer only to the column it is attached to. We follow Postgres' behavior,
+// however, in omitting this restriction by blindly hoisting all column
+// constraints. For example, the following table definition is accepted in
+// CockroachDB and Postgres, but not necessarily other SQL databases:
+//
+//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
+func (node *CreateTable) HoistConstraints() {
+	for _, d := range node.Defs {
+		if col, ok := d.(*ColumnTableDef); ok {
+			for _, checkExpr := range col.CheckExprs {
+				node.Defs = append(node.Defs,
+					&CheckConstraintTableDef{
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
+					},
+				)
+			}
+			col.CheckExprs = nil
+			if col.HasFKConstraint() {
+				var targetCol NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				node.Defs = append(node.Defs, &ForeignKeyConstraintTableDef{
+					Table:    col.References.Table,
+					FromCols: NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+					Actions:  col.References.Actions,
+				})
+				col.References.Table = NormalizableTableName{}
+			}
+		}
+	}
+}
+
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
 	IfNotExists bool

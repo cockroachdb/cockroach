@@ -152,7 +152,7 @@ func MakeSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
-	sql.HoistConstraints(create)
+	create.HoistConstraints()
 	if create.IfNotExists {
 		return nil, pgerror.Unimplemented("import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
