@@ -62,7 +62,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		return nil, err
 	}
 
-	HoistConstraints(n)
+	n.HoistConstraints()
 	for _, def := range n.Defs {
 		switch t := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
@@ -308,62 +308,6 @@ func (n *createTableNode) FastPathResults() (int, bool) {
 		return n.run.rowsAffected, true
 	}
 	return 0, false
-}
-
-// HoistConstraints finds column constraints defined inline with their columns
-// and makes them table-level constraints, stored in n.Defs. For example, the
-// foreign key constraint in
-//
-//     CREATE TABLE foo (a INT REFERENCES bar(a))
-//
-// gets pulled into a top-level constraint like:
-//
-//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
-//
-// Similarly, the CHECK constraint in
-//
-//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
-//
-// gets pulled into a top-level constraint like:
-//
-//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
-//
-// Note some SQL databases require that a constraint attached to a column to
-// refer only to the column it is attached to. We follow Postgres' behavior,
-// however, in omitting this restriction by blindly hoisting all column
-// constraints. For example, the following table definition is accepted in
-// CockroachDB and Postgres, but not necessarily other SQL databases:
-//
-//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
-//
-func HoistConstraints(n *tree.CreateTable) {
-	for _, d := range n.Defs {
-		if col, ok := d.(*tree.ColumnTableDef); ok {
-			for _, checkExpr := range col.CheckExprs {
-				n.Defs = append(n.Defs,
-					&tree.CheckConstraintTableDef{
-						Expr: checkExpr.Expr,
-						Name: checkExpr.ConstraintName,
-					},
-				)
-			}
-			col.CheckExprs = nil
-			if col.HasFKConstraint() {
-				var targetCol tree.NameList
-				if col.References.Col != "" {
-					targetCol = append(targetCol, col.References.Col)
-				}
-				n.Defs = append(n.Defs, &tree.ForeignKeyConstraintTableDef{
-					Table:    col.References.Table,
-					FromCols: tree.NameList{col.Name},
-					ToCols:   targetCol,
-					Name:     col.References.ConstraintName,
-					Actions:  col.References.Actions,
-				})
-				col.References.Table = tree.NormalizableTableName{}
-			}
-		}
-	}
 }
 
 type indexMatch bool
