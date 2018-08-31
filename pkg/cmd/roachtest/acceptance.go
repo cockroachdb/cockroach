@@ -27,6 +27,8 @@ func registerAcceptance(r *registry) {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
 	}{
+		{"bank/cluster-recovery", runBankClusterRecovery},
+		{"bank/node-restart", runBankNodeRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"event-log", runEventLog},
