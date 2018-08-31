@@ -19,14 +19,46 @@ import (
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
+
+type reasonCancelCtx struct {
+	context.Context
+
+	mu struct {
+		syncutil.Mutex
+		reason error
+	}
+}
+
+func (c *reasonCancelCtx) Err() error {
+	var reason error
+	c.mu.Lock()
+	reason = c.mu.reason
+	c.mu.Unlock()
+	return errors.Wrap(reason, c.Context.Err().Error())
+}
 
 // WithCancel adds an info log to context.WithCancel's CancelFunc.
 func WithCancel(parent context.Context) (context.Context, context.CancelFunc) {
 	return wrap(context.WithCancel(parent))
 }
 
+// CancelWithReason cancels a context as normal, annotating it with a reason for
+// cancellation given in err if the context was created with
+// contextutil.WithCancel.
+func CancelWithReason(ctx context.Context, cancelFunc context.CancelFunc, err error) {
+	if reasonCancelCtx, ok := ctx.(*reasonCancelCtx); ok {
+		reasonCancelCtx.mu.Lock()
+		reasonCancelCtx.mu.reason = err
+		reasonCancelCtx.mu.Unlock()
+	}
+	cancelFunc()
+}
+
 func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
+	ctx = &reasonCancelCtx{Context: ctx}
 	if !log.V(1) {
 		return ctx, cancel
 	}
