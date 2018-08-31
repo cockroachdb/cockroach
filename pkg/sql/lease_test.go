@@ -1591,6 +1591,9 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
+			GossipUpdateEvent: func(cfg config.SystemConfig) error {
+				return errors.Errorf("ignore gossip update")
+			},
 		},
 	}
 	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
@@ -1620,6 +1623,15 @@ CREATE TABLE t.test2 ();
 
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
 
+	numReleasedLeases := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(releasedIDs)
+	}
+	if count := numReleasedLeases(); count != 0 {
+		t.Fatalf("expected no leases to be releases, released %d", count)
+	}
+
 	// Acquire a lease on test1 by name.
 	ts1, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
 	if err != nil {
@@ -1644,14 +1656,6 @@ CREATE TABLE t.test2 ();
 
 	// From now on henceforth do not acquire a lease, so any renewals can only
 	// happen through the periodic lease renewal mechanism.
-	numReleasedLeases := func() int {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(releasedIDs)
-	}
-	if count := numReleasedLeases(); count != 0 {
-		t.Fatalf("expected no leases to be releases, released %d", count)
-	}
 
 	// Reset testAcquisitionBlockCount as the first acqusitions will always block.
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
