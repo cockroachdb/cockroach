@@ -29,6 +29,7 @@ func registerAcceptance(r *registry) {
 	}{
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
+		{"event-log", runEventLog},
 	}
 	for _, tc := range testCases {
 		spec.SubTests = append(spec.SubTests, testSpec{
