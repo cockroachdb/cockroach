@@ -958,7 +958,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
 	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
+		distSQLKnobs.MetadataTestLevel = distsqlrun.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
