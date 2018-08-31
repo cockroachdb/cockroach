@@ -81,7 +81,7 @@ func newChangeAggregatorProcessor(
 		output,
 		memMonitor,
 		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func() []distsqlrun.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlrun.ProducerMetadata {
 				ca.close()
 				return nil
 			},
@@ -281,7 +281,7 @@ func newChangeFrontierProcessor(
 		output,
 		memMonitor,
 		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func() []distsqlrun.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlrun.ProducerMetadata {
 				cf.close()
 				return nil
 			},
