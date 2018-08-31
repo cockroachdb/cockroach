@@ -573,6 +573,7 @@ func (r *Replica) withRaftGroupLocked(
 			return err
 		}
 		r.mu.internalRaftGroup = raftGroup
+		log.Infof(ctx, "!! created raft group for r%d with status %+v", r.RangeID, raftGroup.Status())
 
 		if mayCampaignOnWake {
 			r.maybeCampaignOnWakeLocked(ctx)
@@ -4243,10 +4244,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				r.mu.Lock()
 				fresh := r.mu.state.RaftAppliedIndex
 				r.mu.Unlock()
-				expl := fmt.Sprintf("applied index %d (fresh %d) followed by entry at index %d (index %d in batch)", debugRaftAppliedIndex, fresh, e.Index, i)
+				expl := fmt.Sprintf(
+					"at %dth ready, applied index %d (fresh %d) followed by entry at index %d (index %d in batch)",
+					r.readyCount, debugRaftAppliedIndex, fresh, e.Index, i,
+				)
 				logRaftReady(ctx, r.lastReady, true)
 				logRaftReady(ctx, rd, true)
-				return stats, expl, errors.Wrap(errors.Errorf("gap in applied indexes: %+v", rd.CommittedEntries), expl)
+				return stats, expl, errors.Wrap(errors.Errorf("gap in applied indexes"), expl)
 			}
 			debugRaftAppliedIndex = e.Index
 		}
