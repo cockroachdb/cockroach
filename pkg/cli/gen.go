@@ -219,9 +219,12 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		reporter, err := makeReporter()
+		reporter, cleanup, err := makeReporter(os.Stdout)
 		if err != nil {
 			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 		if hr, ok := reporter.(*htmlReporter); ok {
 			hr.escape = false

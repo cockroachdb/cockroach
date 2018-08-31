@@ -38,30 +38,6 @@ interrupt
 eexpect ":/# "
 end_test
 
-start_test "Check that --host causes a deprecation warning."
-send "$argv start --insecure --host=localhost\r"
-eexpect "host has been deprecated, use --listen-addr/--advertise-addr instead."
-eexpect "node starting"
-interrupt
-eexpect ":/# "
-end_test
-
-start_test "Check that server --port causes a deprecation warning."
-send "$argv start --insecure --port=26257\r"
-eexpect "port has been deprecated, use --listen-addr=...:<port> instead."
-eexpect "node starting"
-interrupt
-eexpect ":/# "
-end_test
-
-start_test "Check that server --advertise-port causes a deprecation warning."
-send "$argv start --insecure --advertise-port=12345\r"
-eexpect "advertise-port has been deprecated, use --advertise-addr=...:<port> instead."
-eexpect "node starting"
-interrupt
-eexpect ":/# "
-end_test
-
 start_test "Check that not using --host nor --advertise causes a user warning."
 send "$argv start --insecure\r"
 eexpect "WARNING: neither --listen-addr nor --advertise-addr was specified"
