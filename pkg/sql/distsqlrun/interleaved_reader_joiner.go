@@ -420,7 +420,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-func (irj *interleavedReaderJoiner) generateTrailingMeta() []ProducerMetadata {
+func (irj *interleavedReaderJoiner) generateTrailingMeta(context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
