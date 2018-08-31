@@ -20,12 +20,12 @@ func registerTests(r *registry) {
 	//
 	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
 
+	registerAcceptance(r)
 	registerAllocator(r)
 	registerBackup(r)
 	registerCancel(r)
 	registerCDC(r)
 	registerClearRange(r)
-	registerCLI(r)
 	registerClock(r)
 	registerCopy(r)
 	registerDebug(r)
