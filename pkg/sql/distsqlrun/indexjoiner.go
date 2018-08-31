@@ -88,7 +88,7 @@ func newIndexJoiner(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{ij.input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				ij.InternalClose()
 				if meta := getTxnCoordMeta(ij.flowCtx.txn); meta != nil {
 					return []ProducerMetadata{{TxnCoordMeta: meta}}

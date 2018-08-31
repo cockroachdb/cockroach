@@ -234,7 +234,7 @@ func newWindower(
 		output,
 		memMonitor,
 		ProcStateOpts{InputsToDrain: []RowSource{w.input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				w.close()
 				return nil
 			}},

@@ -169,7 +169,7 @@ func newHashJoiner(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{h.leftSource, h.rightSource},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				h.close()
 				return nil
 			},
