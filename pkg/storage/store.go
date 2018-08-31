@@ -162,7 +162,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 }
 
 var (
-	raftMaxSizePerMsg   = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16*1024)
+	raftMaxSizePerMsg   = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16*1024/2) // HACK
 	raftMaxInflightMsgs = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
 )
 
