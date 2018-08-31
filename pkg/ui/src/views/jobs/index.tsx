@@ -18,6 +18,7 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import "./index.styl";
 
 import spinner from "assets/spinner.gif";
 
@@ -226,6 +227,23 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
+  renderJobExpanded = (job: Job) => {
+    return (
+      <div>
+        <h3>Command</h3>
+        <pre className="job-detail">{job.description}</pre>
+
+        {/*TODO(vilterp): only show if there is an error*/}
+        {job.status === "failed"
+          ? [
+              <h3>Error</h3>,
+              <pre className="job-detail">{job.error}</pre>,
+            ]
+          : null}
+      </div>
+    );
+  }
+
   renderTable = () => {
     const jobs = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     if (_.isEmpty(jobs)) {
@@ -240,6 +258,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           className="jobs-table"
           rowClass={job => "jobs-table__row--" + job.status}
           columns={jobsTableColumns}
+          expandedContent={this.renderJobExpanded}
+          expansionKey={(job) => job.id.toString()}
         />
       </section>
     );
