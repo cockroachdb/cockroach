@@ -12,12 +12,12 @@ import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import * as docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { ExpandableString } from "src/views/shared/components/expandableString";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import "./index.styl";
 
 import spinner from "assets/spinner.gif";
 
@@ -149,9 +149,8 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => <ExpandableString long={job.description} />,
+    cell: job => (<div className="jobs-table__cell--description">{job.description}</div>),
     sort: job => job.description,
-    className: "jobs-table__cell--description",
   },
   {
     title: "User",
@@ -228,6 +227,22 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
+  renderJobExpanded = (job: Job) => {
+    return (
+      <div>
+        <h3>Command</h3>
+        <pre className="job-detail">{job.description}</pre>
+
+        {job.status === "failed"
+          ? [
+              <h3>Error</h3>,
+              <pre className="job-detail">{job.error}</pre>,
+            ]
+          : null}
+      </div>
+    );
+  }
+
   renderTable = () => {
     const jobs = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     if (_.isEmpty(jobs)) {
@@ -242,6 +257,10 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           className="jobs-table"
           rowClass={job => "jobs-table__row--" + job.status}
           columns={jobsTableColumns}
+          expandableConfig={{
+            expandedContent: this.renderJobExpanded,
+            expansionKey: (job) => job.id.toString(),
+          }}
         />
       </section>
     );
