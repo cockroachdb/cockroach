@@ -95,10 +95,49 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := m.wait(`echo`, `1`)
+		err := m.wait(`sleep`, `100`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	t.Run(`wait-fail`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		// Returned error should be that from the wait command.
+		err := m.wait(`false`)
+		expectedErr := `exit status`
+		if !testutils.IsError(err, expectedErr) {
+			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	t.Run(`wait-ok`, func(t *testing.T) {
+		c := &cluster{t: t, l: logger}
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		m.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		// If wait terminates, context gets canceled.
+		err := m.wait(`true`)
+		if err != context.Canceled {
+			t.Errorf(`expected context canceled, got: %+v`, err)
 		}
 	})
 
