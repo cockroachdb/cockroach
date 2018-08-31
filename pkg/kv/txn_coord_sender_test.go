@@ -133,6 +133,8 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 // the minimum number of ranges.
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
 	ranges := []struct {
 		start, end roachpb.Key
 	}{
@@ -152,11 +154,11 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	for _, rng := range ranges {
 		if rng.end != nil {
-			if err := txn.DelRange(context.TODO(), rng.start, rng.end); err != nil {
+			if err := txn.DelRange(ctx, rng.start, rng.end); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			if err := txn.Put(context.TODO(), rng.start, []byte("value")); err != nil {
+			if err := txn.Put(ctx, rng.start, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -164,7 +166,11 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction metadata contains only two entries
 	// in its intents slice. "a" and range "aa"-"c".
-	intents, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
+	meta, err := tc.GetMeta(ctx, client.AnyTxnStatus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intents, _ := roachpb.MergeSpans(meta.Intents)
 	if len(intents) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", intents)
 	}
@@ -260,19 +266,20 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		ds,
 	)
 	db := client.NewDB(ambient, tsf, s.Clock)
+	ctx := context.Background()
 
 	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 	for i, tc := range testCases {
 		if tc.span.EndKey != nil {
-			if err := txn.DelRange(context.TODO(), tc.span.Key, tc.span.EndKey); err != nil {
+			if err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			if err := txn.Put(context.TODO(), tc.span.Key, []byte("value")); err != nil {
+			if err := txn.Put(ctx, tc.span.Key, []byte("value")); err != nil {
 				t.Fatal(err)
 			}
 		}
-		meta := txn.GetTxnCoordMeta()
+		meta := txn.GetTxnCoordMeta(ctx)
 		if a, e := meta.Intents, tc.expIntents; !reflect.DeepEqual(a, e) {
 			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
 		}
@@ -532,23 +539,31 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
+	ctx := context.Background()
+
 	// Create a transaction with intent at "x".
 	key := roachpb.Key("x")
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
 
 	// Write so that the coordinator begins tracking this txn.
-	if err := txn.Put(context.TODO(), "x", "y"); err != nil {
+	if err := txn.Put(ctx, "x", "y"); err != nil {
 		t.Fatal(err)
 	}
-	err, ok := txn.CPut(context.TODO(), key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
-	if !ok {
+	{
+		err, ok := txn.CPut(ctx, key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+		if !ok {
+			t.Fatal(err)
+		}
+	}
+	meta, err := tc.GetMeta(ctx, client.AnyTxnStatus)
+	if err != nil {
 		t.Fatal(err)
 	}
-	intentSpans, _ := roachpb.MergeSpans(tc.GetMeta().Intents)
+	intentSpans, _ := roachpb.MergeSpans(meta.Intents)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
-	if err := txn.Rollback(context.TODO()); err != nil {
+	if err := txn.Rollback(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !equal {
@@ -867,9 +882,13 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	// Augment txn with txn2's meta & commit.
-	txn.AugmentTxnCoordMeta(ctx, txn2.GetTxnCoordMeta())
+	txn.AugmentTxnCoordMeta(ctx, txn2.GetTxnCoordMeta(ctx))
 	// Verify presence of both intents.
-	if a, e := tc.GetMeta().RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
+	meta, err := tc.GetMeta(ctx, client.AnyTxnStatus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := meta.RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected read spans %+v; got %+v", e, a)
 	}
 	ba := txn.NewBatch()
@@ -1597,7 +1616,11 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if numSpans := len(tcs.GetMeta().Intents); numSpans != 1 {
+	meta, err := tcs.GetMeta(ctx, client.AnyTxnStatus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if numSpans := len(meta.Intents); numSpans != 1 {
 		t.Fatalf("expected 1 intent span, got: %d", numSpans)
 	}
 }

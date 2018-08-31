@@ -489,7 +489,9 @@ func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 }
 
 // GetMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
+func (tc *TxnCoordSender) GetMeta(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.TxnCoordMeta, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	// Copy mutable state so access is safe for the caller.
@@ -498,7 +500,14 @@ func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.populateMetaLocked(&meta)
 	}
-	return meta
+	if opt == client.OnlyPending && meta.Txn.Status != roachpb.PENDING {
+		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
+		if rejectErr == nil {
+			log.Fatal(ctx, "expected non-nil rejectErr")
+		}
+		return roachpb.TxnCoordMeta{}, rejectErr.GoError()
+	}
+	return meta, nil
 }
 
 // AugmentMeta is part of the client.TxnSender interface.
@@ -691,6 +700,9 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 // maybeRejectClientLocked checks whether the transaction is in a state that
 // prevents it from continuing, such as the heartbeat having detected the
 // transaction to have been aborted.
+//
+// ba is the batch that the client is trying to send. It's inspected because
+// rollbacks are always allowed. Can be nil.
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
