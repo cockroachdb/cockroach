@@ -16,57 +16,131 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
-// createBenchmarkChangefeed starts a changefeed with some extra hooks. It
-// watches `database.table` and outputs to `sinkURI`. The given `feedClock` is
-// only used for the internal ExportRequest polling, so a benchmark can write
-// data with different timestamps beforehand and simulate the changefeed going
-// through them in steps.
+type benchSink struct {
+	syncutil.Mutex
+	cond      *sync.Cond
+	emits     int
+	emitBytes int64
+}
+
+func makeBenchSink() *benchSink {
+	s := &benchSink{}
+	s.cond = sync.NewCond(&s.Mutex)
+	return s
+}
+
+func (s *benchSink) EmitRow(ctx context.Context, _ string, k, v []byte) error {
+	return s.emit(int64(len(k) + len(v)))
+}
+func (s *benchSink) EmitResolvedTimestamp(_ context.Context, p []byte) error {
+	return s.emit(int64(len(p)))
+}
+func (s *benchSink) Flush(_ context.Context) error { return nil }
+func (s *benchSink) Close() error                  { return nil }
+func (s *benchSink) emit(bytes int64) error {
+	s.Lock()
+	defer s.Unlock()
+	s.emits++
+	s.emitBytes += bytes
+	s.cond.Broadcast()
+	return nil
+}
+
+// WaitForEmit blocks until at least one thing is emitted by the sink. It
+// returns the number of emitted messages and bytes since the last WaitForEmit.
+func (s *benchSink) WaitForEmit() (int, int64) {
+	s.Lock()
+	defer s.Unlock()
+	for s.emits == 0 {
+		s.cond.Wait()
+	}
+	emits, emitBytes := s.emits, s.emitBytes
+	s.emits, s.emitBytes = 0, 0
+	return emits, emitBytes
+}
+
+// createBenchmarkChangefeed starts a stripped down changefeed. It watches
+// `database.table` and outputs to `sinkURI`. The given `feedClock` is only used
+// for the internal ExportRequest polling, so a benchmark can write data with
+// different timestamps beforehand and simulate the changefeed going through
+// them in steps.
 //
-// The closure handed back cancels the changefeed (blocking until it's shut
-// down) and returns an error if the changefeed had failed before the closure
-// was called.
+// The returned sink can be used to count emits and the closure handed back
+// cancels the changefeed (blocking until it's shut down) and returns an error
+// if the changefeed had failed before the closure was called.
+//
+// This intentionally skips the distsql and sink parts to keep the benchmark
+// focused on the core changefeed work, but it does include the poller.
 func createBenchmarkChangefeed(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
 	feedClock *hlc.Clock,
 	database, table string,
-	resultsCh chan<- tree.Datums,
-) func() error {
-	execCfg := &sql.ExecutorConfig{
-		DB:           s.DB(),
-		Settings:     s.ClusterSettings(),
-		Clock:        feedClock,
-		LeaseManager: s.LeaseManager().(*sql.LeaseManager),
-	}
-	tableDesc := sqlbase.GetTableDescriptor(execCfg.DB, database, table)
+) (*benchSink, func() error) {
+	tableDesc := sqlbase.GetTableDescriptor(s.DB(), database, table)
+	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan()}
 	details := jobspb.ChangefeedDetails{
 		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
+		Opts: map[string]string{
+			optEnvelope: string(optEnvelopeRow),
+		},
 	}
-	progress := jobspb.Progress{}
+	initialHighWater := hlc.Timestamp{}
+	sink := makeBenchSink()
+
+	buf := makeBuffer()
+	poller := makePoller(
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details.Targets,
+		initialHighWater, buf)
+
+	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
+	tickFn := emitEntries(details, sink, rowsFn)
 
 	ctx, cancel := context.WithCancel(ctx)
+	go func() { _ = poller.Run(ctx) }()
+
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- errors.New(`TODO(dan): The distsql PR (#28555) broke createBenchmarkChangefeed`)
-		var phs sql.PlanHookState
-		errCh <- distChangefeedFlow(ctx, phs, 0 /* jobID */, details, progress, resultsCh)
+		err := func() error {
+			sf := makeSpanFrontier(spans...)
+			for {
+				// This is basically the ChangeAggregator processor.
+				resolvedSpans, err := tickFn(ctx)
+				if err != nil {
+					return err
+				}
+				// This is basically the ChangeFrontier processor, the resolved
+				// spans are normally sent using distsql, so we're missing a bit
+				// of overhead here.
+				for _, rs := range resolvedSpans {
+					if sf.Forward(rs.Span, rs.Timestamp) {
+						if err := emitResolvedTimestamp(ctx, details, sink, nil, sf); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}()
+		errCh <- err
 	}()
-	return func() error {
+	cancelFn := func() error {
 		select {
 		case err := <-errCh:
 			return err
@@ -76,6 +150,7 @@ func createBenchmarkChangefeed(
 		wg.Wait()
 		return nil
 	}
+	return sink, cancelFn
 }
 
 // loadWorkloadBatches inserts a workload.Table's row batches, each in one
