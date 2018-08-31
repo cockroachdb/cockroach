@@ -290,66 +290,6 @@ const (
 	indexBackfill
 )
 
-// getMutationToBackfill returns the the first mutation enqueued on the table
-// descriptor that passes the input mutationFilter. It also returns the index
-// of that mutation in the table descriptor mutation list.
-//
-// Returns nil if the backfill is complete.
-func (sc *SchemaChanger) getMutationToBackfill(
-	ctx context.Context,
-	version sqlbase.DescriptorVersion,
-	backfillType backfillType,
-	filter backfill.MutationFilter,
-) (*sqlbase.DescriptorMutation, int, error) {
-	var mutation *sqlbase.DescriptorMutation
-	var mutationIdx int
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		mutation = nil
-		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		if tableDesc.Version != version {
-			return makeErrTableVersionMismatch(tableDesc.Version, version)
-		}
-		if len(tableDesc.Mutations) > 0 {
-			mutationID := tableDesc.Mutations[0].MutationID
-			for i := range tableDesc.Mutations {
-				if tableDesc.Mutations[i].MutationID != mutationID {
-					break
-				}
-				if filter(tableDesc.Mutations[i]) {
-					mutation = &tableDesc.Mutations[i]
-					mutationIdx = i
-					break
-				}
-			}
-		}
-		return nil
-	})
-	return mutation, mutationIdx, err
-}
-
-// getJobIDForMutation returns the jobID associated with a mutationId.
-func (sc *SchemaChanger) getJobIDForMutation(
-	ctx context.Context, version sqlbase.DescriptorVersion, mutationID sqlbase.MutationID,
-) (int64, error) {
-	var jobID int64
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		if tableDesc.Version != version {
-			return makeErrTableVersionMismatch(tableDesc.Version, version)
-		}
-
-		jobID, err = getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
-		return err
-	})
-	return jobID, err
-}
-
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
 func getJobIDForMutationWithDescriptor(
@@ -411,27 +351,16 @@ func (sc *SchemaChanger) distBackfill(
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
 	for {
-		// Repeat until getMutationToBackfill returns a mutation with no remaining
-		// ResumeSpans, indicating that the backfill is complete.
-		mutation, mutationIdx, err := sc.getMutationToBackfill(ctx, version, backfillType, filter)
-		if err != nil {
+		var spans []roachpb.Span
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			spans, _, _, err = distsqlrun.GetResumeSpans(
+				ctx, sc.jobRegistry, txn, sc.tableID, sc.mutationID, filter)
+			return err
+		}); err != nil {
 			return err
 		}
-		jobID, err := sc.getJobIDForMutation(ctx, version, mutation.MutationID)
 
-		var tableDesc *sqlbase.TableDescriptor
-		err = sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-			return err
-		})
-		if err != nil {
-			return err
-		}
-		resumeSpanIndex := distsqlrun.GetResumeSpanIndexofMutationID(tableDesc, mutationIdx)
-		spans, err := distsqlrun.GetResumeSpansFromJob(ctx, sc.jobRegistry, nil, jobID, resumeSpanIndex)
-		if err != nil {
-			return err
-		}
 		if len(spans) <= 0 {
 			break
 		}
