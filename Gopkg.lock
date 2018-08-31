@@ -1271,6 +1271,14 @@
   version = "v2.18.06"
 
 [[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
+
+[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
