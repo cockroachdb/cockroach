@@ -12,7 +12,6 @@ import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import * as docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import { ExpandableString } from "src/views/shared/components/expandableString";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
@@ -149,9 +148,8 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => <ExpandableString long={job.description} />,
+    cell: job => (<div className="jobs-table__cell--description">{job.description}</div>),
     sort: job => job.description,
-    className: "jobs-table__cell--description",
   },
   {
     title: "User",
