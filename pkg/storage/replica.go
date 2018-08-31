@@ -259,6 +259,7 @@ func (s *destroyStatus) Reset() {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
+	lastReady raft.Ready
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
@@ -548,6 +549,17 @@ func (r *Replica) withRaftGroupLocked(
 	if r.mu.internalRaftGroup == nil {
 		r.raftMu.Mutex.AssertHeld()
 
+		if false && r.RangeID == 60 {
+			ctx := r.AnnotateCtx(context.Background())
+			log.Infof(ctx, "!!! creating raft group at RAI %d", r.mu.state.RaftAppliedIndex)
+			rai, _, err := r.mu.stateLoader.LoadAppliedIndex(ctx, r.store.engine)
+			if err != nil {
+				panic(err)
+			}
+			if rai != r.mu.state.RaftAppliedIndex {
+				log.Fatalf(ctx, "!!! mismatch mem %d store %d", r.mu.state.RaftAppliedIndex, rai)
+			}
+		}
 		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
@@ -4015,7 +4027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, "", nil
 	}
 
-	logRaftReady(ctx, rd)
+	logRaftReady(ctx, rd, false)
 
 	refreshReason := noReason
 	if rd.SoftState != nil && leaderID != roachpb.ReplicaID(rd.SoftState.Lead) {
@@ -4222,11 +4234,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	r.sendRaftMessages(ctx, otherMsgs)
 
-	for _, e := range rd.CommittedEntries {
+	for i, e := range rd.CommittedEntries {
 		{
 			// Assertions added for #28918.
 			if e.Index != debugRaftAppliedIndex+1 {
-				expl := fmt.Sprintf("applied index %d followed by entry at index %d", debugRaftAppliedIndex, e.Index)
+				r.mu.Lock()
+				fresh := r.mu.state.RaftAppliedIndex
+				r.mu.Unlock()
+				expl := fmt.Sprintf("applied index %d (fresh %d) followed by entry at index %d (index %d in batch)", debugRaftAppliedIndex, fresh, e.Index, i)
+				logRaftReady(ctx, r.lastReady, true)
+				logRaftReady(ctx, rd, true)
 				return stats, expl, errors.Wrap(errors.Errorf("gap in applied indexes: %+v", rd.CommittedEntries), expl)
 			}
 			debugRaftAppliedIndex = e.Index
@@ -4355,6 +4372,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// ID cannot change during handleRaftReady?
 	const expl = "during advance"
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+		r.lastReady = rd
 		raftGroup.Advance(rd)
 		return true, nil
 	}); err != nil {
@@ -5743,6 +5761,10 @@ func (r *Replica) applyRaftCommand(
 
 		// Set the range applied state, which includes the last applied raft and
 		// lease index along with the mvcc stats, all in one key.
+
+		if false && r.RangeID == 60 {
+			log.Infof(ctx, "!! range applied state %d", raftAppliedIndex)
+		}
 		if err := r.raftMu.stateLoader.SetRangeAppliedState(ctx, writer,
 			raftAppliedIndex, leaseAppliedIndex, &ms); err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set range applied state")
@@ -5815,6 +5837,8 @@ func (r *Replica) applyRaftCommand(
 		assertHS = &oldHS
 	}
 	if err := batch.Commit(false); err != nil {
+		fmt.Println("oops")
+		os.Exit(1)
 		return enginepb.MVCCStats{}, errors.Wrap(err, "could not commit batch")
 	}
 

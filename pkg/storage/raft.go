@@ -106,8 +106,8 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 	panic(fmt.Sprintf(format, v...))
 }
 
-func logRaftReady(ctx context.Context, ready raft.Ready) {
-	if log.V(5) {
+func logRaftReady(ctx context.Context, ready raft.Ready, override bool) {
+	if log.V(5) || override {
 		var buf bytes.Buffer
 		if ready.SoftState != nil {
 			fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)

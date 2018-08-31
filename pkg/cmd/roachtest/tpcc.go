@@ -103,7 +103,7 @@ func registerTPCC(r *registry) {
 				Warehouses: 100,
 				UseFixture: true,
 				Duration:   duration,
-				Extra:      " --wait=false --tolerate-errors --scatter",
+				Extra:      " --wait=false --tolerate-errors",
 				Chaos: func() Chaos {
 					return Chaos{
 						Timer: Periodic{
