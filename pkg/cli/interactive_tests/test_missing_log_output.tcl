@@ -94,23 +94,13 @@ end_test
 
 start_server $argv
 
-start_test "Test that quit does not emit unwanted logging output"
-# Unwanted: between the point the command starts until it
-# either prints the final ok message or fails with some error
-# (e.g. due to no definite answer from the server).
-send "echo marker; $argv quit 2>&1 | grep -vE '^\[IWEF\]\[0-9\]+ .+ vendor/google.golang.org/grpc/' | grep -vE '^\(ok|Error\)'\r"
-set timeout 20
-eexpect "marker\r\n:/# "
-set timeout 5
-end_test
-
-start_test "Test that quit does not show INFO by defaults with --logtostderr"
+start_test "Test that quit does not show INFO by default with --logtostderr"
 # Test quit as non-start command, this time with --logtostderr. Test
 # that the default logging level is WARNING, so that no INFO messages
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+ .+ vendor/google.golang.org/grpc/'\r"
-eexpect "marker\r\nError"
+send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+'\r"
+eexpect "marker\r\nok"
 eexpect ":/# "
 end_test
 
