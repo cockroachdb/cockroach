@@ -768,12 +768,12 @@ semi-join
  ├── key: ()
  ├── fd: ()-->(5)
  ├── select
- │    ├── columns: cnt:5(int!null)
+ │    ├── columns: count_rows:5(int!null)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(5)
  │    ├── scalar-group-by
- │    │    ├── columns: cnt:5(int)
+ │    │    ├── columns: count_rows:5(int)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(5)
@@ -783,7 +783,7 @@ semi-join
  │    │         └── count-rows [type=int]
  │    └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
  │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
- │              ├── variable: cnt [type=int, outer=(5)]
+ │              ├── variable: count_rows [type=int, outer=(5)]
  │              └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: u:6(int) v:7(int!null)

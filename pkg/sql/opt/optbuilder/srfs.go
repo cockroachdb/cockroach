@@ -80,6 +80,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require("FROM",
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
+	inScope.context = "FROM"
 
 	// Build each of the provided expressions.
 	elems := make([]memo.GroupID, len(exprs))
@@ -91,9 +92,18 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		if err != nil {
 			panic(builderError{err})
 		}
-
 		texpr := inScope.resolveType(expr, types.Any)
-		elems[i] = b.buildScalarHelper(texpr, label, inScope, outScope)
+		def, err := texpr.(*tree.FuncExpr).Func.Resolve(b.semaCtx.SearchPath)
+		if err != nil {
+			panic(builderError{err})
+		}
+
+		var outCol *scopeColumn
+		if def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
+			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
+		}
+
+		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 	}
 
 	// Get the output columns of the Zip operation and construct the Zip.
@@ -112,17 +122,16 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, group memo.GroupID, columns int, label string, inScope, outScope *scope,
+	f *tree.FuncExpr, group memo.GroupID, columns int, inScope, outScope *scope, outCol *scopeColumn,
 ) (out memo.GroupID) {
-	typ := f.ResolvedType()
-
 	// Add scope columns.
 	if columns == 1 {
 		// Single-column return type.
-		b.synthesizeColumn(outScope, label, typ, f, group)
+		b.populateSynthesizedColumn(outCol, group)
 	} else {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column labels.
+		typ := f.ResolvedType()
 		tType := typ.(types.TTuple)
 		for i := range tType.Types {
 			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, group)

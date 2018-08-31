@@ -38,16 +38,18 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 		op := "OFFSET"
 		b.assertNoAggregationOrWindowing(limit.Offset, op)
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
-		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int, op)
-		offset := b.buildScalar(texpr, parentScope)
+		parentScope.context = op
+		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int)
+		offset := b.buildScalar(texpr, parentScope, nil, nil, nil)
 		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
 	}
 	if limit.Count != nil {
 		op := "LIMIT"
 		b.assertNoAggregationOrWindowing(limit.Count, op)
 		b.semaCtx.Properties.Require(op, tree.RejectSpecial)
-		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int, op)
-		limit := b.buildScalar(texpr, parentScope)
+		parentScope.context = op
+		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int)
+		limit := b.buildScalar(texpr, parentScope, nil, nil, nil)
 		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)
 	}
 }

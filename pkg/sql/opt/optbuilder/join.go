@@ -56,14 +56,17 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
 		outScope = inScope.push()
-		outScope.appendColumns(leftScope)
-		outScope.appendColumns(rightScope)
+		outScope.appendColumnsFromScope(leftScope)
+		outScope.appendColumnsFromScope(rightScope)
 
 		var filter memo.GroupID
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
 			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
-			filter = b.buildScalar(outScope.resolveAndRequireType(on.Expr, types.Bool, "ON"), outScope)
+			outScope.context = "ON"
+			filter = b.buildScalar(
+				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
+			)
 		} else {
 			filter = b.factory.ConstructTrue()
 		}

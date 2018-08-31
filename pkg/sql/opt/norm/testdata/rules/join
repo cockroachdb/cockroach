@@ -794,68 +794,46 @@ inner-join (merge)
 
 # Optimization does not apply with correlated suqueries.
 opt
-SELECT * FROM a JOIN b ON a.k = b.x AND b.x * a.i = (SELECT min(a.k) FROM b)
+SELECT * FROM a JOIN b ON a.k = b.x AND b.x * a.i = (SELECT a.k * b.y FROM b)
 ----
 project
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(1-5,7), (1)==(6), (6)==(1)
- └── select
-      ├── columns: a.k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) min:11(int)
+ ├── fd: (1)-->(2-5), (1,6)-->(7), (1)==(6), (6)==(1)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) "?column?":10(int)
       ├── key: (6)
-      ├── fd: (1)-->(2-5), (6)-->(1-5,7,11), (1)==(6), (6)==(1)
-      ├── group-by
-      │    ├── columns: a.k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) min:11(int)
-      │    ├── grouping columns: b.x:6(int!null)
+      ├── fd: (1)-->(2-5), (1,6)-->(7,10), (1)==(6), (6)==(1)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
+      ├── left-join
+      │    ├── columns: b.x:6(int!null) b.y:7(int) "?column?":10(int)
+      │    ├── outer: (1)
       │    ├── key: (6)
-      │    ├── fd: (1)-->(2-5), (6)-->(1-5,7,11), (1)==(6), (6)==(1)
-      │    ├── left-join-apply
-      │    │    ├── columns: a.k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) k:10(int)
-      │    │    ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
-      │    │    ├── inner-join (merge)
-      │    │    │    ├── columns: a.k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int)
-      │    │    │    ├── key: (6)
-      │    │    │    ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: a.k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    │    └── ordering: +1
-      │    │    │    ├── scan b
-      │    │    │    │    ├── columns: b.x:6(int!null) b.y:7(int)
-      │    │    │    │    ├── key: (6)
-      │    │    │    │    ├── fd: (6)-->(7)
-      │    │    │    │    └── ordering: +6
-      │    │    │    └── merge-on
-      │    │    │         ├── left ordering: +1
-      │    │    │         ├── right ordering: +6
-      │    │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │    │              └── a.k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    │    ├── project
-      │    │    │    ├── columns: k:10(int)
-      │    │    │    ├── outer: (1)
-      │    │    │    ├── fd: ()-->(10)
-      │    │    │    ├── scan b
-      │    │    │    └── projections [outer=(1)]
-      │    │    │         └── variable: a.k [type=int, outer=(1)]
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(1-5,7,10)]
-      │         ├── min [type=int, outer=(10)]
-      │         │    └── variable: k [type=int, outer=(10)]
-      │         ├── const-agg [type=int, outer=(7)]
-      │         │    └── variable: b.y [type=int, outer=(7)]
-      │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int, outer=(2)]
-      │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float, outer=(3)]
-      │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: s [type=string, outer=(4)]
-      │         ├── const-agg [type=jsonb, outer=(5)]
-      │         │    └── variable: j [type=jsonb, outer=(5)]
-      │         └── const-agg [type=int, outer=(1)]
-      │              └── variable: a.k [type=int, outer=(1)]
-      └── filters [type=bool, outer=(2,6,11)]
-           └── (b.x * i) = min [type=bool, outer=(2,6,11)]
+      │    ├── fd: (6)-->(7,10), ()~~>(10)
+      │    ├── scan b
+      │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: "?column?":10(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(10)
+      │    │    └── project
+      │    │         ├── columns: "?column?":10(int)
+      │    │         ├── outer: (1)
+      │    │         ├── scan b
+      │    │         │    └── columns: b.y:9(int)
+      │    │         └── projections [outer=(1,9)]
+      │    │              └── k * b.y [type=int, outer=(1,9)]
+      │    └── true [type=bool]
+      └── filters [type=bool, outer=(1,2,6,10), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           ├── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── (b.x * i) = ?column? [type=bool, outer=(2,6,10)]
 
 # Ensure that we do not map filters for types with composite key encoding.
 opt
@@ -1177,7 +1155,7 @@ inner-join
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count:8(int)
+ │    ├── columns: count_rows:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1200,7 +1178,7 @@ right-join
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count:8(int)
+ │    ├── columns: count_rows:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1268,7 +1246,7 @@ right-join
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── scalar-group-by
- │    ├── columns: count:8(int)
+ │    ├── columns: count_rows:8(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(8)
@@ -1292,7 +1270,7 @@ inner-join
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count:3(int)
+ │    ├── columns: count_rows:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -1315,7 +1293,7 @@ right-join
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count:3(int)
+ │    ├── columns: count_rows:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)
@@ -1338,7 +1316,7 @@ right-join
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
  ├── scalar-group-by
- │    ├── columns: count:3(int)
+ │    ├── columns: count_rows:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3)

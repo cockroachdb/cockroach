@@ -182,64 +182,68 @@ project
 
 # Propagate outer columns.
 build
-SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) > 100
+SELECT (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) FROM xyzs GROUP BY y
 ----
-select
- ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── key: (1)
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── prune: (3,4)
- ├── interesting orderings: (+1) (-4,+3,+1)
- ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    └── interesting orderings: (+1) (-4,+3,+1)
- └── filters [type=bool, outer=(1,2)]
-      └── gt [type=bool, outer=(1,2)]
-           ├── subquery [type=decimal, outer=(1,2)]
-           │    └── max1-row
-           │         ├── columns: sum:10(decimal)
-           │         ├── outer: (1,2)
-           │         ├── cardinality: [0 - 1]
-           │         ├── key: ()
-           │         ├── fd: ()-->(10)
-           │         └── project
-           │              ├── columns: sum:10(decimal)
-           │              ├── outer: (1,2)
-           │              ├── prune: (10)
-           │              └── group-by
-           │                   ├── columns: u:6(float) sum:10(decimal)
-           │                   ├── grouping columns: u:6(float)
-           │                   ├── outer: (1,2)
-           │                   ├── key: (6)
-           │                   ├── fd: (6)-->(10)
-           │                   ├── prune: (10)
-           │                   ├── project
-           │                   │    ├── columns: x:9(int) u:6(float)
-           │                   │    ├── outer: (1,2)
-           │                   │    ├── fd: ()-->(9)
-           │                   │    ├── prune: (6,9)
-           │                   │    ├── project
-           │                   │    │    ├── columns: y:8(int) u:6(float)
-           │                   │    │    ├── outer: (2)
-           │                   │    │    ├── fd: ()-->(8)
-           │                   │    │    ├── prune: (6,8)
-           │                   │    │    ├── scan kuv
-           │                   │    │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │                   │    │    │    ├── key: (5)
-           │                   │    │    │    ├── fd: (5)-->(6,7)
-           │                   │    │    │    ├── prune: (5-7)
-           │                   │    │    │    └── interesting orderings: (+5)
-           │                   │    │    └── projections [outer=(2,6)]
-           │                   │    │         └── variable: xyzs.y [type=int, outer=(2)]
-           │                   │    └── projections [outer=(1,6)]
-           │                   │         └── variable: xyzs.x [type=int, outer=(1)]
-           │                   └── aggregations [outer=(9)]
-           │                        └── sum [type=decimal, outer=(9)]
-           │                             └── variable: x [type=int, outer=(9)]
-           └── const: 100 [type=decimal]
+project
+ ├── columns: sum:12(decimal)
+ ├── prune: (12)
+ ├── group-by
+ │    ├── columns: xyzs.y:2(int) sum:10(decimal)
+ │    ├── grouping columns: xyzs.y:2(int)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(10)
+ │    ├── prune: (10)
+ │    ├── project
+ │    │    ├── columns: x:9(int) xyzs.y:2(int)
+ │    │    ├── prune: (2,9)
+ │    │    ├── scan xyzs
+ │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │    │    ├── prune: (1-4)
+ │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
+ │    │    └── projections [outer=(1,2)]
+ │    │         └── variable: xyzs.x [type=int, outer=(1)]
+ │    └── aggregations [outer=(9)]
+ │         └── sum [type=decimal, outer=(9)]
+ │              └── variable: x [type=int, outer=(9)]
+ └── projections [outer=(2,10)]
+      └── subquery [type=decimal, outer=(2,10)]
+           └── max1-row
+                ├── columns: sum:11(decimal)
+                ├── outer: (2,10)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(11)
+                └── project
+                     ├── columns: sum:11(decimal)
+                     ├── outer: (2,10)
+                     ├── fd: ()-->(11)
+                     ├── prune: (11)
+                     ├── group-by
+                     │    ├── columns: u:6(float)
+                     │    ├── grouping columns: u:6(float)
+                     │    ├── outer: (2)
+                     │    ├── key: (6)
+                     │    └── project
+                     │         ├── columns: u:6(float)
+                     │         ├── outer: (2)
+                     │         ├── prune: (6)
+                     │         └── project
+                     │              ├── columns: y:8(int) u:6(float)
+                     │              ├── outer: (2)
+                     │              ├── fd: ()-->(8)
+                     │              ├── prune: (6,8)
+                     │              ├── scan kuv
+                     │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+                     │              │    ├── key: (5)
+                     │              │    ├── fd: (5)-->(6,7)
+                     │              │    ├── prune: (5-7)
+                     │              │    └── interesting orderings: (+5)
+                     │              └── projections [outer=(2,6)]
+                     │                   └── variable: xyzs.y [type=int, outer=(2)]
+                     └── projections [outer=(10)]
+                          └── variable: sum [type=decimal, outer=(10)]
 
 # Calculate groupby cardinality.
 build

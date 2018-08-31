@@ -275,12 +275,11 @@ func (b *Builder) buildScan(
 		tabColIDs.Add(int(colID))
 		name := col.ColName()
 		outScope.cols[i] = scopeColumn{
-			id:       colID,
-			origName: name,
-			name:     name,
-			table:    *tn,
-			typ:      col.DatumType(),
-			hidden:   col.IsHidden(),
+			id:     colID,
+			name:   name,
+			table:  *tn,
+			typ:    col.DatumType(),
+			hidden: col.IsHidden(),
 		}
 	}
 
@@ -400,9 +399,12 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
-			b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
+			expr := &outScope.cols[i]
+			col := b.addColumn(projectionsScope, "" /* label */, expr.ResolvedType(), expr)
+			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
-		b.buildOrderBy(orderBy, outScope, projectionsScope)
+		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope)
+		b.buildOrderBy(outScope, projectionsScope, orderByScope)
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
 	}
@@ -427,15 +429,28 @@ func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
+	projectionsScope := fromScope.replace()
 
-	var projectionsScope *scope
-	if b.needsAggregation(sel, orderBy) {
-		outScope, projectionsScope = b.buildAggregation(sel, orderBy, fromScope)
+	// This is where the magic happens. When this call reaches an aggregate
+	// function that refers to variables in fromScope or an ancestor scope,
+	// buildAggregateFunction is called which adds columns to the appropriate
+	// aggInScope and aggOutScope.
+	b.analyzeProjectionList(sel.Exprs, fromScope, projectionsScope)
+
+	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
+	// exist) will be added here.
+	havingExpr := b.analyzeHaving(sel.Having, fromScope)
+	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope)
+	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+
+	if b.needsAggregation(sel, fromScope) {
+		outScope = b.buildAggregation(
+			sel, havingExpr, fromScope, projectionsScope, orderByScope, distinctOnScope,
+		)
 	} else {
-		projectionsScope = fromScope.replace()
-		b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
-		b.buildOrderBy(orderBy, fromScope, projectionsScope)
-		b.buildDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+		b.buildProjectionList(fromScope, projectionsScope)
+		b.buildOrderBy(fromScope, projectionsScope, orderByScope)
+		b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 		outScope = fromScope
 	}
 
@@ -482,7 +497,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(outScope, tableScope)
 
-		outScope.appendColumns(tableScope)
+		outScope.appendColumnsFromScope(tableScope)
 		outScope.group = b.factory.ConstructInnerJoin(
 			outScope.group, tableScope.group, b.factory.ConstructTrue(),
 		)
@@ -505,11 +520,12 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		// context.
 		defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 		b.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
+		outScope.context = "WHERE"
 
 		// All "from" columns are visible to the filter expression.
-		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool, "WHERE")
+		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool)
 
-		filter := b.buildScalar(texpr, outScope)
+		filter := b.buildScalar(texpr, outScope, nil, nil, nil)
 		// Wrap the filter in a FiltersOp.
 		filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
