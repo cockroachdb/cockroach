@@ -360,9 +360,11 @@ func (r *Replica) sha512(
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator
+	var intBuf [8]byte
+	var legacyTimestamp hlc.LegacyTimestamp
+	var timestampBuf []byte
 	hasher := sha512.New()
 
-	var legacyTimestamp hlc.LegacyTimestamp
 	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
@@ -375,24 +377,30 @@ func (r *Replica) sha512(
 		}
 
 		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeKey.Key))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeValue))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
 		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
-		timestamp, err := protoutil.Marshal(&legacyTimestamp)
-		if err != nil {
+		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+			timestampBuf = make([]byte, size)
+		} else {
+			timestampBuf = timestampBuf[:size]
+		}
+		if _, err := protoutil.MarshalToWithoutFuzzing(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
-		if _, err := hasher.Write(timestamp); err != nil {
+		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
-		_, err = hasher.Write(unsafeValue)
+		_, err := hasher.Write(unsafeValue)
 		return err
 	}
 
