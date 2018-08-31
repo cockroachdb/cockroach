@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRunWithTimeout(t *testing.T) {
@@ -94,4 +95,30 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
 			"returned error")
 	}
+}
+
+func TestCancelWithReason(t *testing.T) {
+	ctx := context.Background()
+
+	var cancel CancelWithReasonFunc
+	ctx, cancel = WithCancelReason(ctx)
+
+	e := errors.New("hodor")
+	go func() {
+		cancel(e)
+	}()
+
+loop:
+	for true {
+		select {
+		case <-ctx.Done():
+			break loop
+		}
+		time.Sleep(time.Duration(100 * time.Millisecond))
+	}
+
+	expected := "context canceled"
+	found := ctx.Err().Error()
+	assert.Equal(t, expected, found)
+	assert.Equal(t, e, GetCancelReason(ctx))
 }

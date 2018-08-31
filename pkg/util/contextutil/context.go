@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"net"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,6 +29,29 @@ import (
 // WithCancel adds an info log to context.WithCancel's CancelFunc.
 func WithCancel(parent context.Context) (context.Context, context.CancelFunc) {
 	return wrap(context.WithCancel(parent))
+}
+
+type reasonKey struct{}
+
+type CancelWithReasonFunc func(error)
+
+func WithCancelReason(ctx context.Context) (context.Context, CancelWithReasonFunc) {
+	ptr := new(unsafe.Pointer)
+	ctx = context.WithValue(ctx, reasonKey{}, ptr)
+	ctx, cancel := wrap(context.WithCancel(ctx))
+	return ctx, func(reason error) {
+		atomic.StorePointer(ptr, unsafe.Pointer(&reason))
+		cancel()
+	}
+}
+
+func GetCancelReason(ctx context.Context) error {
+	i := ctx.Value(reasonKey{})
+	switch t := i.(type) {
+	case *unsafe.Pointer:
+		return *(*error)(atomic.LoadPointer(t))
+	}
+	return nil
 }
 
 func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
