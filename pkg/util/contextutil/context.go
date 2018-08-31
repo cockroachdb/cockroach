@@ -19,14 +19,53 @@ import (
 	"fmt"
 	"net"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// WithCancel adds an info log to context.WithCancel's CancelFunc.
+// WithCancel adds an info log to context.WithCancel's CancelFunc. Prefer using
+// WithCancelReason when possible.
 func WithCancel(parent context.Context) (context.Context, context.CancelFunc) {
 	return wrap(context.WithCancel(parent))
+}
+
+// reasonKey is a marker struct that's used to save the reason a context was
+// cancelled.
+type reasonKey struct{}
+
+// CancelWithReasonFunc is the
+type CancelWithReasonFunc func(error)
+
+// WithCancelReason adds a CancelFunc to this context, returning a new
+// cancellable context and a CancelWithReasonFunc, which is like
+// context.CancelFunc, except it also takes an "reason" error. The context that
+// is cancelled with this CancelWithReasonFunc will immediately be updated to
+// contain this "reason". The reason can be retrieved with GetCancelReason.
+func WithCancelReason(ctx context.Context) (context.Context, CancelWithReasonFunc) {
+	ptr := new(unsafe.Pointer)
+	ctx = context.WithValue(ctx, reasonKey{}, ptr)
+	ctx, cancel := wrap(context.WithCancel(ctx))
+	return ctx, func(reason error) {
+		atomic.StorePointer(ptr, unsafe.Pointer(&reason))
+		cancel()
+	}
+}
+
+// GetCancelReason retrieves the cancel reason for a context that has been
+// created via WithCancelReason. The reason will be nil if the context was not
+// created with WithCancelReason, or if the context has not been canceled yet.
+// Otherwise, the reason will be the error that the context's
+// CancelWithReasonFunc was invoked with.
+func GetCancelReason(ctx context.Context) error {
+	i := ctx.Value(reasonKey{})
+	switch t := i.(type) {
+	case *unsafe.Pointer:
+		return *(*error)(atomic.LoadPointer(t))
+	}
+	return nil
 }
 
 func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
