@@ -17,14 +17,54 @@ import (
 	"fmt"
 	"net"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// WithCancel adds an info log to context.WithCancel's CancelFunc.
+// WithCancel adds an info log to context.WithCancel's CancelFunc. Prefer using
+// WithCancelReason when possible.
 func WithCancel(parent context.Context) (context.Context, context.CancelFunc) {
 	return wrap(context.WithCancel(parent))
+}
+
+// reasonKey is a marker struct that's used to save the reason a context was
+// canceled.
+type reasonKey struct{}
+
+// CancelWithReasonFunc is a context.CancelFunc that also passes along an error
+// that is the reason for cancellation.
+type CancelWithReasonFunc func(reason error)
+
+// WithCancelReason adds a CancelFunc to this context, returning a new
+// cancellable context and a CancelWithReasonFunc, which is like
+// context.CancelFunc, except it also takes a "reason" error. The context that
+// is canceled with this CancelWithReasonFunc will immediately be updated to
+// contain this "reason". The reason can be retrieved with GetCancelReason.
+// This function doesn't change the deadline of a context if it already exists.
+func WithCancelReason(ctx context.Context) (context.Context, CancelWithReasonFunc) {
+	val := new(atomic.Value)
+	ctx = context.WithValue(ctx, reasonKey{}, val)
+	ctx, cancel := wrap(context.WithCancel(ctx))
+	return ctx, func(reason error) {
+		val.Store(reason)
+		cancel()
+	}
+}
+
+// GetCancelReason retrieves the cancel reason for a context that has been
+// created via WithCancelReason. The reason will be nil if the context was not
+// created with WithCancelReason, or if the context has not been canceled yet.
+// Otherwise, the reason will be the error that the context's
+// CancelWithReasonFunc was invoked with.
+func GetCancelReason(ctx context.Context) error {
+	i := ctx.Value(reasonKey{})
+	switch t := i.(type) {
+	case *atomic.Value:
+		return t.Load().(error)
+	}
+	return nil
 }
 
 func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
