@@ -805,21 +805,49 @@ func (txn *Txn) Send(
 				requestTxnID, retryErr.TxnID, retryErr)
 		}
 		txn.mu.Lock()
-		txn.resetDeadlineLocked()
-		txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, requestTxnID)
+		txn.handleErrIfRetryableLocked(ctx, retryErr)
 		txn.mu.Unlock()
 	}
 	return br, pErr
+}
+
+func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
+	retryErr, ok := err.(*roachpb.HandledRetryableTxnError)
+	if !ok {
+		return
+	}
+	txn.resetDeadlineLocked()
+	txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
 }
 
 // GetTxnCoordMeta returns the TxnCoordMeta information for this
 // transaction for use with AugmentTxnCoordMeta(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
+func (txn *Txn) GetTxnCoordMeta(ctx context.Context) roachpb.TxnCoordMeta {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.GetMeta()
+	meta, err := txn.mu.sender.GetMeta(ctx, AnyTxnStatus)
+	if err != nil {
+		log.Fatalf(ctx, "unexpected error from GetMeta(AnyTxnStatus): %s", err)
+	}
+	return meta
+}
+
+// GetTxnCoordMetaOrRejectClient is like GetTxnCoordMeta except, if the
+// transaction is already aborted or otherwise in a final state, it returns an
+// error. If the transaction is aborted, the error will be a retryable one, and
+// the transaction will have been prepared for another transaction attempt (so,
+// on retryable errors, it acts like Send()).
+func (txn *Txn) GetTxnCoordMetaOrRejectClient(ctx context.Context) (roachpb.TxnCoordMeta, error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	meta, err := txn.mu.sender.GetMeta(ctx, OnlyPending)
+	if err != nil {
+		txn.handleErrIfRetryableLocked(ctx, err)
+		return roachpb.TxnCoordMeta{}, err
+	}
+	return meta, nil
 }
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
