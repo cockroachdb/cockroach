@@ -1,0 +1,18 @@
+@require '~styl/base/palette.styl'
+
+.jobs-table
+  .job-detail
+    max-width 1000px
+    white-space pre-wrap
+    padding 5px
+    margin-top 5px
+    margin-bottom 10px
+    border 1px solid grey
+    border-radius 4px
+    background-color $headings-color
+    color white
+
+  &__cell--description
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
