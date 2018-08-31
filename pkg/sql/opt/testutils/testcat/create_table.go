@@ -50,8 +50,10 @@ const (
 func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	tn, err := stmt.Table.Normalize()
 	if err != nil {
-		panic(fmt.Errorf("%s", err))
+		panic(err)
 	}
+
+	stmt.HoistConstraints()
 
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(tn)
@@ -95,7 +97,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.addPrimaryColumnIndex(rowid.Name)
 	}
 
-	// Search for other relevant definitions.
+	// Search for index definitions.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
@@ -106,9 +108,16 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
 		}
+	}
 
-		// TODO(rytaft): In the future we will likely want to check for foreign key
-		// constraints.
+	// Search for foreign key constraints. We want to process them after first
+	// processing all the indexes (otherwise the foreign keys could add
+	// unnecessary indexes).
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ForeignKeyConstraintTableDef:
+			tc.resolveFK(tab, def)
+		}
 	}
 
 	// We need to keep track of the tableID from numeric references. 53 is a magic
@@ -119,6 +128,99 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	tc.AddTable(tab)
 
 	return tab
+}
+
+// resolveFK processes a foreign key constraint
+func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
+	targetTableName, err := d.Table.Normalize()
+	if err != nil {
+		panic(err)
+	}
+
+	fromCols := make([]int, len(d.FromCols))
+	for i, c := range d.FromCols {
+		fromCols[i] = tab.FindOrdinal(string(c))
+	}
+
+	targetTable := tc.Table(targetTableName)
+
+	toCols := make([]int, len(d.ToCols))
+	for i, c := range d.ToCols {
+		toCols[i] = targetTable.FindOrdinal(string(c))
+	}
+
+	// Foreign keys require indexes in both tables:
+	//
+	//  1. In the target table, we need an index because adding a new row to the
+	//     source table requires looking up whether there is a matching value in
+	//     the target table. This index should already exist because a unique
+	//     constraint is required on the target table (it's a foreign *key*).
+	//
+	//  2. In the source table, we need an index because removing a row from the
+	//     target table requires looking up whether there would be orphan values
+	//     left in the source table. This index does not need to be unique; in
+	//     fact, if an existing index has the relevant columns as a prefix, that
+	//     is good enough.
+
+	// matches returns true if the key columns in the given index match the given
+	// columns. If strict is false, it is acceptable if the given columns are a
+	// prefix of the index key columns.
+	matches := func(idx *Index, cols []int, strict bool) bool {
+		if idx.KeyColumnCount() < len(cols) {
+			return false
+		}
+		if strict && idx.KeyColumnCount() > len(cols) {
+			return false
+		}
+		for i := range cols {
+			if idx.Column(i).Ordinal != cols[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// 1. Verify that the target table has a unique index.
+	found := false
+	for _, idx := range targetTable.Indexes {
+		if matches(idx, toCols, true /* strict */) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		panic(fmt.Errorf(
+			"there is no unique constraint matching given keys for referenced table %s",
+			targetTable.Name(),
+		))
+	}
+
+	// 2. Search for an existing index in the source table; add it if necessary.
+	found = false
+	for _, idx := range tab.Indexes {
+		if matches(idx, fromCols, false /* strict */) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		// Add a non-unique index on fromCols.
+		constraintName := string(d.Name)
+		if constraintName == "" {
+			constraintName = fmt.Sprintf(
+				"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
+			)
+		}
+		idx := tree.IndexTableDef{
+			Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
+			Columns: make(tree.IndexElemList, len(fromCols)),
+		}
+		for i, c := range fromCols {
+			idx.Columns[i].Column = tab.Columns[c].ColName()
+			idx.Columns[i].Direction = tree.Ascending
+		}
+		tab.addIndex(&idx, nonUniqueIndex)
+	}
 }
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {

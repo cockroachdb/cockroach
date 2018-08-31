@@ -25,7 +25,10 @@ TABLE c
  ├── y float
  ├── z string
  ├── rowid int not null (hidden)
- └── INDEX primary
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX c_auto_index_fk_x_ref_a
+      ├── x int
       └── rowid int not null (hidden)
 
 build
