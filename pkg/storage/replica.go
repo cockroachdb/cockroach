@@ -259,7 +259,8 @@ func (s *destroyStatus) Reset() {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Replica struct {
-	lastReady raft.Ready
+	readyCount int
+	lastReady  raft.Ready
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
@@ -4013,6 +4014,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
+			r.readyCount++
 			rd = raftGroup.Ready()
 		}
 		return hasReady /* unquiesceAndWakeLeader */, nil
