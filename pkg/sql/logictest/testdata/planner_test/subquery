@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: fakedist-opt
 
 # Tests for subqueries (SELECT statements which are part of a bigger statement).
 
@@ -134,16 +134,29 @@ CREATE INDEX idx_tab4_0 ON tab4 (col4,col0)
 query TTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-root                 ·             ·
- ├── render          ·             ·
- │    └── scan       ·             ·
- │                   table         tab4@primary
- │                   spans         ALL
- └── subquery        ·             ·
-      │              id            @S1
-      │              original sql  (SELECT col1 FROM tab4 WHERE col1 > 8.27)
-      │              exec mode     all rows normalized
-      └── render     ·             ·
-           └── scan  ·             ·
-·                    table         tab4@primary
-·                    spans         ALL
+root                 ·          ·
+ ├── render          ·          ·
+ │    └── scan       ·          ·
+ │                   table      tab4@primary
+ │                   spans      ALL
+ └── subquery        ·          ·
+      │              id         @S1
+      │              sql        (SELECT col1 FROM tab4 WHERE col1 > 8.27)
+      │              exec mode  all rows normalized
+      └── render     ·          ·
+           └── scan  ·          ·
+·                    table      tab4@primary
+·                    spans      ALL
+
+statement ok
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT EXISTS (SELECT * FROM abc WHERE a = 1)]
+
+statement ok
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 2))]
+
+statement ok
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE a = 7)]
+
+statement ok
+SELECT url FROM [EXPLAIN (DISTSQL) INSERT INTO abc (a, b, c) (SELECT a+1,b,c FROM abc)]
+>>>>>>> 98ccaf8901... wippy
