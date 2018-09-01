@@ -32,14 +32,16 @@ import (
 // serverCfg is used as the client-side copy of default server
 // parameters for CLI utilities (other than `cockroach start`, which
 // constructs a proper server.Config for the newly created server).
-var serverCfg = func() server.Config {
+var serverCfg = makeDefaultServerCfg()
+
+func makeDefaultServerCfg() server.Config {
 	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	s := server.MakeConfig(context.Background(), st)
 	s.SQLAuditLogDirName = &sqlAuditLogDir
 	return s
-}()
+}
 
 var sqlAuditLogDir log.DirName
 
@@ -57,8 +59,14 @@ var baseCfg = serverCfg.Config
 // configuration defaults. It is suitable for calling between tests of
 // the CLI utilities inside a single testing process.
 func initCLIDefaults() {
-	// We don't reset the pointers (because they are tied into the
-	// flags), but instead overwrite the existing structs' values.
+	// Reset the server configuration.
+	serverCfg = makeDefaultServerCfg()
+
+	// At this point serverCfg.Config has been reset/re-initialized, but we
+	// cannot use this new object, because the previous baseCfg has
+	// been embedded in all places (e.g. flags).
+	// So we keep the old object and reset its values instead.
+	serverCfg.Config = baseCfg
 	baseCfg.InitDefaults()
 
 	// isInteractive is only set to `true` by `cockroach sql` -- all
@@ -101,9 +109,6 @@ func initCLIDefaults() {
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
 
-	serverCfg.ReadyFn = nil
-	serverCfg.DelayedBootstrapFn = nil
-	serverCfg.SocketFile = ""
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverListenAddr = ""

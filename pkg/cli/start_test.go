@@ -31,6 +31,9 @@ import (
 func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
 	f := StartCmd.Flags()
 
 	testCases := []struct {
@@ -75,6 +78,9 @@ func TestInitInsecure(t *testing.T) {
 
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
 
 	f := StartCmd.Flags()
 
