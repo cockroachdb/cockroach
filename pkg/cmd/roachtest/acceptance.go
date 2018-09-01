@@ -36,10 +36,14 @@ func registerAcceptance(r *registry) {
 		{"status-server", runStatusServer},
 	}
 	for _, tc := range testCases {
+		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Name:   tc.name,
 			Stable: true, // DO NOT COPY to new tests
-			Run:    tc.fn,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				c.Wipe(ctx)
+				tc.fn(ctx, t, c)
+			},
 		})
 	}
 
