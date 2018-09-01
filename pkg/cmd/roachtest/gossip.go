@@ -19,11 +19,16 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 func registerGossip(r *registry) {
@@ -116,4 +121,177 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			runGossipChaos(ctx, t, c)
 		},
 	})
+}
+
+type gossipUtil struct {
+	waitTime time.Duration
+	urlMap   map[int]string
+}
+
+func newGossipUtil(ctx context.Context, c *cluster, waitTime time.Duration) *gossipUtil {
+	urlMap := make(map[int]string)
+	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
+		urlMap[i+1] = `http://` + addr
+	}
+	return &gossipUtil{
+		waitTime: waitTime,
+		urlMap:   urlMap,
+	}
+}
+
+type checkGossipFunc func(map[string]gossip.Info) error
+
+// checkGossip fetches the gossip infoStore from each node and invokes the
+// given function. The test passes if the function returns 0 for every node,
+// retrying for up to the given duration.
+func (g *gossipUtil) check(ctx context.Context, c *cluster, f checkGossipFunc) error {
+	return retry.ForDuration(g.waitTime, func() error {
+		var infoStatus gossip.InfoStatus
+		for i := 1; i <= c.nodes; i++ {
+			url := g.urlMap[i] + `/_status/gossip/local`
+			if err := httputil.GetJSON(http.Client{}, url, &infoStatus); err != nil {
+				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
+			}
+			if err := f(infoStatus.Infos); err != nil {
+				return errors.Wrapf(err, "node %d", i)
+			}
+		}
+
+		return nil
+	})
+}
+
+// hasPeers returns a checkGossipFunc that passes when the given number of
+// peers are connected via gossip.
+func (gossipUtil) hasPeers(expected int) checkGossipFunc {
+	return func(infos map[string]gossip.Info) error {
+		count := 0
+		for k := range infos {
+			if strings.HasPrefix(k, gossip.KeyNodeIDPrefix) {
+				count++
+			}
+		}
+		if count != expected {
+			return errors.Errorf("expected %d peers, found %d", expected, count)
+		}
+		return nil
+	}
+}
+
+// hasSentinel is a checkGossipFunc that passes when the sentinel gossip is present.
+func (gossipUtil) hasSentinel(infos map[string]gossip.Info) error {
+	if _, ok := infos[gossip.KeySentinel]; !ok {
+		return errors.Errorf("sentinel not found")
+	}
+	return nil
+}
+
+// hasClusterID is a checkGossipFunc that passes when the cluster ID gossip is present.
+func (gossipUtil) hasClusterID(infos map[string]gossip.Info) error {
+	if _, ok := infos[gossip.KeyClusterID]; !ok {
+		return errors.Errorf("cluster ID not found")
+	}
+	return nil
+}
+
+func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c *cluster) {
+	c.l.Printf("waiting for gossip to be connected\n")
+	if err := g.check(ctx, c, g.hasPeers(c.nodes)); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.check(ctx, c, g.hasClusterID); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.check(ctx, c, g.hasSentinel); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 1; i <= c.nodes; i++ {
+		db := c.Conn(ctx, i)
+		defer db.Close()
+		if i == 1 {
+			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var count int
+		if rows.Next() {
+			if err := rows.Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != i {
+				t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i)
+			}
+		} else {
+			t.Fatalf("no results found from update")
+		}
+	}
+}
+
+func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx)
+
+	// Repeatedly restart a random node and verify that all of the nodes are
+	// seeing the gossiped values.
+
+	g := newGossipUtil(ctx, c, 30*time.Second)
+	deadline := timeutil.Now().Add(time.Minute)
+
+	for i := 1; timeutil.Now().Before(deadline); i++ {
+		if err := g.check(ctx, c, g.hasPeers(c.nodes)); err != nil {
+			t.Fatal(err)
+		}
+		if err := g.check(ctx, c, g.hasClusterID); err != nil {
+			t.Fatal(err)
+		}
+		if err := g.check(ctx, c, g.hasSentinel); err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("%d: OK\n", i)
+
+		// Restart a random node.
+		node := c.All().randNode()
+		c.l.Printf("%d: restarting node %d\n", i, node[0])
+		c.Stop(ctx, node)
+		c.Start(ctx, node)
+	}
+}
+
+func runGossipRestart(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx)
+
+	// Repeatedly stop and restart a cluster and verify that we can perform basic
+	// operations. This is stressing the gossiping of the first range descriptor
+	// which is required for any node to be able do even the most basic
+	// operations on a cluster.
+
+	g := newGossipUtil(ctx, c, 30*time.Second)
+	deadline := timeutil.Now().Add(time.Minute)
+
+	for i := 1; timeutil.Now().Before(deadline); i++ {
+		g.checkConnectedAndFunctional(ctx, t, c)
+		c.l.Printf("%d: OK\n", i)
+
+		c.l.Printf("%d: killing all nodes\n", i)
+		c.Stop(ctx)
+
+		c.l.Printf("%d: restarting all nodes\n", i)
+		c.Start(ctx)
+	}
+}
+
+func runGossipRestartFirstNodeNeedsIncoming(ctx context.Context, t *test, c *cluster) {
 }
