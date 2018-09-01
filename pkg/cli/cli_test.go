@@ -83,6 +83,32 @@ func (c *cliTest) fail(err interface{}) {
 	}
 }
 
+func createTestCerts(certsDir string) (cleanup func() error) {
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	// Disable embedded certs, or the security library will try to load
+	// our real files as embedded assets.
+	security.ResetAssetLoader()
+
+	assets := []string{
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+	}
+
+	for _, a := range assets {
+		securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
+	}
+
+	return func() error {
+		security.SetAssetLoader(securitytest.EmbeddedAssets)
+		return os.RemoveAll(certsDir)
+	}
+}
+
 func newCLITest(params cliTestParams) cliTest {
 	c := cliTest{t: params.t}
 
@@ -100,30 +126,8 @@ func newCLITest(params cliTestParams) cliTest {
 
 	if !params.noServer {
 		if !params.insecure {
-			// Copy these assets to disk from embedded strings, so this test can
-			// run from a standalone binary.
-			// Disable embedded certs, or the security library will try to load
-			// our real files as embedded assets.
-			security.ResetAssetLoader()
-
-			assets := []string{
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-				filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
-			}
-
-			for _, a := range assets {
-				securitytest.RestrictedCopy(nil, a, certsDir, filepath.Base(a))
-			}
+			c.cleanupFunc = createTestCerts(certsDir)
 			baseCfg.SSLCertsDir = certsDir
-
-			c.cleanupFunc = func() error {
-				security.SetAssetLoader(securitytest.EmbeddedAssets)
-				return os.RemoveAll(c.certsDir)
-			}
 		}
 
 		s, err := serverutils.StartServerRaw(base.TestServerArgs{
