@@ -479,97 +479,28 @@ func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
 	return makeSQLClient(appName)
 }
 
-// makeURLFromFlags constructs a pg connection URL using the values
-// initialized by command-line flags.
-func makeURLFromFlags(userinfo *url.Userinfo) *url.URL {
-	host := serverCfg.Addr
-	if !strings.HasPrefix(cliCtx.Addr, ":") {
-		host = cliCtx.Addr
-	}
-
-	// Build the URL object.
-	return &url.URL{
-		Scheme: "postgresql",
-		Path:   cliCtx.sqlConnDBName,
-		Host:   host,
-		User:   userinfo,
-	}
-}
-
 var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
 
 // makeSQLClient connects to the database using the connection
-// settings set by the command-line flags. The value of --url, if any
-// is provided is used as the source of configuration; otherwise a URL
-// is constructed from the other command-line parameters.
-//
-// If --url is specified but any of the following items is _missing_
-// from the URL, the remaining command-line flags are used to "fill it
-// in":
-//
-// - the current database (--database)
-// - the user (--user)
-// - the SSL configuration (--insecure, --certs-dir, etc)
-//
-// Otherwise, if an item is present both in the URL and specified
-// otherwise, a warning is printed to indicate that the URL prevails.
+// settings set by the command-line flags.
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
 func makeSQLClient(appName string) (*sqlConn, error) {
-	var baseURL *url.URL
-	var options url.Values
-
-	defaultUserinfo := url.User(security.RootUser)
-	if cliCtx.sqlConnUser != "" {
-		defaultUserinfo = url.User(cliCtx.sqlConnUser)
+	baseURL, err := cliCtx.makeClientConnURL()
+	if err != nil {
+		return nil, err
 	}
 
-	// Determine the starting point.
-	if cliCtx.sqlConnURL == "" {
-		baseURL = makeURLFromFlags(defaultUserinfo)
-		options = url.Values{}
-	} else {
-		// User-specified --url is the starting point.
-		var err error
-		baseURL, err = url.Parse(cliCtx.sqlConnURL)
-		if err != nil {
-			return nil, err
-		}
-		options, err = url.ParseQuery(baseURL.RawQuery)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check that any argument otherwise used to
-		// populate a URL, if --url was not specified, have
-		// not been specified if --url was.
-		if baseURL.Path != "" && cliCtx.sqlConnDBName != "" {
-			log.Warning(context.Background(), "parameter --database ignored, using --url instead")
-		}
-		if baseURL.User.Username() != "" && cliCtx.sqlConnUser != "" {
-			log.Warning(context.Background(), "parameter --user ignored, using --url instead")
-		}
-		if !strings.HasPrefix(cliCtx.Addr, ":") {
-			log.Warning(context.Background(), "parameter --host ignored, using --url instead")
-		}
-		if options.Get("sslmode") != "" && cliCtx.Insecure {
-			log.Warning(context.Background(), "parameter --insecure ignored, using --url instead")
-		}
-	}
-
-	// If there is no user in the URL already, use the one passed as
-	// command-line flag.
+	// If there is no user in the URL already, fill in the default user.
 	if baseURL.User.Username() == "" {
-		baseURL.User = defaultUserinfo
+		baseURL.User = url.User(security.RootUser)
 	}
 
-	// If there are no SSL options yet, use the command-line flags to set them.
-	if options.Get("sslmode") == "" {
-		if err := cliCtx.LoadSecurityOptions(options, baseURL.User.Username()); err != nil {
-			return nil, err
-		}
+	options, err := url.ParseQuery(baseURL.RawQuery)
+	if err != nil {
+		return nil, err
 	}
 
 	// Insecure connections are insecure and should never see a password. Reject
@@ -598,12 +529,6 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 				baseURL.User = url.UserPassword(baseURL.User.Username(), pwd)
 			}
 		}
-	}
-
-	// If there is no database in the URL already, use the one passed as
-	// command-line flag.
-	if baseURL.Path == "" || baseURL.Path == "/" {
-		baseURL.Path = cliCtx.sqlConnDBName
 	}
 
 	// Load the application name. It's not a command-line flag, so
