@@ -74,6 +74,8 @@ func initCLIDefaults() {
 	}
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.clientConnHost = ""
+	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.sqlConnURL = ""
 	cliCtx.sqlConnUser = ""
 	cliCtx.sqlConnDBName = ""
@@ -155,6 +157,12 @@ type cliContext struct {
 	// cmdTimeout sets the maximum run time for the command.
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
+
+	// clientConnHost is the hostname/address to use to connect to a server.
+	clientConnHost string
+
+	// clientConnPort is the port name/number to use to connect to a server.
+	clientConnPort string
 
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.

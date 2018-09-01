@@ -47,7 +47,6 @@ import (
 //   flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
-var clientConnHost, clientConnPort string
 var localityAdvertiseHosts localityList
 
 // initPreFlagsDefaults initializes the values of the global variables
@@ -60,8 +59,6 @@ func initPreFlagsDefaults() {
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
 
-	clientConnHost = ""
-	clientConnPort = base.DefaultPort
 	localityAdvertiseHosts = localityList{}
 }
 
@@ -382,8 +379,8 @@ func init() {
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		VarFlag(f, addrSetter{&clientConnHost, &clientConnPort}, cliflags.ClientHost)
-		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
+		VarFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		StringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort, cliCtx.clientConnPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
@@ -517,7 +514,7 @@ func extraServerFlagInit() {
 }
 
 func extraClientFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
