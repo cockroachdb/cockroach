@@ -60,7 +60,19 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 				break
 			}
 
-			time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
+			waitTime := time.Duration(rand.Int63n(int64(time.Second)))
+			if !c.isLocal() {
+				// TODO(peter): This is hacky: the signal might be sent before the
+				// cockroach process starts, which is especially true on remote
+				// clusters. Perhaps combine this with a monitor so that we can detect
+				// as soon as the process starts before killing it. Or a custom kill
+				// script which loops looking for a cockroach process and kills it as
+				// soon as it appears. Using --pid_file or --background isn't quite
+				// right as we want to be able to kill the process before it is ready.
+				waitTime += time.Second
+			}
+			time.Sleep(waitTime)
+
 			sig := [2]string{"2", "9"}[rand.Intn(2)]
 			c.Stop(ctx, nodes, stopArgs("--sig="+sig))
 			select {
