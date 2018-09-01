@@ -18,6 +18,9 @@ package main
 import "context"
 
 func registerAcceptance(r *registry) {
+	// The acceptance tests all share a 4-node cluster and run sequentially. In
+	// local mode the acceptance tests should be configured to run within a
+	// minute or so as these tests are run on every merge to master.
 	spec := testSpec{
 		Name:  "acceptance",
 		Nodes: nodes(4),
