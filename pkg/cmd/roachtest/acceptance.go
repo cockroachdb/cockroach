@@ -20,22 +20,30 @@ import "context"
 func registerAcceptance(r *registry) {
 	spec := testSpec{
 		Name:  "acceptance",
-		Nodes: nodes(3),
+		Nodes: nodes(4),
 	}
 
 	testCases := []struct {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
 	}{
+		{"bank/cluster-recovery", runBankClusterRecovery},
+		{"bank/node-restart", runBankNodeRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"event-log", runEventLog},
+		{"rapid-restart", runRapidRestart},
+		{"status-server", runStatusServer},
 	}
 	for _, tc := range testCases {
+		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Name:   tc.name,
 			Stable: true, // DO NOT COPY to new tests
-			Run:    tc.fn,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				c.Wipe(ctx)
+				tc.fn(ctx, t, c)
+			},
 		})
 	}
 

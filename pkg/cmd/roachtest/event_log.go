@@ -33,8 +33,7 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 		ClusterID  uuid.UUID
 	}
 
-	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Wipe(ctx)
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 
 	// Verify that "node joined" and "node restart" events are recorded whenever
