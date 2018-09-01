@@ -20,7 +20,7 @@ import "context"
 func registerAcceptance(r *registry) {
 	spec := testSpec{
 		Name:  "acceptance",
-		Nodes: nodes(3),
+		Nodes: nodes(4),
 	}
 
 	testCases := []struct {
