@@ -434,17 +434,27 @@ func init() {
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
-		f := cmd.PersistentFlags()
+		f := cmd.Flags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
 
 		if cmd != demoCmd {
-			StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+			VarFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
 			StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
 		}
 
 		if cmd == sqlShellCmd {
 			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
 		}
+	}
+
+	// Make the other non-SQL client commands also recognize --url in
+	// strict SSL mode.
+	for _, cmd := range clientCmds {
+		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+			// --url already registered above, nothing to do.
+			continue
+		}
+		VarFlag(cmd.PersistentFlags(), urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 	}
 
 	// Commands that print tables.
