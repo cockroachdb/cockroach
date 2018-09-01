@@ -15,7 +15,10 @@
 
 package main
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 func registerAcceptance(r *registry) {
 	// The acceptance tests all share a 4-node cluster and run sequentially. In
@@ -45,8 +48,9 @@ func registerAcceptance(r *registry) {
 	for _, tc := range testCases {
 		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+			Name:    tc.name,
+			Timeout: 10 * time.Minute,
+			Stable:  true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Wipe(ctx)
 				tc.fn(ctx, t, c)
