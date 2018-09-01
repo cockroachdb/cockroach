@@ -832,3 +832,6 @@ func (n *Node) Wait() *exec.ExitError {
 	ee, _ := n.waitErr.Load().(*exec.ExitError)
 	return ee
 }
+
+// Silence unused warning.
+var _ = (*Node)(nil).Wait

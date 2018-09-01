@@ -32,6 +32,7 @@ func registerAcceptance(r *registry) {
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"event-log", runEventLog},
+		{"rapid-restart", runRapidRestart},
 		{"status-server", runStatusServer},
 	}
 	for _, tc := range testCases {
