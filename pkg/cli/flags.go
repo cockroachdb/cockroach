@@ -461,18 +461,19 @@ func init() {
 	// By default, query times are not displayed. The default is overridden
 	// in the CLI shell.
 	for _, cmd := range tableOutputCommands {
-		f := cmd.Flags()
+		f := cmd.PersistentFlags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// sqlfmt command.
-	VarFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.execStmts, cliflags.Execute)
+	fmtFlags := sqlfmtCmd.Flags()
+	VarFlag(fmtFlags, &sqlfmtCtx.execStmts, cliflags.Execute)
 	cfg := tree.DefaultPrettyCfg()
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
+	IntFlag(fmtFlags, &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
+	IntFlag(fmtFlags, &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
+	BoolFlag(fmtFlags, &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
 
 	// Debug commands.
 	{
