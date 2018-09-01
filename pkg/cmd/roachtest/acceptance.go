@@ -15,9 +15,15 @@
 
 package main
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 func registerAcceptance(r *registry) {
+	// The acceptance tests all share a 4-node cluster and run sequentially. In
+	// local mode the acceptance tests should be configured to run within a
+	// minute or so as these tests are run on every merge to master.
 	spec := testSpec{
 		Name:  "acceptance",
 		Nodes: nodes(4),
@@ -27,19 +33,24 @@ func registerAcceptance(r *registry) {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
 	}{
+		// Sorted. Please keep it that way.
 		{"bank/cluster-recovery", runBankClusterRecovery},
 		{"bank/node-restart", runBankNodeRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"event-log", runEventLog},
+		{"gossip/peerings", runGossipPeerings},
+		{"gossip/restart", runGossipRestart},
+		{"gossip/restart-node-one", runGossipRestartNodeOne},
 		{"rapid-restart", runRapidRestart},
 		{"status-server", runStatusServer},
 	}
 	for _, tc := range testCases {
 		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
+			Name:    tc.name,
+			Timeout: 10 * time.Minute,
+			Stable:  true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Wipe(ctx)
 				tc.fn(ctx, t, c)
