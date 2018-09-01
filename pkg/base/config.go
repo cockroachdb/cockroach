@@ -174,6 +174,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.HTTPAddr = defaultHTTPAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.certificateManager = lazyCertificateManager{}
+	cfg.httpClient = lazyHTTPClient{}
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
