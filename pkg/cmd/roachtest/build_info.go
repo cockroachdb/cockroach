@@ -24,8 +24,7 @@ import (
 )
 
 func runBuildInfo(ctx context.Context, t *test, c *cluster) {
-	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Wipe(ctx)
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx)
 
 	var details serverpb.DetailsResponse
