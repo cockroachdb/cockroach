@@ -38,7 +38,7 @@ func registerAcceptance(r *registry) {
 		{"event-log", runEventLog},
 		{"gossip/peerings", runGossipPeerings},
 		{"gossip/restart", runGossipRestart},
-		{"gossip/restart-first-node-needs-incoming", runGossipRestartFirstNodeNeedsIncoming},
+		{"gossip/restart-node-one", runGossipRestartNodeOne},
 		{"rapid-restart", runRapidRestart},
 		{"status-server", runStatusServer},
 	}

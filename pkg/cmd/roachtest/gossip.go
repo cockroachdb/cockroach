@@ -19,7 +19,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -126,16 +129,18 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 type gossipUtil struct {
 	waitTime time.Duration
 	urlMap   map[int]string
+	conn     func(ctx context.Context, i int) *gosql.DB
 }
 
-func newGossipUtil(ctx context.Context, c *cluster, waitTime time.Duration) *gossipUtil {
+func newGossipUtil(ctx context.Context, c *cluster) *gossipUtil {
 	urlMap := make(map[int]string)
 	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
 		urlMap[i+1] = `http://` + addr
 	}
 	return &gossipUtil{
-		waitTime: waitTime,
+		waitTime: 30 * time.Second,
 		urlMap:   urlMap,
+		conn:     c.Conn,
 	}
 }
 
@@ -207,7 +212,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c
 	}
 
 	for i := 1; i <= c.nodes; i++ {
-		db := c.Conn(ctx, i)
+		db := g.conn(ctx, i)
 		defer db.Close()
 		if i == 1 {
 			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
@@ -246,7 +251,7 @@ func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
 	// Repeatedly restart a random node and verify that all of the nodes are
 	// seeing the gossiped values.
 
-	g := newGossipUtil(ctx, c, 30*time.Second)
+	g := newGossipUtil(ctx, c)
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
@@ -278,7 +283,7 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 	// which is required for any node to be able do even the most basic
 	// operations on a cluster.
 
-	g := newGossipUtil(ctx, c, 30*time.Second)
+	g := newGossipUtil(ctx, c)
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
@@ -293,5 +298,98 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 	}
 }
 
-func runGossipRestartFirstNodeNeedsIncoming(ctx context.Context, t *test, c *cluster) {
+func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx, racks(c.nodes))
+
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	run := func(stmt string) {
+		c.l.Printf("%s\n", stmt)
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Evacuate all of the ranges off node 1 with zone config constraints. See
+	// the racks setting specified when the cluster was started.
+	run(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
+
+	var lastCount int
+	if err := retry.ForDuration(2*time.Minute, func() error {
+		const query = `
+SELECT count(replicas)
+  FROM crdb_internal.ranges
+ WHERE array_position(replicas, 1) IS NOT NULL
+`
+		var count int
+		if err := db.QueryRow(query).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count > 0 {
+			err := errors.Errorf("node 1 still has %d replicas", count)
+			if count != lastCount {
+				lastCount = count
+				c.l.Printf("%s\n", err)
+			}
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	c.l.Printf("killing all nodes\n")
+	c.Stop(ctx)
+
+	// Restart node 1, but have it listen on a different port for internal
+	// connections. This will require node 1 to reach out to the other nodes in
+	// the cluster for gossip info.
+	err := c.RunE(ctx, c.Node(1),
+		`./cockroach start --insecure --background --store={store-dir} `+
+			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
+			`--listen-addr=:$[{pgport:1}+10000] --http-port=$[{pgport:1}+1] `+
+			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Restart the other nodes. These nodes won't be able to talk to node 1 until
+	// node 1 talks to it (they have out of date address info). Node 1 needs
+	// incoming gossip info in order to determine where range 1 is.
+	c.Start(ctx, c.Range(2, c.nodes))
+
+	// We need to override DB connection creation to use the correct port for
+	// node 1. This is more complicated than it should be and a limitation of the
+	// current infrastructure which doesn't know about cockroach nodes started on
+	// non-standard ports.
+	g := newGossipUtil(ctx, c)
+	g.conn = func(ctx context.Context, i int) *gosql.DB {
+		if i != 1 {
+			return c.Conn(ctx, i)
+		}
+		url, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		host, port, err := net.SplitHostPort(url.Host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := strconv.Atoi(port)
+		if err != nil {
+			t.Fatal(err)
+		}
+		url.Host = fmt.Sprintf("%s:%d", host, v+10000)
+		db, err := gosql.Open("postgres", url.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return db
+	}
+
+	g.checkConnectedAndFunctional(ctx, t, c)
 }
