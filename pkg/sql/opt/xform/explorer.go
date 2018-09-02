@@ -107,6 +107,11 @@ func (e *explorer) init(o *Optimizer) {
 	e.funcs.Init(e)
 }
 
+// Memo returns the memo data structure over which the explorer is operating.
+func (e *explorer) Memo() *memo.Memo {
+	return e.mem
+}
+
 // exploreGroup generates alternate expressions that are logically equivalent
 // to the expressions already in the given group, and adds them to the group.
 // The explorer maintains state that tracks which expressions were explored in
