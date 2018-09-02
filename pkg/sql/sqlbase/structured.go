@@ -2451,6 +2451,12 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		return nil, err
 	}
 
+	for _, c := range desc.allNonDropColumns() {
+		for _, id := range c.UsesSequenceIds {
+			refs[id] = struct{}{}
+		}
+	}
+
 	for _, dest := range desc.DependsOn {
 		refs[dest] = struct{}{}
 	}
