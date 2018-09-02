@@ -72,7 +72,7 @@ CREATE INDEX c on t1 USING GIN (id2)
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
 
-statement error pq: syntax error at or near "storing"
+statement error pq: inverted indexes don't support stored columns
 CREATE INVERTED INDEX c on t1 (id2) STORING (id1,id3);
 
 statement error pq: inverted indexes can't be unique

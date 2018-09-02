@@ -876,8 +876,8 @@ create_database_stmt ::=
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
-	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' opt_unique 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
 
 create_table_stmt ::=
 	'CREATE' 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
