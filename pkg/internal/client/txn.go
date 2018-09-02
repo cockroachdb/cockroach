@@ -694,10 +694,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			if txn.status() == roachpb.ABORTED {
-				log.Fatalf(ctx, "no err but aborted txn proto. txn: %+v", txn)
-			}
-			if txn.status() == roachpb.PENDING {
+			if txn.status() != roachpb.COMMITTED {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
 				if err != nil {
