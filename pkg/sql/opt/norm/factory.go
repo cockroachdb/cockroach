@@ -63,7 +63,7 @@ type Factory struct {
 	evalCtx *tree.EvalContext
 
 	// mem is the Memo data structure that the factory builds.
-	mem *memo.Memo
+	mem memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
 	// used by the normalization rules. It wraps an unnamed xfunc.CustomFuncs,
@@ -109,7 +109,7 @@ type Factory struct {
 // This must be called before the factory can be used (or reused).
 func (f *Factory) Init(evalCtx *tree.EvalContext) {
 	f.evalCtx = evalCtx
-	f.mem = memo.New()
+	f.mem.Init()
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
@@ -147,7 +147,7 @@ func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 
 // Memo returns the memo structure that the factory is operating upon.
 func (f *Factory) Memo() *memo.Memo {
-	return f.mem
+	return &f.mem
 }
 
 // Metadata returns the query-specific metadata, which includes information
@@ -176,7 +176,7 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
 	if util.RaceEnabled && !f.skipSanityChecks {
-		f.checkExpr(memo.MakeNormExprView(f.mem, group))
+		f.checkExpr(memo.MakeNormExprView(&f.mem, group))
 	}
 	return group
 }

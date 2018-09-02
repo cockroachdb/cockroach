@@ -140,19 +140,29 @@ type Memo struct {
 	root BestExprID
 }
 
-// New constructs a new empty memo instance.
-func New() *Memo {
+// Init initializes a new empty memo instance, or resets existing state so it
+// can be reused. It must be called before use (or reuse).
+func (m *Memo) Init() {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
-	m := &Memo{
-		exprMap: make(map[Fingerprint]GroupID),
-		groups:  make([]group, 1, 12),
+	m.metadata.Init()
+
+	// TODO(andyk): Investigate fast map clear when we move to Go 1.11.
+	m.exprMap = make(map[Fingerprint]GroupID)
+
+	// Reuse groups slice unless it was under-utilized.
+	const minGroupCount = 12
+	if m.groups == nil || (len(m.groups) > minGroupCount && len(m.groups) < cap(m.groups)/2) {
+		m.groups = make([]group, 1, minGroupCount)
+	} else {
+		m.groups = m.groups[:1]
 	}
 
+	m.listStorage.init()
 	m.privateStorage.init()
-	return m
+	m.root = BestExprID{}
 }
 
 // Metadata returns the metadata instance associated with the memo.

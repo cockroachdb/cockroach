@@ -71,7 +71,7 @@ type privateKey struct {
 	str   string
 }
 
-// init must be called before privateStorage can be used.
+// init prepares privateStorage for use (or reuse).
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
 	ps.privatesMap = make(map[privateKey]PrivateID)
