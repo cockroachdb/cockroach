@@ -153,6 +153,20 @@ type mdColumn struct {
 	typ types.T
 }
 
+// Init prepares the metadata for use (or reuse).
+func (md *Metadata) Init() {
+	// Clear the columns and tables to release memory (this clearing pattern is
+	// optimized by Go).
+	for i := range md.cols {
+		md.cols[i] = mdColumn{}
+	}
+	for i := range md.tables {
+		md.tables[i] = mdTable{}
+	}
+	md.cols = md.cols[:0]
+	md.tables = md.tables[:0]
+}
+
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {

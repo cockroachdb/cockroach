@@ -46,7 +46,7 @@ type CustomFuncs struct {
 // Init initializes a new CustomFuncs with the given factory.
 func (c *CustomFuncs) Init(f *Factory) {
 	c.f = f
-	c.mem = f.mem
+	c.mem = f.Memo()
 }
 
 // ----------------------------------------------------------------------
