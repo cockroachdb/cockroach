@@ -78,6 +78,11 @@ func (noopEverything) CanServe(
 ) bool {
 	return false
 }
+func (noopEverything) MaxClosed(
+	roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI,
+) hlc.Timestamp {
+	return hlc.Timestamp{}
+}
 func (noopEverything) Request(roachpb.NodeID, roachpb.RangeID) {}
 func (noopEverything) EnsureClient(roachpb.NodeID)             {}
 func (noopEverything) Dial(context.Context, roachpb.NodeID) (ctpb.Client, error) {

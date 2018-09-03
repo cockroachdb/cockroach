@@ -126,6 +126,10 @@ type Producer interface {
 //    to its local storage, so that
 // 4. the CanServe method determines via the the underlying storage whether a
 //    given read can be satisfied via follower reads.
+// 5. the MaxClosed method determines via the underlying storage what the maximum
+//    closed timestamp is for the specified LAI.
+//    TODO(tschottdorf): This is already adding some cruft to this nice interface.
+//    CanServe and MaxClosed are almost identical.
 //
 // Note that a Provider has no duty to immediately persist the local closed
 // timestamps to the underlying storage.
@@ -134,6 +138,7 @@ type Provider interface {
 	Notifyee
 	Start()
 	CanServe(roachpb.NodeID, hlc.Timestamp, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) bool
+	MaxClosed(roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) hlc.Timestamp
 }
 
 // A ClientRegistry is the client component of the follower reads subsystem. It
