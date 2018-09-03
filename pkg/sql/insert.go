@@ -119,6 +119,12 @@ func (p *planner) Insert(
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
 		insertCols = desc.Columns
+		// Add mutation columns.
+		for i := range desc.Mutations {
+			if c := desc.Mutations[i].GetColumn(); c != nil && desc.Mutations[i].State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				insertCols = append(insertCols, *c)
+			}
+		}
 	} else {
 		var err error
 		if insertCols, err = p.processColumns(desc, n.Columns,
