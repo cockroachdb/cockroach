@@ -25,12 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 )
 
 const (
 	dockerTest = "runMode=docker"
 )
+
+var stopper = stop.NewStopper()
 
 // RunDocker runs the given acceptance test using a Docker cluster.
 func RunDocker(t *testing.T, testee func(t *testing.T)) {
@@ -42,27 +45,6 @@ func RunDocker(t *testing.T, testee func(t *testing.T)) {
 // subtests in that way when they are invoked multiple times with the same name,
 // and we sometimes call RunDocker multiple times in tests.
 var reStripTestEnumeration = regexp.MustCompile(`#\d+$`)
-
-// runTestWithCluster runs the passed in test against the configuration
-// specified by the flags. If any options are specified, they may mutate the
-// test config before it runs.
-func runTestWithCluster(
-	t *testing.T,
-	testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
-	options ...func(*cluster.TestConfig),
-) {
-	cfg := ReadConfigFromFlags()
-	ctx := context.Background()
-
-	for _, opt := range options {
-		opt(&cfg)
-	}
-
-	cluster := StartCluster(ctx, t, cfg)
-	log.Infof(ctx, "cluster started successfully")
-	defer cluster.AssertAndStop(ctx, t)
-	testFunc(ctx, t, cluster, cfg)
-}
 
 // StartCluster starts a cluster from the relevant flags. All test clusters
 // should be created through this command since it sets up the logging in a
