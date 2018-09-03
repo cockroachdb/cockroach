@@ -39,7 +39,8 @@ type tableUpserterBase struct {
 	// rowTemplate is used to prepare rows to add to rowsUpserted.
 	rowTemplate tree.Datums
 	// rowIdxToRetIdx maps the indices in the inserted rows
-	// back to indices in rowTemplate.
+	// back to indices in rowTemplate. Contains -1 for indices in the inserted
+	// rows that shouldn't be returned to the user - mutation columns.
 	rowIdxToRetIdx []int
 	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
 	// collectRows is set, counted separately otherwise.
@@ -77,13 +78,22 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 	}
 
 	// Create the map from insert rows to returning rows.
+	// Note that this map will *not* contain any mutation columns - that's because
+	// even though we might insert values into mutation columns, we never return
+	// them back to the user.
 	colIDToRetIndex := map[sqlbase.ColumnID]int{}
 	for i, col := range tableDesc.Columns {
 		colIDToRetIndex[col.ID] = i
 	}
 	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
 	for i, col := range tu.ri.InsertCols {
-		tu.rowIdxToRetIdx[i] = colIDToRetIndex[col.ID]
+		retId, ok := colIDToRetIndex[col.ID]
+		if !ok {
+			// If the column is missing, it means it's a mutation column. Put -1 in
+			// the map to signal that we don't want it in the returning row.
+			retId = -1
+		}
+		tu.rowIdxToRetIdx[i] = retId
 	}
 
 	tu.insertRows.Init(
@@ -149,16 +159,25 @@ func (tu *tableUpserterBase) finalize(
 func (tu *tableUpserterBase) makeResultFromInsertRow(
 	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
 ) tree.Datums {
-	resultRow := insertRow
-	if len(resultRow) < len(cols) {
-		resultRow = make(tree.Datums, len(cols))
-		// Pre-fill with NULLs.
+	if len(insertRow) == len(cols) {
+		// The row we inserted was already the right shape.
+		return insertRow
+	}
+	resultRow := make(tree.Datums, len(cols))
+	if len(insertRow) < len(cols) {
+		// The row we inserted didn't have all columns filled out. Fill the columns
+		// that weren't included with NULLs.
 		for i := range resultRow {
 			resultRow[i] = tree.DNull
 		}
-		// Fill the other values from insertRow.
-		for i, val := range insertRow {
-			resultRow[tu.rowIdxToRetIdx[i]] = val
+	}
+	// Now, fill the other values from insertRow.
+	for i, val := range insertRow {
+		retIdx := tu.rowIdxToRetIdx[i]
+		if retIdx != -1 {
+			// We don't want to return values we wrote into non-public columns.
+			// These values have retIdx = -1. Skip them.
+			resultRow[retIdx] = val
 		}
 	}
 	return resultRow
