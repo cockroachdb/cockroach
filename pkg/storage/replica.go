@@ -2889,11 +2889,11 @@ func (r *Replica) executeReadOnlyBatch(
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
 				FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
-				lErr.LeaseHolder != nil && lErr.Lease.Epoch != 0 {
+				lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch {
 
-				r.mu.Lock()
+				r.mu.RLock()
 				lai := r.mu.state.LeaseAppliedIndex
-				r.mu.Unlock()
+				r.mu.RUnlock()
 				if !r.store.cfg.ClosedTimestamp.Provider.CanServe(
 					lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
 				) {
