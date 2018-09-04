@@ -331,6 +331,11 @@ func setupRanges(
 		}
 	}
 
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	tableDesc := sqlbase.GetTableDescriptor(cdb, "t", "test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))

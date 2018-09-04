@@ -216,6 +216,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
 			},
 		},
+		// Prevent the merge queue from immediately discarding our splits.
+		DisableMergeQueue: true,
 	}}
 
 	ctx := context.Background()
