@@ -36,9 +36,8 @@ import (
 var useast1bFixtures = workloadccl.FixtureConfig{
 	// TODO(dan): Keep fixtures in more than one region to better support
 	// geo-distributed clusters.
-	GCSBucket:      `cockroach-fixtures`,
-	GCSPrefix:      `workload`,
-	BillingProject: `cockroach-shared`,
+	GCSBucket: `cockroach-fixtures`,
+	GCSPrefix: `workload`,
 }
 
 func config() workloadccl.FixtureConfig {
