@@ -107,6 +107,7 @@ limit                ·            ·          (sum)      ·
            │         aggregate 0  sum(w)     ·          ·
            │         aggregate 1  v          ·          ·
            │         group by     @1-@2      ·          ·
+           │         ordered      @1         ·          ·
            └── scan  ·            ·          (k, v, w)  k!=NULL; key(k)
 ·                    table        t@primary  ·          ·
 ·                    spans        ALL        ·          ·
