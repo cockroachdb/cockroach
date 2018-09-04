@@ -73,13 +73,17 @@ func distChangefeedFlow(
 		return err
 	}
 
-	var highWater hlc.Timestamp
-	if h := progress.GetHighWater(); h != nil {
-		highWater = *h
+	spansTS := details.StatementTime
+	var initialHighWater hlc.Timestamp
+	if h := progress.GetHighWater(); h != nil && *h != (hlc.Timestamp{}) {
+		initialHighWater = *h
+		// If we have a high-water set, use it to compute the spans, since the
+		// ones at the statement time may have been garbage collected by now.
+		spansTS = initialHighWater
 	}
 
 	execCfg := phs.ExecCfg()
-	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, details.Targets, highWater)
+	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, details.Targets, spansTS)
 	if err != nil {
 		return err
 	}
@@ -107,7 +111,7 @@ func distChangefeedFlow(
 		for i, nodeSpan := range nodeSpans {
 			watches[i] = distsqlrun.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
-				InitialResolved: highWater,
+				InitialResolved: initialHighWater,
 			}
 		}
 
