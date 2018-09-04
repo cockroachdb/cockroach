@@ -46,6 +46,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.txn.restarts.deleterange" title="Forwarded Timestamp (delete range)" nonNegativeRate />
         <Metric name="cr.node.txn.restarts.serializable" title="Forwarded Timestamp (iso=serializable)" nonNegativeRate />
         <Metric name="cr.node.txn.restarts.possiblereplay" title="Possible Replay" nonNegativeRate />
+        <Metric name="cr.node.txn.restarts.asyncwritefailure" title="Async Consensus Failure" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
