@@ -1055,6 +1055,26 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	return d
 }
 
+func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Concat(
+		pretty.Text("CREATE VIEW "),
+		p.Doc(&node.Name),
+	)
+	if len(node.ColumnNames) > 0 {
+		d = pretty.ConcatSpace(
+			d,
+			pretty.Bracket("(", p.Doc(&node.ColumnNames), ")"),
+		)
+	}
+	return p.nestUnder(
+		d,
+		p.nestUnder(
+			pretty.Text("AS"),
+			p.Doc(node.AsSource),
+		),
+	)
+}
+
 func (node *TableDefs) doc(p *PrettyCfg) pretty.Doc {
 	d := make([]pretty.Doc, len(*node))
 	for i, n := range *node {
