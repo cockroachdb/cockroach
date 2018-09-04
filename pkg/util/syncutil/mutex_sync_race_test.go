@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 // +build !deadlock
+// +build race
 
 package syncutil
 
