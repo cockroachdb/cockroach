@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE t.a
+CREATE TABLE a
 (
     x INT,
     y FLOAT,
@@ -16,6 +16,30 @@ TABLE a
  └── INDEX primary
       ├── x int not null
       └── y float not null desc
+
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      └── c int not null
+
+exec-ddl
+CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y, z))
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int not null
+ ├── z int not null
+ └── INDEX primary
+      ├── x int not null
+      ├── y int not null
+      └── z int not null
 
 # --------------------------------------------------
 # Scan operator.
@@ -246,6 +270,8 @@ memo (optimized)
 # --------------------------------------------------
 # GroupBy operator.
 # --------------------------------------------------
+
+# Verify that the internal ordering is required of the input.
 opt
 SELECT array_agg(z) FROM (SELECT * FROM a ORDER BY y)
 ----
@@ -273,6 +299,125 @@ scalar-group-by
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: x [type=int]
+
+# Pass through ordering on grouping columns.
+opt
+SELECT a, min(b) FROM abc GROUP BY a ORDER BY a
+----
+group-by
+ ├── columns: a:1(int!null) min:4(int)
+ ├── grouping columns: a:1(int!null)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    └── ordering: +1
+ └── aggregations
+      └── min [type=int]
+           └── variable: b [type=int]
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ └── aggregations
+      └── min [type=int]
+           └── variable: c [type=int]
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── min [type=int]
+           └── variable: c [type=int]
+
+opt
+SELECT a, b, min(c) FROM abc GROUP BY b, a ORDER BY a, b
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2
+ └── aggregations
+      └── min [type=int]
+           └── variable: c [type=int]
+
+# We can't pass through the ordering if it refers to aggregation results.
+opt
+SELECT a, b, min(c) AS m FROM abc GROUP BY a, b ORDER BY a, m
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) m:4(int)
+ ├── ordering: +1,+4
+ └── group-by
+      ├── columns: a:1(int!null) b:2(int!null) min:4(int)
+      ├── grouping columns: a:1(int!null) b:2(int!null)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── aggregations
+           └── min [type=int]
+                └── variable: c [type=int]
+
+# Satisfy both the required and the internal orderings by requiring a+,b+,c+.
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +3 opt(1,2)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: c [type=int]
+
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, b ORDER BY a, b
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +3 opt(1,2)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: c [type=int]
+
+opt
+SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, a ORDER BY a, b
+----
+group-by
+ ├── columns: a:1(int!null) b:2(int!null) array_agg:4(int[])
+ ├── grouping columns: a:1(int!null) b:2(int!null)
+ ├── internal-ordering: +3 opt(1,2)
+ ├── ordering: +1,+2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1,+2,+3
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: c [type=int]
 
 # --------------------------------------------------
 # Explain operator.
@@ -420,30 +565,6 @@ memo (optimized)
 # --------------------------------------------------
 # Merge Join
 # --------------------------------------------------
-
-exec-ddl
-CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
-----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- └── INDEX primary
-      ├── a int not null
-      ├── b int not null
-      └── c int not null
-
-exec-ddl
-CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y, z))
-----
-TABLE xyz
- ├── x int not null
- ├── y int not null
- ├── z int not null
- └── INDEX primary
-      ├── x int not null
-      ├── y int not null
-      └── z int not null
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x ORDER BY a

@@ -100,25 +100,22 @@ offset
 opt
 SELECT array_agg(b), a, c FROM abcde GROUP BY b, a, c ORDER BY a, b, c
 ----
-sort
+group-by
  ├── columns: array_agg:6(int[]) a:1(int!null) c:3(int)
+ ├── grouping columns: a:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(3,6)
  ├── ordering: +1
- └── group-by
-      ├── columns: a:1(int!null) c:3(int) array_agg:6(int[])
-      ├── grouping columns: a:1(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(3,6)
-      ├── scan abcde@bc
-      │    ├── columns: a:1(int!null) b:2(int) c:3(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2,3), (2,3)~~>(1)
-      └── aggregations [outer=(2,3)]
-           ├── array-agg [type=int[], outer=(2)]
-           │    └── variable: b [type=int, outer=(2)]
-           └── const-agg [type=int, outer=(3)]
-                └── variable: c [type=int, outer=(3)]
+ ├── scan abcde
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── ordering: +1
+ └── aggregations [outer=(2,3)]
+      ├── array-agg [type=int[], outer=(2)]
+      │    └── variable: b [type=int, outer=(2)]
+      └── const-agg [type=int, outer=(3)]
+           └── variable: c [type=int, outer=(3)]
 
 # ScalarGroupBy case.
 opt

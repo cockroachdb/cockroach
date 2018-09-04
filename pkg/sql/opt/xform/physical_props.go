@@ -36,26 +36,17 @@ import (
 // method.
 func (o *Optimizer) canProvidePhysicalProps(eid memo.ExprID, required memo.PhysicalPropsID) bool {
 	requiredProps := o.mem.LookupPhysicalProps(required)
-
-	if !requiredProps.Presentation.Any() {
-		if !o.canProvidePresentation(eid, requiredProps.Presentation) {
-			return false
-		}
-	}
-
-	if !requiredProps.Ordering.Any() {
-		if !o.canProvideOrdering(eid, &requiredProps.Ordering) {
-			return false
-		}
-	}
-
-	return true
+	return o.canProvidePresentation(eid, requiredProps.Presentation) &&
+		o.canProvideOrdering(eid, &requiredProps.Ordering)
 }
 
 // canProvidePresentation returns true if the given expression can provide the
 // required presentation property. Currently, all relational operators are
 // capable of doing this.
 func (o *Optimizer) canProvidePresentation(eid memo.ExprID, required props.Presentation) bool {
+	if required.Any() {
+		return true
+	}
 	mexpr := o.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("presentation property doesn't apply to non-relational operators")
@@ -69,6 +60,9 @@ func (o *Optimizer) canProvidePresentation(eid memo.ExprID, required props.Prese
 // required ordering property. The required ordering is assumed to have already
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.OrderingChoice) bool {
+	if required.Any() {
+		return true
+	}
 	mexpr := o.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("ordering property doesn't apply to non-relational operators")
@@ -108,6 +102,19 @@ func (o *Optimizer) canProvideOrdering(eid memo.ExprID, required *props.Ordering
 		// These operators require a certain ordering of their input, but can also
 		// pass through a stronger ordering.
 		return required.Intersects(o.internalOrdering(mexpr))
+
+	case opt.GroupByOp:
+		// Similar to Limit, GroupBy may require a certain ordering of its input,
+		// but can also pass through a stronger ordering on the grouping columns.
+		def := mexpr.Private(o.mem).(*memo.GroupByDef)
+		if !required.CanProjectCols(def.GroupingCols) {
+			return false
+		}
+		return required.Intersects(&def.Ordering)
+
+	case opt.ScalarGroupByOp:
+		// ScalarGroupBy always has exactly one result; any required ordering should
+		// have been simplified to Any (unless normalization rules are disabled).
 	}
 
 	return false
@@ -165,8 +172,8 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 		}
 
-	case opt.RowNumberOp, opt.GroupByOp, opt.ScalarGroupByOp:
-		// These ops require the ordering in their private.
+	case opt.RowNumberOp, opt.ScalarGroupByOp:
+		// This op requires the ordering in its private.
 		if nth == 0 {
 			childProps.Ordering = *o.internalOrdering(mexpr)
 		}
@@ -178,11 +185,21 @@ func (o *Optimizer) buildChildPhysicalProps(
 			//   SELECT * FROM (SELECT x, y FROM t ORDER BY x LIMIT 10) ORDER BY x,y
 			// In this case the internal ordering is x+, but we can pass through x+,y+
 			// to satisfy both orderings.
-			//
-			// DistinctOn is executed differently than GroupBy, in a way that retains
-			// the input ordering. Once we support "streaming" execution of GroupBy,
-			// that operator will belong here as well.
 			childProps.Ordering = parentProps.Ordering.Intersection(o.internalOrdering(mexpr))
+		}
+
+	case opt.GroupByOp:
+		if nth == 0 {
+			// Similar to Limit, GroupBy may require a certain ordering of its input,
+			// but can also pass through a stronger ordering on the grouping columns.
+			def := mexpr.Private(o.mem).(*memo.GroupByDef)
+			parentOrdering := parentProps.Ordering
+			if !parentOrdering.SubsetOfCols(def.GroupingCols) {
+				parentOrdering = parentOrdering.Copy()
+				parentOrdering.ProjectCols(def.GroupingCols)
+			}
+
+			childProps.Ordering = parentOrdering.Intersection(&def.Ordering)
 		}
 
 	case opt.ExplainOp:
