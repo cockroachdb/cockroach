@@ -129,14 +129,15 @@ func changefeedPlanHook(
 			return err
 		}
 
-		now := p.ExecCfg().Clock.Now()
-		var highWater hlc.Timestamp
+		statementTime := p.ExecCfg().Clock.Now()
+		var initialHighWater hlc.Timestamp
 		if cursor, ok := opts[optCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if highWater, err = p.EvalAsOfTimestamp(asOf, now); err != nil {
+			if initialHighWater, err = p.EvalAsOfTimestamp(asOf, statementTime); err != nil {
 				return err
 			}
+			statementTime = initialHighWater
 		}
 
 		// For now, disallow targeting a database or wildcard table selection.
@@ -157,32 +158,31 @@ func changefeedPlanHook(
 		}
 
 		// This grabs table descriptors once to get their ids.
-		descriptorTime := now
-		if highWater != (hlc.Timestamp{}) {
-			descriptorTime = highWater
-		}
 		targetDescs, _, err := backupccl.ResolveTargetsToDescriptors(
-			ctx, p, descriptorTime, changefeedStmt.Targets)
+			ctx, p, statementTime, changefeedStmt.Targets)
 		if err != nil {
 			return err
 		}
-		targets := make(map[sqlbase.ID]string, len(targetDescs))
+		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				if err := validateChangefeedTable(tableDesc); err != nil {
+				targets[tableDesc.ID] = jobspb.ChangefeedTarget{
+					StatementTimeName: tableDesc.Name,
+				}
+				if err := validateChangefeedTable(targets, tableDesc); err != nil {
 					return err
 				}
-				targets[tableDesc.ID] = tableDesc.Name
 			}
 		}
 
 		details := jobspb.ChangefeedDetails{
-			Targets: targets,
-			Opts:    opts,
-			SinkURI: sinkURI,
+			Targets:       targets,
+			Opts:          opts,
+			SinkURI:       sinkURI,
+			StatementTime: statementTime,
 		}
 		progress := jobspb.Progress{
-			Progress: &jobspb.Progress_HighWater{HighWater: &highWater},
+			Progress: &jobspb.Progress_HighWater{HighWater: &initialHighWater},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{},
 			},
@@ -275,7 +275,14 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	return details, nil
 }
 
-func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
+func validateChangefeedTable(
+	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor,
+) error {
+	t, ok := targets[tableDesc.ID]
+	if !ok {
+		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+	}
+
 	// Technically, the only non-user table known not to work is system.jobs
 	// (which creates a cycle since the resolved timestamp high-water mark is
 	// saved in it), but there are subtle differences in the way many of them
@@ -298,6 +305,18 @@ func validateChangefeedTable(tableDesc *sqlbase.TableDescriptor) error {
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
 			tableDesc.Name, len(tableDesc.Families))
 	}
+
+	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
+	}
+	if tableDesc.Name != t.StatementTimeName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
+	}
+
+	if tableDesc.HasColumnBackfillMutation() {
+		return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
+	}
+
 	return nil
 }
 

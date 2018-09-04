@@ -17,6 +17,8 @@ package jobspb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Details is a marker interface for job details proto structs.
@@ -192,3 +194,6 @@ func (d ImportProgress) Completed() float32 {
 	}
 	return completed
 }
+
+// ChangefeedTargets is a set of id targets with metadata.
+type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget
