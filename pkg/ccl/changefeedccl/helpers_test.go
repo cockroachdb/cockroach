@@ -94,7 +94,9 @@ func createBenchmarkChangefeed(
 	tableDesc := sqlbase.GetTableDescriptor(s.DB(), database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan()}
 	details := jobspb.ChangefeedDetails{
-		Targets: map[sqlbase.ID]string{tableDesc.ID: tableDesc.Name},
+		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.Name,
+		}},
 		Opts: map[string]string{
 			optEnvelope: string(optEnvelopeRow),
 		},
@@ -104,8 +106,7 @@ func createBenchmarkChangefeed(
 
 	buf := makeBuffer()
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details.Targets,
-		initialHighWater, buf)
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf)
 
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	tickFn := emitEntries(details, sink, rowsFn)

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,7 +45,7 @@ type poller struct {
 	clock    *hlc.Clock
 	gossip   *gossip.Gossip
 	spans    []roachpb.Span
-	targets  map[sqlbase.ID]string
+	details  jobspb.ChangefeedDetails
 	buf      *buffer
 
 	highWater hlc.Timestamp
@@ -56,8 +57,8 @@ func makePoller(
 	clock *hlc.Clock,
 	gossip *gossip.Gossip,
 	spans []roachpb.Span,
-	targets map[sqlbase.ID]string,
-	startTime hlc.Timestamp,
+	details jobspb.ChangefeedDetails,
+	highWater hlc.Timestamp,
 	buf *buffer,
 ) *poller {
 	return &poller{
@@ -65,36 +66,35 @@ func makePoller(
 		db:        db,
 		clock:     clock,
 		gossip:    gossip,
-		highWater: startTime,
+		highWater: highWater,
 		spans:     spans,
-		targets:   targets,
+		details:   details,
 		buf:       buf,
 	}
 }
 
 func fetchSpansForTargets(
-	ctx context.Context, db *client.DB, targets map[sqlbase.ID]string, ts hlc.Timestamp,
+	ctx context.Context, db *client.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		spans = nil
-		if ts != (hlc.Timestamp{}) {
-			txn.SetFixedTimestamp(ctx, ts)
-		}
+		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID, origName := range targets {
+		for tableID, t := range targets {
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 			if err != nil {
 				if errors.Cause(err) == sqlbase.ErrDescriptorNotFound {
-					return errors.Errorf(`"%s" was dropped or truncated`, origName)
+					return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 				}
 				return err
 			}
 			if tableDesc.State == sqlbase.TableDescriptor_DROP {
-				return errors.Errorf(`"%s" was dropped or truncated`, origName)
+				return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 			}
-			if tableDesc.Name != origName {
-				return errors.Errorf(`"%s" was renamed to "%s"`, origName, tableDesc.Name)
+			if tableDesc.Name != t.StatementTimeName {
+				return errors.Errorf(
+					`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
 			}
 			if err := validateChangefeedTable(tableDesc); err != nil {
 				return err
@@ -137,7 +137,7 @@ func (p *poller) Run(ctx context.Context) error {
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
-		_, err := fetchSpansForTargets(ctx, p.db, p.targets, nextHighWater)
+		_, err := fetchSpansForTargets(ctx, p.db, p.details.Targets, nextHighWater)
 		if err != nil {
 			return err
 		}
@@ -301,22 +301,15 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
 // TODO(nvanbenschoten): this should probably be a whole different type that
 // shares a common interface with poller.
 func (p *poller) runUsingRangefeeds(ctx context.Context) error {
-	startTS := p.highWater
-	spans, err := fetchSpansForTargets(ctx, p.db, p.targets, startTS)
-	if err != nil {
-		return err
-	}
-
 	g := ctxgroup.WithContext(ctx)
 	sender := p.db.NonTransactionalSender()
-	if startTS == (hlc.Timestamp{}) {
-		startTS = p.clock.Now()
-
+	if p.highWater == (hlc.Timestamp{}) {
 		// TODO(nvanbenschoten/danhhz): This should be replaced by a series of
 		// ScanRequests and this structure should be completely reworked. Right
 		// now it's copied verbatim from above.
 		var ranges []roachpb.RangeDescriptor
 		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			txn.SetFixedTimestamp(ctx, p.details.StatementTime)
 			var err error
 			ranges, err = allRangeDescriptors(ctx, txn)
 			return err
@@ -378,7 +371,7 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 					if log.V(2) {
 						log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
 					}
-					header := roachpb.Header{Timestamp: startTS}
+					header := roachpb.Header{Timestamp: p.details.StatementTime}
 					req := &roachpb.ExportRequest{
 						RequestHeader: roachpb.RequestHeaderFromSpan(span),
 						StartTime:     hlc.Timestamp{},
@@ -401,20 +394,25 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 							return err
 						}
 					}
-					return p.buf.AddResolved(ctx, span, startTS)
+					return p.buf.AddResolved(ctx, span, p.details.StatementTime)
 				})
 			}
 			return nil
 		})
 	}
 
+	rangeFeedTS := p.details.StatementTime
+	if rangeFeedTS.Less(p.highWater) {
+		rangeFeedTS = p.highWater
+	}
+
 	// TODO(nvanbenschoten): This is horrible.
 	ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
 	eventC := make(chan *roachpb.RangeFeedEvent, 128)
-	for _, span := range spans {
+	for _, span := range p.spans {
 		req := &roachpb.RangeFeedRequest{
 			Header: roachpb.Header{
-				Timestamp: startTS,
+				Timestamp: rangeFeedTS,
 			},
 			Span: span,
 		}
