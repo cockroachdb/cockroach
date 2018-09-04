@@ -256,7 +256,11 @@ func (ts *txnState) finishSQLTxn() {
 // InternalExecutor). These guys don't want to mess with the transaction per-se,
 // but still want to clean up other stuff.
 func (ts *txnState) finishExternalTxn() {
-	ts.mon.Stop(ts.Ctx)
+	if ts.Ctx == nil {
+		ts.mon.Stop(ts.connCtx)
+	} else {
+		ts.mon.Stop(ts.Ctx)
+	}
 	if ts.cancel != nil {
 		ts.cancel()
 		ts.cancel = nil
