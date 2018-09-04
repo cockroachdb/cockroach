@@ -1656,6 +1656,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 			}
 			return nil
 		}
+	// Don't clobber the test's splits.
+	storeKnobs.DisableMergeQueue = true
+
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.TODO()
@@ -1850,6 +1853,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}
 			return nil
 		}
+	// Don't clobber the test's splits.
+	storeKnobs.DisableMergeQueue = true
+
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
 	ctx := context.Background()
