@@ -218,6 +218,10 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 // processor did not finish completion, there is an excessive amount of nil
 // checking.
 func (ca *changeAggregator) close() {
+	// Shut down the poller and tableHistUpdater if they weren't already.
+	if ca.cancel != nil {
+		ca.cancel()
+	}
 	// Wait for the poller and tableHistUpdater to finish shutting down.
 	if ca.pollerDoneCh != nil {
 		<-ca.pollerDoneCh
