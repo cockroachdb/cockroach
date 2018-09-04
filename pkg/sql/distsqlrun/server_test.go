@@ -61,7 +61,8 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
-	txnCoordMeta := txn.GetStrippedTxnCoordMeta()
+	txnCoordMeta := txn.GetTxnCoordMeta()
+	txnCoordMeta.StripRootToLeaf()
 
 	req := &SetupFlowRequest{Version: Version, TxnCoordMeta: &txnCoordMeta}
 	req.Flow = FlowSpec{
