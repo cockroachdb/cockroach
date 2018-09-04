@@ -44,6 +44,7 @@ func registerAcceptance(r *registry) {
 		{"gossip/restart-node-one", runGossipRestartNodeOne},
 		{"rapid-restart", runRapidRestart},
 		{"status-server", runStatusServer},
+		{"version-upgrade", runVersionUpgrade},
 	}
 	for _, tc := range testCases {
 		tc := tc
