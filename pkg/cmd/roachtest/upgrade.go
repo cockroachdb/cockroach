@@ -443,7 +443,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	const baseVersion = "v1.0.6"
 	steps := []versionStep{
-		binaryVersionUpgrade(baseVersion, nodes),
 		// v1.1.0 is the first binary version that knows about cluster versions,
 		// but thinks it can only support up to 1.0-3.
 		binaryVersionUpgrade("v1.1.0", nodes),
