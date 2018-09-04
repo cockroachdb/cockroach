@@ -57,7 +57,7 @@ func registerSchemaChange(r *registry) {
 				// but we can't put it in monitor as-is because the test deadlocks.
 				go func() {
 					const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --db=test`
-					l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
+					l, err := c.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -81,7 +81,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// These schema changes are over a table that is not actively
 	// being updated.
-	l.printf("running schema changes over workload.customer\n")
+	l.Printf("running schema changes over workload.customer\n")
 	schemaChanges := []string{
 		"ALTER TABLE workload.customer ADD COLUMN newcol INT DEFAULT 23456",
 		"CREATE INDEX foo ON workload.customer (c_name)",
@@ -110,7 +110,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 	// an opportunity to get populate through the load generator. These
 	// schema changes are acting upon a decent sized table that is also
 	// being updated.
-	l.printf("running schema changes over test.kv\n")
+	l.Printf("running schema changes over test.kv\n")
 	schemaChanges = []string{
 		"ALTER TABLE test.kv ADD COLUMN created_at TIMESTAMP DEFAULT now()",
 		"CREATE INDEX foo ON test.kv (v)",
@@ -141,12 +141,12 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 func runSchemaChanges(ctx context.Context, l *logger, db *gosql.DB, schemaChanges []string) error {
 	for _, cmd := range schemaChanges {
 		start := timeutil.Now()
-		l.printf("starting schema change: %s\n", cmd)
+		l.Printf("starting schema change: %s\n", cmd)
 		if _, err := db.Exec(cmd); err != nil {
-			l.errorf("hit schema change error: %s, for %s, in %s\n", err, cmd, timeutil.Since(start))
+			l.Errorf("hit schema change error: %s, for %s, in %s\n", err, cmd, timeutil.Since(start))
 			return err
 		}
-		l.printf("completed schema change: %s, in %s\n", cmd, timeutil.Since(start))
+		l.Printf("completed schema change: %s, in %s\n", cmd, timeutil.Since(start))
 		// TODO(vivek): Monitor progress of schema changes and log progress.
 	}
 
@@ -189,7 +189,7 @@ func runValidationQueries(
 		if err := db.QueryRow(q).Scan(&count); err != nil {
 			return err
 		}
-		l.printf("query: %s, found %d rows\n", q, count)
+		l.Printf("query: %s, found %d rows\n", q, count)
 		if count == 0 {
 			return errors.Errorf("%s: %d rows found", q, count)
 		}
@@ -236,7 +236,7 @@ func checkIndexOverTimeSpan(
 	if err := db.QueryRow(q, s.start, s.end).Scan(&count); err != nil {
 		return false, err
 	}
-	l.printf("counts seen %d, %d, over [%s, %s]\n", count, eCount, s.start, s.end)
+	l.Printf("counts seen %d, %d, over [%s, %s]\n", count, eCount, s.start, s.end)
 	return count != eCount, nil
 }
 
@@ -259,7 +259,7 @@ func findIndexProblem(
 		leftSpan, rightSpan := s, s
 		d := s.end.Sub(s.start) / 2
 		if d < 50*time.Millisecond {
-			l.printf("problem seen over [%s, %s]\n", s.start, s.end)
+			l.Printf("problem seen over [%s, %s]\n", s.start, s.end)
 			continue
 		}
 		m := s.start.Add(d)
@@ -283,7 +283,7 @@ func findIndexProblem(
 			spans = append(spans, rightSpan)
 		}
 		if !(leftState || rightState) {
-			l.printf("no problem seen over [%s, %s]\n", s.start, s.end)
+			l.Printf("no problem seen over [%s, %s]\n", s.start, s.end)
 		}
 	}
 	return nil

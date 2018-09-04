@@ -218,7 +218,7 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
-	l.printf("> %s\n", strings.Join(args, " "))
+	l.Printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	debugStdoutBuffer, _ := circbuf.NewBuffer(1024)
@@ -292,7 +292,7 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 }
 
 func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, error) {
-	l.printf("> %s\n", strings.Join(args, " "))
+	l.Printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	out, err := cmd.CombinedOutput()
@@ -628,7 +628,7 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 		if clusterWipe {
 			c.Wipe(ctx, c.All())
 		} else {
-			l.printf("skipping cluster wipe\n")
+			l.Printf("skipping cluster wipe\n")
 		}
 	}
 	c.status("running test")
@@ -710,16 +710,16 @@ func (c *cluster) destroy(ctx context.Context) {
 		if c.name != clusterName {
 			c.status("destroying cluster")
 			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
-				c.l.errorf("%s", err)
+				c.l.Errorf("%s", err)
 			}
 		} else {
 			c.status("wiping cluster")
 			if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
-				c.l.errorf("%s", err)
+				c.l.Errorf("%s", err)
 			}
 		}
 	} else {
-		c.l.printf("skipping cluster wipe\n")
+		c.l.Printf("skipping cluster wipe\n")
 	}
 }
 
@@ -1273,7 +1273,7 @@ func (m *monitor) wait(args ...string) error {
 			// on the error if the monitoring command exits peacefully.
 		}()
 
-		monL, err := m.l.childLogger(`MONITOR`)
+		monL, err := m.l.ChildLogger(`MONITOR`)
 		if err != nil {
 			setErr(err)
 			return

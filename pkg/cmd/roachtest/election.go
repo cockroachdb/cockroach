@@ -44,7 +44,7 @@ func registerElectionAfterRestart(r *registry) {
 			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
         SELECT * FROM test.kv"`)
 			duration := timeutil.Since(start)
-			c.l.printf("pre-restart, query took %s\n", duration)
+			c.l.Printf("pre-restart, query took %s\n", duration)
 
 			t.Status("restarting")
 			c.Stop(ctx)
@@ -60,7 +60,7 @@ func registerElectionAfterRestart(r *registry) {
 			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
         SELECT * FROM test.kv"`)
 			duration = timeutil.Since(start)
-			c.l.printf("post-restart, query took %s\n", duration)
+			c.l.Printf("post-restart, query took %s\n", duration)
 			if expected := 15 * time.Second; duration > expected {
 				// In the happy case, this query runs in around 250ms. Prior
 				// to the introduction of this test, a bug caused most

@@ -80,10 +80,10 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	}
 
 	t.Status("validating clock monotonicity")
-	c.l.printf("pre-restart time:  %f\n", preRestartTime)
-	c.l.printf("post-restart time: %f\n", postRestartTime)
+	c.l.Printf("pre-restart time:  %f\n", preRestartTime)
+	c.l.Printf("post-restart time: %f\n", postRestartTime)
 	difference := postRestartTime - preRestartTime
-	c.l.printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
+	c.l.Printf("time-difference: %v\n", time.Duration(difference*float64(time.Second)))
 
 	if tc.expectIncreasingWallTime {
 		if preRestartTime > postRestartTime {
