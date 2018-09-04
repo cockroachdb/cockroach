@@ -166,13 +166,17 @@ func initRowFetcher(
 
 	cols := desc.Columns
 	if scanVisibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		for _, mutation := range desc.Mutations {
-			if c := mutation.GetColumn(); c != nil {
-				col := *c
-				// Even if the column is non-nullable it can be null in the
-				// middle of a schema change.
-				col.Nullable = true
-				cols = append(cols, col)
+		if len(desc.Mutations) > 0 {
+			cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+			cols = append(cols, desc.Columns...)
+			for _, mutation := range desc.Mutations {
+				if c := mutation.GetColumn(); c != nil {
+					col := *c
+					// Even if the column is non-nullable it can be null in the
+					// middle of a schema change.
+					col.Nullable = true
+					cols = append(cols, col)
+				}
 			}
 		}
 	}
