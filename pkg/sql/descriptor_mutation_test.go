@@ -154,6 +154,63 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 	}
 }
 
+// Test that UPSERT with a column mutation that has a default value with a
+// NOT NULL constraint can handle the null input to its row fetcher, and
+// produces output rows of the correct shape.
+// Regression test for #29436.
+func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer sql.TestDisableTableLeases()()
+	// Disable external processing of mutations.
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
+	}
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR);
+INSERT INTO t.test VALUES('a', 'foo');
+ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// read table descriptor
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	// Add column "i" as a mutation in delete/write.
+	mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY})
+
+	// This row will conflict with the original row, and should insert an `i`
+	// into the new column.
+	mTest.Exec(t, `UPSERT INTO t.test VALUES('a', 'bar') RETURNING k`)
+
+	// These rows will not conflict.
+	mTest.Exec(t, `UPSERT INTO t.test VALUES('b', 'bar') RETURNING k`)
+	mTest.Exec(t, `INSERT INTO t.test VALUES('c', 'bar') RETURNING k, v`)
+	mTest.Exec(t, `INSERT INTO t.test VALUES('c', 'bar') ON CONFLICT(k) DO UPDATE SET v='qux' RETURNING k`)
+
+	mTest.CheckQueryResults(t, `SELECT * FROM t.test`, [][]string{
+		{"a", "bar"},
+		{"b", "bar"},
+		{"c", "qux"},
+	})
+
+	mTest.makeMutationsActive()
+
+	mTest.CheckQueryResults(t, `SELECT * FROM t.test`, [][]string{
+		{"a", "bar", "i"},
+		{"b", "bar", "i"},
+		{"c", "qux", "i"},
+	})
+}
+
 // Test INSERT, UPDATE, UPSERT, and DELETE operations with a column schema
 // change.
 func TestOperationsWithColumnMutation(t *testing.T) {
@@ -228,6 +285,14 @@ CREATE INDEX allidx ON t.test (k, v);
 						_, err = sqlDB.Exec(`UPSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`)
 					} else {
 						_, err = sqlDB.Exec(`INSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`)
+					}
+					if !testutils.IsError(err, `column "i" does not exist`) {
+						t.Fatal(err)
+					}
+					if useUpsert {
+						_, err = sqlDB.Exec(`UPSERT INTO t.test (k, v) VALUES ('b', 'y') RETURNING i`)
+					} else {
+						_, err = sqlDB.Exec(`INSERT INTO t.test (k, v) VALUES ('b', 'y') RETURNING i`)
 					}
 					if !testutils.IsError(err, `column "i" does not exist`) {
 						t.Fatal(err)
