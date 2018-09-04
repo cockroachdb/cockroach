@@ -57,7 +57,8 @@ func runTestFlow(
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
-	txnCoordMeta := txn.GetStrippedTxnCoordMeta()
+	txnCoordMeta := txn.GetTxnCoordMeta()
+	txnCoordMeta.StripRootToLeaf()
 	req := distsqlrun.SetupFlowRequest{
 		Version:      distsqlrun.Version,
 		TxnCoordMeta: &txnCoordMeta,
