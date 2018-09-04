@@ -38,6 +38,7 @@ func registerAcceptance(r *registry) {
 		{"bank/node-restart", runBankNodeRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
+		{"decommission", runDecommissionAcceptance},
 		{"event-log", runEventLog},
 		{"gossip/peerings", runGossipPeerings},
 		{"gossip/restart", runGossipRestart},

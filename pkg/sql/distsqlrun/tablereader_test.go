@@ -197,8 +197,6 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	_, err := db.Exec(`
--- Prevent the merge queue from immediately discarding our splits.
-SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
 `)
