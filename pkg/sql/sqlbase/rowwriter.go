@@ -182,10 +182,14 @@ func MakeRowInserter(
 	indexes := tableDesc.Indexes
 	// Also include the secondary indexes in mutation state
 	// DELETE_AND_WRITE_ONLY.
-	for _, m := range tableDesc.Mutations {
-		if m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			if index := m.GetIndex(); index != nil {
-				indexes = append(indexes, *index)
+	if len(tableDesc.Mutations) > 0 {
+		indexes = make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+		indexes = append(indexes, tableDesc.Indexes...)
+		for _, m := range tableDesc.Mutations {
+			if m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
+				if index := m.GetIndex(); index != nil {
+					indexes = append(indexes, *index)
+				}
 			}
 		}
 	}
@@ -999,9 +1003,13 @@ func makeRowDeleterWithoutCascader(
 	alloc *DatumAlloc,
 ) (RowDeleter, error) {
 	indexes := tableDesc.Indexes
-	for _, m := range tableDesc.Mutations {
-		if index := m.GetIndex(); index != nil {
-			indexes = append(indexes, *index)
+	if len(tableDesc.Mutations) > 0 {
+		indexes = make([]IndexDescriptor, 0, len(tableDesc.Indexes)+len(tableDesc.Mutations))
+		indexes = append(indexes, tableDesc.Indexes...)
+		for _, m := range tableDesc.Mutations {
+			if index := m.GetIndex(); index != nil {
+				indexes = append(indexes, *index)
+			}
 		}
 	}
 
