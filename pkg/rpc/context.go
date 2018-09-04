@@ -533,6 +533,7 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 // ensures that our initial heartbeat (and its version/clusterID
 // validation) occurs on every new connection.
 type onlyOnceDialer struct {
+	ctx context.Context
 	syncutil.Mutex
 	dialed     bool
 	closed     bool
@@ -548,7 +549,7 @@ func (ood *onlyOnceDialer) dial(addr string, timeout time.Duration) (net.Conn, e
 			Timeout:   timeout,
 			LocalAddr: sourceAddr,
 		}
-		return dialer.Dial("tcp", addr)
+		return dialer.DialContext(ood.ctx, "tcp", addr)
 	} else if !ood.closed {
 		ood.closed = true
 		close(ood.redialChan)
@@ -576,6 +577,7 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 		grpc.WithInitialConnWindowSize(initialConnWindowSize))
 
 	dialer := onlyOnceDialer{
+		ctx:        ctx.masterCtx,
 		redialChan: make(chan struct{}),
 	}
 	dialOpts = append(dialOpts, grpc.WithDialer(dialer.dial))
