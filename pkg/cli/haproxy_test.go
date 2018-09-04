@@ -56,10 +56,13 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 		{
 			[]status.NodeStatus{
 				{
-					Args: []string{"--unwanted", "-http-port=1234"},
+					Args: []string{"--unwanted", "--http-port=1234"},
 				},
 				{
 					Args: nil,
+				},
+				{
+					Args: []string{"--http-addr=foo:4567"},
 				},
 			},
 			[]haProxyNodeInfo{
@@ -68,6 +71,9 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 				},
 				{
 					CheckPort: base.DefaultHTTPPort,
+				},
+				{
+					CheckPort: "4567",
 				},
 			},
 		},
