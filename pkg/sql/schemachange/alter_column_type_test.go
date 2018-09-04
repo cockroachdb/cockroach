@@ -108,6 +108,7 @@ func TestColumnConversions(t *testing.T) {
 				VisibleType:  sqlbase.ColumnType_INTEGER,
 				Width:        32,
 			}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_BIT}: ColumnConversionGeneral,
 		},
 		{SemanticType: sqlbase.ColumnType_INT, Width: 32}: {
 			{
@@ -122,7 +123,19 @@ func TestColumnConversions(t *testing.T) {
 			}: ColumnConversionTrivial,
 		},
 
+		{SemanticType: sqlbase.ColumnType_BIT}: {
+			{SemanticType: sqlbase.ColumnType_INT}:           ColumnConversionGeneral,
+			{SemanticType: sqlbase.ColumnType_STRING}:        ColumnConversionGeneral,
+			{SemanticType: sqlbase.ColumnType_BYTES}:         ColumnConversionImpossible,
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: ColumnConversionValidate,
+		},
+		{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: {
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 2}: ColumnConversionValidate,
+			{SemanticType: sqlbase.ColumnType_BIT, Width: 8}: ColumnConversionTrivial,
+		},
+
 		{SemanticType: sqlbase.ColumnType_STRING}: {
+			{SemanticType: sqlbase.ColumnType_BIT}:              ColumnConversionGeneral,
 			{SemanticType: sqlbase.ColumnType_BYTES}:            ColumnConversionTrivial,
 			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionValidate,
 		},
@@ -200,6 +213,18 @@ func TestColumnConversions(t *testing.T) {
 						insert = []interface{}{[]uint8{}, []uint8("data")}
 						switch to.SemanticType {
 						case sqlbase.ColumnType_BYTES:
+							expect = insert
+						}
+
+					case sqlbase.ColumnType_BIT:
+						switch from.Width {
+						case 4:
+							insert = []interface{}{[]uint8("0110")}
+						case 0:
+							insert = []interface{}{[]uint8("110"), []uint8("000110")}
+						}
+						switch to.SemanticType {
+						case sqlbase.ColumnType_BIT:
 							expect = insert
 						}
 

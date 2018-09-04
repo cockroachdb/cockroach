@@ -313,6 +313,10 @@ CREATE TABLE alltypes (
   cbigserial BIGSERIAL,
   cblob BLOB,
   cbool BOOL,
+  cbit BIT,
+  cbit12 BIT(12),
+  cvarbit VARBIT,
+  cvarbit12 VARBIT(12),
   cbytea BYTEA,
   cbytes BYTES,
   cchar CHAR,
@@ -361,6 +365,10 @@ cbigint           INT8          true         NULL            ·                 
 cbigserial        INT           false        unique_rowid()  ·                      {}           false
 cblob             BYTES         true         NULL            ·                      {}           false
 cbool             BOOL          true         NULL            ·                      {}           false
+cbit              BIT           true         NULL            ·                      {}           false
+cbit12            BIT(12)       true         NULL            ·                      {}           false
+cvarbit           VARBIT        true         NULL            ·                      {}           false
+cvarbit12         VARBIT(12)    true         NULL            ·                      {}           false
 cbytea            BYTES         true         NULL            ·                      {}           false
 cbytes            BYTES         true         NULL            ·                      {}           false
 cchar             CHAR          true         NULL            ·                      {}           false
