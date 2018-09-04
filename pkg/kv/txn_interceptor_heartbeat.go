@@ -41,7 +41,16 @@ const (
 type txnHeartbeat struct {
 	log.AmbientContext
 
-	wrapped           lockedSender
+	// wrapped is the next sender in the stack
+	wrapped lockedSender
+	// gatekeeper is the sender to which heartbeat requests need to be sent. It is
+	// set to the gatekeeper interceptor, so sending directly to it will bypass
+	// all the other interceptors; heartbeats don't need them and they can only
+	// heart - we don't want heartbeats to get sequence numbers or to check any
+	// intents. Note that the async rollbacks that this interceptor sometimes
+	// sends got through `wrapped`, not directly through `gatekeeper`.
+	gatekeeper lockedSender
+
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
 	metrics           *TxnMetrics
@@ -99,6 +108,7 @@ func (h *txnHeartbeat) init(
 	txn *roachpb.Transaction,
 	clock *hlc.Clock,
 	heartbeatInterval time.Duration,
+	gatekeeper lockedSender,
 	metrics *TxnMetrics,
 	stopper *stop.Stopper,
 	asyncAbortCallbackLocked func(context.Context),
@@ -110,6 +120,7 @@ func (h *txnHeartbeat) init(
 	h.mu.Locker = mu
 	h.mu.txn = txn
 	h.mu.needBeginTxn = true
+	h.gatekeeper = gatekeeper
 	h.asyncAbortCallbackLocked = asyncAbortCallbackLocked
 }
 
@@ -439,7 +450,7 @@ func (h *txnHeartbeat) heartbeat(ctx context.Context) bool {
 	ba.Add(hb)
 
 	log.VEvent(ctx, 2, "heartbeat")
-	br, pErr := h.wrapped.SendLocked(ctx, ba)
+	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
 
 	var respTxn *roachpb.Transaction
 	if pErr != nil {

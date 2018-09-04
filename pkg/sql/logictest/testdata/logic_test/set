@@ -169,16 +169,16 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET experimental_opt = on
+SET optimizer = on
 
 statement ok
-SET experimental_opt = local
+SET optimizer = local
 
 statement ok
-SET experimental_opt = off
+SET optimizer = off
 
-statement error invalid value for parameter "experimental_opt": "bogus"
-SET experimental_opt = bogus
+statement error invalid value for parameter "optimizer": "bogus"
+SET optimizer = bogus
 
 statement ok
 SET bytea_output = escape
