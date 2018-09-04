@@ -58,7 +58,6 @@ create_stmt ::=
 	create_user_stmt
 	| create_role_stmt
 	| create_ddl_stmt
-	| create_stats_stmt
 
 deallocate_stmt ::=
 	'DEALLOCATE' name
@@ -157,7 +156,6 @@ show_stmt ::=
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_grants_stmt
-	| show_histogram_stmt
 	| show_indexes_stmt
 	| show_jobs_stmt
 	| show_queries_stmt
@@ -166,7 +164,6 @@ show_stmt ::=
 	| show_schemas_stmt
 	| show_session_stmt
 	| show_sessions_stmt
-	| show_stats_stmt
 	| show_tables_stmt
 	| show_trace_stmt
 	| show_users_stmt
@@ -262,9 +259,6 @@ create_ddl_stmt ::=
 	| create_view_stmt
 	| create_sequence_stmt
 
-create_stats_stmt ::=
-	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name
-
 name ::=
 	'identifier'
 	| unreserved_keyword
@@ -322,7 +316,6 @@ explainable_stmt ::=
 	preparable_stmt
 	| alter_ddl_stmt
 	| create_ddl_stmt
-	| create_stats_stmt
 	| drop_ddl_stmt
 	| execute_stmt
 
@@ -462,9 +455,6 @@ show_databases_stmt ::=
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
 
-show_histogram_stmt ::=
-	'SHOW' 'HISTOGRAM' 'ICONST'
-
 show_indexes_stmt ::=
 	'SHOW' 'INDEX' 'FROM' table_name
 	| 'SHOW' 'INDEXES' 'FROM' table_name
@@ -497,10 +487,6 @@ show_sessions_stmt ::=
 	'SHOW' 'SESSIONS'
 	| 'SHOW' 'CLUSTER' 'SESSIONS'
 	| 'SHOW' 'LOCAL' 'SESSIONS'
-
-show_stats_stmt ::=
-	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
-	| 'SHOW' 'STATISTICS' 'USING' 'JSON' 'FOR' 'TABLE' table_name
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name
@@ -894,9 +880,6 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
-
-statistics_name ::=
-	name
 
 with_clause ::=
 	'WITH' cte_list
@@ -1755,7 +1738,6 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by
-	| 'INJECT' 'STATISTICS' a_expr
 
 alter_index_cmd ::=
 	partition_by
