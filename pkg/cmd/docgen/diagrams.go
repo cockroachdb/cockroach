@@ -378,6 +378,12 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:    "alter_type",
+		stmt:    "alter_onetable_stmt",
+		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ALTER' column_name 'TYPE' new_type"},
+		unlink:  []string{"table_name"},
+	},
+	{
 		name:    "alter_view",
 		stmt:    "alter_rename_view_stmt",
 		inline:  []string{"opt_transaction"},
