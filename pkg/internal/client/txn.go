@@ -822,23 +822,6 @@ func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
 	return txn.mu.sender.GetMeta()
 }
 
-// GetStrippedTxnCoordMeta is like GetTxnCoordMeta, but it strips out all
-// information that is unnecessary to communicate to other distributed
-// transaction coordinators that are all operating on the same transaction.
-func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
-	meta := txn.GetTxnCoordMeta()
-	switch txn.typ {
-	case RootTxn:
-		meta.Intents = nil
-		meta.CommandCount = 0
-		meta.RefreshReads = nil
-		meta.RefreshWrites = nil
-	case LeafTxn:
-		meta.OutstandingWrites = nil
-	}
-	return meta
-}
-
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
 // information with the supplied meta. For use with GetTxnCoordMeta().
 func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
