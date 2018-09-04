@@ -282,6 +282,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
+		Skip:       "https://github.com/cockroachdb/cockroach/issues/29196",
 		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
