@@ -1122,6 +1122,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
 //   ALTER TABLE ... SPLIT AT <selectclause>
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
@@ -1493,6 +1494,7 @@ alter_table_cmd:
   // ALTER TABLE <name> INJECT STATISTICS <json>
 | INJECT STATISTICS a_expr
   {
+    /* SKIP DOC */
     $$.val = &tree.AlterTableInjectStats{
       Stats: $3.expr(),
     }
@@ -1928,8 +1930,8 @@ create_ddl_stmt:
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 
-// %Help: CREATE STATISTICS - create a new table statistic
-// %Category: Misc
+// %Help: CREATE STATISTICS - create a new table statistic (experimental)
+// %Category: Experimental
 // %Text:
 // CREATE STATISTICS <statisticname>
 //   ON <colname> [, ...]
@@ -1937,6 +1939,7 @@ create_ddl_stmt:
 create_stats_stmt:
   CREATE STATISTICS statistics_name ON name_list FROM table_name
   {
+    /* SKIP DOC */
     $$.val = &tree.CreateStats{
       Name: tree.Name($3),
       ColumnNames: $5.nameList(),
@@ -2814,10 +2817,10 @@ zone_value:
 // %Help: SHOW
 // %Category: Group
 // %Text:
-// SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
-// SHOW CONSTRAINTS, SHOW CREATE, SHOW USERS,
-// SHOW TRANSACTION, SHOW BACKUP, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW SYNTAX,
-// SHOW TRACE
+// SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
+// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW JOBS,
+// SHOW QUERIES, SHOW ROLES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
+// SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -2869,8 +2872,8 @@ session_var:
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
 
-// %Help: SHOW STATISTICS - display table statistics
-// %Category: Misc
+// %Help: SHOW STATISTICS - display table statistics (experimental)
+// %Category: Experimental
 // %Text: SHOW STATISTICS [USING JSON] FOR TABLE <table_name>
 //
 // Returns the available statistics for a table.
@@ -2882,16 +2885,18 @@ session_var:
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
+    /* SKIP DOC */
     $$.val = &tree.ShowTableStats{Table: $5.normalizableTableNameFromUnresolvedName() }
   }
 | SHOW STATISTICS USING JSON FOR TABLE table_name
   {
+    /* SKIP DOC */
     $$.val = &tree.ShowTableStats{Table: $7.normalizableTableNameFromUnresolvedName(), UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
-// %Help: SHOW HISTOGRAM - display histogram
-// %Category: Misc
+// %Help: SHOW HISTOGRAM - display histogram (experimental)
+// %Category: Experimental
 // %Text: SHOW HISTOGRAM <histogram_id>
 //
 // Returns the data in the histogram with the
@@ -2900,6 +2905,7 @@ show_stats_stmt:
 show_histogram_stmt:
   SHOW HISTOGRAM ICONST
   {
+    /* SKIP DOC */
     id, err := $3.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())
