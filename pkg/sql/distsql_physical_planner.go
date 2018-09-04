@@ -1308,7 +1308,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	var orderedGroupColSet util.FastIntSet
 	for i, idx := range n.orderedGroupCols {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[idx])
-		orderedGroupColSet.Add(i)
+		orderedGroupColSet.Add(idx)
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
@@ -1578,6 +1578,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// be part of the output of the local stage for the final stage to know
 		// about them.
 		finalGroupCols := make([]uint32, len(groupCols))
+		finalOrderedGroupCols := make([]uint32, 0, len(orderedGroupCols))
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_ANY_NOT_NULL,
@@ -1599,33 +1600,22 @@ func (dsp *DistSQLPlanner) addAggregators(
 				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
 			}
 			finalGroupCols[i] = uint32(idx)
-		}
-
-		finalOrderedGroupCols := make([]uint32, len(orderedGroupCols))
-		for i, c := range orderedGroupCols {
-			finalOrderedGroupCols[i] = finalGroupCols[c]
+			if orderedGroupColSet.Contains(n.groupCols[i]) {
+				finalOrderedGroupCols = append(finalOrderedGroupCols, uint32(idx))
+			}
 		}
 
 		// Create the merge ordering for the local stage.
 		groupColProps := planPhysicalProps(n.plan)
 		groupColProps = groupColProps.project(n.groupCols)
-		ordCols := make([]distsqlrun.Ordering_Column, 0, len(groupColProps.ordering))
-	OrderingLoop:
-		for _, o := range groupColProps.ordering {
-			for i, c := range finalGroupCols {
-				if o.ColIdx == n.groupCols[i] {
-					dir := distsqlrun.Ordering_Column_ASC
-					if o.Direction == encoding.Descending {
-						dir = distsqlrun.Ordering_Column_DESC
-					}
-					ordCols = append(ordCols, distsqlrun.Ordering_Column{
-						ColIdx:    c,
-						Direction: dir,
-					})
-					continue OrderingLoop
-				}
+		ordCols := make([]distsqlrun.Ordering_Column, len(groupColProps.ordering))
+		for i, o := range groupColProps.ordering {
+			ordCols[i].ColIdx = finalGroupCols[o.ColIdx]
+			if o.Direction == encoding.Descending {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_DESC
+			} else {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_ASC
 			}
-			panic("missing IDENT from local aggregations")
 		}
 
 		localAggsSpec := distsqlrun.AggregatorSpec{
