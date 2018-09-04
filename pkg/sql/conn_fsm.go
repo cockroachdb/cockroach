@@ -50,6 +50,8 @@ const (
 
 type stateNoTxn struct{}
 
+var _ State = &stateNoTxn{}
+
 func (stateNoTxn) String() string {
 	return NoTxnStr
 }
@@ -62,6 +64,8 @@ type stateOpen struct {
 	RetryIntent Bool
 }
 
+var _ State = &stateOpen{}
+
 func (stateOpen) String() string {
 	return OpenStateStr
 }
@@ -72,17 +76,23 @@ type stateAborted struct {
 	RetryIntent Bool
 }
 
+var _ State = &stateAborted{}
+
 func (stateAborted) String() string {
 	return AbortedStateStr
 }
 
 type stateRestartWait struct{}
 
+var _ State = &stateRestartWait{}
+
 func (stateRestartWait) String() string {
 	return RestartWaitStateStr
 }
 
 type stateCommitWait struct{}
+
+var _ State = &stateCommitWait{}
 
 func (stateCommitWait) String() string {
 	return CommitWaitStateStr
@@ -94,6 +104,8 @@ func (stateCommitWait) String() string {
 // transaction" is finished, however the higher-level transaction is not rolled
 // back.
 type stateInternalError struct{}
+
+var _ State = &stateInternalError{}
 
 func (stateInternalError) String() string {
 	return InternalErrorStateStr
