@@ -118,6 +118,35 @@ func (node *TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.TypeName())
 }
 
+// TBitArray represents a BIT or VARBIT type.
+type TBitArray struct {
+	// Width is the maximum number of bits.
+	// Always specified for BIT, may be 0 for VARBIT.
+	Width uint
+	// Variable distinguishes between BIT and VARBIT.
+	Variable bool
+}
+
+// TypeName implements the ColTypeFormatter interface.
+func (node *TBitArray) TypeName() string {
+	if node.Variable {
+		return "VARBIT"
+	}
+	return "BIT"
+}
+
+// Format implements the ColTypeFormatter interface.
+func (node *TBitArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+	buf.WriteString(node.TypeName())
+	if node.Width > 0 {
+		if node.Width == 1 && !node.Variable {
+			// BIT(1) pretty-prints as just BIT.
+			return
+		}
+		fmt.Fprintf(buf, "(%d)", node.Width)
+	}
+}
+
 // TCollatedString represents a STRING, CHAR, QCHAR or VARCHAR type
 // with a collation locale.
 type TCollatedString struct {

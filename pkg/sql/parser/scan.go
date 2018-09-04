@@ -266,10 +266,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case 'b', 'B':
+	case 'b':
 		// Bytes?
 		if s.peek() == singleQuote {
-			// [bB]'[^']'
+			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
 				lval.id = BCONST
@@ -291,6 +291,17 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
 				lval.id = SCONST
 			}
+			return
+		}
+		s.scanIdent(lval)
+		return
+
+	case 'B':
+		// Bit array literal?
+		if s.peek() == singleQuote {
+			// B'[01]*'
+			s.pos++
+			s.scanBitString(lval, singleQuote)
 			return
 		}
 		s.scanIdent(lval)
@@ -843,6 +854,42 @@ outer:
 	}
 
 	lval.id = BCONST
+	lval.str = string(buf)
+	return true
+}
+
+// scanBitString scans the content inside B'....'.
+func (s *Scanner) scanBitString(lval *sqlSymType, ch int) bool {
+	var buf []byte
+outer:
+	for {
+		b := s.next()
+		switch b {
+		case ch:
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
+				return false
+			}
+			// SQL allows joining adjacent strings separated by whitespace
+			// as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that
+			// is the standard.
+			if s.peek() == ch && newline {
+				s.pos++
+				continue
+			}
+			break outer
+
+		case '0', '1':
+			buf = append(buf, byte(b))
+		default:
+			lval.id = ERROR
+			lval.str = fmt.Sprintf(`"%c" is not a valid binary digit`, rune(b))
+			return false
+		}
+	}
+
+	lval.id = BITCONST
 	lval.str = string(buf)
 	return true
 }

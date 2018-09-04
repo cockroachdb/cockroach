@@ -16,6 +16,7 @@ package sqlbase
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -111,6 +112,15 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 // (e.g. via CastTargetToDatumType).
 func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
+	case *coltypes.TBitArray:
+		if t.Width > math.MaxInt32 {
+			return ColumnType{}, fmt.Errorf("bit width too large: %d", t.Width)
+		}
+		base.Width = int32(t.Width)
+		if t.Variable {
+			base.VisibleType = ColumnType_VARBIT
+		}
+
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
 
@@ -225,6 +235,16 @@ func (c *ColumnType) stringTypeName() string {
 // See also InformationSchemaVisibleType() below.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
+	case ColumnType_BIT:
+		typName := "BIT"
+		if c.VisibleType == ColumnType_VARBIT {
+			typName = "VARBIT"
+		}
+		if (c.VisibleType != ColumnType_VARBIT && c.Width > 1) ||
+			(c.VisibleType == ColumnType_VARBIT && c.Width > 0) {
+			typName = fmt.Sprintf("%s(%d)", typName, c.Width)
+		}
+		return typName
 	case ColumnType_INT:
 		if name, ok := coltypes.IntegerTypeNames[int(c.Width)]; ok {
 			return name
@@ -357,7 +377,7 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 // expectations.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING, ColumnType_BIT:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -475,6 +495,8 @@ func (c *ColumnType) FloatProperties() (int32, int32) {
 // determination of DatumTypeHasCompositeKeyEncoding().
 func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
+	case types.BitArray:
+		return ColumnType_BIT, nil
 	case types.Bool:
 		return ColumnType_BOOL, nil
 	case types.Int:
@@ -532,6 +554,8 @@ func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 // column type.
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
+	case ColumnType_BIT:
+		return types.BitArray
 	case ColumnType_BOOL:
 		return types.Bool
 	case ColumnType_INT:
@@ -640,6 +664,22 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
+				}
+			}
+		}
+	case ColumnType_BIT:
+		if v, ok := tree.AsDBitArray(val); ok {
+			if typ.Width > 0 {
+				bitLen := v.BitLen()
+				switch typ.VisibleType {
+				case ColumnType_VARBIT:
+					if bitLen > uint(typ.Width) {
+						return fmt.Errorf("bit string length %d too large for type %s", bitLen, typ.SQLString())
+					}
+				default:
+					if bitLen != uint(typ.Width) {
+						return fmt.Errorf("bit string length %d does not match type %s", bitLen, typ.SQLString())
+					}
 				}
 			}
 		}

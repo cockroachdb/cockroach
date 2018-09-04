@@ -91,6 +91,11 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 			return classifierWidth(from, to)
 		},
 	},
+	sqlbase.ColumnType_BIT: {
+		sqlbase.ColumnType_BIT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
+			return classifierWidth(from, to)
+		},
+	},
 	sqlbase.ColumnType_STRING: {
 		// If we want to convert string -> bytes, we need to know that the
 		// bytes type has an unlimited width or that we have at least

@@ -144,11 +144,11 @@ project
 # --------------------------------------------------
 opt
 SELECT
-    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::int, s::string::string
+    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::string::string
 FROM a
 ----
 project
- ├── columns: i:7(int) arr:8(int[]) jsonb:9(jsonb!null) int:10(int) s:11(string)
+ ├── columns: i:7(int) arr:8(int[]) jsonb:9(jsonb!null) bit:10(varbit) s:11(string)
  ├── fd: ()-->(9,10)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
@@ -156,7 +156,7 @@ project
       ├── variable: a.i [type=int, outer=(2)]
       ├── variable: a.arr [type=int[], outer=(6)]
       ├── const: '[1, 2]' [type=jsonb]
-      ├── null [type=int]
+      ├── null [type=varbit]
       └── variable: a.s [type=string, outer=(4)]
 
 # Shouldn't eliminate these casts.
@@ -194,7 +194,7 @@ opt
 SELECT
     null::int,
     null::timestamptz,
-    null::decimal(19,2)::int::char(2),
+    null::decimal(19,2)::int::bit::char(2),
     null::oidvector,
     null::int2vector
 ----

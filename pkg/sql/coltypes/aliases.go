@@ -27,6 +27,11 @@ var (
 	// Bool is an immutable T instance.
 	Bool = &TBool{}
 
+	// Bit is an immutable T instance.
+	Bit = &TBitArray{Width: 1}
+	// VarBit is an immutable T instance.
+	VarBit = &TBitArray{Width: 0, Variable: true}
+
 	// Int is an immutable T instance.
 	Int = &TInt{}
 	// Int2 is an immutable T instance.
@@ -110,6 +115,17 @@ var (
 	// OidVector is an immutable T instance.
 	OidVector = &TVector{Name: "OIDVECTOR", ParamType: Oid}
 )
+
+var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"length for type bit must be at least 1")
+
+// NewBitArrayType creates a new BIT type with the given bit width.
+func NewBitArrayType(width int, varying bool) (*TBitArray, error) {
+	if width < 1 {
+		return nil, errBitLengthNotPositive
+	}
+	return &TBitArray{Width: uint(width), Variable: varying}, nil
+}
 
 var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 	"precision for type float must be at least 1 bit")

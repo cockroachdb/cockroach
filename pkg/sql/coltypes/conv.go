@@ -70,6 +70,8 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 	switch t {
 	case types.Bool:
 		return Bool, nil
+	case types.BitArray:
+		return VarBit, nil
 	case types.Int:
 		return Int, nil
 	case types.Float:
@@ -150,6 +152,8 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	switch ct := t.(type) {
 	case *TBool:
 		return types.Bool
+	case *TBitArray:
+		return types.BitArray
 	case *TInt:
 		return types.Int
 	case *TSerial:

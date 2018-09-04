@@ -116,6 +116,8 @@ func (r *RSG) generate(root string, depth int) []string {
 				v = []string{fmt.Sprint(r.Float64())}
 			case "BCONST":
 				v = []string{`b'bytes'`}
+			case "BITCONST":
+				v = []string{`B'10010'`}
 			case "substr_from":
 				v = []string{"FROM", `'string'`}
 			case "substr_for":
@@ -237,6 +239,8 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	switch types.UnwrapType(typ) {
 	case types.Int:
 		v = r.Int()
+	case types.BitArray:
+		v = bitArrayArgs[r.Intn(len(bitArrayArgs))]
 	case types.Float, types.Decimal:
 		v = r.Float64()
 	case types.String:
@@ -305,6 +309,12 @@ var stringArgs = map[int]string{
 	3: `'1234567890'`,
 	4: `'12345678901234567890'`,
 	5: `'123456789123456789123456789123456789123456789123456789123456789123456789'`,
+}
+
+var bitArrayArgs = map[int]string{
+	0: `B''`,
+	1: `B'1'`,
+	2: `B'10010'`,
 }
 
 var boolArgs = map[int]string{

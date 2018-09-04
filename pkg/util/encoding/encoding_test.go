@@ -16,6 +16,7 @@ package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"regexp"
@@ -25,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -605,6 +607,278 @@ func TestEncodeDecodeUnsafeString(t *testing.T) {
 	}
 }
 
+func encodeBitArrayWithDir(dir Direction, buf []byte, d bitarray.BitArray) []byte {
+	if dir == Ascending {
+		return EncodeBitArrayAscending(buf, d)
+	}
+	return EncodeBitArrayDescending(buf, d)
+}
+
+func decodeBitArrayWithDir(
+	t *testing.T, dir Direction, buf []byte, tmp []byte,
+) ([]byte, bitarray.BitArray) {
+	var err error
+	var resBuf []byte
+	var res bitarray.BitArray
+	if dir == Ascending {
+		resBuf, res, err = DecodeBitArrayAscending(buf)
+	} else {
+		resBuf, res, err = DecodeBitArrayDescending(buf)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resBuf, res
+}
+
+func TestEncodeBitArray(t *testing.T) {
+	ba := func(s string) bitarray.BitArray {
+		res, _ := bitarray.Parse(s)
+		return res
+	}
+
+	testCases := []struct {
+		Value    bitarray.BitArray
+		Encoding []byte
+	}{
+		{ba(""),
+			[]byte{0x3a, 0 /* no words */, 0x88}},
+		{ba("0"),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0x89}},
+		{ba("1"),
+			[]byte{0x3a,
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x89}},
+		{ba("00"),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0x8a}},
+		{ba("01"),
+			[]byte{0x3a,
+				0xfd, 0x40, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{ba("10"),
+			[]byte{0x3a,
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{ba("11"),
+			[]byte{0x3a,
+				0xfd, 0xc0, 0, 0, 0, 0, 0, 0, 0, // word 0
+				0, 0x8a}},
+		{bitarray.MakeZeroBitArray(32),
+			[]byte{0x3a, 0x88 /* word 0*/, 0, 0xa8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(32)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, // word 0
+				0, 0xa8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("01")),
+			[]byte{0x3a,
+				0xf9, 0x40, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("10")),
+			[]byte{0x3a,
+				0xf9, 0x80, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(32), ba("11")),
+			[]byte{0x3a,
+				0xf9, 0xc0, 0, 0, 0, // word 0
+				0, 0xaa}},
+		{bitarray.MakeZeroBitArray(48),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xb8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(48)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, // word 0
+				0, 0xb8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0 */, 0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("01")),
+			[]byte{0x3a,
+				0xf7, 0x40, 0, // word 0
+				0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("10")),
+			[]byte{0x3a,
+				0xf7, 0x80, 0, // word 0
+				0, 0xba}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(48), ba("11")),
+			[]byte{0x3a,
+				0xf7, 0xc0, 0, // word 0
+				0, 0xba}},
+		{bitarray.MakeZeroBitArray(62),
+			[]byte{0x3a,
+				0x88, //word 0
+				0, 0xc6}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(62)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfc, // word 0
+				0, 0xc6}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("00")),
+			[]byte{0x3a, 0x88 /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("01")),
+			[]byte{0x3a, 0x89 /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("10")),
+			[]byte{0x3a, 0x8a /* word 0*/, 0, 0xc8}},
+		{bitarray.Concat(bitarray.MakeZeroBitArray(62), ba("11")),
+			[]byte{0x3a, 0x8b /* word 0*/, 0, 0xc8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(64)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0, 0xc8}},
+		{bitarray.MakeZeroBitArray(65),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0x89}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(65)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0xfd, 0x80, 0, 0, 0, 0, 0, 0, 0, // word 1
+				0, 0x89}},
+		{bitarray.MakeZeroBitArray(66),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0x8a}},
+		{bitarray.MakeZeroBitArray(128),
+			[]byte{0x3a,
+				0x88, // word 0
+				0x88, // word 1
+				0, 0xc8}},
+		{bitarray.Not(bitarray.MakeZeroBitArray(128)),
+			[]byte{0x3a,
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 0
+				0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // word 1
+				0, 0xc8}},
+	}
+
+	rng, _ := randutil.NewPseudoRand()
+
+	var lastEncoded []byte
+	dirNames := []string{"", "asc", "desc"}
+	for _, dir := range []Direction{Ascending, Descending} {
+		for _, tmp := range [][]byte{nil, make([]byte, 0, 100)} {
+			for i, c := range testCases {
+				t.Run(fmt.Sprintf("%s/%d/%d/%s", dirNames[dir], cap(tmp), i, c.Value), func(t *testing.T) {
+					enc := encodeBitArrayWithDir(dir, nil, c.Value)
+					_, dec := decodeBitArrayWithDir(t, dir, enc, tmp)
+					if dir == Ascending && !bytes.Equal(enc, c.Encoding) {
+						t.Errorf("unexpected mismatch for %s. expected [% x], got [% x]",
+							c.Value, c.Encoding, enc)
+					}
+					if i > 0 {
+						valCompare := bitarray.Compare(testCases[i-1].Value, testCases[i].Value)
+						expCompare := valCompare
+						if dir == Descending {
+							expCompare = -expCompare
+						}
+						const compareSigns = "<=>"
+						gotCompare := bytes.Compare(lastEncoded, enc)
+						if gotCompare != expCompare {
+							t.Errorf("%q %c %q, however their %s encodings are %v %c %v",
+								testCases[i-1].Value, compareSigns[valCompare+1], testCases[i].Value,
+								dirNames[dir],
+								lastEncoded, compareSigns[gotCompare+1], enc)
+						}
+					}
+					testPeekLength(t, enc)
+					if bitarray.Compare(dec, c.Value) != 0 {
+						t.Errorf("%d unexpected mismatch for %v. got %v", i, c.Value, dec)
+					}
+					lastEncoded = enc
+
+					// Test that appending the bitarray to an existing buffer works. It
+					// is important to test with various values, slice lengths, and
+					// capacities because the various encoding paths try to use any
+					// spare capacity to avoid allocations.
+					for trials := 0; trials < 5; trials++ {
+						orig := randBuf(rng, 30)
+						origLen := len(orig)
+
+						bufCap := origLen + rng.Intn(30)
+						buf := make([]byte, origLen, bufCap)
+						copy(buf, orig)
+
+						enc := encodeBitArrayWithDir(dir, buf, c.Value)
+						// Append some random bytes
+						enc = append(enc, randBuf(rng, 20)...)
+						_, dec := decodeBitArrayWithDir(t, dir, enc[origLen:], tmp)
+
+						if bitarray.Compare(dec, c.Value) != 0 {
+							t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+						}
+						// Verify the existing values weren't modified.
+						for i := range orig {
+							if enc[i] != orig[i] {
+								t.Errorf("existing byte %d changed after encoding (from %d to %d)",
+									i, orig[i], enc[i])
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestKeyEncodeDecodeBitArrayRand(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]bitarray.BitArray, 1000)
+	for i := range tests {
+		tests[i] = rd.bitArray()
+	}
+	for i, test := range tests {
+		for _, dir := range []Direction{Ascending, Descending} {
+			var remainder, buf []byte
+			var err error
+			var x bitarray.BitArray
+			if dir == Ascending {
+				buf = EncodeBitArrayAscending(nil, test)
+				remainder, x, err = DecodeBitArrayAscending(buf)
+			} else {
+				buf = EncodeBitArrayAscending(nil, test)
+				remainder, x, err = DecodeBitArrayAscending(buf)
+			}
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if bitarray.Compare(x, tests[i]) != 0 {
+				t.Errorf("seed %d: expected %v got %v (buf: %+v)", seed, &tests[i], &x, buf)
+			}
+			if len(remainder) > 0 {
+				t.Errorf("seed %d: decoding %v tailing bytes: %+v", seed, &tests[i], remainder)
+			}
+		}
+	}
+}
+
+func TestPrettyPrintValue(t *testing.T) {
+	ba := bitarray.MakeBitArrayFromInt64(8, 58, 7)
+
+	testData := []struct {
+		dir Direction
+		key []byte
+		exp string
+	}{
+		{Ascending, EncodeFloatAscending(nil, float64(233.221112)), "/233.221112"},
+		{Descending, EncodeFloatDescending(nil, float64(233.221112)), "/233.221112"},
+		{Ascending, EncodeBitArrayAscending(nil, ba), "/B00111010"},
+		{Descending, EncodeBitArrayDescending(nil, ba), "/B00111010"},
+	}
+
+	for _, test := range testData {
+		dirStr := "Asc"
+		if test.dir != Ascending {
+			dirStr = "Desc"
+		}
+		t.Run(test.exp[1:]+"/"+dirStr, func(t *testing.T) {
+			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/")
+			if got != test.exp {
+				t.Errorf("expected %q, got %q", test.exp, got)
+			}
+		})
+	}
+}
+
 func TestEncodeDecodeUnsafeStringDescending(t *testing.T) {
 	testCases := []struct {
 		value   string
@@ -887,6 +1161,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
+		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},
+		{EncodeBitArrayDescending(nil, bitarray.BitArray{}), BitArrayDesc},
 	}
 	for i, c := range testCases {
 		typ := PeekType(c.enc)
@@ -910,6 +1186,10 @@ func (rd randData) decimal() *apd.Decimal {
 
 func (rd randData) time() time.Time {
 	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+}
+
+func (rd randData) bitArray() bitarray.BitArray {
+	return bitarray.Rand(rd.Rand, uint(rd.Int31n(140)))
 }
 
 func (rd randData) duration() duration.Duration {
@@ -1390,6 +1670,28 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 	}
 }
 
+func TestValueEncodeDecodeBitArray(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	rd := randData{rng}
+	tests := make([]bitarray.BitArray, 1000)
+	for i := range tests {
+		tests[i] = rd.bitArray()
+	}
+	for i, test := range tests {
+		buf := EncodeBitArrayValue(nil, NoColumnID, test)
+		remainder, x, err := DecodeBitArrayValue(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bitarray.Compare(x, tests[i]) != 0 {
+			t.Errorf("seed %d: expected %v got %v (buf: %+v)", seed, &tests[i], &x, buf)
+		}
+		if len(remainder) > 0 {
+			t.Errorf("seed %d: decoding %v tailing bytes: %+v", seed, &tests[i], remainder)
+		}
+	}
+}
+
 func TestValueEncodeDecodeDuration(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	rd := randData{rng}
@@ -1605,6 +1907,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
+	case BitArray:
+		x := rd.bitArray()
+		return EncodeBitArrayValue(buf, colID, x), x, true
 	case IPAddr:
 		x := rd.ipAddr()
 		return EncodeIPAddrValue(buf, colID, x), x, true
@@ -1757,6 +2062,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeTimeValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
+		case BitArray:
+			buf, decoded, err = DecodeBitArrayValue(buf)
 		case IPAddr:
 			buf, decoded, err = DecodeIPAddrValue(buf)
 		default:
@@ -1783,6 +2090,12 @@ func TestValueEncodingRand(t *testing.T) {
 			if !d.Equal(&val) {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
+		case BitArray:
+			d := decoded.(bitarray.BitArray)
+			val := value.(bitarray.BitArray)
+			if bitarray.Compare(d, val) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
 		default:
 			if decoded != value {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
@@ -1803,6 +2116,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
 	}
+	ba := bitarray.MakeBitArrayFromInt64(6, 9, 5)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1822,6 +2136,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x89}), "0x89"}, // non-printable bytes
 		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
+		{EncodeBitArrayValue(nil, NoColumnID, ba), "B001001"},
 	}
 	for i, test := range tests {
 		remaining, str, err := PrettyPrintValueEncoded(test.buf)
