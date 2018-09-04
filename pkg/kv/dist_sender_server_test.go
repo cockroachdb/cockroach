@@ -50,11 +50,12 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
 				DisableSplitQueue: true,
+				DisableMergeQueue: true,
 			},
 		},
 	})
@@ -67,7 +68,7 @@ func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	// Create an intent on the meta1 record by writing directly to the
@@ -367,7 +368,7 @@ func checkReverseScanResults(
 // bounds.
 func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
@@ -558,7 +559,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 // contain two partial responses.
 func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -597,7 +598,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 // contain two partial responses.
 func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -666,7 +667,7 @@ func checkResumeSpanDelRangeResults(
 // Tests a batch of bounded DelRange() requests.
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -734,7 +735,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 // ResumeSpan.
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -780,7 +781,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 // overlap.
 func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -846,7 +847,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
@@ -869,7 +870,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // TestMultiRequestBatchWithFwdAndReverseRequests are disallowed.
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
@@ -891,7 +892,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
@@ -955,7 +956,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		roachpb.INCONSISTENT,
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
-			s, _ := startNoSplitServer(t)
+			s, _ := startNoSplitMergeServer(t)
 			ctx := context.TODO()
 			defer s.Stopper().Stop(ctx)
 			db := s.DB()
@@ -1041,7 +1042,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 // dist sender.
 func TestParallelSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := startNoSplitServer(t)
+	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
@@ -1110,7 +1111,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *cl
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 	ctx := context.TODO()
@@ -1155,7 +1156,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 	ctx := context.TODO()
@@ -1181,7 +1182,7 @@ func TestMultiRangeReverseScan(t *testing.T) {
 
 func TestStopAtRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -1526,7 +1527,7 @@ func TestStopAtRangeBoundary(t *testing.T) {
 // #12603 for more details.
 func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := startNoSplitServer(t)
+	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	// Split first using the default client and scan to make sure that
@@ -1579,7 +1580,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := startNoSplitServer(t)
+	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 
@@ -1610,7 +1611,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db := startNoSplitServer(t)
+	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 

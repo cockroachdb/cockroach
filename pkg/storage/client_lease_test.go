@@ -38,6 +38,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
 		sc := storage.TestStoreConfig(nil)
+		sc.TestingKnobs.DisableMergeQueue = true
 		sc.EnableEpochRangeLeases = enableEpoch
 		mtc := &multiTestContext{storeConfig: &sc}
 		defer mtc.Stop()
@@ -104,6 +105,7 @@ func TestStoreRangeLease(t *testing.T) {
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -169,6 +171,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
