@@ -108,11 +108,12 @@ func processColumnSet(
 		}
 	}
 
-	// Add any column that has a DEFAULT expression.
+	// Add all public columns that satisfy the condition.
 	for _, col := range tableDesc.Columns {
 		addIf(col)
 	}
-	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY.
+	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY that also
+	// satisfies the condition.
 	for _, m := range tableDesc.Mutations {
 		if col := m.GetColumn(); col != nil &&
 			m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
