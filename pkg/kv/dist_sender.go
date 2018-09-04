@@ -1068,6 +1068,8 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
+			// TODO(nvanbenschoten): shouldn't we be passing an eviction token
+			// here from the previous iteration? See #28967.
 			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
@@ -1274,22 +1276,21 @@ func (ds *DistSender) sendToReplicas(
 	opts SendOptions,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
-	args roachpb.BatchRequest,
+	ba roachpb.BatchRequest,
 	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
 	var ambiguousError error
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
-	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok {
+	if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
 		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
 	}
 
-	transport, err := ds.transportFactory(opts, nodeDialer, replicas, args)
+	transport, err := ds.transportFactory(opts, nodeDialer, replicas)
 	if err != nil {
 		return nil, err
 	}
-	defer transport.Close()
 	if transport.IsExhausted() {
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
@@ -1297,9 +1298,9 @@ func (ds *DistSender) sendToReplicas(
 
 	curReplica := transport.NextReplica()
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), curReplica)
+		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, ba.Summary(), curReplica)
 	}
-	br, err := transport.SendNext(ctx)
+	br, err := transport.SendNext(ctx, ba)
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
@@ -1410,6 +1411,6 @@ func (ds *DistSender) sendToReplicas(
 		ds.metrics.NextReplicaErrCount.Inc(1)
 		curReplica = transport.NextReplica()
 		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
-		br, err = transport.SendNext(ctx)
+		br, err = transport.SendNext(ctx, ba)
 	}
 }

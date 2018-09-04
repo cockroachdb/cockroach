@@ -31,8 +31,6 @@ type Stream interface {
 	// Context returns the context for this stream.
 	Context() context.Context
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// The provided RangeFeedEvent is not guaranteed to be safe for use after
-	// Send returns, so a copy should be made before returning if necessary.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*roachpb.RangeFeedEvent) error
 }
@@ -204,18 +202,20 @@ func (reg *registry) forOverlappingRegs(
 	span roachpb.Span, fn func(*registration) (disconnect bool, pErr *roachpb.Error),
 ) {
 	var toDelete []interval.Interface
-	reg.tree.DoMatching(
-		func(i interval.Interface) (done bool) {
-			r := i.(*registration)
-			dis, pErr := fn(r)
-			if dis {
-				r.errC <- pErr
-				toDelete = append(toDelete, i)
-			}
-			return false
-		},
-		span.AsRange(),
-	)
+	matchFn := func(i interval.Interface) (done bool) {
+		r := i.(*registration)
+		dis, pErr := fn(r)
+		if dis {
+			r.errC <- pErr
+			toDelete = append(toDelete, i)
+		}
+		return false
+	}
+	if span.EqualValue(all) {
+		reg.tree.Do(matchFn)
+	} else {
+		reg.tree.DoMatching(matchFn, span.AsRange())
+	}
 
 	if len(toDelete) == reg.tree.Len() {
 		reg.tree.Clear()

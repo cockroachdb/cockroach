@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -149,6 +151,14 @@ func (r *Replica) RangeFeed(
 		return roachpb.NewError(err)
 	}
 
+	// Ensure that the range does not require an expiration-based lease. If it
+	// does, it will never get closed timestamp updates and the rangefeed will
+	// never be able to advance its resolved timestamp.
+	if r.requiresExpiringLease() {
+		r.raftMu.Unlock()
+		return roachpb.NewErrorf("expiration-based leases are incompatible with rangefeeds")
+	}
+
 	// Ensure that the rangefeed processor is running.
 	p := r.maybeInitRangefeedRaftMuLocked()
 
@@ -185,13 +195,15 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	desc := r.mu.state.Desc
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
-		AmbientContext: r.AmbientContext,
-		Clock:          r.Clock(),
-		Span:           desc.RSpan(),
-		TxnPusher:      &tp,
-		EventChanCap:   128,
+		AmbientContext:   r.AmbientContext,
+		Clock:            r.Clock(),
+		Span:             desc.RSpan(),
+		TxnPusher:        &tp,
+		EventChanCap:     512,
+		EventChanTimeout: 50 * time.Millisecond,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
+	r.store.addReplicaWithRangefeed(r.RangeID)
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := r.Engine().NewIterator(engine.IterOptions{
@@ -206,10 +218,16 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 	})
 	r.raftMu.rangefeed.Start(r.store.Stopper(), rtsIter)
 
-	// TODO(nvanbenschoten): forward the rangefeed's closed timestamp if the
-	// range has established a closed timestamp.
-	// r.raftMu.rangefeed.ForwardClosedTS(r.ClosedTimestamp)
+	// Check for an initial closed timestamp update immediately to help
+	// initialize the rangefeed's resolved timestamp as soon as possible.
+	r.handleClosedTimestampUpdateRaftMuLocked()
+
 	return r.raftMu.rangefeed
+}
+
+func (r *Replica) resetRangefeedRaftMuLocked() {
+	r.raftMu.rangefeed = nil
+	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
 // maybeDestroyRangefeedRaftMuLocked tears down the provided Processor if it is
@@ -221,7 +239,7 @@ func (r *Replica) maybeDestroyRangefeedRaftMuLocked(p *rangefeed.Processor) {
 	}
 	if r.raftMu.rangefeed.Len() == 0 {
 		r.raftMu.rangefeed.Stop()
-		r.raftMu.rangefeed = nil
+		r.resetRangefeedRaftMuLocked()
 	}
 }
 
@@ -233,7 +251,7 @@ func (r *Replica) disconnectRangefeedWithErrRaftMuLocked(pErr *roachpb.Error) {
 		return
 	}
 	r.raftMu.rangefeed.StopWithErr(pErr)
-	r.raftMu.rangefeed = nil
+	r.resetRangefeedRaftMuLocked()
 }
 
 // disconnectRangefeedWithReasonRaftMuLocked broadcasts the provided rangefeed
@@ -316,5 +334,44 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...)
+	if !r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...) {
+		// Consumption failed and the rangefeed was stopped.
+		r.resetRangefeedRaftMuLocked()
+	}
+}
+
+// handleClosedTimestampUpdate determines the current maximum closed timestamp
+// for the replica and informs the rangefeed, if one is running. No-op if a
+// rangefeed is not active.
+func (r *Replica) handleClosedTimestampUpdate() {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.handleClosedTimestampUpdateRaftMuLocked()
+}
+
+// handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
+// but it requires raftMu to be locked.
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
+	if r.raftMu.rangefeed == nil {
+		return
+	}
+
+	r.mu.RLock()
+	lai := r.mu.state.LeaseAppliedIndex
+	lease := *r.mu.state.Lease
+	r.mu.RUnlock()
+
+	// Determine what the maximum closed timestamp is for this replica.
+	closedTS := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
+		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai),
+	)
+
+	// If the closed timestamp is not empty, inform the Processor.
+	if closedTS.IsEmpty() {
+		return
+	}
+	if !r.raftMu.rangefeed.ForwardClosedTS(closedTS) {
+		// Consumption failed and the rangefeed was stopped.
+		r.resetRangefeedRaftMuLocked()
+	}
 }

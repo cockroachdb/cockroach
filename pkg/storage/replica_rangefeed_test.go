@@ -19,18 +19,16 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 // testStream is a mock implementation of roachpb.Internal_RangeFeedServer.
@@ -65,22 +63,7 @@ func (s *testStream) Cancel() {
 func (s *testStream) Send(e *roachpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// Send's contract does not promise that its provided events are safe for
-	// use after it has returned. To work around this, make a clone.
-	var eClone roachpb.RangeFeedEvent
-	{
-		b, err := protoutil.Marshal(e)
-		if err != nil {
-			panic(err)
-		}
-		err = protoutil.Unmarshal(b, &eClone)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	s.mu.events = append(s.mu.events, &eClone)
+	s.mu.events = append(s.mu.events, e)
 	return nil
 }
 
@@ -99,13 +82,19 @@ func TestReplicaRangefeed(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
+	mtc.replicateRange(1, 1, 2)
 	db := mtc.dbs[0].NonTransactionalSender()
 
-	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
-	initTime := mtc.clock.Now()
+	// Split the range so that the RHS uses epoch-based leases.
+	startKey := []byte("a")
+	splitArgs := adminSplitArgs(startKey)
+	if _, pErr := client.SendWrapped(ctx, db, splitArgs); pErr != nil {
+		t.Fatalf("split saw unexpected error: %v", pErr)
+	}
+	rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
 
 	// Insert a key before starting the rangefeeds.
+	initTime := mtc.clock.Now()
 	mtc.manualClock.Increment(1)
 	ts1 := mtc.clock.Now()
 	incArgs := incrementArgs(roachpb.Key("b"), 9)
@@ -170,7 +159,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			Key: roachpb.Key("b"), Value: expVal1,
 		}},
 		{Checkpoint: &roachpb.RangeFeedCheckpoint{
-			Span:       roachpb.Span{Key: nil, EndKey: roachpb.KeyMax},
+			Span:       roachpb.Span{Key: startKey, EndKey: roachpb.KeyMax},
 			ResolvedTS: hlc.Timestamp{},
 		}},
 	}
@@ -220,18 +209,65 @@ func TestReplicaRangefeed(t *testing.T) {
 	}
 }
 
-func TestReplicaRangefeedErrors(t *testing.T) {
+func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 1)
+
+	// Establish a rangefeed on the replica we plan to remove.
+	stream := newTestStream()
+	req := roachpb.RangeFeedRequest{
+		Header: roachpb.Header{
+			RangeID: 1,
+		},
+		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+	}
+
+	// Cancel the stream's context so that RangeFeed would return
+	// immediately even if it didn't return the correct error.
+	stream.Cancel()
+
+	pErr := mtc.Store(0).RangeFeed(ctx, &req, stream)
+	const exp = "expiration-based leases are incompatible with rangefeeds"
+	if !testutils.IsPError(pErr, exp) {
+		t.Errorf("expected error %q, found %v", exp, pErr)
+	}
+}
+
+func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	rangeID := roachpb.RangeID(1)
-	setup := func() *multiTestContext {
+	startKey := []byte("a")
+	setup := func(subT *testing.T) (*multiTestContext, roachpb.RangeID) {
+		subT.Helper()
 		sc := storage.TestStoreConfig(nil)
 		storage.RangefeedEnabled.Override(&sc.Settings.SV, true)
 		mtc := &multiTestContext{storeConfig: &sc}
-		mtc.Start(t, 3)
-		mtc.replicateRange(rangeID, 1, 2)
-		return mtc
+		mtc.Start(subT, 3)
+		mtc.replicateRange(1, 1, 2)
+
+		// Split the range so that the RHS uses epoch-based leases.
+		splitArgs := adminSplitArgs(startKey)
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+			subT.Fatalf("split saw unexpected error: %v", pErr)
+		}
+		rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
+
+		// Write to the RHS of the split and wait for all replicas to process it.
+		// This ensures that all replicas have seen the split before we move on.
+		incArgs := incrementArgs(roachpb.Key("a"), 9)
+		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(roachpb.Key("a"), []int64{9, 9, 9})
+
+		return mtc, rangeID
 	}
 
 	waitForInitialCheckpointAcrossSpan := func(
@@ -267,7 +303,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	waitForInitialCheckpoint := func(
 		subT *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error,
 	) {
-		span := roachpb.Span{Key: nil, EndKey: roachpb.KeyMax}
+		span := roachpb.Span{Key: startKey, EndKey: roachpb.KeyMax}
 		waitForInitialCheckpointAcrossSpan(subT, stream, streamErrC, span)
 	}
 
@@ -291,7 +327,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 
 	t.Run(roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED.String(), func(t *testing.T) {
 		const removeStore = 2
-		mtc := setup()
+		mtc, rangeID := setup(t)
 		defer mtc.Stop()
 
 		// Establish a rangefeed on the replica we plan to remove.
@@ -320,7 +356,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT.String(), func(t *testing.T) {
-		mtc := setup()
+		mtc, rangeID := setup(t)
 		defer mtc.Stop()
 
 		// Establish a rangefeed on the replica we plan to split.
@@ -352,7 +388,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_MERGED.String(), func(t *testing.T) {
-		mtc := setup()
+		mtc, rangeID := setup(t)
 		defer mtc.Stop()
 
 		// Split the range.
@@ -403,14 +439,14 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 
 		// Wait for the first checkpoint event on each stream.
 		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, roachpb.Span{
-			Key: nil, EndKey: splitKey,
+			Key: startKey, EndKey: splitKey,
 		})
 		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, roachpb.Span{
 			Key: splitKey, EndKey: roachpb.KeyMax,
 		})
 
 		// Merge the ranges back together
-		mergeArgs := adminMergeArgs(keys.MinKey)
+		mergeArgs := adminMergeArgs(startKey)
 		if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
 			t.Fatalf("merge saw unexpected error: %v", pErr)
 		}
@@ -422,7 +458,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT.String(), func(t *testing.T) {
 		const partitionStore = 2
-		mtc := setup()
+		mtc, rangeID := setup(t)
 		defer mtc.Stop()
 
 		mtc.stores[0].SetReplicaGCQueueActive(false)
@@ -457,7 +493,11 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 
 		// Get that command's log index.
-		index, err := mtc.Store(0).LookupReplica(roachpb.RKeyMin).GetLastIndex()
+		repl, err := mtc.Store(0).GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		index, err := repl.GetLastIndex()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -465,7 +505,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		// Truncate the log at index+1 (log entries < N are removed, so this
 		// includes the put). This necessitates a snapshot when the partitioned
 		// replica rejoins the rest of the range.
-		truncArgs := truncateLogArgs(index+1, 1)
+		truncArgs := truncateLogArgs(index+1, rangeID)
+		truncArgs.Key = startKey
 		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -478,7 +519,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
-		mtc := setup()
+		mtc, rangeID := setup(t)
 		defer mtc.Stop()
 
 		// Establish a rangefeed.
