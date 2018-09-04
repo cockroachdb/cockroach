@@ -2113,32 +2113,39 @@ limit
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(string)
  │         │    │    │    ├── key: (1)
  │         │    │    │    └── fd: (1)-->(2)
- │         │    │    ├── semi-join
+ │         │    │    ├── semi-join (merge)
  │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date)
  │         │    │    │    ├── key: (9)
  │         │    │    │    ├── fd: (9)-->(10,12,13)
  │         │    │    │    ├── scan orders
  │         │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date)
  │         │    │    │    │    ├── key: (9)
- │         │    │    │    │    └── fd: (9)-->(10,12,13)
+ │         │    │    │    │    ├── fd: (9)-->(10,12,13)
+ │         │    │    │    │    └── ordering: +9
  │         │    │    │    ├── select
  │         │    │    │    │    ├── columns: lineitem.l_orderkey:34(int!null) sum:50(float!null)
  │         │    │    │    │    ├── key: (34)
  │         │    │    │    │    ├── fd: (34)-->(50)
+ │         │    │    │    │    ├── ordering: +34
  │         │    │    │    │    ├── group-by
  │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:34(int!null) sum:50(float)
  │         │    │    │    │    │    ├── grouping columns: lineitem.l_orderkey:34(int!null)
  │         │    │    │    │    │    ├── key: (34)
  │         │    │    │    │    │    ├── fd: (34)-->(50)
+ │         │    │    │    │    │    ├── ordering: +34
  │         │    │    │    │    │    ├── scan lineitem
- │         │    │    │    │    │    │    └── columns: lineitem.l_orderkey:34(int!null) lineitem.l_quantity:38(float)
+ │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:34(int!null) lineitem.l_quantity:38(float)
+ │         │    │    │    │    │    │    └── ordering: +34
  │         │    │    │    │    │    └── aggregations [outer=(38)]
  │         │    │    │    │    │         └── sum [type=float, outer=(38)]
  │         │    │    │    │    │              └── variable: lineitem.l_quantity [type=float, outer=(38)]
  │         │    │    │    │    └── filters [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
  │         │    │    │    │         └── sum > 300.0 [type=bool, outer=(50), constraints=(/50: [/300.00000000000006 - ]; tight)]
- │         │    │    │    └── filters [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ]), fd=(9)==(34), (34)==(9)]
- │         │    │    │         └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ])]
+ │         │    │    │    └── merge-on
+ │         │    │    │         ├── left ordering: +9
+ │         │    │    │         ├── right ordering: +34
+ │         │    │    │         └── filters [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ]), fd=(9)==(34), (34)==(9)]
+ │         │    │    │              └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ])]
  │         │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │         │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  │         │    ├── scan lineitem
