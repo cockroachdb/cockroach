@@ -18,10 +18,10 @@ SELECT * FROM [SHOW client_encoding] WITH ORDINALITY
 client_encoding     ordinality
 UTF8                1
 
-# We filter here because experimental_opt will be different depending on which
+# We filter here because optimizer will be different depending on which
 # configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'experimental_opt'
+SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer'
 ----
 variable                           value
 application_name                   ·

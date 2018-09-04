@@ -16,7 +16,7 @@ statement ok
 INSERT INTO xy VALUES (2, 200), (3, 300), (4, 400)
 
 statement ok
-SET EXPERIMENTAL_OPT = ON
+SET OPTIMIZER = ON
 
 # ParenSelect
 query II rowsort
@@ -95,7 +95,7 @@ statement ok
 CREATE SEQUENCE seq
 
 statement ok
-SET EXPERIMENTAL_OPT = ALWAYS
+SET OPTIMIZER = ALWAYS
 
 query error pq: unsupported statement: \*tree\.Insert
 INSERT INTO test (k, v) VALUES (5, 50)
@@ -108,7 +108,7 @@ query error pq: sequences are not supported
 SELECT * FROM seq
 
 statement ok
-SET EXPERIMENTAL_OPT = LOCAL
+SET OPTIMIZER = LOCAL
 
 # In local mode, we should always get the results in order (no rowsort).
 query II
