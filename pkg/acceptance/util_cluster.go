@@ -16,8 +16,6 @@ package acceptance
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -25,22 +23,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
 const (
-	localTest  = "runMode=local"
 	dockerTest = "runMode=docker"
 )
-
-// RunLocal runs the given acceptance test using a bare cluster.
-func RunLocal(t *testing.T, testee func(t *testing.T)) {
-	t.Run(localTest, testee)
-}
 
 // RunDocker runs the given acceptance test using a Docker cluster.
 func RunDocker(t *testing.T, testee func(t *testing.T)) {
@@ -87,15 +77,13 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 
 	parts := strings.Split(t.Name(), "/")
 	if len(parts) < 2 {
-		t.Fatal("must invoke RunLocal or RunDocker")
+		t.Fatal("must invoke RunDocker")
 	}
 
 	var runMode string
 	for _, part := range parts[1:] {
 		part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
 		switch part {
-		case localTest:
-			fallthrough
 		case dockerTest:
 			if runMode != "" {
 				t.Fatalf("test has more than one run mode: %s and %s", runMode, part)
@@ -105,44 +93,6 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 	}
 
 	switch runMode {
-	case localTest:
-		pwd, err := os.Getwd()
-		if err != nil {
-			t.Fatal(err)
-		}
-		dataDir, err := ioutil.TempDir(pwd, ".localcluster")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		logDir := *flagLogDir
-		if logDir != "" {
-			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
-		}
-
-		perNodeCfg := localcluster.MakePerNodeFixedPortsCfg(len(cfg.Nodes))
-		for i := 0; i < len(cfg.Nodes); i++ {
-			// TODO(tschottdorf): handle Nodes[i].Stores properly.
-			if cfg.Nodes[i].Version != "" {
-				nCfg := perNodeCfg[i]
-				nCfg.Binary = GetBinary(ctx, t, cfg.Nodes[i].Version)
-				perNodeCfg[i] = nCfg
-			}
-		}
-		clusterCfg := localcluster.ClusterConfig{
-			Ephemeral:  true,
-			DataDir:    dataDir,
-			LogDir:     logDir,
-			NumNodes:   len(cfg.Nodes),
-			PerNodeCfg: perNodeCfg,
-			NoWait:     cfg.NoWait,
-		}
-
-		l := localcluster.New(clusterCfg)
-
-		l.Start(ctx)
-		c = &localcluster.LocalCluster{Cluster: l}
-
 	case dockerTest:
 		logDir := *flagLogDir
 		if logDir != "" {
@@ -153,7 +103,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		c = l
 
 	default:
-		t.Fatalf("unable to run in mode %q, use either RunLocal or RunDocker", runMode)
+		t.Fatalf("unable to run in mode %q, use RunDocker", runMode)
 	}
 
 	// Don't wait for replication unless requested (usually it is).
@@ -228,18 +178,4 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 
 	completed = true
 	return c
-}
-
-// GetBinary retrieves a binary for the specified version and returns it.
-func GetBinary(ctx context.Context, t *testing.T, version string) string {
-	t.Helper()
-	bin, err := binfetcher.Download(ctx, binfetcher.Options{
-		Binary:  "cockroach",
-		Dir:     ".localcluster_cache",
-		Version: version,
-	})
-	if err != nil {
-		t.Fatalf("unable to set up binary for v%s: %s", version, err)
-	}
-	return bin
 }

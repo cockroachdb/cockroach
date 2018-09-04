@@ -1578,7 +1578,6 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		EvalKnobs: batcheval.TestingKnobs{
 			TestingEvalFilter: filter,
 		},
-		DisableMergeQueue: true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 2, args)
@@ -1760,7 +1759,6 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
-		DisableMergeQueue:    true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 3, args)
@@ -1850,7 +1848,6 @@ func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
-		DisableMergeQueue:    true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, args)

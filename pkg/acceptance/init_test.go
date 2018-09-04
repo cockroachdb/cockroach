@@ -39,8 +39,7 @@ func TestInitModeBootstrapNodeZero(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(tschottdorf): give LocalCluster support for the init modes and we should be able
-	// to switch this to RunLocal. Ditto below.
+	// TODO(peter): Move this test to a roachtest.
 	RunDocker(t, func(t *testing.T) {
 		runTestWithCluster(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
 	})
@@ -50,7 +49,7 @@ func TestInitModeCommand(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(tschottdorf): see above.
+	// TODO(peter): Move this test to a roachtest.
 	RunDocker(t, func(t *testing.T) {
 		runTestWithCluster(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
 	})
@@ -75,7 +74,7 @@ func TestInitModeNone(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(tschottdorf): see above.
+	// TODO(peter): Move this test to a roachtest.
 	RunDocker(t, func(t *testing.T) {
 		runTestWithCluster(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
 	})
