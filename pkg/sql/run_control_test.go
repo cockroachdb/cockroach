@@ -233,11 +233,6 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Prevent the merge queue from immediately discarding our splits.
-	if _, err := conn1.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
-		t.Fatal(err)
-	}
-
 	if _, err := conn1.Exec("ALTER TABLE nums SPLIT AT VALUES (50)"); err != nil {
 		t.Fatal(err)
 	}
