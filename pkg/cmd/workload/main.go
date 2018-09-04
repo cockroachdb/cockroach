@@ -24,7 +24,7 @@ import (
 )
 
 func main() {
-	if err := workloadcli.WorkloadCmd().Execute(); err != nil {
+	if err := workloadcli.WorkloadCmd(false /* userFacing */).Execute(); err != nil {
 		// Cobra has already printed the error message.
 		os.Exit(1)
 	}

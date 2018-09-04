@@ -18,18 +18,40 @@ package cli
 import (
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/cobra"
 )
 
 // WorkloadCmd returns a new command that can serve as the root of the workload
 // command tree.
-func WorkloadCmd() *cobra.Command {
+func WorkloadCmd(userFacing bool) *cobra.Command {
 	rootCmd := SetCmdDefaults(&cobra.Command{
 		Use:   `workload`,
 		Short: `generators for data and query loads`,
 	})
 	for _, subCmdFn := range subCmdFns {
 		rootCmd.AddCommand(subCmdFn())
+	}
+	if userFacing {
+		whitelist := map[string]struct{}{
+			`workload`: {},
+			`init`:     {},
+			`run`:      {},
+		}
+		for _, m := range workload.Registered() {
+			whitelist[m.Name] = struct{}{}
+		}
+		var addExperimental func(c *cobra.Command)
+		addExperimental = func(c *cobra.Command) {
+			c.Short = `[experimental] ` + c.Short
+			if _, ok := whitelist[c.Name()]; !ok {
+				c.Hidden = true
+			}
+			for _, sub := range c.Commands() {
+				addExperimental(sub)
+			}
+		}
+		addExperimental(rootCmd)
 	}
 	return rootCmd
 }
