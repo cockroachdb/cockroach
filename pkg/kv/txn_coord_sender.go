@@ -244,10 +244,11 @@ type TxnMetrics struct {
 	Restarts *metric.Histogram
 
 	// Counts of restart types.
-	RestartsWriteTooOld    *metric.Counter
-	RestartsDeleteRange    *metric.Counter
-	RestartsSerializable   *metric.Counter
-	RestartsPossibleReplay *metric.Counter
+	RestartsWriteTooOld       *metric.Counter
+	RestartsDeleteRange       *metric.Counter
+	RestartsSerializable      *metric.Counter
+	RestartsPossibleReplay    *metric.Counter
+	RestartsAsyncWriteFailure *metric.Counter
 }
 
 var (
@@ -314,22 +315,29 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsAsyncWriteFailure = metric.Metadata{
+		Name:        "txn.restarts.asyncwritefailure",
+		Help:        "Number of restarts due to async consensus writes that failed to leave intents",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                 metric.NewCounterWithRates(metaAbortsRates),
-		Commits:                metric.NewCounterWithRates(metaCommitsRates),
-		Commits1PC:             metric.NewCounterWithRates(metaCommits1PCRates),
-		AutoRetries:            metric.NewCounterWithRates(metaAutoRetriesRates),
-		Durations:              metric.NewLatency(metaDurationsHistograms, histogramWindow),
-		Restarts:               metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:    metric.NewCounter(metaRestartsWriteTooOld),
-		RestartsDeleteRange:    metric.NewCounter(metaRestartsDeleteRange),
-		RestartsSerializable:   metric.NewCounter(metaRestartsSerializable),
-		RestartsPossibleReplay: metric.NewCounter(metaRestartsPossibleReplay),
+		Aborts:                    metric.NewCounterWithRates(metaAbortsRates),
+		Commits:                   metric.NewCounterWithRates(metaCommitsRates),
+		Commits1PC:                metric.NewCounterWithRates(metaCommits1PCRates),
+		AutoRetries:               metric.NewCounterWithRates(metaAutoRetriesRates),
+		Durations:                 metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		Restarts:                  metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
+		RestartsWriteTooOld:       metric.NewCounter(metaRestartsWriteTooOld),
+		RestartsDeleteRange:       metric.NewCounter(metaRestartsDeleteRange),
+		RestartsSerializable:      metric.NewCounter(metaRestartsSerializable),
+		RestartsPossibleReplay:    metric.NewCounter(metaRestartsPossibleReplay),
+		RestartsAsyncWriteFailure: metric.NewCounter(metaRestartsAsyncWriteFailure),
 	}
 }
 
@@ -776,6 +784,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsSerializable.Inc(1)
 		case roachpb.RETRY_POSSIBLE_REPLAY:
 			tc.metrics.RestartsPossibleReplay.Inc(1)
+		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
+			tc.metrics.RestartsAsyncWriteFailure.Inc(1)
 		}
 	}
 	errTxnID := pErr.GetTxn().ID
