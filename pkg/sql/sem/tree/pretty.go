@@ -1022,27 +1022,26 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.IfNotExists {
 		title += "IF NOT EXISTS "
 	}
-	d := pretty.Fold(pretty.Concat,
+	d := pretty.Concat(
 		pretty.Text(title),
 		p.Doc(&node.Table),
-		pretty.Text(" "),
 	)
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
-			d = pretty.Concat(
+			d = pretty.ConcatSpace(
 				d,
 				pretty.Bracket("(", p.Doc(&node.AsColumnNames), ")"),
 			)
 		}
 		d = p.nestUnder(
-			pretty.Concat(
+			pretty.ConcatSpace(
 				d,
 				pretty.Text("AS"),
 			),
 			p.Doc(node.AsSource),
 		)
 	} else {
-		d = pretty.Concat(
+		d = pretty.ConcatSpace(
 			d,
 			pretty.Bracket("(", p.Doc(&node.Defs), ")"),
 		)
