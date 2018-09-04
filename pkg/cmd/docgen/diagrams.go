@@ -378,10 +378,19 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:    "alter_type",
-		stmt:    "alter_onetable_stmt",
-		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ALTER' column_name 'TYPE' new_type"},
-		unlink:  []string{"table_name"},
+		name:   "alter_type",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "opt_set_data"},
+		match:  []*regexp.Regexp{regexp.MustCompile(`'ALTER' ('COLUMN')? column_name ('SET' 'DATA')? 'TYPE'`)},
+		regreplace: map[string]string{
+			regList:                  "",
+			"opt_collate":            "",
+			"opt_alter_column_using": "",
+		},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name", "column_name"},
 	},
 	{
 		name:    "alter_view",
