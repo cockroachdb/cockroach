@@ -148,6 +148,11 @@ func newOptView(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Table
 	return ov
 }
 
+// Fingerprint is part of the opt.DataSource interface.
+func (ov *optView) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(ov.desc.ID)<<32 | opt.Fingerprint(ov.desc.Version)
+}
+
 // Name is part of the opt.View interface.
 func (ov *optView) Name() *tree.TableName {
 	return &ov.name
@@ -200,14 +205,19 @@ func newOptSequence(
 	return ot
 }
 
+// Fingerprint is part of the opt.DataSource interface.
+func (os *optSequence) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(os.desc.ID)<<32 | opt.Fingerprint(os.desc.Version)
+}
+
 // Name is part of the opt.DataSource interface.
-func (ot *optSequence) Name() *tree.TableName {
-	return &ot.name
+func (os *optSequence) Name() *tree.TableName {
+	return &os.name
 }
 
 // CheckPrivilege is part of the opt.DataSource interface.
-func (ot *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
+func (os *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return os.cat.resolver.CheckPrivilege(ctx, os.desc, priv)
 }
 
 // optTable is a wrapper around sqlbase.TableDescriptor that caches index
@@ -248,6 +258,11 @@ func newOptTable(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Tabl
 	ot.primary.init(ot, &desc.PrimaryIndex)
 
 	return ot
+}
+
+// Fingerprint is part of the opt.DataSource interface.
+func (ot *optTable) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(ot.desc.ID)<<32 | opt.Fingerprint(ot.desc.Version)
 }
 
 // Name is part of the opt.DataSource interface.

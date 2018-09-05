@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -121,7 +120,7 @@ func (b *Builder) analyzeOrderByIndex(
 		panic(builderError{err})
 	}
 
-	tab, ok := b.resolveDataSource(tn, privilege.SELECT).(opt.Table)
+	tab, ok := b.resolveDataSource(tn).(opt.Table)
 	if !ok {
 		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
 	}

@@ -36,7 +36,12 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtParsable)
 	stmt.AsSource.Format(&fmtCtx)
 
-	view := &View{ViewName: *tn, QueryText: buf.String(), ColumnNames: stmt.ColumnNames}
+	view := &View{
+		ViewFingerprint: tc.nextFingerprint(),
+		ViewName:        *tn,
+		QueryText:       buf.String(),
+		ColumnNames:     stmt.ColumnNames,
+	}
 
 	// Add the new view to the catalog.
 	tc.AddView(view)

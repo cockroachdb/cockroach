@@ -33,6 +33,7 @@ import (
 // Catalog implements the opt.Catalog interface for testing purposes.
 type Catalog struct {
 	dataSources map[string]opt.DataSource
+	fingerprint opt.Fingerprint
 }
 
 var _ opt.Catalog = &Catalog{}
@@ -126,6 +127,18 @@ func (tc *Catalog) AddTable(tab *Table) {
 	tc.dataSources[fq] = tab
 }
 
+// View returns the test view that was previously added with the given name.
+func (tc *Catalog) View(name *tree.TableName) *View {
+	ds, err := tc.ResolveDataSource(context.TODO(), name)
+	if err != nil {
+		panic(err)
+	}
+	if vw, ok := ds.(*View); ok {
+		return vw
+	}
+	panic(fmt.Errorf("\"%q\" is not a view", tree.ErrString(name)))
+}
+
 // AddView adds the given test view to the catalog.
 func (tc *Catalog) AddView(view *View) {
 	fq := view.ViewName.FQString()
@@ -169,6 +182,12 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 	}
 }
 
+// nextFingerprint returns a new unique fingerprint for a data source.
+func (tc *Catalog) nextFingerprint() opt.Fingerprint {
+	tc.fingerprint++
+	return tc.fingerprint
+}
+
 // qualifyTableName updates the given table name to include catalog and schema
 // if not already included.
 func (tc *Catalog) qualifyTableName(name *tree.TableName) {
@@ -202,9 +221,13 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 
 // View implements the opt.View interface for testing purposes.
 type View struct {
-	ViewName    tree.TableName
-	QueryText   string
-	ColumnNames tree.NameList
+	ViewFingerprint opt.Fingerprint
+	ViewName        tree.TableName
+	QueryText       string
+	ColumnNames     tree.NameList
+
+	// If Revoked is true, then the user has had privileges on the view revoked.
+	Revoked bool
 }
 
 var _ opt.View = &View{}
@@ -215,13 +238,21 @@ func (tv *View) String() string {
 	return tp.String()
 }
 
-// Name is part of the opt.View interface.
+// Fingerprint is part of the opt.DataSource interface.
+func (tv *View) Fingerprint() opt.Fingerprint {
+	return tv.ViewFingerprint
+}
+
+// Name is part of the opt.DataSource interface.
 func (tv *View) Name() *tree.TableName {
 	return &tv.ViewName
 }
 
 // CheckPrivilege is part of the opt.DataSource interface.
 func (tv *View) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	if tv.Revoked {
+		return fmt.Errorf("user does not have privilege to access %v", tv.ViewName)
+	}
 	return nil
 }
 
@@ -242,11 +273,15 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the opt.Table interface for testing purposes.
 type Table struct {
-	TabName   tree.TableName
-	Columns   []*Column
-	Indexes   []*Index
-	Stats     TableStats
-	IsVirtual bool
+	TabFingerprint opt.Fingerprint
+	TabName        tree.TableName
+	Columns        []*Column
+	Indexes        []*Index
+	Stats          TableStats
+	IsVirtual      bool
+
+	// If Revoked is true, then the user has had privileges on the table revoked.
+	Revoked bool
 
 	tableID sqlbase.ID
 }
@@ -259,13 +294,21 @@ func (tt *Table) String() string {
 	return tp.String()
 }
 
-// Name is part of the opt.Table interface.
+// Fingerprint is part of the opt.DataSource interface.
+func (tt *Table) Fingerprint() opt.Fingerprint {
+	return tt.TabFingerprint
+}
+
+// Name is part of the opt.DataSource interface.
 func (tt *Table) Name() *tree.TableName {
 	return &tt.TabName
 }
 
 // CheckPrivilege is part of the opt.DataSource interface.
 func (tt *Table) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	if tt.Revoked {
+		return fmt.Errorf("user does not have privilege to access %v", tt.TabName)
+	}
 	return nil
 }
 
