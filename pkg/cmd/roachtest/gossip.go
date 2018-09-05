@@ -300,7 +300,8 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 
 func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, racks(c.nodes))
+	// Reduce the scan max idle time to speed up evacuation of node 1.
+	c.Start(ctx, racks(c.nodes), startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms"))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
