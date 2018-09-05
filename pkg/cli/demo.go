@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -67,10 +69,24 @@ func init() {
 }
 
 func setupTransientServer(
-	gen workload.Generator,
+	cmd *cobra.Command, gen workload.Generator,
 ) (connURL string, adminURL string, cleanup func(), err error) {
 	cleanup = func() {}
 	ctx := context.Background()
+
+	df := cmd.Flags().Lookup(logflags.LogDirName)
+	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
+	if !df.Changed && !sf.Changed {
+		// User did not request logging flags; shut down logging under
+		// errors and make logs appear on stderr.
+		// Otherwise, the demo command would cause a cockroach-data
+		// directory to appear in the current directory just for logs.
+		_ = df.Value.Set("")
+		df.Changed = true
+		_ = sf.Value.Set(log.Severity_ERROR.String())
+		sf.Changed = true
+	}
+
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return connURL, adminURL, cleanup, err
@@ -120,7 +136,7 @@ func setupTransientServer(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
-	connURL, adminURL, cleanup, err := setupTransientServer(gen)
+	connURL, adminURL, cleanup, err := setupTransientServer(cmd, gen)
 	defer cleanup()
 	if err != nil {
 		return checkAndMaybeShout(err)
