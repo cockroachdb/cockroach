@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -41,6 +42,34 @@ const (
 	// threshold. This avoids too many lease transfers in lightly loaded clusters.
 	minQPSThresholdDifference = 100
 )
+
+var (
+	metaStoreRebalancerLeaseTransferCount = metric.Metadata{
+		Name:        "rebalancing.lease.transfers",
+		Help:        "Number of lease transfers motivated by store-level load imbalances",
+		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaStoreRebalancerRangeRebalanceCount = metric.Metadata{
+		Name:        "rebalancing.range.rebalances",
+		Help:        "Number of range rebalance operations motivated by store-level load imbalances",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+// StoreRebalancerMetrics is the set of metrics for the store-level rebalancer.
+type StoreRebalancerMetrics struct {
+	LeaseTransferCount  *metric.Counter
+	RangeRebalanceCount *metric.Counter
+}
+
+func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
+	return StoreRebalancerMetrics{
+		LeaseTransferCount:  metric.NewCounter(metaStoreRebalancerLeaseTransferCount),
+		RangeRebalanceCount: metric.NewCounter(metaStoreRebalancerRangeRebalanceCount),
+	}
+}
 
 // LoadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
@@ -95,6 +124,7 @@ const (
 // will best accomplish the store-level goals.
 type StoreRebalancer struct {
 	log.AmbientContext
+	metrics      StoreRebalancerMetrics
 	st           *cluster.Settings
 	rq           *replicateQueue
 	replRankings *replicaRankings
@@ -109,12 +139,15 @@ func NewStoreRebalancer(
 	replRankings *replicaRankings,
 ) *StoreRebalancer {
 	ambientCtx.AddLogTag("store-rebalancer", nil)
-	return &StoreRebalancer{
+	sr := &StoreRebalancer{
 		AmbientContext: ambientCtx,
+		metrics:        makeStoreRebalancerMetrics(),
 		st:             st,
 		rq:             rq,
 		replRankings:   replRankings,
 	}
+	sr.rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
+	return sr
 }
 
 // Start runs an infinite loop in a goroutine which regularly checks whether
@@ -217,6 +250,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			continue
 		}
 		cancel()
+		sr.metrics.LeaseTransferCount.Inc(1)
 
 		// Finally, update our local copies of the descriptors so that if
 		// additional transfers are needed we'll be making the decisions with more
@@ -271,14 +305,15 @@ func (sr *StoreRebalancer) rebalanceStore(
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
 		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		// TODO: Either make RelocateRange production-ready or do the rebalancing
-		// another way.
+		// TODO(a-robinson): Either make RelocateRange production-ready or do the
+		// rebalancing another way.
 		if err := RelocateRange(replCtx, sr.rq.store.DB(), *descBeforeRebalance, targets); err != nil {
 			cancel()
 			log.Errorf(replCtx, "unable to relocate range to %v: %v", targets, err)
 			continue
 		}
 		cancel()
+		sr.metrics.RangeRebalanceCount.Inc(1)
 
 		// Finally, update our local copies of the descriptors so that if
 		// additional transfers are needed we'll be making the decisions with more
