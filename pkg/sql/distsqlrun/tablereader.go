@@ -197,13 +197,13 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if meta := getTxnCoordMeta(tr.flowCtx.txn); meta != nil {
+	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
 	tr.InternalClose()

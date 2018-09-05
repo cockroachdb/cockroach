@@ -150,13 +150,13 @@ func TestDelayedBeginRetryable(t *testing.T) {
 		s.DistSender(),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	pushErr := make(chan error)
 	go func() {
 		<-unblockPush
 		// Conflicting transaction that pushes the above transaction.
-		conflictTxn := client.NewTxn(origDB, 0 /* gatewayNodeID */, client.RootTxn)
+		conflictTxn := client.NewTxn(ctx, origDB, 0 /* gatewayNodeID */, client.RootTxn)
 		// Push through a Put, as opposed to a Get, so that the pushee gets aborted.
 		if err := conflictTxn.Put(ctx, key2, "pusher was here"); err != nil {
 			pushErr <- err
