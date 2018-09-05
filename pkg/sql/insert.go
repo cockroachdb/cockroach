@@ -184,10 +184,14 @@ func (p *planner) Insert(
 	// Extract the AST for the data source.
 	var insertRows tree.SelectStatement
 	arityChecked := false
+	colNames := make(tree.NameList, len(insertCols))
+	for i := range insertCols {
+		colNames[i] = tree.Name(insertCols[i].Name)
+	}
 	if n.DefaultValues() {
-		insertRows = newDefaultValuesClause(defaultExprs, insertCols)
+		insertRows = newDefaultValuesClause(defaultExprs, colNames)
 	} else {
-		src, values, err := extractInsertSource(n.Rows)
+		src, values, err := extractInsertSource(colNames, n.Rows)
 		if err != nil {
 			return nil, err
 		}
@@ -681,7 +685,9 @@ func (p *planner) processColumns(
 // extractInsertSource removes the parentheses around the data source of an INSERT statement.
 // If the data source is a VALUES clause not further qualified with LIMIT/OFFSET and ORDER BY,
 // the 3rd return value is a pre-casted pointer to the VALUES clause.
-func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClause, error) {
+func extractInsertSource(
+	colNames tree.NameList, s *tree.Select,
+) (tree.SelectStatement, *tree.ValuesClauseWithNames, error) {
 	wrapped := s.Select
 	limit := s.Limit
 	orderBy := s.OrderBy
@@ -704,7 +710,10 @@ func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClau
 
 	if orderBy == nil && limit == nil {
 		values, _ := wrapped.(*tree.ValuesClause)
-		return wrapped, values, nil
+		if values != nil {
+			return wrapped, &tree.ValuesClauseWithNames{ValuesClause: *values, Names: colNames}, nil
+		}
+		return wrapped, nil, nil
 	}
 	return &tree.ParenSelect{
 		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
@@ -712,17 +721,20 @@ func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClau
 }
 
 func newDefaultValuesClause(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor,
+	defaultExprs []tree.TypedExpr, colNames tree.NameList,
 ) tree.SelectStatement {
-	row := make(tree.Exprs, 0, len(cols))
-	for i := range cols {
+	row := make(tree.Exprs, 0, len(colNames))
+	for i := range colNames {
 		if defaultExprs == nil {
 			row = append(row, tree.DNull)
 			continue
 		}
 		row = append(row, defaultExprs[i])
 	}
-	return &tree.ValuesClause{Rows: []tree.Exprs{row}}
+	return &tree.ValuesClauseWithNames{
+		ValuesClause: tree.ValuesClause{Rows: []tree.Exprs{row}},
+		Names:        colNames,
+	}
 }
 
 // fillDefaults populates default expressions in the provided ValuesClause,
@@ -737,12 +749,14 @@ func newDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, values *tree.ValuesClause,
-) (*tree.ValuesClause, error) {
+	defaultExprs []tree.TypedExpr,
+	cols []sqlbase.ColumnDescriptor,
+	values *tree.ValuesClauseWithNames,
+) (*tree.ValuesClauseWithNames, error) {
 	ret := values
 	copyValues := func() {
 		if ret == values {
-			ret = &tree.ValuesClause{Rows: append([]tree.Exprs(nil), values.Rows...)}
+			ret = &tree.ValuesClauseWithNames{ValuesClause: tree.ValuesClause{Rows: append([]tree.Exprs(nil), values.Rows...)}, Names: values.Names}
 		}
 	}
 
@@ -787,6 +801,9 @@ func fillDefaults(
 			tuple = append(tuple, defaultExpr(len(tuple)))
 			ret.Rows[tIdx] = tuple
 		}
+	}
+	for i := numColsOrig; i < len(cols); i++ {
+		ret.Names = append(ret.Names, tree.Name(cols[i].Name))
 	}
 	return ret, nil
 }
