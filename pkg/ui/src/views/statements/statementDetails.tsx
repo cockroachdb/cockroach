@@ -102,7 +102,6 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
             </th>
             <th className="numeric-stats-table__cell">Mean {this.props.measure}</th>
             <th className="numeric-stats-table__cell">Standard Deviation</th>
-            <th className="numeric-stats-table__cell" />
           </tr>
         </thead>
         <tbody style={{ textAlign: "right" }}>
@@ -113,9 +112,8 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
               return (
                 <tr className={classNames}>
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
-                  <td className="numeric-stats-table__cell">{ this.props.format(row.value.mean) }</td>
-                  <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
                   <td className="numeric-stats-table__cell">{ row.bar ? row.bar() : null }</td>
+                  <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
                 </tr>
               );
             })
@@ -257,22 +255,18 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
               <tbody>
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>First Attempts</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ firstAttemptCount }</td>
                   <td className="numeric-stats-table__cell">{ firstAttemptsBarChart() }</td>
                 </tr>
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Retries</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count - firstAttemptCount }</td>
                   <td className="numeric-stats-table__cell">{ retriesBarChart() }</td>
                 </tr>
                 <tr className="numeric-stats-table__row--body">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Max Retries</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ FixLong(stats.max_retries).toInt() }</td>
                   <td className="numeric-stats-table__cell">{ maxRetriesBarChart() }</td>
                 </tr>
                 <tr className="numeric-stats-table__row--body numeric-stats-table__row--summary">
                   <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Total</th>
-                  <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ count }</td>
                   <td className="numeric-stats-table__cell">{ totalCountBarChart() }</td>
                 </tr>
               </tbody>
