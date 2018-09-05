@@ -739,3 +739,12 @@ UPSERT INTO error_check VALUES (1, 'foo')
 # Upsert -> insert
 statement error computed column i:
 UPSERT INTO error_check VALUES (3, 'foo')
+
+statement ok
+CREATE TABLE x (
+  a INT PRIMARY KEY,
+  b INT AS (a+1) STORED
+)
+
+query error value type decimal doesn't match type INT of column "a"
+INSERT INTO x VALUES(1.4)
