@@ -20,12 +20,10 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -2450,12 +2448,9 @@ func TestCommitTurnedToRollback(t *testing.T) {
 
 	// Attempt to commit again, at the next epoch. This should succeed, and the
 	// commit should be turned to a rollback.
-	tr := tracing.NewTracer()
-	sp := tr.StartSpan("test", tracing.Recordable)
-	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	commitCtx := opentracing.ContextWithSpan(ctx, sp)
+	commitCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
+	defer cancel()
 	err = txn.Commit(commitCtx)
-	sp.Finish()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2471,20 +2466,7 @@ func TestCommitTurnedToRollback(t *testing.T) {
 
 	// Look for a specific log message indicating that this test is not fooling
 	// itself and indeed we transformed a commit to a rollback.
-	var found bool
-	for _, recSp := range tracing.GetRecording(sp) {
-		msg := ""
-		for _, l := range recSp.Logs {
-			for _, f := range l.Fields {
-				msg = msg + fmt.Sprintf("  %s: %v", f.Key, f.Value)
-			}
-		}
-		if strings.Contains(msg, turningCommitToRollbackMsg) {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if tracing.FindMsgInRecording(getRec(), turningCommitToRollbackMsg) == -1 {
 		t.Fatalf("didn't find trace message: %s", turningCommitToRollbackMsg)
 	}
 }
