@@ -85,7 +85,9 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	var mtc multiTestContext
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)
@@ -136,7 +138,9 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	var mtc multiTestContext
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)
@@ -220,6 +224,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	var mtc *multiTestContext
@@ -388,7 +393,9 @@ func TestStoreRangeMergeTimestampCache(t *testing.T) {
 
 func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	ctx := context.Background()
-	var mtc multiTestContext
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
 	var lhsStore, rhsStore *storage.Store
 	if disjointLeaseholders {
 		mtc.Start(t, 2)
@@ -504,6 +511,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil /* clock */)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	var readTS hlc.Timestamp
 	rhsKey := roachpb.Key("c")
@@ -624,6 +632,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 
 	// Install a store filter that maybe injects retryable errors into a merge
 	// transaction before ultimately aborting the merge.
@@ -711,7 +720,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	mtc := &multiTestContext{}
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 	store := mtc.Store(0)
@@ -807,6 +818,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
@@ -1062,6 +1074,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 
 	// The synchronization in this test is tricky. The merge transaction is
 	// controlled by the AdminMerge function and normally commits quite quickly,
@@ -1216,6 +1229,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
 	var mtc *multiTestContext
@@ -1355,6 +1369,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -1512,6 +1527,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
 	mtc := &multiTestContext{storeConfig: &storeCfg}
@@ -1611,6 +1627,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
@@ -1681,6 +1698,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -1770,6 +1788,7 @@ func TestStoreRangeMergeDeadFollower(t *testing.T) {
 
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -1798,6 +1817,7 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -1906,6 +1926,7 @@ func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -2089,6 +2110,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
 	// Install a filter that triggers a shutdown when stop is non-zero and the

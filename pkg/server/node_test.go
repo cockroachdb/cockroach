@@ -544,6 +544,12 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Prevent the merge queue from immediately discarding our splits.
+				DisableMergeQueue: true,
+			},
+		},
 	})
 	defer srv.Stopper().Stop(context.TODO())
 	ts := srv.(*TestServer)
