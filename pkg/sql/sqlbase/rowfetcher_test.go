@@ -91,9 +91,10 @@ type fetcherEntryArgs struct {
 
 func TestNextRowSingle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -153,7 +154,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -210,9 +211,10 @@ func TestNextRowSingle(t *testing.T) {
 
 func TestNextRowBatchLimiting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -272,7 +274,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
@@ -331,9 +333,10 @@ func TestNextRowBatchLimiting(t *testing.T) {
 // as well as STORING columns).
 func TestNextRowSecondaryIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	// Modulo to use for s1, s2 storing columns.
 	storingMods := [2]int{7, 13}
@@ -446,7 +449,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -574,9 +577,10 @@ func generateIdxSubsets(maxIdx int, subsets [][]int) [][]int {
 // We test reading rows from every non-empty subset for completeness.
 func TestNextRowInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tableArgs := map[string]*fetcherEntryArgs{
 		"parent1": {
@@ -806,7 +810,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				lookupSpans,
 				false, /*limitBatches*/
 				0,     /*limitHint*/

@@ -556,7 +556,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxn(ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
+	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
 	if err := ex.state.mu.txn.SetIsolation(isolation); err != nil {
 		return err
 	}

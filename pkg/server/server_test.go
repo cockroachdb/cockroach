@@ -302,6 +302,8 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
@@ -310,11 +312,11 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m", "m"); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -322,17 +324,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
+	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(context.Background(), tds, scan)
+		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -354,7 +356,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,13 +369,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	txn := client.NewTxnWithProto(db, s.NodeID(), client.RootTxn, txnProto)
+	txn := client.NewTxnWithProto(ctx, db, s.NodeID(), client.RootTxn, txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txnProto}
 	ba.Add(scan)
-	br, pErr := txn.Send(context.Background(), ba)
+	br, pErr := txn.Send(ctx, ba)
 	if pErr != nil {
 		t.Fatal(err)
 	}

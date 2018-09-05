@@ -741,22 +741,22 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// will leave a record on the RHS, and txn3 will leave a record on both. This
 	// tests whether the merge code properly accounts for merging abort span
 	// records for the same transaction.
-	txn1 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn1.Put(ctx, "a-txn1", "val"); err != nil {
 		t.Fatal(err)
 	}
-	txn2 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn2.Put(ctx, "c-txn2", "val"); err != nil {
 		t.Fatal(err)
 	}
-	txn3 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	txn3 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn3.Put(ctx, "a-txn3", "val"); err != nil {
 		t.Fatal(err)
 	}
 	if err := txn3.Put(ctx, "c-txn3", "val"); err != nil {
 		t.Fatal(err)
 	}
-	hiPriTxn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	hiPriTxn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 	hiPriTxn.InternalSetPriority(roachpb.MaxTxnPriority)
 	for _, key := range []string{"a-txn1", "c-txn2", "a-txn3", "c-txn3"} {
 		if err := hiPriTxn.Put(ctx, key, "val"); err != nil {
@@ -841,7 +841,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 		lhsKey, rhsKey := roachpb.Key("aa"), roachpb.Key("cc")
 
-		txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		// Put the key on the RHS side first so ownership of the transaction record
 		// will need to transfer to the LHS range during the merge.
 		if err := txn.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -879,7 +879,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Create a transaction that will be aborted before the merge but won't
 		// realize until after the merge.
-		txn1 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		// Put the key on the RHS side so ownership of the transaction record and
 		// abort span records will need to transfer to the LHS during the merge.
 		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -887,7 +887,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 
 		// Create and commit a txn that aborts txn1.
-		txn2 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		txn2.InternalSetPriority(roachpb.MaxTxnPriority)
 		if err := txn2.Put(ctx, rhsKey, "muhahahah"); err != nil {
 			t.Fatal(err)
@@ -927,7 +927,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		txnwait.TxnLivenessThreshold = 2 * testutils.DefaultSucceedsSoonDuration
 
 		// Create a transaction that won't complete until after the merge.
-		txn1 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn1 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		// Put the key on the RHS side so ownership of the transaction record and
 		// abort span records will need to transfer to the LHS during the merge.
 		if err := txn1.Put(ctx, rhsKey, t.Name()); err != nil {
@@ -935,7 +935,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		}
 
 		// Create a txn that will conflict with txn1.
-		txn2 := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		txn2ErrCh := make(chan error)
 		go func() {
 			txn2ErrCh <- txn2.Put(ctx, rhsKey, "muhahahah")
@@ -2157,7 +2157,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 
 	// Simulate a merge transaction by launching a transaction that lays down
 	// intents on the two copies of the RHS range descriptor.
-	txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn.Del(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey)); err != nil {
 		t.Fatal(err)
 	}

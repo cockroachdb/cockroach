@@ -126,7 +126,7 @@ func (tc *testContext) createOpenState(
 		mon:           &txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
-	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
+	ts.mu.txn = client.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
 
 	state := stateOpen{
 		ImplicitTxn: FromBool(typ == implicitTxn),
