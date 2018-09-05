@@ -459,7 +459,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 # We look for rows containing a BeginTxn and an EndTxn, as proof that the
 # insertNode is committing the txn.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 BeginTxn, 1 EndTxn%'
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 BeginTxn, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
 r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 1 CPut, 1 BeginTxn, 1 EndTxn
