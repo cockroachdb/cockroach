@@ -255,7 +255,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		runNode int,
 		extraArgs ...string,
 	) (string, error) {
-		args := []string{cockroach}
+		args := []string{"./cockroach"}
 		args = append(args, extraArgs...)
 		args = append(args, "--insecure")
 		args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))

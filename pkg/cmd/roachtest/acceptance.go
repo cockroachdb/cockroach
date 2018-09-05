@@ -39,6 +39,7 @@ func registerAcceptance(r *registry) {
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"decommission", runDecommissionAcceptance},
+		{"cluster-init", runClusterInit},
 		{"event-log", runEventLog},
 		{"gossip/peerings", runGossipPeerings},
 		{"gossip/restart", runGossipRestart},
