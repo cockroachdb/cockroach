@@ -231,6 +231,7 @@ func (b *Builder) buildScalar(
 						Ordering: oc,
 					}),
 				),
+				b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.expr}),
 			),
 			b.factory.ConstructArray(memo.EmptyList, typID),
 		}))
