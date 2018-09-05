@@ -118,11 +118,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7cd501539a6126e82ab5835d3ae2b0d996f9c426dda4856bfb975ce72894fc87"
+  digest = "1:b20392f0a4ea88031e44e6a13c8566da8ece9ce834a9fb70768e0518db0fe003"
   name = "github.com/abourget/teamcity"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+  revision = "8ca25c33eb11b24ed691f5f8fc4ca869ef970017"
+  source = "https://github.com/cockroachdb/teamcity"
 
 [[projects]]
   branch = "master"
@@ -585,7 +586,8 @@
   revision = "11a7a839e723aa293cccdc353b394dbfce7c131e"
 
 [[projects]]
-  digest = "1:5376fe6ba8b3f1d54401ccdc2a26da4f3cd3c20831fd6bf1448cde10c394a535"
+  branch = "master"
+  digest = "1:c4a33776db6799b4b76d373662939dbab8aacb0ee5ff97cc40f3941eebf40e35"
   name = "github.com/golang/dep"
   packages = [
     ".",
@@ -608,8 +610,7 @@
     "internal/importers/vndr",
   ]
   pruneopts = "UT"
-  revision = "224a564abe296670b692fe08bb63a3e4c4ad7978"
-  version = "v0.5.0"
+  revision = "bbe56e5e9a2596e258cc3fcd24c2153c7b252cb8"
 
 [[projects]]
   branch = "master"
@@ -1258,6 +1259,14 @@
   pruneopts = "UT"
   revision = "4a180b209f5f494e5923cfce81ea30ba23915877"
   version = "v2.18.06"
+
+[[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
