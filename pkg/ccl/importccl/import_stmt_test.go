@@ -579,6 +579,29 @@ COPY t (a, b, c) FROM stdin;
 			err: `create table t \(t time with time zone\)
                                  \^`,
 		},
+		{
+			name: "various create ignores",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
+				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
+				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
+
+				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
+				    LANGUAGE sql
+				    AS $_$
+				SELECT $1 ~ '^[0-9]+$'
+				$_$;
+				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
+
+				CREATE TABLE t (i INT);
+			`,
+			query: map[string][][]string{
+				`SHOW TABLES`: {{"t"}},
+			},
+		},
 
 		// Error
 		{
