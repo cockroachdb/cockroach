@@ -2197,8 +2197,9 @@ func TestImportPgDump(t *testing.T) {
 	second := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(secondFile, baseDir))}
 	multitableFile := getMultiTablePostgresDumpTestdata(t)
 	multitable := []interface{}{fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(multitableFile, baseDir))}
+	opendata := []interface{}{"nodelocal:///pgdump/opendata.sql"}
 
-	const expectAll, expectSimple, expectSecond = 1, 2, 3
+	const expectAll, expectSimple, expectSecond, expectOpenData = 1, 2, 3, 4
 
 	for _, c := range []struct {
 		name     string
@@ -2224,9 +2225,10 @@ func TestImportPgDump(t *testing.T) {
 		{`simple from multi`, expectSimple, `IMPORT TABLE simple FROM PGDUMP ($1)`, multitable},
 		{`second from multi`, expectSecond, `IMPORT TABLE second FROM PGDUMP ($1)`, multitable},
 		{`all from multi`, expectAll, `IMPORT PGDUMP ($1)`, multitable},
+		{`opendata`, expectOpenData, `IMPORT PGDUMP $1`, opendata},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS simple, second, seqtable`)
 			sqlDB.Exec(t, c.query, c.args...)
 
 			if c.expected == expectSimple || c.expected == expectAll {
@@ -2324,6 +2326,36 @@ func TestImportPgDump(t *testing.T) {
 					sqlDB.QueryStr(t, `select a+1, a*10 from generate_series(0, 7) a`),
 				)
 				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"8"}})
+			}
+			if c.expected == expectOpenData {
+				sqlDB.CheckQueryResults(t, `SHOW TABLES`, [][]string{
+					{"conditions"},
+					{"document_categories"},
+					{"documents"},
+					{"fda_applications"},
+					{"fda_approvals"},
+					{"files"},
+					{"interventions"},
+					{"knex_migrations"},
+					{"knex_migrations_lock"},
+					{"locations"},
+					{"organizations"},
+					{"persons"},
+					{"publications"},
+					{"records"},
+					{"risk_of_bias_criteria"},
+					{"risk_of_biases"},
+					{"risk_of_biases_risk_of_bias_criteria"},
+					{"sources"},
+					{"trials"},
+					{"trials_conditions"},
+					{"trials_documents"},
+					{"trials_interventions"},
+					{"trials_locations"},
+					{"trials_organizations"},
+					{"trials_persons"},
+					{"trials_publications"},
+				})
 			}
 		})
 	}

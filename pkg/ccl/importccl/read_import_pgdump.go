@@ -138,6 +138,9 @@ var (
 		regexp.MustCompile("(?i)^alter table .* owner to"),
 		regexp.MustCompile("(?i)^comment on"),
 		regexp.MustCompile("(?i)^create extension"),
+		regexp.MustCompile("(?i)^create trigger"),
+		regexp.MustCompile("(?i)^grant .* on sequence"),
+		regexp.MustCompile("(?i)^revoke .* on sequence"),
 	}
 )
 
