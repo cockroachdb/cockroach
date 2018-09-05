@@ -41,6 +41,8 @@ import (
 // multiple queries.
 const numRunners = 16
 
+const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
+
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
 	ctx        context.Context
@@ -135,7 +137,13 @@ func (dsp *DistSQLPlanner) Run(
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
-		meta := txn.GetStrippedTxnCoordMeta()
+		meta, err := txn.GetTxnCoordMetaOrRejectClient(ctx)
+		if err != nil {
+			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
+			recv.SetError(err)
+			return
+		}
+		meta.StripRootToLeaf()
 		txnCoordMeta = &meta
 	}
 

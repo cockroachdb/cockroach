@@ -963,7 +963,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	}
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
-			txn := client.NewTxn(db, test.nodeID, test.typ)
+			txn := client.NewTxn(ctx, db, test.nodeID, test.typ)
 			ots := txn.Serialize().ObservedTimestamps
 			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)

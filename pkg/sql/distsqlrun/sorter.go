@@ -270,7 +270,7 @@ func newSortAllProcessor(
 		spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -382,7 +382,7 @@ func newSortTopKProcessor(
 		ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -481,7 +481,7 @@ func newSortChunksProcessor(
 		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				proc.close()
 				return nil
 			},

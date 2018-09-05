@@ -725,8 +725,11 @@ func matchesWithoutFileLine(msg string, expected string) bool {
 
 // ContextWithRecordingSpan returns a context with an embedded trace span which
 // returns its contents when getRecording is called and must be stopped by
-// calling the cancel method when done with the context. Note that to convert
-// the recorded spans into text, you can use FormatRecordedSpans.
+// calling the cancel method when done with the context (getRecording() needs to
+// be called before cancel()).
+//
+// Note that to convert the recorded spans into text, you can use
+// FormatRecordedSpans. Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, opName string,
 ) (retCtx context.Context, getRecording func() []RecordedSpan, cancel func()) {

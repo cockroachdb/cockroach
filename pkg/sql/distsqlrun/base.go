@@ -253,9 +253,10 @@ func sendTraceData(ctx context.Context, dst RowReceiver) {
 // a node, and so it's possible for multiple processors to send the same
 // TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func getTxnCoordMeta(txn *client.Txn) *roachpb.TxnCoordMeta {
+func getTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
 	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetStrippedTxnCoordMeta()
+		txnMeta := txn.GetTxnCoordMeta(ctx)
+		txnMeta.StripLeafToRoot()
 		if txnMeta.Txn.ID != uuid.Nil {
 			return &txnMeta
 		}

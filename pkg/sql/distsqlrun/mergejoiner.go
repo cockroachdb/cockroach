@@ -86,7 +86,7 @@ func newMergeJoiner(
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{leftSource, rightSource},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				m.close()
 				return nil
 			},

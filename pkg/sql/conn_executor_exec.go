@@ -244,7 +244,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
 		// started running. The client txn's statement count indicates how many
 		// statements have been executed as part of this transaction.
-		if ex.state.mu.txn.GetTxnCoordMeta().CommandCount > 0 {
+		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
+		if meta.CommandCount > 0 {
 			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", tree.RestartSavepointName)
 			return makeErrEvent(err)
@@ -555,7 +556,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxn(ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
+	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
 	if err := ex.state.mu.txn.SetIsolation(isolation); err != nil {
 		return err
 	}

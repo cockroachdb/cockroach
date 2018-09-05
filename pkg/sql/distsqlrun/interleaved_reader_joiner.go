@@ -420,13 +420,13 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-func (irj *interleavedReaderJoiner) generateTrailingMeta() []ProducerMetadata {
+func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if meta := getTxnCoordMeta(irj.flowCtx.txn); meta != nil {
+	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
 	irj.InternalClose()
