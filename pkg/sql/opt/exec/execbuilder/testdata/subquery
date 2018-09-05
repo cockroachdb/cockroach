@@ -36,7 +36,7 @@ root                ·             ·
  │    └── emptyrow  ·             ·
  └── subquery       ·             ·
       │             id            @S1
-      │             original sql  EXISTS <unknown>
+      │             original sql  EXISTS (SELECT a FROM abc)
       │             exec mode     exists
       └── scan      ·             ·
 ·                   table         abc@primary
@@ -45,30 +45,30 @@ root                ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
-root                 ·             ·                 (a, b, c)  ·
- ├── scan            ·             ·                 (a, b, c)  ·
- │                   table         abc@primary       ·          ·
- │                   spans         ALL               ·          ·
- │                   filter        a = @S2           ·          ·
- ├── subquery        ·             ·                 (a, b, c)  ·
- │    │              id            @S1               ·          ·
- │    │              original sql  EXISTS <unknown>  ·          ·
- │    │              exec mode     exists            ·          ·
- │    └── scan       ·             ·                 (a, b, c)  ·
- │                   table         abc@primary       ·          ·
- │                   spans         ALL               ·          ·
- │                   filter        c = (a + 3)       ·          ·
- └── subquery        ·             ·                 (a, b, c)  ·
-      │              id            @S2               ·          ·
-      │              original sql  <unknown>         ·          ·
-      │              exec mode     one row           ·          ·
-      └── group      ·             ·                 (agg0)     ·
-           │         aggregate 0   max(a)            ·          ·
-           │         scalar        ·                 ·          ·
-           └── scan  ·             ·                 (a)        ·
-·                    table         abc@primary       ·          ·
-·                    spans         ALL               ·          ·
-·                    filter        @S1               ·          ·
+root                 ·             ·                                                                            (a, b, c)  ·
+ ├── scan            ·             ·                                                                            (a, b, c)  ·
+ │                   table         abc@primary                                                                  ·          ·
+ │                   spans         ALL                                                                          ·          ·
+ │                   filter        a = @S2                                                                      ·          ·
+ ├── subquery        ·             ·                                                                            (a, b, c)  ·
+ │    │              id            @S1                                                                          ·          ·
+ │    │              original sql  EXISTS (SELECT * FROM abc WHERE c = (a + 3))                                 ·          ·
+ │    │              exec mode     exists                                                                       ·          ·
+ │    └── scan       ·             ·                                                                            (a, b, c)  ·
+ │                   table         abc@primary                                                                  ·          ·
+ │                   spans         ALL                                                                          ·          ·
+ │                   filter        c = (a + 3)                                                                  ·          ·
+ └── subquery        ·             ·                                                                            (a, b, c)  ·
+      │              id            @S2                                                                          ·          ·
+      │              original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·          ·
+      │              exec mode     one row                                                                      ·          ·
+      └── group      ·             ·                                                                            (agg0)     ·
+           │         aggregate 0   max(a)                                                                       ·          ·
+           │         scalar        ·                                                                            ·          ·
+           └── scan  ·             ·                                                                            (a)        ·
+·                    table         abc@primary                                                                  ·          ·
+·                    spans         ALL                                                                          ·          ·
+·                    filter        @S1                                                                          ·          ·
 
 # IN expression transformed into semi-join.
 query TTTTT
@@ -103,7 +103,7 @@ root                     ·             ·
  │                       size          1 column, 2 rows
  └── subquery            ·             ·
       │                  id            @S1
-      │                  original sql  <unknown>
+      │                  original sql  (SELECT 2)
       │                  exec mode     one row
       └── render         ·             ·
            └── emptyrow  ·             ·
@@ -228,7 +228,7 @@ root                 ·             ·                       ("array")  ·
  │    └── emptyrow   ·             ·                       ()         ·
  └── subquery        ·             ·                       ("array")  ·
       │              id            @S1                     ·          ·
-      │              original sql  <unknown>               ·          ·
+      │              original sql  (SELECT x FROM b)       ·          ·
       │              exec mode     one row                 ·          ·
       └── group      ·             ·                       (agg0)     ·
            │         aggregate 0   array_agg(x)            ·          ·

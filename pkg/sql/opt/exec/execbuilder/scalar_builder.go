@@ -360,7 +360,8 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 		types.Types[val] = ev.Metadata().ColumnType(opt.ColumnID(key))
 	})
 
-	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root)
+	def := ev.Private().(*memo.SubqueryDef)
+	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root, def.OriginalExpr)
 
 	// Build the scalar value that is compared against each row.
 	scalar, err := b.buildScalar(ctx, ev.Child(1))
@@ -368,7 +369,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 		return nil, err
 	}
 
-	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
+	cmp := opt.ComparisonOpReverseMap[def.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalar, subqueryExpr), nil
 }
 
@@ -388,7 +389,8 @@ func (b *Builder) buildExistsSubquery(
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryExists, types.Bool, root), nil
+	def := ev.Private().(*memo.SubqueryDef)
+	return b.addSubquery(exec.SubqueryExists, types.Bool, root, def.OriginalExpr), nil
 }
 
 func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
@@ -417,13 +419,19 @@ func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryOneRow, ev.Logical().Scalar.Type, root), nil
+	def := ev.Private().(*memo.SubqueryDef)
+	return b.addSubquery(exec.SubqueryOneRow, ev.Logical().Scalar.Type, root, def.OriginalExpr), nil
 }
 
 // addSubquery adds an entry to b.subqueries and creates a tree.Subquery
 // expression node associated with it.
-func (b *Builder) addSubquery(mode exec.SubqueryMode, typ types.T, root exec.Node) *tree.Subquery {
-	exprNode := &tree.Subquery{Exists: mode == exec.SubqueryExists}
+func (b *Builder) addSubquery(
+	mode exec.SubqueryMode, typ types.T, root exec.Node, originalExpr *tree.Subquery,
+) *tree.Subquery {
+	exprNode := &tree.Subquery{
+		Select: originalExpr.Select,
+		Exists: mode == exec.SubqueryExists,
+	}
 	exprNode.SetType(typ)
 	b.subqueries = append(b.subqueries, exec.Subquery{
 		ExprNode: exprNode,

@@ -387,6 +387,14 @@ func (ev ExprView) formatScalarPrivate(f *ExprFmtCtx, private interface{}) {
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
 		private = nil
+
+	case opt.AnyOp:
+		// We don't want to show the OriginalExpr; just show Cmp.
+		private = private.(*SubqueryDef).Cmp
+
+	case opt.SubqueryOp, opt.ExistsOp:
+		// We don't want to show the OriginalExpr.
+		private = nil
 	}
 
 	if private != nil {

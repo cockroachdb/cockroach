@@ -564,6 +564,39 @@ func TestInternFuncOpDef(t *testing.T) {
 	test(funcDef2, funcDef3, false)
 }
 
+func TestInternSubqueryDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *SubqueryDef, expected bool) {
+		t.Helper()
+		leftID := ps.internSubqueryDef(left)
+		rightID := ps.internSubqueryDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	expr1 := &tree.Subquery{}
+	expr2 := &tree.Subquery{}
+
+	defs := []SubqueryDef{
+		{},
+		{OriginalExpr: expr1},
+		{OriginalExpr: expr2},
+		{Cmp: opt.LeOp},
+		{Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.LeOp},
+		{OriginalExpr: expr2, Cmp: opt.GtOp},
+	}
+	for i := range defs {
+		for j := range defs {
+			test(&defs[i], &defs[j], i == j)
+		}
+	}
+}
+
 func TestInternSetOpColMap(t *testing.T) {
 	var ps privateStorage
 	ps.init()
@@ -883,6 +916,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
 	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -903,6 +937,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internMergeOnDef(mergeOnDef)
 		ps.internIndexJoinDef(indexJoinDef)
 		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
@@ -943,6 +978,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
 	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -965,6 +1001,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internMergeOnDef(mergeOnDef)
 		ps.internIndexJoinDef(indexJoinDef)
 		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
