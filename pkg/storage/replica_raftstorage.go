@@ -115,10 +115,11 @@ func entries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, size, hitIndex := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+	ents, size, hitIndex, exceededMaxBytes := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if uint64(len(ents)) == hi-lo || (maxBytes > 0 && size > maxBytes) {
+	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
 		return ents, nil
 	}
 
@@ -131,7 +132,6 @@ func entries(
 	canCache := true
 
 	var ent raftpb.Entry
-	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
 			return false, err
@@ -159,9 +159,13 @@ func entries(
 
 		// Note that we track the size of proposals with payloads inlined.
 		size += uint64(ent.Size())
-
+		if maxBytes > 0 && size > maxBytes {
+			exceededMaxBytes = true
+			if len(ents) > 0 {
+				return exceededMaxBytes, nil
+			}
+		}
 		ents = append(ents, ent)
-		exceededMaxBytes = maxBytes > 0 && size > maxBytes
 		return exceededMaxBytes, nil
 	}
 

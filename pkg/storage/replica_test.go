@@ -7242,7 +7242,7 @@ func TestEntries(t *testing.T) {
 		if tc.setup != nil {
 			tc.setup()
 		}
-		cacheEntries, _, _ := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
+		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
@@ -7258,6 +7258,11 @@ func TestEntries(t *testing.T) {
 		}
 		if len(ents) != tc.expResultCount {
 			t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
+		} else if tc.expResultCount > 0 {
+			expHitLimit := ents[len(ents)-1].Index < tc.hi-1
+			if hitLimit != expHitLimit {
+				t.Errorf("%d: unexpected hit limit: %t", i, hitLimit)
+			}
 		}
 	}
 
@@ -7280,13 +7285,26 @@ func TestEntries(t *testing.T) {
 		t.Errorf("24: error expected, got none")
 	}
 
-	// Case 25: don't hit the gap due to maxBytes.
-	ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
-	if err != nil {
-		t.Errorf("25: expected no error, got %s", err)
+	// Case 25a: don't hit the gap due to maxBytes, cache populated.
+	{
+		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
+		if err != nil {
+			t.Errorf("25: expected no error, got %s", err)
+		}
+		if len(ents) != 1 {
+			t.Errorf("25: expected 1 entry, got %d", len(ents))
+		}
 	}
-	if len(ents) != 1 {
-		t.Errorf("25: expected 1 entry, got %d", len(ents))
+	// Case 25b: don't hit the gap due to maxBytes, cache cleared.
+	{
+		repl.store.raftEntryCache.delEntries(rangeID, indexes[5], indexes[5]+1)
+		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
+		if err != nil {
+			t.Errorf("25: expected no error, got %s", err)
+		}
+		if len(ents) != 1 {
+			t.Errorf("25: expected 1 entry, got %d", len(ents))
+		}
 	}
 
 	// Case 26: don't hit the gap due to truncation.
