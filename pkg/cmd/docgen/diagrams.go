@@ -449,9 +449,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
-			"'=' string_or_placeholder":    "'=' value",
-			"'SCONST'":                     "",
-			"name":                         "option"},
+			"name":                      "option",
+			"'SCONST'":                  "option",
+			"'=' string_or_placeholder": "'=' value"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'OPTIONS'")},
 		unlink: []string{"table_name", "sink", "option", "value"},
