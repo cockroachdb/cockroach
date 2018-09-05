@@ -833,6 +833,8 @@ func (p *planner) newPlan(
 		return p.Update(ctx, n, desiredTypes)
 	case *tree.ValuesClause:
 		return p.Values(ctx, n, desiredTypes)
+	case *tree.ValuesClauseWithNames:
+		return p.Values(ctx, n, desiredTypes)
 	default:
 		return nil, errors.Errorf("unknown statement type: %T", stmt)
 	}
