@@ -644,21 +644,9 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		}
 	case ColumnType_ARRAY:
 		if v, ok := val.(*tree.DArray); ok {
-			semanticType, err := datumTypeToColumnSemanticType(v.ParamTyp)
-			if err != nil {
+			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
 				return r, err
 			}
-			if semanticType != *col.Type.ArrayContents {
-				return r, errors.Errorf("type of array contents %s doesn't match column type %s",
-					v.ParamTyp, col.Type.ArrayContents)
-			}
-			if cs, ok := v.ParamTyp.(types.TCollatedString); ok {
-				if cs.Locale != *col.Type.Locale {
-					return r, errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
-						cs.Locale, *col.Type.Locale)
-				}
-			}
-
 			b, err := encodeArray(v, nil)
 			if err != nil {
 				return r, err
@@ -1057,6 +1045,24 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
 	}
+}
+
+func checkElementType(paramType types.T, columnType ColumnType) error {
+	semanticType, err := datumTypeToColumnSemanticType(paramType)
+	if err != nil {
+		return err
+	}
+	if semanticType != *columnType.ArrayContents {
+		return errors.Errorf("type of array contents %s doesn't match column type %s",
+			paramType, columnType.ArrayContents)
+	}
+	if cs, ok := paramType.(types.TCollatedString); ok {
+		if cs.Locale != *columnType.Locale {
+			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
+				cs.Locale, *columnType.Locale)
+		}
+	}
+	return nil
 }
 
 // encodeArrayElement appends the encoded form of one array element to
