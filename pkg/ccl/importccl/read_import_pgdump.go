@@ -134,10 +134,15 @@ func (p *postgreStream) Next() (interface{}, error) {
 var (
 	ignoreComments   = regexp.MustCompile(`^\s*(--.*)`)
 	ignoreStatements = []*regexp.Regexp{
+		regexp.MustCompile("(?i)^alter function"),
 		regexp.MustCompile("(?i)^alter sequence .* owned by"),
 		regexp.MustCompile("(?i)^alter table .* owner to"),
 		regexp.MustCompile("(?i)^comment on"),
 		regexp.MustCompile("(?i)^create extension"),
+		regexp.MustCompile("(?i)^create function"),
+		regexp.MustCompile("(?i)^create trigger"),
+		regexp.MustCompile("(?i)^grant .* on sequence"),
+		regexp.MustCompile("(?i)^revoke .* on sequence"),
 	}
 )
 
