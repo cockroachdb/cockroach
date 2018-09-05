@@ -34,8 +34,8 @@ func TestNewStoreSpec(t *testing.T) {
 		expected    StoreSpec
 	}{
 		// path
-		{"path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1"}},
-		{",path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1"}},
+		{"path=/mnt/hda1", "", StoreSpec{Path: "/mnt/broken"}},
+		{",path=/mnt/hda1", "", StoreSpec{Path: "/mnt/broken"}},
 		{"path=/mnt/hda1,", "", StoreSpec{Path: "/mnt/hda1"}},
 		{",,,path=/mnt/hda1,,,", "", StoreSpec{Path: "/mnt/hda1"}},
 		{"/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1"}},
