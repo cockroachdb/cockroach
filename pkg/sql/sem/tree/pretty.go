@@ -1041,16 +1041,17 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 			p.Doc(node.AsSource),
 		)
 	} else {
-		d = pretty.ConcatSpace(
+		docs := []pretty.Doc{pretty.ConcatSpace(
 			d,
 			pretty.Bracket("(", p.Doc(&node.Defs), ")"),
-		)
+		)}
 		if node.Interleave != nil {
-			d = pretty.ConcatLine(d, p.Doc(node.Interleave))
+			docs = append(docs, p.Doc(node.Interleave))
 		}
 		if node.PartitionBy != nil {
-			d = pretty.ConcatLine(d, p.Doc(node.PartitionBy))
+			docs = append(docs, p.Doc(node.PartitionBy))
 		}
+		d = pretty.Group(pretty.Stack(docs...))
 	}
 	return d
 }
@@ -1154,4 +1155,44 @@ func (node *NullIfExpr) doc(p *PrettyCfg) pretty.Doc {
 		p.Doc(node.Expr1),
 		p.Doc(node.Expr2),
 	), ")")
+}
+
+func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
+	if node == nil {
+		return pretty.Text(`PARTITION BY NOTHING`)
+	}
+	var title string
+	if len(node.List) > 0 {
+		title = `PARTITION BY LIST`
+	} else if len(node.Range) > 0 {
+		title = `PARTITION BY RANGE`
+	}
+	inner := make([]pretty.Doc, 0, len(node.List)+len(node.Range))
+	for _, v := range node.List {
+		inner = append(inner, p.Doc(&v))
+	}
+	for _, v := range node.Range {
+		inner = append(inner, p.Doc(&v))
+	}
+	return pretty.ConcatSpace(
+		pretty.Bracket(title+" (", p.Doc(&node.Fields), ")"),
+		pretty.Bracket("(",
+			pretty.Join(",", inner...),
+			")",
+		),
+	)
+}
+
+func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
+	title := pretty.Fold(
+		pretty.ConcatSpace,
+		pretty.Text("INTERLEAVE IN PARENT"),
+		p.Doc(node.Parent),
+		pretty.Text("("),
+	)
+	d := pretty.BracketDoc(title, p.Doc(&node.Fields), pretty.Text(")"))
+	if node.DropBehavior != DropDefault {
+		d = pretty.ConcatSpace(d, pretty.Text(node.DropBehavior.String()))
+	}
+	return d
 }
