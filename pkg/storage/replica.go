@@ -4216,11 +4216,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Update protected state (last index, last term, raft log size and raft
-	// leader ID) and set raft log entry cache. We clear any older, uncommitted
-	// log entries and cache the latest ones.
+	// Update protected state - last index, last term, raft log size, and raft
+	// leader ID.
 	r.mu.Lock()
-	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
@@ -4231,6 +4229,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.remoteProposals = nil
 	}
 	r.mu.Unlock()
+
+	// Update raft log entry cache. We clear any older, uncommitted log entries
+	// and cache the latest ones.
+	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 
 	r.sendRaftMessages(ctx, otherMsgs)
 
