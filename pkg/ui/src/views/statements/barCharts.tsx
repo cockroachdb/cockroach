@@ -184,6 +184,7 @@ export function countBreakdown(s: StatementStatistics) {
     firstAttemptsBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
+          <div className="label">{ firstAttempts }</div>
           <div
             className="count-first-try bar-chart__bar"
             style={{ width: scale(firstAttempts) + "%" }}
@@ -195,6 +196,7 @@ export function countBreakdown(s: StatementStatistics) {
     retriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
+          <div className="label">{ retries }</div>
           <div
             className="count-retry bar-chart__bar"
             style={{ width: scale(retries) + "%", position: "absolute", right: "0" }}
@@ -206,6 +208,7 @@ export function countBreakdown(s: StatementStatistics) {
     maxRetriesBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
+          <div className="label">{ maxRetries }</div>
           <div
             className="count-max-retries bar-chart__bar"
             style={{ width: scale(maxRetries) + "%" }}
@@ -217,6 +220,7 @@ export function countBreakdown(s: StatementStatistics) {
     totalCountBarChart() {
       return (
         <div className="bar-chart bar-chart--breakdown">
+          <div className="label">{ count }</div>
           <div
             className="count-total bar-chart__bar"
             style={{ width: scale(count) + "%" }}
@@ -246,6 +250,7 @@ export function rowsBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Math.round(mean * 100) / 100 }</div>
             <div
               className="rows bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: 0 }}
@@ -300,6 +305,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Duration(parseMean * 1e9) }</div>
             <div
               className="latency-parse bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: 0 }}
@@ -322,6 +328,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Duration(planMean * 1e9) }</div>
             <div
               className="latency-plan bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: left + "%" }}
@@ -344,6 +351,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Duration(runMean * 1e9) }</div>
             <div
               className="latency-run bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: left + "%" }}
@@ -366,6 +374,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Duration(overheadMean * 1e9) }</div>
             <div
               className="latency-overhead bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: left + "%" }}
@@ -390,6 +399,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
+            <div className="label">{ Duration(overallMean * 1e9) }</div>
             <div
               className="latency-parse bar-chart__bar"
               style={{ width: parse + "%", position: "absolute", left: 0 }}
