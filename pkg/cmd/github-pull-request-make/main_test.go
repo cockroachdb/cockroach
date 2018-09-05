@@ -43,6 +43,7 @@ func TestPkgsFromDiff(t *testing.T) {
 			"pkg/storage/closedts/container": {tests: []string{"TestTwoNodes"}},
 			"pkg/storage/closedts/storage":   {tests: []string{"TestConcurrent"}},
 		},
+		"testdata/removed.diff": {},
 	} {
 		t.Run(filename, func(t *testing.T) {
 			f, err := os.Open(filename)
