@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
 	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
 	txnCoordMeta.StripRootToLeaf()
 

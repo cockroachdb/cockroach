@@ -314,7 +314,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
 	kvDB := s.DB()
-	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	txn := client.NewTxn(context.TODO(), kvDB, s.NodeID(), client.RootTxn)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := newInternalPlanner(
 		"plan", txn, security.RootUser, &MemoryMetrics{}, &execCfg)

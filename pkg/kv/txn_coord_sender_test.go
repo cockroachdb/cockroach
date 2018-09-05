@@ -82,9 +82,10 @@ func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	if err := txn.Put(context.TODO(), roachpb.Key("a"), []byte("value")); err != nil {
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if err := txn.Put(ctx, roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	if !txn.Serialize().Writing {
@@ -98,8 +99,9 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
@@ -108,7 +110,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 		t.Fatal(err)
 	}
-	if err := txn.Put(context.Background(), key, []byte("value")); err != nil {
+	if err := txn.Put(ctx, key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	proto := txn.Serialize()
@@ -147,7 +149,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
 
 	for _, rng := range ranges {
@@ -266,7 +268,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	db := client.NewDB(ambient, tsf, s.Clock)
 	ctx := context.Background()
 
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 	for i, tc := range testCases {
 		if tc.span.EndKey != nil {
 			if err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey); err != nil {
@@ -339,7 +341,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	for _, pusherKey := range []roachpb.Key{keyA, keyC} {
 		t.Run(fmt.Sprintf("pusher:%s", pusherKey), func(t *testing.T) {
 			// Make a db with a short heartbeat interval.
-			initialTxn := client.NewTxn(quickHeartbeatDB, 0 /* gatewayNodeID */, client.RootTxn)
+			initialTxn := client.NewTxn(ctx, quickHeartbeatDB, 0 /* gatewayNodeID */, client.RootTxn)
 			tc := initialTxn.Sender().(*TxnCoordSender)
 
 			if err := initialTxn.Put(ctx, keyA, []byte("value")); err != nil {
@@ -446,29 +448,30 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
 	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
 	for i := 0; i < 4; i++ {
 		key := roachpb.Key("key: " + strconv.Itoa(i))
-		txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+		txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 		// Set to SNAPSHOT so that it can be pushed without restarting.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			t.Fatal(err)
 		}
 		// Initialize the transaction.
-		if pErr := txn.Put(context.TODO(), key, []byte("value")); pErr != nil {
+		if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Conflicting transaction that pushes the above transaction.
-		conflictTxn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-		if _, pErr := conflictTxn.Get(context.TODO(), key); pErr != nil {
+		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+		if _, pErr := conflictTxn.Get(ctx, key); pErr != nil {
 			t.Fatal(pErr)
 		}
 
 		// The transaction was pushed at least to conflictTxn's timestamp (but
 		// it could have been pushed more - the push takes a timestamp off the
 		// HLC).
-		pusheeTxn, pErr := getTxn(context.TODO(), txn)
+		pusheeTxn, pErr := getTxn(ctx, txn)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -482,24 +485,24 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				if !txn.UpdateDeadlineMaybe(context.TODO(), pushedTimestamp.Prev()) {
+				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Prev()) {
 					t.Fatalf("did not update deadline")
 				}
 
 			case 2:
 				// Equal deadline.
-				if !txn.UpdateDeadlineMaybe(context.TODO(), pushedTimestamp) {
+				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp) {
 					t.Fatalf("did not update deadline")
 				}
 
 			case 3:
 				// Future deadline.
 
-				if !txn.UpdateDeadlineMaybe(context.TODO(), pushedTimestamp.Next()) {
+				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Next()) {
 					t.Fatalf("did not update deadline")
 				}
 			}
-			err = txn.CommitOrCleanup(context.TODO())
+			err = txn.CommitOrCleanup(ctx)
 
 			switch i {
 			case 0:
@@ -541,7 +544,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 
 	// Create a transaction with intent at "x".
 	key := roachpb.Key("x")
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
 
 	// Write so that the coordinator begins tracking this txn.
@@ -597,28 +600,29 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
 	defer s.Stop()
+	ctx := context.Background()
 
 	// Create a transaction with intent at "a".
 	key := roachpb.Key("a")
-	txn1 := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	if err := txn1.Put(context.TODO(), key, []byte("value")); err != nil {
+	txn1 := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	if err := txn1.Put(ctx, key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Push the transaction (by writing key "a" with higher priority) to abort it.
-	txn2 := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn2 := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn2.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 		t.Fatal(err)
 	}
-	if err := txn2.Put(context.TODO(), key, []byte("value2")); err != nil {
+	if err := txn2.Put(ctx, key, []byte("value2")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
-	err := txn1.CommitOrCleanup(context.TODO())
+	err := txn1.CommitOrCleanup(ctx)
 	assertTransactionAbortedError(t, err)
-	if err := txn2.CommitOrCleanup(context.TODO()); err != nil {
+	if err := txn2.CommitOrCleanup(ctx); err != nil {
 		t.Fatal(err)
 	}
 	verifyCleanup(key, s.Eng, t, txn1.Sender().(*TxnCoordSender), txn2.Sender().(*TxnCoordSender))
@@ -648,7 +652,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 		defer s.Stop()
 
 		ctx := context.Background()
-		txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+		txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 		tc := txn.Sender().(*TxnCoordSender)
 		if !errOnFirst {
 			otherKey := roachpb.Key("other")
@@ -680,6 +684,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	origTS := makeTS(123, 0)
 	plus10 := origTS.Add(10, 10)
 	plus20 := plus10.Add(10, 0)
@@ -815,11 +820,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// for assigning exact priorities doesn't work properly when faced with
 			// updates.
 			origTxnProto.Priority = 1
-			txn := client.NewTxnWithProto(db, 0 /* gatewayNodeID */, client.RootTxn, origTxnProto)
+			txn := client.NewTxnWithProto(ctx, db, 0 /* gatewayNodeID */, client.RootTxn, origTxnProto)
 			txn.InternalSetPriority(1)
 
-			err := txn.Put(context.TODO(), key, []byte("value"))
-			stopper.Stop(context.TODO())
+			err := txn.Put(ctx, key, []byte("value"))
+			stopper.Stop(ctx)
 
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
@@ -861,7 +866,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	defer s.Stop()
 
 	ctx := context.Background()
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
 
 	// Start the transaction.
@@ -871,7 +876,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	// New create a second, leaf coordinator.
-	txn2 := client.NewTxnWithProto(s.DB, 0 /* gatewayNodeID */, client.LeafTxn, *txn.Serialize())
+	txn2 := client.NewTxnWithProto(ctx, s.DB, 0 /* gatewayNodeID */, client.LeafTxn, *txn.Serialize())
 
 	// Start the second transaction.
 	key2 := roachpb.Key("b")
@@ -961,6 +966,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 // generate duplicate intents and that it merges intents for overlapping ranges.
 func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
@@ -990,22 +996,22 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		},
 		senderFn,
 	)
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 
 	db := client.NewDB(ambient, factory, clock)
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	// Write to a, b, u-w before the final batch.
 
-	pErr := txn.Put(context.TODO(), roachpb.Key("a"), []byte("value"))
+	pErr := txn.Put(ctx, roachpb.Key("a"), []byte("value"))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = txn.Put(context.TODO(), roachpb.Key("b"), []byte("value"))
+	pErr = txn.Put(ctx, roachpb.Key("b"), []byte("value"))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	pErr = txn.DelRange(context.TODO(), roachpb.Key("u"), roachpb.Key("w"))
+	pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1024,7 +1030,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
 	}
 
-	pErr = txn.CommitInBatch(context.TODO(), b)
+	pErr = txn.CommitInBatch(ctx, b)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1200,7 +1206,7 @@ func TestTxnRestartCount(t *testing.T) {
 	// Start a transaction and read a key that we're going to modify outside the
 	// txn. This ensures that refreshing the txn will not succeed, so a restart
 	// will be necessary.
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	if _, err := txn.Get(ctx, readKey); err != nil {
 		t.Fatal(err)
 	}
@@ -1288,6 +1294,7 @@ func TestTxnDurations(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
@@ -1321,7 +1328,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			abort.Store(false)
 
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
+			defer stopper.Stop(ctx)
 			var senderFn client.SenderFunc = func(
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1368,11 +1375,11 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			)
 
 			db := client.NewDB(ambient, factory, clock)
-			txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-			if pErr := txn.Put(context.Background(), "a", "b"); pErr != nil {
+			txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+			if pErr := txn.Put(ctx, "a", "b"); pErr != nil {
 				t.Fatalf("put failed: %s", pErr)
 			}
-			if pErr := txn.CommitOrCleanup(context.Background()); pErr == nil {
+			if pErr := txn.CommitOrCleanup(ctx); pErr == nil {
 				t.Fatalf("unexpected commit success")
 			}
 
@@ -1456,7 +1463,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 		return nil, roachpb.NewErrorf("injected err")
 	})
 
-	txn := client.NewTxn(db, roachpb.NodeID(1), client.RootTxn)
+	txn := client.NewTxn(ctx, db, roachpb.NodeID(1), client.RootTxn)
 	txnHeader := roachpb.Header{
 		Txn: txn.Serialize(),
 	}
@@ -1547,7 +1554,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 		return resp, nil
 	})
 
-	txn := client.NewTxn(db, roachpb.NodeID(1), client.RootTxn)
+	txn := client.NewTxn(ctx, db, roachpb.NodeID(1), client.RootTxn)
 	txnHeader := roachpb.Header{
 		Txn: txn.Serialize(),
 	}
@@ -2088,7 +2095,7 @@ func TestSequenceNumbers(t *testing.T) {
 		sender,
 	)
 	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	for i := 0; i < 5; i++ {
 		var ba roachpb.BatchRequest
@@ -2261,7 +2268,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	// in different ways in the two cases.
 
 	t.Run("standalone commit", func(t *testing.T) {
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
 		txn.UpdateDeadlineMaybe(ctx, clock.Now())
 		if _, err := txn.Get(ctx, "k"); err != nil {
@@ -2274,7 +2281,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	})
 
 	t.Run("commit in batch", func(t *testing.T) {
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
 		txn.UpdateDeadlineMaybe(ctx, clock.Now())
 		b := txn.NewBatch()
@@ -2421,7 +2428,7 @@ func TestCommitTurnedToRollback(t *testing.T) {
 	// Start a transaction and read a key that we're going to modify outside the
 	// txn. This ensures that refreshing the txn will not succeed, so a restart
 	// will be necessary.
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	if _, err := txn.Get(ctx, readKey); err != nil {
 		t.Fatal(err)
 	}

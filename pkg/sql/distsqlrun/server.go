@@ -333,7 +333,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 			// The flow will run in a LeafTxn because we do not want each distributed
 			// Txn to heartbeat the transaction.
-			txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
 		}
 	}
 
