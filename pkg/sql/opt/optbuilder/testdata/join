@@ -20,8 +20,7 @@ project
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-      └── filters [type=bool]
-           └── true [type=bool]
+      └── true [type=bool]
 
 # Check that name resolution chokes on ambiguity when it needs to.
 build
@@ -149,6 +148,26 @@ SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
 error (42P09): ORDER BY "x" is ambiguous
 
 build
+SELECT * FROM (SELECT x, x FROM onecolumn) AS a JOIN onecolumn AS b USING (x)
+----
+error (42701): duplicate column name: "x"
+
+build
+SELECT * FROM onecolumn AS a JOIN (SELECT x, x FROM onecolumn) AS b USING (x)
+----
+error (42701): duplicate column name: "x"
+
+build
+SELECT * FROM (SELECT x, x FROM onecolumn) AS a NATURAL JOIN onecolumn AS b
+----
+error (42701): duplicate column name: "x"
+
+build
+SELECT * FROM onecolumn AS a NATURAL JOIN (SELECT x, x FROM onecolumn) AS b
+----
+error (42701): duplicate column name: "x"
+
+build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
 ----
 project
@@ -236,7 +255,6 @@ project
       ├── scan onecolumn_w
       │    └── columns: w:3(int) onecolumn_w.rowid:4(int!null)
       └── filters [type=bool]
-           └── true [type=bool]
 
 exec-ddl
 CREATE TABLE othercolumn (x INT)
@@ -388,8 +406,7 @@ project
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan empty
       │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
-      └── filters [type=bool]
-           └── true [type=bool]
+      └── true [type=bool]
 
 build
 SELECT * FROM empty AS a CROSS JOIN onecolumn AS b
@@ -402,8 +419,7 @@ project
       │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
-      └── filters [type=bool]
-           └── true [type=bool]
+      └── true [type=bool]
 
 build
 SELECT * FROM onecolumn AS a(x) JOIN empty AS b(y) ON a.x = b.y
@@ -1013,8 +1029,7 @@ limit
  │              │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
  │              │    │    ├── scan twocolumn
  │              │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
- │              │    │    └── filters [type=bool]
- │              │    │         └── true [type=bool]
+ │              │    │    └── true [type=bool]
  │              │    ├── scan onecolumn
  │              │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
  │              │    └── filters [type=bool]
@@ -1699,13 +1714,12 @@ project
       ├── scan t2
       │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: t1.x [type=int]
-                │    └── variable: t2.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: t1.y [type=int]
-                     └── variable: t2.y [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: t1.x [type=int]
+           │    └── variable: t2.x [type=int]
+           └── eq [type=bool]
+                ├── variable: t1.y [type=int]
+                └── variable: t2.y [type=int]
 
 build
 SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
@@ -1719,13 +1733,12 @@ project
       ├── scan t2
       │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: t1.x [type=int]
-                │    └── variable: t2.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: t1.y [type=int]
-                     └── variable: t2.y [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: t1.x [type=int]
+           │    └── variable: t2.x [type=int]
+           └── eq [type=bool]
+                ├── variable: t1.y [type=int]
+                └── variable: t2.y [type=int]
 
 build
 SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
@@ -1739,13 +1752,12 @@ project
       ├── scan t2
       │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: t1.x [type=int]
-                │    └── variable: t2.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: t1.y [type=int]
-                     └── variable: t2.y [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: t1.x [type=int]
+           │    └── variable: t2.x [type=int]
+           └── eq [type=bool]
+                ├── variable: t1.y [type=int]
+                └── variable: t2.y [type=int]
 
 build
 SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
@@ -1799,13 +1811,12 @@ project
       │    ├── scan t2
       │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: t1.x [type=int]
-      │              │    └── variable: t2.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: t1.y [type=int]
-      │                   └── variable: t2.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: t1.x [type=int]
+      │         │    └── variable: t2.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: t1.y [type=int]
+      │              └── variable: t2.y [type=int]
       └── projections
            ├── coalesce [type=int]
            │    ├── variable: t1.x [type=int]
@@ -1916,13 +1927,12 @@ project
       │    └── scan t2
       │         └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: t1.x [type=int]
-                │    └── variable: t2.x [type=int]
-                └── eq [type=bool]
-                     ├── variable: t1.y [type=int]
-                     └── variable: t2.y [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: t1.x [type=int]
+           │    └── variable: t2.x [type=int]
+           └── eq [type=bool]
+                ├── variable: t1.y [type=int]
+                └── variable: t2.y [type=int]
 
 # Tests for merge join ordering information.
 exec-ddl
@@ -2009,19 +2019,18 @@ project
       ├── scan pkbad
       │    └── columns: pkbad.a:5(int!null) pkbad.b:6(int!null) pkbad.c:7(int) pkbad.d:8(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: pkba.a [type=int]
-                │    └── variable: pkbad.a [type=int]
-                ├── eq [type=bool]
-                │    ├── variable: pkba.b [type=int]
-                │    └── variable: pkbad.b [type=int]
-                ├── eq [type=bool]
-                │    ├── variable: pkba.c [type=int]
-                │    └── variable: pkbad.c [type=int]
-                └── eq [type=bool]
-                     ├── variable: pkba.d [type=int]
-                     └── variable: pkbad.d [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: pkba.a [type=int]
+           │    └── variable: pkbad.a [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: pkba.b [type=int]
+           │    └── variable: pkbad.b [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: pkba.c [type=int]
+           │    └── variable: pkbad.c [type=int]
+           └── eq [type=bool]
+                ├── variable: pkba.d [type=int]
+                └── variable: pkbad.d [type=int]
 
 build
 SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
@@ -2035,16 +2044,15 @@ project
       ├── scan pkbac
       │    └── columns: pkbac.a:5(int!null) pkbac.b:6(int!null) pkbac.c:7(int!null) pkbac.d:8(int)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: pkbac.a [type=int]
-                │    └── variable: pkbac.a [type=int]
-                ├── eq [type=bool]
-                │    ├── variable: pkbac.b [type=int]
-                │    └── variable: pkbac.b [type=int]
-                └── eq [type=bool]
-                     ├── variable: pkbac.c [type=int]
-                     └── variable: pkbac.c [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: pkbac.a [type=int]
+           │    └── variable: pkbac.a [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: pkbac.b [type=int]
+           │    └── variable: pkbac.b [type=int]
+           └── eq [type=bool]
+                ├── variable: pkbac.c [type=int]
+                └── variable: pkbac.c [type=int]
 
 build
 SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
@@ -2179,13 +2187,12 @@ project
       │    ├── scan str2
       │    │    └── columns: str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: str1.a [type=int]
-      │              │    └── variable: str2.a [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-      │                   └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: str1.a [type=int]
+      │         │    └── variable: str2.a [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
+      │              └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
       └── projections
            └── coalesce [type=collatedstring{en_u_ks_level1}]
                 ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
@@ -2230,13 +2237,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: xyu.x [type=int]
@@ -2256,13 +2262,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: xyu.x [type=int]
@@ -2282,13 +2287,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: xyv.x [type=int]
@@ -2310,13 +2314,12 @@ project
       │    │    ├── scan xyv
       │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    │    └── filters [type=bool]
-      │    │         └── and [type=bool]
-      │    │              ├── eq [type=bool]
-      │    │              │    ├── variable: xyu.x [type=int]
-      │    │              │    └── variable: xyv.x [type=int]
-      │    │              └── eq [type=bool]
-      │    │                   ├── variable: xyu.y [type=int]
-      │    │                   └── variable: xyv.y [type=int]
+      │    │         ├── eq [type=bool]
+      │    │         │    ├── variable: xyu.x [type=int]
+      │    │         │    └── variable: xyv.x [type=int]
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: xyu.y [type=int]
+      │    │              └── variable: xyv.y [type=int]
       │    └── projections
       │         ├── coalesce [type=int]
       │         │    ├── variable: xyu.x [type=int]
@@ -2453,13 +2456,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: xyu.x [type=int]
@@ -2479,13 +2481,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: xyv.x [type=int]
@@ -2507,13 +2508,12 @@ project
       │    │    ├── scan xyv
       │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    │    └── filters [type=bool]
-      │    │         └── and [type=bool]
-      │    │              ├── eq [type=bool]
-      │    │              │    ├── variable: xyu.x [type=int]
-      │    │              │    └── variable: xyv.x [type=int]
-      │    │              └── eq [type=bool]
-      │    │                   ├── variable: xyu.y [type=int]
-      │    │                   └── variable: xyv.y [type=int]
+      │    │         ├── eq [type=bool]
+      │    │         │    ├── variable: xyu.x [type=int]
+      │    │         │    └── variable: xyv.x [type=int]
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: xyu.y [type=int]
+      │    │              └── variable: xyv.y [type=int]
       │    └── projections
       │         ├── coalesce [type=int]
       │         │    ├── variable: xyu.x [type=int]
@@ -2593,13 +2593,12 @@ project
       │    ├── scan xyv
       │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: xyu.x [type=int]
-      │              │    └── variable: xyv.x [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: xyu.y [type=int]
-      │                   └── variable: xyv.y [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: xyu.x [type=int]
+      │         │    └── variable: xyv.x [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: xyu.y [type=int]
+      │              └── variable: xyv.y [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── tuple [type=tuple{int, int, int}]
@@ -2769,13 +2768,12 @@ project
       │    ├── scan abg
       │    │    └── columns: abg.a:7(int!null) abg.b:8(int!null) g:9(int)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: abcdef.a [type=int]
-      │              │    └── variable: abg.a [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: abcdef.b [type=int]
-      │                   └── variable: abg.b [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: abcdef.a [type=int]
+      │         │    └── variable: abg.a [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: abcdef.b [type=int]
+      │              └── variable: abg.b [type=int]
       └── filters [type=bool]
            └── or [type=bool]
                 ├── or [type=bool]
@@ -2859,19 +2857,18 @@ project
       ├── scan bar
       │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.a [type=int]
-                │    └── variable: bar.a [type=int]
-                ├── eq [type=bool]
-                │    ├── variable: foo.b [type=int]
-                │    └── variable: bar.b [type=float]
-                ├── eq [type=bool]
-                │    ├── variable: foo.c [type=float]
-                │    └── variable: bar.c [type=float]
-                └── eq [type=bool]
-                     ├── variable: foo.d [type=float]
-                     └── variable: bar.d [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: foo.a [type=int]
+           │    └── variable: bar.a [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: foo.b [type=int]
+           │    └── variable: bar.b [type=float]
+           ├── eq [type=bool]
+           │    ├── variable: foo.c [type=float]
+           │    └── variable: bar.c [type=float]
+           └── eq [type=bool]
+                ├── variable: foo.d [type=float]
+                └── variable: bar.d [type=int]
 
 # b can't be an equality column.
 build
@@ -2903,13 +2900,12 @@ project
       ├── scan bar
       │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.a [type=int]
-                │    └── variable: bar.a [type=int]
-                └── eq [type=bool]
-                     ├── variable: foo.b [type=int]
-                     └── variable: bar.b [type=float]
+           ├── eq [type=bool]
+           │    ├── variable: foo.a [type=int]
+           │    └── variable: bar.a [type=int]
+           └── eq [type=bool]
+                ├── variable: foo.b [type=int]
+                └── variable: bar.b [type=float]
 
 # Only a and c can be equality columns.
 build
@@ -2924,16 +2920,15 @@ project
       ├── scan bar
       │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       └── filters [type=bool]
-           └── and [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: foo.a [type=int]
-                │    └── variable: bar.a [type=int]
-                ├── eq [type=bool]
-                │    ├── variable: foo.b [type=int]
-                │    └── variable: bar.b [type=float]
-                └── eq [type=bool]
-                     ├── variable: foo.c [type=float]
-                     └── variable: bar.c [type=float]
+           ├── eq [type=bool]
+           │    ├── variable: foo.a [type=int]
+           │    └── variable: bar.a [type=int]
+           ├── eq [type=bool]
+           │    ├── variable: foo.b [type=int]
+           │    └── variable: bar.b [type=float]
+           └── eq [type=bool]
+                ├── variable: foo.c [type=float]
+                └── variable: bar.c [type=float]
 
 # b can't be an equality column.
 build
@@ -3031,13 +3026,12 @@ project
       │    ├── scan bar
       │    │    └── columns: bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: foo.a [type=int]
-      │              │    └── variable: bar.a [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: foo.b [type=int]
-      │                   └── variable: bar.b [type=float]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: foo.a [type=int]
+      │         │    └── variable: bar.a [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: foo.b [type=int]
+      │              └── variable: bar.b [type=float]
       └── filters [type=bool]
            └── and [type=bool]
                 ├── eq [type=bool]
@@ -3129,13 +3123,12 @@ project
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 1 [type=int]
       │    └── filters [type=bool]
-      │         └── and [type=bool]
-      │              ├── eq [type=bool]
-      │              │    ├── variable: column1 [type=unknown]
-      │              │    └── variable: column1 [type=int]
-      │              └── eq [type=bool]
-      │                   ├── variable: column2 [type=unknown]
-      │                   └── variable: column2 [type=int]
+      │         ├── eq [type=bool]
+      │         │    ├── variable: column1 [type=unknown]
+      │         │    └── variable: column1 [type=int]
+      │         └── eq [type=bool]
+      │              ├── variable: column2 [type=unknown]
+      │              └── variable: column2 [type=int]
       └── projections
            ├── coalesce [type=int]
            │    ├── variable: column1 [type=unknown]
@@ -3173,13 +3166,12 @@ project
  │         │    │         ├── const: 1 [type=int]
  │         │    │         └── const: 1 [type=int]
  │         │    └── filters [type=bool]
- │         │         └── and [type=bool]
- │         │              ├── eq [type=bool]
- │         │              │    ├── variable: column1 [type=unknown]
- │         │              │    └── variable: column1 [type=int]
- │         │              └── eq [type=bool]
- │         │                   ├── variable: column2 [type=unknown]
- │         │                   └── variable: column2 [type=int]
+ │         │         ├── eq [type=bool]
+ │         │         │    ├── variable: column1 [type=unknown]
+ │         │         │    └── variable: column1 [type=int]
+ │         │         └── eq [type=bool]
+ │         │              ├── variable: column2 [type=unknown]
+ │         │              └── variable: column2 [type=int]
  │         └── projections
  │              ├── coalesce [type=int]
  │              │    ├── variable: column1 [type=unknown]

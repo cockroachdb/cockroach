@@ -72,22 +72,65 @@ var EmptyList = ListID{Offset: 1, Length: 0}
 //   [2 3 4]: ListID{Offset: 3, Length: 3}
 //   [2 4]  : ListID{Offset: 6, Length: 2}
 //
+// The entire prefix tree is stored in a single Go map, using 8 byte keys and
+// values, which are highly optimized in Go. Each map entry is an edge in the
+// prefix tree, connecting a list to another list that has it as a prefix, but
+// with one additional item appended.
+//
 type listStorage struct {
-	// index maps the path of each node in the prefix tree to an Offset value
-	// (biased index of the list in the lists slice). See listStorageKey comment
-	// for more details about node path format.
-	index map[listStorageKey]uint32
+	// index encodes the list of edges in the prefix tree. Given a (nodeID, item)
+	// pair, the index can lookup the node (i.e. the list) which has the same
+	// elements, except with the item appended to the end. The index maps to an
+	// offset value in the lists slice where the larger list is stored. See
+	// listStorageKey comment for more details.
+	index map[listStorageKey]listStorageVal
 	lists []GroupID
+
+	// unique is an increasing counter that's used to generate unique ids for
+	// nodes in the prefix tree.
+	unique nodeID
 }
 
-// listStorageKey is the path to a node in the prefix tree. The path is a
-// (prefix, item) pair, where prefix is the list of edges from root to parent
-// node, and item is the last edge from parent to child. This representation is
-// a legal and efficient map key type, and it allows the entire prefix tree to
-// be stored in a map, which are highly optimized in Go.
+// nodeID is the unique index of a node in the prefix tree. Each node in the
+// tree corresponds to a list having a particular sequence of items. The prefix
+// tree "interns" all lists with that sequence of items, so that they are mapped
+// to the same nodeID.
+type nodeID uint32
+
+// listStorageKey represents an edge in the prefix tree, linking one node that
+// corresponds to a unique list of items, to another node that corresponds to
+// that list plus one appended item. For example, the list (10, 20, 30) could be
+// represented as the following chain:
+//
+//   (node: 0, item: 10) => (node: 1, offset: 1)
+//   (node: 1, item: 20) => (node: 2, offset: 1)
+//   (node: 2, item: 30) => (node: 3, offset: 1)
+//
+// This representation fits in 8 bytes, and so allows Go to use the
+// mapaccess1_fast64 function for fast lookups.
 type listStorageKey struct {
-	prefix ListID
-	item   GroupID
+	// node is the id of a node in the prefix tree, which corresponds to a list
+	// with a unique sequence of items.
+	node nodeID
+
+	// item links to another node in the prefix tree which corresponds to a list
+	// with the same sequence of items, except with this item appended to it.
+	item GroupID
+}
+
+// listStorageVal represents a node in the prefix tree, having a unique id and
+// the offset of the node's list in the "lists" slice.
+type listStorageVal struct {
+	// node is the id of a node in the prefix tree, which corresponds to a list
+	// with a unique sequence of items. This id can be used in a listStorageKey
+	// to look up lists that are one greater in length, and that have this node's
+	// list as a prefix.
+	node nodeID
+
+	// offset stores the offset of the node's list in the "lists" slice. The
+	// offset is 1-based, so to index into the slice, first subtract one from
+	// this value (0 is reserved to mean "undefined" list).
+	offset uint32
 }
 
 // intern adds the given list to storage and returns an id that can later be
@@ -96,28 +139,30 @@ type listStorageKey struct {
 // that was returned from the previous call. intern is an O(N) operation, where
 // N is the length of the list.
 func (ls *listStorage) intern(list []GroupID) ListID {
-	// Start with empty prefix.
-	prefix := EmptyList
-
-	if ls.index == nil {
-		ls.index = make(map[listStorageKey]uint32)
+	if len(list) == 0 {
+		return EmptyList
 	}
 
+	if ls.index == nil {
+		ls.index = make(map[listStorageKey]listStorageVal)
+	}
+
+	var val listStorageVal
 	for i, item := range list {
 		// Is there an existing list for the prefix + next item?
-		key := listStorageKey{prefix: prefix, item: item}
+		key := listStorageKey{node: val.node, item: item}
 		existing := ls.index[key]
-		if existing == 0 {
+		if existing.offset == 0 {
 			// No, so append the list now.
-			return ls.appendList(prefix, list)
+			return ls.appendList(val, i, list)
 		}
 
-		// Yes, so set the new prefix and keep looping.
-		prefix = ListID{Offset: existing, Length: uint32(i + 1)}
+		// Yes, so keep looping.
+		val = existing
 	}
 
 	// Found an existing list, so return it.
-	return prefix
+	return ListID{Offset: val.offset, Length: uint32(len(list))}
 }
 
 // lookup returns a list that was previously interned by listStorage. Do not
@@ -128,24 +173,25 @@ func (ls *listStorage) lookup(id ListID) []GroupID {
 	return ls.lists[id.Offset-1 : id.Offset+id.Length-1]
 }
 
-func (ls *listStorage) appendList(prefix ListID, list []GroupID) ListID {
+func (ls *listStorage) appendList(val listStorageVal, prefixLen int, list []GroupID) ListID {
 	var offset uint32
 
 	// If prefix is the last list in the slice, then optimize by appending only
 	// the suffix.
-	if prefix.Offset+prefix.Length-1 == uint32(len(ls.lists)) {
-		offset = prefix.Offset
-		ls.lists = append(ls.lists, list[prefix.Length:]...)
+	if int(val.offset)+prefixLen-1 == len(ls.lists) {
+		offset = val.offset
+		ls.lists = append(ls.lists, list[prefixLen:]...)
 	} else {
 		offset = uint32(len(ls.lists)) + 1
 		ls.lists = append(ls.lists, list...)
 	}
 
 	// Add rest of list to the index (prefix is already in the index).
-	for i := prefix.Length; i < uint32(len(list)); i++ {
-		key := listStorageKey{prefix: prefix, item: list[i]}
-		ls.index[key] = offset
-		prefix = ListID{Offset: offset, Length: i + 1}
+	for i := prefixLen; i < len(list); i++ {
+		key := listStorageKey{node: val.node, item: list[i]}
+		ls.unique++
+		val.node = ls.unique
+		ls.index[key] = listStorageVal{node: val.node, offset: offset}
 	}
 
 	return ListID{Offset: offset, Length: uint32(len(list))}
