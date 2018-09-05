@@ -160,15 +160,13 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
           </title>
         </Helmet>
-        <section className="section">
-          <h2>Statement Details</h2>
-          <Loading
-            loading={_.isNil(this.props.statement)}
-            className="loading-image loading-image__spinner"
-            image={spinner}
-            render={this.renderContent}
-          />
-        </section>
+        <section className="section"><h1>Statement Details</h1></section>
+        <Loading
+          loading={_.isNil(this.props.statement)}
+          className="loading-image loading-image__spinner"
+          image={spinner}
+          render={this.renderContent}
+        />
       </div>
     );
   }
@@ -212,7 +210,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     return (
       <div className="content l-columns">
         <div className="l-columns__left">
-          <section className="section">
+          <section className="section section--heading">
             <SqlBox value={ statement } />
           </section>
           <section className="section">
