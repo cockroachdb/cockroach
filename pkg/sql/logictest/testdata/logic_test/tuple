@@ -29,6 +29,11 @@ SELECT (1, 2, 'hello', NULL, NULL) AS t, (true, NULL, (false, 6.6, false)) AS u 
 t                u
 (1,2,"hello",,)  (t,,"(f,6.6,f)")
 
+query T
+SELECT (1, e'hello\nworld')
+----
+(1,"hello\012world")
+
 query BBBBBBBBB colnames
 SELECT
   (2, 2) < (1, 1) AS a,
