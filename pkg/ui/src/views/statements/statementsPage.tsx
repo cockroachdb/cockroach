@@ -86,7 +86,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
     return (
       <React.Fragment>
-        <PageConfig>
+        <PageConfig layout="spread">
           <PageConfigItem>
             <Dropdown
               title="App"
