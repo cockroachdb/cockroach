@@ -387,6 +387,12 @@ func (ev ExprView) formatScalarPrivate(f *ExprFmtCtx, private interface{}) {
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
 		private = nil
+
+	case opt.AnyOp:
+		private = private.(*SubqueryDef).Cmp
+
+	case opt.SubqueryOp, opt.ExistsOp:
+		private = nil
 	}
 
 	if private != nil {

@@ -225,8 +225,9 @@ func (b *Builder) buildSubqueryProjection(
 func (b *Builder) buildSingleRowSubquery(
 	s *subquery, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
+	def := b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.expr})
 	if s.expr.Exists {
-		return b.factory.ConstructExists(s.group), inScope
+		return b.factory.ConstructExists(s.group, def), inScope
 	}
 
 	out, outScope = b.buildSubqueryProjection(s, inScope)
@@ -236,7 +237,7 @@ func (b *Builder) buildSingleRowSubquery(
 	// prove statically that the subquery always returns at most one row.
 	out = b.factory.ConstructMax1Row(out)
 
-	out = b.factory.ConstructSubquery(out)
+	out = b.factory.ConstructSubquery(out, def)
 	return out, outScope
 }
 
@@ -263,7 +264,8 @@ func (b *Builder) buildSingleRowSubquery(
 func (b *Builder) buildMultiRowSubquery(
 	c *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
 ) (out memo.GroupID, outScope *scope) {
-	out, outScope = b.buildSubqueryProjection(c.Right.(*subquery), inScope)
+	s := c.Right.(*subquery)
+	out, outScope = b.buildSubqueryProjection(s, inScope)
 
 	scalar := b.buildScalar(c.TypedLeft(), inScope, nil, nil, colRefs)
 	outScope = outScope.replace()
@@ -289,7 +291,14 @@ func (b *Builder) buildMultiRowSubquery(
 	}
 
 	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(out, scalar, b.factory.InternOperator(cmp))
+	out = b.factory.ConstructAny(
+		out,
+		scalar,
+		b.factory.InternSubqueryDef(&memo.SubqueryDef{
+			OriginalExpr: s.expr,
+			Cmp:          cmp,
+		}),
+	)
 	switch c.Operator {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)

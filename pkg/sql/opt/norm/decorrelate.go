@@ -611,10 +611,11 @@ func (c *CustomFuncs) AddColsToGroupByDef(
 // expression with the first (and only) column of the input rowset, using the
 // given comparison operator.
 func (c *CustomFuncs) ConstructAnyCondition(
-	input, scalar memo.GroupID, cmp memo.PrivateID,
+	input, scalar memo.GroupID, subqueryDef memo.PrivateID,
 ) memo.GroupID {
 	inputVar := c.referenceSingleColumn(input)
-	return c.ConstructBinary(c.f.mem.LookupPrivate(cmp).(opt.Operator), scalar, inputVar)
+	def := c.f.mem.LookupPrivate(subqueryDef).(*memo.SubqueryDef)
+	return c.ConstructBinary(def.Cmp, scalar, inputVar)
 }
 
 // ConstructBinary builds a dynamic binary expression, given the binary
@@ -731,7 +732,7 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 		case opt.AnyOp:
 			input := ev.ChildGroup(0)
 			scalar := ev.ChildGroup(1)
-			cmp := ev.Private().(opt.Operator)
+			cmp := ev.Private().(*memo.SubqueryDef).Cmp
 			subquery = r.constructGroupByAny(scalar, cmp, input)
 		}
 
