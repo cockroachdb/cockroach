@@ -68,6 +68,10 @@ func TestListStorage(t *testing.T) {
 	if s := groupsToString(ls.lookup(catalogID)); s != "catalog" {
 		t.Fatalf("unexpected lookup: %v", s)
 	}
+
+	if s := groupsToString(ls.lookup(catalogingID)); s != "cataloging" {
+		t.Fatalf("unexpected lookup: %v", s)
+	}
 }
 
 func stringToGroups(s string) []GroupID {
