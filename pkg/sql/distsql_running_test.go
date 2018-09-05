@@ -63,7 +63,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		client.NewTxn(db, s.NodeID(), client.RootTxn),
+		client.NewTxn(ctx, db, s.NodeID(), client.RootTxn),
 		security.RootUser,
 		&MemoryMetrics{},
 		&execCfg,
@@ -80,7 +80,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes another transaction.
-		conflictTxn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+		conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 		// We need to explicitly set a high priority for the push to happen.
 		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err

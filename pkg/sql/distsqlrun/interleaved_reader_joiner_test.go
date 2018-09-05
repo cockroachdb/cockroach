@@ -53,9 +53,10 @@ func makeSpanWithRootBound(desc *sqlbase.TableDescriptor, min int, max int) roac
 
 func TestInterleavedReaderJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % 10))
@@ -395,12 +396,12 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-			defer evalCtx.Stop(context.Background())
+			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
 				EvalCtx:  &evalCtx,
 				Settings: s.ClusterSettings(),
 				// Run in a RootTxn so that there's no txn metadata produced.
-				txn:    client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				nodeID: s.NodeID(),
 			}
 
@@ -409,7 +410,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			irj.Run(context.Background(), nil /* wg */)
+			irj.Run(ctx, nil /* wg */)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -435,9 +436,10 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 func TestInterleavedReaderJoinerErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(t, sqlDB, "parent",
 		"id INT PRIMARY KEY",
@@ -524,12 +526,12 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-			defer evalCtx.Stop(context.Background())
+			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
 				EvalCtx:  &evalCtx,
 				Settings: s.ClusterSettings(),
 				// Run in a RootTxn so that there's no txn metadata produced.
-				txn:    client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				nodeID: s.NodeID(),
 			}
 
@@ -548,9 +550,10 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 
 func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(t, sqlDB, "parent",
 		"id INT PRIMARY KEY",
@@ -569,11 +572,11 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	cd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 
 	// Run the flow in a snowball trace so that we can test for tracing info.
 	tracer := tracing.NewTracer()
-	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	ctx, sp, err := tracing.StartSnowballTrace(ctx, tracer, "test flow ctx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +586,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		// Run in a LeafTxn so that txn metadata is produced.
-		txn:    client.NewTxn(s.DB(), s.NodeID(), client.LeafTxn),
+		txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
 		nodeID: s.NodeID(),
 	}
 

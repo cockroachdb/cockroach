@@ -52,9 +52,10 @@ func encInt(i int) sqlbase.EncDatum {
 
 func TestZigzagJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	null := tree.DNull
 
@@ -493,11 +494,11 @@ func TestZigzagJoiner(t *testing.T) {
 		t.Run(c.desc, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
-			defer evalCtx.Stop(context.Background())
+			defer evalCtx.Stop(ctx)
 			flowCtx := FlowCtx{
 				EvalCtx:  &evalCtx,
 				Settings: st,
-				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 			}
 
 			out := &RowBuffer{}
@@ -507,7 +508,7 @@ func TestZigzagJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			z.Run(context.Background(), nil /* wg */)
+			z.Run(ctx, nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -533,9 +534,10 @@ func TestZigzagJoiner(t *testing.T) {
 // is closed.
 func TestZigzagJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]tree.Datum{}
@@ -556,11 +558,11 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -587,7 +589,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		zz.Run(context.Background(), nil /* wg */)
+		zz.Run(ctx, nil /* wg */)
 	})
 
 	//TODO(pbardea): When RowSource inputs are added, ensure that meta is

@@ -145,7 +145,7 @@ func TestIndexJoiner(t *testing.T) {
 				Table:    *td,
 				IndexIdx: 0,
 			}
-			txn := client.NewTxn(s.DB(), s.NodeID(), client.RootTxn)
+			txn := client.NewTxn(context.Background(), s.DB(), s.NodeID(), client.RootTxn)
 			runProcessorTest(
 				t,
 				ProcessorCoreUnion{JoinReader: &spec},

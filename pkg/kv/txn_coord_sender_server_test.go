@@ -77,7 +77,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	push := func(ctx context.Context, key roachpb.Key) error {
 		// Conflicting transaction that pushes the above transaction.
-		conflictTxn := client.NewTxn(origDB, 0 /* gatewayNodeID */, client.RootTxn)
+		conflictTxn := client.NewTxn(ctx, origDB, 0 /* gatewayNodeID */, client.RootTxn)
 		// We need to explicitly set a high priority for the push to happen.
 		if err := conflictTxn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
@@ -103,7 +103,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		s.DistSender(),
 	)
 	db := client.NewDB(ambient, tsf, s.Clock())
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 	if err := txn.Put(ctx, key, "val"); err != nil {
 		t.Fatal(err)
 	}

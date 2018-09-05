@@ -1813,10 +1813,10 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	db := s.DB()
 
 	// Write values to key "a".
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 	b := txn.NewBatch()
 	b.Put(keyA, []byte("value"))
-	if err := txn.Run(context.TODO(), b); err != nil {
+	if err := txn.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 

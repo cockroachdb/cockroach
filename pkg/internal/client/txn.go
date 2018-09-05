@@ -98,7 +98,7 @@ type Txn struct {
 //   in the batch with the current node's ID.
 //   If the gatewayNodeID is set and this is a root transaction, we optimize
 //   away any clock uncertainty for our own node, as our clock is accessible.
-func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
+func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 	now := db.clock.Now()
 	txn := roachpb.MakeTransaction(
 		"unnamed",
@@ -113,33 +113,33 @@ func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 	if gatewayNodeID != 0 && typ == RootTxn {
 		txn.UpdateObservedTimestamp(gatewayNodeID, now)
 	}
-	return NewTxnWithProto(db, gatewayNodeID, typ, txn)
+	return NewTxnWithProto(ctx, db, gatewayNodeID, typ, txn)
 }
 
 // NewTxnWithProto is like NewTxn, except it returns a new txn with the provided
 // Transaction proto. This allows a client.Txn to be created with an already
 // initialized proto.
 func NewTxnWithProto(
-	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
 ) *Txn {
 	meta := roachpb.MakeTxnCoordMeta(proto)
-	return NewTxnWithCoordMeta(db, gatewayNodeID, typ, meta)
+	return NewTxnWithCoordMeta(ctx, db, gatewayNodeID, typ, meta)
 }
 
 // NewTxnWithCoordMeta is like NewTxn, except it returns a new txn with the
 // provided TxnCoordMeta. This allows a client.Txn to be created with an already
 // initialized proto and TxnCoordSender.
 func NewTxnWithCoordMeta(
-	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
 ) *Txn {
 	if db == nil {
-		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", meta.Txn)
+		log.Fatalf(ctx, "attempting to create txn with nil db for Transaction: %s", meta.Txn)
 	}
 	if meta.Txn.Status != roachpb.PENDING {
-		log.Fatal(context.TODO(), "can't create txn with non-PENDING proto: %s",
+		log.Fatalf(ctx, "can't create txn with non-PENDING proto: %s",
 			meta.Txn)
 	}
-	meta.Txn.AssertInitialized(context.TODO())
+	meta.Txn.AssertInitialized(ctx)
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.ID = meta.Txn.ID
 	txn.mu.sender = db.factory.TransactionalSender(typ, meta)
