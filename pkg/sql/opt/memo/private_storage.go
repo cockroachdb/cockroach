@@ -71,11 +71,21 @@ type privateKey struct {
 	str   string
 }
 
-// init must be called before privateStorage can be used.
+// init prepares privateStorage for use (or reuse).
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
 	ps.privatesMap = make(map[privateKey]PrivateID)
-	ps.privates = make([]interface{}, 1, 8)
+
+	if ps.privates == nil {
+		ps.privates = make([]interface{}, 1, 8)
+	} else {
+		// Clear the privates to release memory (this clearing pattern is
+		// optimized by Go).
+		for i := range ps.privates {
+			ps.privates[i] = nil
+		}
+		ps.privates = ps.privates[:1]
+	}
 }
 
 // lookup returns a private value previously interned by privateStorage.

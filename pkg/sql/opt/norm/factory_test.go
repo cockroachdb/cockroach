@@ -99,13 +99,13 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 
 	for _, tc := range testCases {
 		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
-		f.checkExpr(memo.MakeNormExprView(f.mem, combined))
+		f.checkExpr(memo.MakeNormExprView(f.Memo(), combined))
 		actual := f.funcs.OutputCols(combined).String()
 		if actual != tc.expected {
 			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
 		}
 
-		def := f.funcs.ExtractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
+		def := f.funcs.ExtractProjectionsOpDef(f.Memo().NormExpr(combined).AsProjections().Def())
 		expectedCount := def.PassthroughCols.Len() + len(def.SynthesizedCols)
 		actualCount := f.funcs.OutputCols(combined).Len()
 		if actualCount != expectedCount {

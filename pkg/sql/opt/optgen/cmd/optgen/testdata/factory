@@ -616,8 +616,8 @@ func (_f *Factory) ConstructSelect(
 		_match := false
 		_expr := _f.mem.NormExpr(input)
 		if _expr.IsJoin() || _expr.Operator() == opt.UnionOp {
-			r := _expr.ChildGroup(_f.mem, 0)
-			s := _expr.ChildGroup(_f.mem, 1)
+			r := _expr.ChildGroup(_f.Memo(), 0)
+			s := _expr.ChildGroup(_f.Memo(), 1)
 			_match = true
 		}
 
@@ -627,8 +627,8 @@ func (_f *Factory) ConstructSelect(
 				item := _item
 				_expr2 := _f.mem.NormExpr(_item)
 				if _expr2.IsJoin() {
-					t := _expr2.ChildGroup(_f.mem, 0)
-					u := _expr2.ChildGroup(_f.mem, 1)
+					t := _expr2.ChildGroup(_f.Memo(), 0)
+					u := _expr2.ChildGroup(_f.Memo(), 1)
 					if _f.matchedRule == nil || _f.matchedRule(opt.Test) {
 						_group = _f.DynamicConstruct(
 							_f.mem.NormOp(item),
@@ -838,8 +838,8 @@ func (_f *Factory) ConstructSelect(
 	{
 		_expr := _f.mem.NormExpr(input)
 		if _expr.Operator() == opt.LookupJoinOp || _expr.IsGroupByOps() {
-			expr1 := _expr.ChildGroup(_f.mem, 0)
-			expr2 := _expr.ChildGroup(_f.mem, 1)
+			expr1 := _expr.ChildGroup(_f.Memo(), 0)
+			expr2 := _expr.ChildGroup(_f.Memo(), 1)
 			private := _expr.PrivateID()
 			if _f.funcs.True() {
 				if _f.matchedRule == nil || _f.matchedRule(opt.Test) {
@@ -1369,16 +1369,16 @@ func (_f *Factory) ConstructNe(
 	{
 		_expr := _f.mem.NormExpr(left)
 		if _expr.Operator() == opt.EqOp || _expr.Operator() == opt.NeOp {
-			_expr2 := _f.mem.NormExpr(_expr.ChildGroup(_f.mem, 0))
+			_expr2 := _f.mem.NormExpr(_expr.ChildGroup(_f.Memo(), 0))
 			if _expr2.Operator() == opt.EqOp || _expr2.Operator() == opt.NeOp {
-				_expr3 := _f.mem.NormExpr(_expr.ChildGroup(_f.mem, 1))
+				_expr3 := _f.mem.NormExpr(_expr.ChildGroup(_f.Memo(), 1))
 				if !(_expr3.Operator() == opt.EqOp || _expr3.Operator() == opt.NeOp) {
 					_match := false
 					_expr4 := _f.mem.NormExpr(right)
 					if _expr4.Operator() == opt.EqOp || _expr4.Operator() == opt.NeOp {
-						_expr5 := _f.mem.NormExpr(_expr4.ChildGroup(_f.mem, 0))
+						_expr5 := _f.mem.NormExpr(_expr4.ChildGroup(_f.Memo(), 0))
 						if _expr5.Operator() == opt.EqOp || _expr5.Operator() == opt.NeOp {
-							_expr6 := _f.mem.NormExpr(_expr4.ChildGroup(_f.mem, 1))
+							_expr6 := _f.mem.NormExpr(_expr4.ChildGroup(_f.Memo(), 1))
 							if !(_expr6.Operator() == opt.EqOp || _expr6.Operator() == opt.NeOp) {
 								_match = true
 							}
@@ -1681,8 +1681,8 @@ func (_f *Factory) ConstructNot(
 	{
 		_expr := _f.mem.NormExpr(input)
 		if _expr.IsComparison() {
-			left := _expr.ChildGroup(_f.mem, 0)
-			right := _expr.ChildGroup(_f.mem, 1)
+			left := _expr.ChildGroup(_f.Memo(), 0)
+			right := _expr.ChildGroup(_f.Memo(), 1)
 			_containsExpr := _f.mem.NormExpr(input).AsContains()
 			if _containsExpr == nil {
 				if _f.funcs.SomeOtherCondition(input) {

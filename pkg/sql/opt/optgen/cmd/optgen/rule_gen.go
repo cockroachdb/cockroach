@@ -584,7 +584,7 @@ func (g *ruleGen) genDynamicMatch(
 			if isPrivateType(string(prototype.Fields[index].Type)) {
 				context = fmt.Sprintf("%s.PrivateID()", exprName)
 			} else {
-				context = fmt.Sprintf("%s.ChildGroup(%s.mem, %d)", exprName, g.thisVar, index)
+				context = fmt.Sprintf("%s.ChildGroup(%s.Memo(), %d)", exprName, g.thisVar, index)
 			}
 			g.genMatch(matchArg, context, false /* noMatch */)
 		}

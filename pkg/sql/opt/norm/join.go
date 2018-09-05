@@ -154,8 +154,8 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 			if !ok {
 				panic(fmt.Errorf(
 					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
-					memo.MakeNormExprView(c.f.mem, src).FormatString(memo.ExprFmtHideScalars),
-					memo.MakeNormExprView(c.f.mem, dst).FormatString(memo.ExprFmtHideScalars),
+					memo.MakeNormExprView(c.mem, src).FormatString(memo.ExprFmtHideScalars),
+					memo.MakeNormExprView(c.mem, dst).FormatString(memo.ExprFmtHideScalars),
 				))
 			}
 			colMap.Set(srcCol, dstCol)
@@ -166,7 +166,7 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 	// that need to be replaced.
 	var replace memo.ReplaceChildFunc
 	replace = func(child memo.GroupID) memo.GroupID {
-		expr := c.f.mem.NormExpr(child)
+		expr := c.mem.NormExpr(child)
 
 		switch expr.Operator() {
 		case opt.VariableOp:
@@ -183,7 +183,7 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 			return child
 		}
 
-		ev := memo.MakeNormExprView(c.f.mem, child)
+		ev := memo.MakeNormExprView(c.mem, child)
 		return ev.Replace(c.f.evalCtx, replace).Group()
 	}
 
@@ -268,7 +268,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 		return false
 	}
 
-	filtersExpr := c.f.mem.NormExpr(filters).AsFilters()
+	filtersExpr := c.mem.NormExpr(filters).AsFilters()
 	if filtersExpr == nil {
 		return false
 	}
@@ -279,15 +279,15 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 	md := c.f.Metadata()
 
 	var leftTab, rightTab opt.Table
-	for _, condition := range c.f.mem.LookupList(filtersExpr.Conditions()) {
-		eqExpr := c.f.mem.NormExpr(condition).AsEq()
+	for _, condition := range c.mem.LookupList(filtersExpr.Conditions()) {
+		eqExpr := c.mem.NormExpr(condition).AsEq()
 		if eqExpr == nil {
 			// Condition #1: conjunct is not an equality comparison.
 			return false
 		}
 
-		leftVarExpr := c.f.mem.NormExpr(eqExpr.Left()).AsVariable()
-		rightVarExpr := c.f.mem.NormExpr(eqExpr.Right()).AsVariable()
+		leftVarExpr := c.mem.NormExpr(eqExpr.Left()).AsVariable()
+		rightVarExpr := c.mem.NormExpr(eqExpr.Right()).AsVariable()
 		if leftVarExpr == nil || rightVarExpr == nil {
 			// Condition #1: conjunct does not compare two columns.
 			return false
@@ -362,27 +362,27 @@ func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
 
 	// Derive the UnfilteredCols property now.
 	// TODO(andyk): Could add other cases, such as outer joins and union.
-	expr := c.f.mem.NormExpr(group)
+	expr := c.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.ScanOp:
 		// All un-limited, unconstrained output columns are unfiltered columns.
-		def := expr.Private(c.f.mem).(*memo.ScanOpDef)
+		def := expr.Private(c.mem).(*memo.ScanOpDef)
 		if def.HardLimit == 0 && def.Constraint == nil {
 			relational.Rule.UnfilteredCols = relational.OutputCols
 		}
 
 	case opt.ProjectOp:
 		// Project never filters rows, so it passes through unfiltered columns.
-		unfilteredCols := c.deriveUnfilteredCols(expr.ChildGroup(c.f.mem, 0))
+		unfilteredCols := c.deriveUnfilteredCols(expr.ChildGroup(c.mem, 0))
 		relational.Rule.UnfilteredCols = unfilteredCols.Intersection(relational.OutputCols)
 
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		left := expr.ChildGroup(c.f.mem, 0)
-		right := expr.ChildGroup(c.f.mem, 1)
-		on := expr.ChildGroup(c.f.mem, 2)
+		left := expr.ChildGroup(c.mem, 0)
+		right := expr.ChildGroup(c.mem, 1)
+		on := expr.ChildGroup(c.mem, 2)
 
 		// Cross join always preserves left/right rows.
-		isCrossJoin := c.f.mem.NormOp(on) == opt.TrueOp
+		isCrossJoin := c.mem.NormOp(on) == opt.TrueOp
 
 		// Inner joins may preserve left/right rows, according to
 		// JoinFiltersMatchAllLeftRows conditions.
