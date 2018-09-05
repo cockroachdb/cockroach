@@ -8356,6 +8356,111 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 }
 
+func TestReplicaShouldDropForwardedProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
+	data, noData := []byte("data"), []byte("")
+
+	testCases := []struct {
+		name                string
+		msg                 raftpb.Message
+		expDrop             bool
+		expRemotePropsAfter int
+	}{
+		{
+			name: "new proposal",
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name: "duplicate proposal",
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             true,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name: "partially new proposal",
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name: "empty proposal",
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, noData)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name: "conf change",
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryConfChange, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name: "non proposal",
+			msg: raftpb.Message{
+				Type: raftpb.MsgApp,
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+
+			// Reset the remoteProposals map to only contain cmdSeen.
+			tc.repl.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{
+				cmdSeen: struct{}{},
+			}
+
+			req := &RaftMessageRequest{Message: c.msg}
+			drop := tc.repl.shouldDropForwardedProposalLocked(req)
+
+			if c.expDrop != drop {
+				t.Errorf("expected drop=%t, found %t", c.expDrop, drop)
+			}
+			if l := len(tc.repl.mu.remoteProposals); c.expRemotePropsAfter != l {
+				t.Errorf("expected %d tracked remote proposals, found %d", c.expRemotePropsAfter, l)
+			}
+		})
+	}
+}
+
 // checkValue asserts that the value for a key is the expected one.
 // The function will attempt to resolve the intent present on the key, if any.
 func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []byte) error {
