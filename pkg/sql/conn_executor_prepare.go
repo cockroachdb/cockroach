@@ -172,7 +172,7 @@ func (ex *connExecutor) prepare(
 	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
 	// the prepared statement outlives the txn. I hope that it's not used for
 	// anything other than getting a timestamp.
-	txn := client.NewTxn(ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
 	// Create a plan for the statement to figure out the typing, then close the
 	// plan.

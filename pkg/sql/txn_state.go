@@ -193,7 +193,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.mu.Lock()
 	if txn == nil {
-		ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
+		ts.mu.txn = client.NewTxn(ts.Ctx, tranCtx.db, tranCtx.nodeID, client.RootTxn)
 		ts.mu.txn.SetDebugName(opName)
 	} else {
 		ts.mu.txn = txn

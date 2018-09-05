@@ -98,7 +98,7 @@ type Txn struct {
 //   in the batch with the current node's ID.
 //   If the gatewayNodeID is set and this is a root transaction, we optimize
 //   away any clock uncertainty for our own node, as our clock is accessible.
-func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
+func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 	now := db.clock.Now()
 	txn := roachpb.MakeTransaction(
 		"unnamed",
@@ -113,29 +113,33 @@ func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
 	if gatewayNodeID != 0 && typ == RootTxn {
 		txn.UpdateObservedTimestamp(gatewayNodeID, now)
 	}
-	return NewTxnWithProto(db, gatewayNodeID, typ, txn)
+	return NewTxnWithProto(ctx, db, gatewayNodeID, typ, txn)
 }
 
 // NewTxnWithProto is like NewTxn, except it returns a new txn with the provided
 // Transaction proto. This allows a client.Txn to be created with an already
 // initialized proto.
 func NewTxnWithProto(
-	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
 ) *Txn {
 	meta := roachpb.MakeTxnCoordMeta(proto)
-	return NewTxnWithCoordMeta(db, gatewayNodeID, typ, meta)
+	return NewTxnWithCoordMeta(ctx, db, gatewayNodeID, typ, meta)
 }
 
 // NewTxnWithCoordMeta is like NewTxn, except it returns a new txn with the
 // provided TxnCoordMeta. This allows a client.Txn to be created with an already
 // initialized proto and TxnCoordSender.
 func NewTxnWithCoordMeta(
-	db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
 ) *Txn {
 	if db == nil {
-		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", meta.Txn)
+		log.Fatalf(ctx, "attempting to create txn with nil db for Transaction: %s", meta.Txn)
 	}
-	meta.Txn.AssertInitialized(context.TODO())
+	if meta.Txn.Status != roachpb.PENDING {
+		log.Fatalf(ctx, "can't create txn with non-PENDING proto: %s",
+			meta.Txn)
+	}
+	meta.Txn.AssertInitialized(ctx)
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.ID = meta.Txn.ID
 	txn.mu.sender = db.factory.TransactionalSender(typ, meta)
@@ -805,38 +809,49 @@ func (txn *Txn) Send(
 				requestTxnID, retryErr.TxnID, retryErr)
 		}
 		txn.mu.Lock()
-		txn.resetDeadlineLocked()
-		txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, requestTxnID)
+		txn.handleErrIfRetryableLocked(ctx, retryErr)
 		txn.mu.Unlock()
 	}
 	return br, pErr
+}
+
+func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
+	retryErr, ok := err.(*roachpb.HandledRetryableTxnError)
+	if !ok {
+		return
+	}
+	txn.resetDeadlineLocked()
+	txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
 }
 
 // GetTxnCoordMeta returns the TxnCoordMeta information for this
 // transaction for use with AugmentTxnCoordMeta(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetTxnCoordMeta() roachpb.TxnCoordMeta {
+func (txn *Txn) GetTxnCoordMeta(ctx context.Context) roachpb.TxnCoordMeta {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.GetMeta()
-}
-
-// GetStrippedTxnCoordMeta is like GetTxnCoordMeta, but it strips out all
-// information that is unnecessary to communicate to other distributed
-// transaction coordinators that are all operating on the same transaction.
-func (txn *Txn) GetStrippedTxnCoordMeta() roachpb.TxnCoordMeta {
-	meta := txn.GetTxnCoordMeta()
-	switch txn.typ {
-	case RootTxn:
-		meta.Intents = nil
-		meta.CommandCount = 0
-		meta.RefreshReads = nil
-		meta.RefreshWrites = nil
-	case LeafTxn:
-		meta.OutstandingWrites = nil
+	meta, err := txn.mu.sender.GetMeta(ctx, AnyTxnStatus)
+	if err != nil {
+		log.Fatalf(ctx, "unexpected error from GetMeta(AnyTxnStatus): %s", err)
 	}
 	return meta
+}
+
+// GetTxnCoordMetaOrRejectClient is like GetTxnCoordMeta except, if the
+// transaction is already aborted or otherwise in a final state, it returns an
+// error. If the transaction is aborted, the error will be a retryable one, and
+// the transaction will have been prepared for another transaction attempt (so,
+// on retryable errors, it acts like Send()).
+func (txn *Txn) GetTxnCoordMetaOrRejectClient(ctx context.Context) (roachpb.TxnCoordMeta, error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	meta, err := txn.mu.sender.GetMeta(ctx, OnlyPending)
+	if err != nil {
+		txn.handleErrIfRetryableLocked(ctx, err)
+		return roachpb.TxnCoordMeta{}, err
+	}
+	return meta, nil
 }
 
 // AugmentTxnCoordMeta augments this transaction's TxnCoordMeta

@@ -626,8 +626,10 @@ func TestValidateTableDesc(t *testing.T) {
 
 func TestValidateCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	tests := []struct {
 		err        string
@@ -829,7 +831,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		if err := v.SetProto(desc); err != nil {
 			t.Fatal(err)
 		}
-		if err := kvDB.Put(context.TODO(), MakeDescMetadataKey(0), &v); err != nil {
+		if err := kvDB.Put(ctx, MakeDescMetadataKey(0), &v); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -841,18 +843,18 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			if err := v.SetProto(desc); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.Put(context.TODO(), MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
+			if err := kvDB.Put(ctx, MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
 				t.Fatal(err)
 			}
 		}
-		txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
-		if err := test.desc.validateCrossReferences(context.TODO(), txn); err == nil {
+		txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
+		if err := test.desc.validateCrossReferences(ctx, txn); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
 		for _, referencedDesc := range test.referenced {
-			if err := kvDB.Del(context.TODO(), MakeDescMetadataKey(referencedDesc.ID)); err != nil {
+			if err := kvDB.Del(ctx, MakeDescMetadataKey(referencedDesc.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}

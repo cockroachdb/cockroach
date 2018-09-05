@@ -36,9 +36,10 @@ func BenchmarkFlowSetup(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
 	defer logScope.Close(b)
+	ctx := context.Background()
 
 	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(conn)
 	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT);")
@@ -50,7 +51,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				planner, cleanup := sql.NewInternalPlanner(
 					"test",
-					client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+					client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 					security.RootUser,
 					&sql.MemoryMetrics{},
 					&execCfg,
@@ -58,7 +59,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 				defer cleanup()
 				for pb.Next() {
 					if err := dsp.Exec(
-						context.Background(),
+						ctx,
 						planner,
 						"SELECT k FROM b.test WHERE k=1",
 						distribute,

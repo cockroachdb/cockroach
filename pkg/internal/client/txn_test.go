@@ -141,6 +141,7 @@ func newTestTxnFactory(
 
 func TestInitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	// This test is mostly an excuse to exercise otherwise unused code.
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
@@ -152,8 +153,8 @@ func TestInitPut(t *testing.T) {
 			return br, nil
 		}), clock)
 
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
-	if pErr := txn.InitPut(context.Background(), "a", "b", false); pErr != nil {
+	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
+	if pErr := txn.InitPut(ctx, "a", "b", false); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -318,30 +319,31 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 // status updated correctly.
 func TestTransactionStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
-			txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+			txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 
-			if _, pErr := txn.Get(context.Background(), "a"); pErr != nil {
+			if _, pErr := txn.Get(ctx, "a"); pErr != nil {
 				t.Fatal(pErr)
 			}
 			if write {
-				if pErr := txn.Put(context.Background(), "a", "b"); pErr != nil {
+				if pErr := txn.Put(ctx, "a", "b"); pErr != nil {
 					t.Fatal(pErr)
 				}
 			}
 			if commit {
-				if pErr := txn.CommitOrCleanup(context.Background()); pErr != nil {
+				if pErr := txn.CommitOrCleanup(ctx); pErr != nil {
 					t.Fatal(pErr)
 				}
 				if a, e := txn.Serialize().Status, roachpb.COMMITTED; a != e {
 					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
 				}
 			} else {
-				if pErr := txn.Rollback(context.Background()); pErr != nil {
+				if pErr := txn.Rollback(ctx); pErr != nil {
 					t.Fatal(pErr)
 				}
 				if a, e := txn.Serialize().Status, roachpb.ABORTED; a != e {
@@ -354,16 +356,18 @@ func TestTransactionStatus(t *testing.T) {
 
 func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 
 	b1 := &Batch{}
-	txn2 := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn2 := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 	b2 := txn2.NewBatch()
 
 	for _, b := range []*Batch{b1, b2} {
-		if err := txn.CommitInBatch(context.Background(), b); !testutils.IsError(err, "can only be committed by") {
+		if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "can only be committed by") {
 			t.Error(err)
 		}
 	}
@@ -373,6 +377,7 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 // depending on the transaction priority.
 func TestSetPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var expected roachpb.UserPriority
@@ -394,19 +399,19 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the normal priority setting path.
 	expected = roachpb.NormalUserPriority
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Verify the internal (fixed value) priority setting path.
 	expected = roachpb.UserPriority(-13)
-	txn = NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn = NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.Send(ctx, roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -453,6 +458,8 @@ func TestBatchMixRawRequest(t *testing.T) {
 
 func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	mc := hlc.NewManualClock(1)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	db := NewDB(
@@ -463,14 +470,14 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 				return nil, nil
 			}),
 		clock)
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 
 	if txn.deadline() != nil {
 		t.Errorf("unexpected initial deadline: %s", txn.deadline())
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(context.TODO(), deadline) {
+	if !txn.UpdateDeadlineMaybe(ctx, deadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline(); d != deadline {
@@ -478,7 +485,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
-	if txn.UpdateDeadlineMaybe(context.TODO(), futureDeadline) {
+	if txn.UpdateDeadlineMaybe(ctx, futureDeadline) {
 		t.Errorf("expected no update, but update happened")
 	}
 	if d := *txn.deadline(); d != deadline {
@@ -486,7 +493,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(context.TODO(), pastDeadline) {
+	if !txn.UpdateDeadlineMaybe(ctx, pastDeadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline(); d != pastDeadline {

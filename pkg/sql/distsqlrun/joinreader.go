@@ -175,9 +175,9 @@ func newJoinReader(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{jr.input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				jr.InternalClose()
-				if meta := getTxnCoordMeta(jr.flowCtx.txn); meta != nil {
+				if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
 					return []ProducerMetadata{{TxnCoordMeta: meta}}
 				}
 				return nil
