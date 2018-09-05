@@ -17,7 +17,7 @@ import cockroach_storage1 "github.com/cockroachdb/cockroach/pkg/storage"
 import cockroach_storage_storagebase "github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 import cockroach_util_log "github.com/cockroachdb/cockroach/pkg/util/log"
 import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
-import raftpb "github.com/coreos/etcd/raft/raftpb"
+import raftpb "go.etcd.io/etcd/raft/raftpb"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import time "time"
@@ -224,7 +224,7 @@ func (*NodeRequest) ProtoMessage()               {}
 func (*NodeRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{7} }
 
 // RaftState gives internal details about a Raft group's state.
-// Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
+// Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 type RaftState struct {
 	ReplicaID uint64           `protobuf:"varint,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
 	HardState raftpb.HardState `protobuf:"bytes,2,opt,name=hard_state,json=hardState" json:"hard_state"`

@@ -20,8 +20,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

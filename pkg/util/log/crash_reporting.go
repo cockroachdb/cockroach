@@ -256,7 +256,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 
 var crdbPaths = []string{
 	"github.com/cockroachdb/cockroach",
-	"github.com/coreos/etcd/raft",
+	"go.etcd.io/etcd/raft",
 }
 
 func uptimeTag(now time.Time) string {

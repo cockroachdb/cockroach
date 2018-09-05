@@ -26,9 +26,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"

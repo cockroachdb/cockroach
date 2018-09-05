@@ -340,17 +340,6 @@
   revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
 
 [[projects]]
-  branch = "master"
-  digest = "1:7ecae2db1ca129a75fc3b17870b32d71fa8cab2c116c154b14efca06f4b276fd"
-  name = "github.com/coreos/etcd"
-  packages = [
-    "raft",
-    "raft/raftpb",
-  ]
-  pruneopts = "UT"
-  revision = "3a037744dee9a7df42d3469917e3b34c02ae0bb3"
-
-[[projects]]
   digest = "1:0ff2bad72e274682c67085ca89e764506f85280310df2d30b522f7ba21dfc4fb"
   name = "github.com/cpuguy83/go-md2man"
   packages = ["md2man"]
@@ -1271,14 +1260,6 @@
   version = "v2.18.06"
 
 [[projects]]
-  branch = "master"
-  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
-  name = "github.com/shirou/w32"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
-
-[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1323,6 +1304,17 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
+
+[[projects]]
+  branch = "master"
+  digest = "1:6ed3bd1e5b150f6454b5163a451e4f2efa4d915541f202d5fa42dc4a5c326dcc"
+  name = "go.etcd.io/etcd"
+  packages = [
+    "raft",
+    "raft/raftpb",
+  ]
+  pruneopts = "UT"
+  revision = "1df1ddff4361ed7f2c0f33571923511889a115ce"
 
 [[projects]]
   digest = "1:f163a34487229f36dfdb298191d8e17c0e3e6a899aa2cddb020f2ac61ca364ab"
@@ -1644,8 +1636,6 @@
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
     "github.com/codahale/hdrhistogram",
-    "github.com/coreos/etcd/raft",
-    "github.com/coreos/etcd/raft/raftpb",
     "github.com/docker/distribution/reference",
     "github.com/docker/docker/api/types",
     "github.com/docker/docker/api/types/container",
@@ -1734,6 +1724,8 @@
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "github.com/wadey/gocovmerge",
+    "go.etcd.io/etcd/raft",
+    "go.etcd.io/etcd/raft/raftpb",
     "golang.org/x/crypto/bcrypt",
     "golang.org/x/crypto/ssh/terminal",
     "golang.org/x/net/html",

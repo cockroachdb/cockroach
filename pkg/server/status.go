@@ -33,9 +33,9 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/coreos/etcd/raft"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
