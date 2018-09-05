@@ -989,7 +989,7 @@ PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
-COREOS_PATH := ./vendor/github.com/coreos
+COREOS_PATH := ./vendor/go.etcd.io
 
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
@@ -1041,7 +1041,7 @@ bin/.go_protobuf_sources: $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) bin/.bootstr
 	done
 	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!cockroachdb/cockroach/pkg/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!github\.com/cockroachdb/cockroach/pkg/(etcd)!go.etcd.io/\1!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!cockroachdb/cockroach/pkg/(prometheus/client_model)!\1/go!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!github.com/cockroachdb/cockroach/pkg/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
 	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.

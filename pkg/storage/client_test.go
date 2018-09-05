@@ -34,10 +34,10 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
-	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
+	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
