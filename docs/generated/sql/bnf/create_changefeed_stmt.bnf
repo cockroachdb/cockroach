@@ -1,0 +1,11 @@
+create_changefeed_stmt ::=
+	'CREATE' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' table_name ( ( ',' table_name ) )* 'INTO' sink 
+	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option '=' value ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 'WITH' option ( ( ',' ( option '=' value | option | option '=' value | option ) ) )*
+	| 'CREATE' 'CHANGEFEED' 'FOR' 'TABLE' table_name ( ( ',' table_name ) )* 'INTO' sink 

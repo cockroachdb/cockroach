@@ -459,6 +459,19 @@ var specs = []stmtSpec{
 	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
 	{
+		name:   "create_changefeed_stmt",
+		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		replace: map[string]string{
+			"table_option":                 "table_name",
+			"'INTO' string_or_placeholder": "'INTO' sink",
+			"name":                      "option",
+			"'SCONST'":                  "option",
+			"'=' string_or_placeholder": "'=' value"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'OPTIONS'")},
+		unlink: []string{"table_name", "sink", "option", "value"},
+	},
+	{
 		name:    "create_index_stmt",
 		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
 		replace: map[string]string{"opt_using_gin_btree": ""},
