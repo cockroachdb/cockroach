@@ -89,6 +89,10 @@ ignored = [
   source = "https://github.com/cockroachdb/yaml"
   branch = "v2-encoding-style"
 
+[[constraint]]
+  name = "github.com/abourget/teamcity"
+  source = "https://github.com/cockroachdb/teamcity"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #

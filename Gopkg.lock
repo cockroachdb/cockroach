@@ -118,11 +118,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7cd501539a6126e82ab5835d3ae2b0d996f9c426dda4856bfb975ce72894fc87"
+  digest = "1:b20392f0a4ea88031e44e6a13c8566da8ece9ce834a9fb70768e0518db0fe003"
   name = "github.com/abourget/teamcity"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+  revision = "8ca25c33eb11b24ed691f5f8fc4ca869ef970017"
+  source = "https://github.com/cockroachdb/teamcity"
 
 [[projects]]
   branch = "master"
