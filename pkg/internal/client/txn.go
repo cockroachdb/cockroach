@@ -135,6 +135,10 @@ func NewTxnWithCoordMeta(
 	if db == nil {
 		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", meta.Txn)
 	}
+	if meta.Txn.Status != roachpb.PENDING {
+		log.Fatal(context.TODO(), "can't create txn with non-PENDING proto: %s",
+			meta.Txn)
+	}
 	meta.Txn.AssertInitialized(context.TODO())
 	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
 	txn.mu.ID = meta.Txn.ID
