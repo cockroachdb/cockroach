@@ -17,11 +17,17 @@ type waiter struct {
 	ready chan<- struct{} // Closed when semaphore acquired.
 }
 
+// MakeWeighted returns a weighted semaphore value with the given
+// maximum combined weight for concurrent access.
+func MakeWeighted(n int64) Weighted {
+	return Weighted{size: n}
+}
+
 // NewWeighted creates a new weighted semaphore with the given
 // maximum combined weight for concurrent access.
 func NewWeighted(n int64) *Weighted {
-	w := &Weighted{size: n}
-	return w
+	w := MakeWeighted(n)
+	return &w
 }
 
 // Weighted provides a way to bound concurrent access to a resource.
