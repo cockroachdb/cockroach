@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package semaphore_test
+package semaphore
 
 import (
 	"context"
@@ -15,13 +15,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 )
 
 const maxSleep = 1 * time.Millisecond
 
-func HammerWeighted(t *testing.T, sem *semaphore.Weighted, n int64, loops int) {
+func HammerWeighted(t *testing.T, sem *Weighted, n int64, loops int) {
 	for i := 0; i < loops; i++ {
 		require.Nil(t, sem.Acquire(context.Background(), n))
 		time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
@@ -34,7 +32,7 @@ func TestWeighted(t *testing.T) {
 
 	n := runtime.GOMAXPROCS(0)
 	loops := 10000 / n
-	sem := semaphore.NewWeighted(int64(n))
+	sem := NewWeighted(int64(n))
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
@@ -55,7 +53,7 @@ func TestWeightedPanic(t *testing.T) {
 			t.Fatal("release of an unacquired weighted semaphore did not panic")
 		}
 	}()
-	w := semaphore.NewWeighted(1)
+	w := NewWeighted(1)
 	w.Release(1)
 }
 
@@ -63,7 +61,7 @@ func TestWeightedTryAcquire(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sem := semaphore.NewWeighted(2)
+	sem := NewWeighted(2)
 	tries := []bool{}
 	require.Nil(t, sem.Acquire(ctx, 1))
 	tries = append(tries, sem.TryAcquire(1))
@@ -87,7 +85,7 @@ func TestWeightedAcquire(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sem := semaphore.NewWeighted(2)
+	sem := NewWeighted(2)
 	tryAcquire := func(n int64) bool {
 		tryCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer cancel()
@@ -117,7 +115,7 @@ func TestWeightedDoesntBlockIfTooBig(t *testing.T) {
 	t.Parallel()
 
 	const n = 2
-	sem := semaphore.NewWeighted(n)
+	sem := NewWeighted(n)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -138,7 +136,7 @@ func TestWeightedDoesntBlockIfTooBig(t *testing.T) {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		t.Errorf("semaphore.NewWeighted(%v) failed to AcquireCtx(_, 1) with AcquireCtx(_, %v) pending", n, n+1)
+		t.Errorf("NewWeighted(%v) failed to AcquireCtx(_, 1) with AcquireCtx(_, %v) pending", n, n+1)
 	}
 }
 
@@ -149,7 +147,7 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 
 	ctx := context.Background()
 	n := int64(runtime.GOMAXPROCS(0))
-	sem := semaphore.NewWeighted(n)
+	sem := NewWeighted(n)
 	running := true
 
 	var wg sync.WaitGroup
@@ -173,4 +171,103 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	running = false
 	sem.Release(n)
 	wg.Wait()
+}
+
+func TestResize(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sem := NewWeighted(10)
+	require.Equal(t, int64(10), sem.size)
+	require.Equal(t, int64(0), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Acquire(ctx, 5)
+	require.Equal(t, int64(10), sem.size)
+	require.Equal(t, int64(5), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Resize(15)
+	require.Equal(t, int64(15), sem.size)
+	require.Equal(t, int64(5), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Release(5)
+	require.Equal(t, int64(15), sem.size)
+	require.Equal(t, int64(0), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Acquire(ctx, 10)
+	require.Equal(t, int64(15), sem.size)
+	require.Equal(t, int64(10), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Resize(5)
+	require.Equal(t, int64(5), sem.size)
+	require.Equal(t, int64(5), sem.cur)
+	require.Equal(t, int64(5), sem.drain)
+
+	// Acquisition should block until resized properly.
+	allocC := make(chan struct{})
+	go func() {
+		sem.Acquire(ctx, 10)
+		sem.Release(10)
+		close(allocC)
+	}()
+	checkBlocked := func() {
+		select {
+		case <-allocC:
+			t.Fatal("unexpected acquisition")
+		default:
+		}
+	}
+	checkBlocked()
+
+	sem.Resize(2)
+	require.Equal(t, int64(2), sem.size)
+	require.Equal(t, int64(2), sem.cur)
+	require.Equal(t, int64(8), sem.drain)
+	checkBlocked()
+
+	sem.Resize(8)
+	require.Equal(t, int64(8), sem.size)
+	require.Equal(t, int64(8), sem.cur)
+	require.Equal(t, int64(2), sem.drain)
+	checkBlocked()
+
+	try := sem.TryAcquire(2)
+	require.False(t, try)
+
+	sem.Resize(18)
+	require.Equal(t, int64(18), sem.size)
+	require.Equal(t, int64(10), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+	checkBlocked()
+
+	try = sem.TryAcquire(2)
+	require.True(t, try)
+	require.Equal(t, int64(18), sem.size)
+	require.Equal(t, int64(12), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Release(2)
+	require.Equal(t, int64(18), sem.size)
+	require.Equal(t, int64(10), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Resize(20)
+	<-allocC
+	require.Equal(t, int64(20), sem.size)
+	require.Equal(t, int64(10), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
+
+	sem.Resize(5)
+	require.Equal(t, int64(5), sem.size)
+	require.Equal(t, int64(5), sem.cur)
+	require.Equal(t, int64(5), sem.drain)
+
+	sem.Release(10)
+	require.Equal(t, int64(5), sem.size)
+	require.Equal(t, int64(0), sem.cur)
+	require.Equal(t, int64(0), sem.drain)
 }

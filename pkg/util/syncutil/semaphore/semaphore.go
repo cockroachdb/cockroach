@@ -29,6 +29,7 @@ func NewWeighted(n int64) *Weighted {
 type Weighted struct {
 	size    int64
 	cur     int64
+	drain   int64
 	mu      syncutil.Mutex
 	waiters list.List
 }
@@ -93,6 +94,22 @@ func (s *Weighted) TryAcquire(n int64) bool {
 // Release releases the semaphore with a weight of n.
 func (s *Weighted) Release(n int64) {
 	s.mu.Lock()
+	s.releaseLocked(n)
+	s.mu.Unlock()
+}
+
+func (s *Weighted) releaseLocked(n int64) {
+	if s.drain >= n {
+		// Don't decrement s.cur or release waiters until we drain
+		// the excess weight. This weight is gained when Resize
+		// reduces the size of the semaphore.
+		s.drain -= n
+		return
+	} else if s.drain > 0 {
+		// Decrement the released weight by the excess weight.
+		n -= s.drain
+		s.drain = 0
+	}
 	s.cur -= n
 	if s.cur < 0 {
 		s.mu.Unlock()
@@ -123,6 +140,30 @@ func (s *Weighted) Release(n int64) {
 		s.cur += w.n
 		s.waiters.Remove(next)
 		close(w.ready)
+	}
+}
+
+// Resize resizes the semaphore to a new size. It does not wait for the total
+// allocated weight to drop below the new size. However, no new acquisitions
+// will succeed until the allocated weight drops below the new size.
+func (s *Weighted) Resize(n int64) {
+	s.mu.Lock()
+	diff := n - s.size
+	if diff == 0 {
+		// Nothing to do.
+	} else if diff > 0 {
+		// Add more weight. May be able to release waiters.
+		s.size = n
+		s.cur += diff
+		s.releaseLocked(diff)
+	} else {
+		// Remove weight. May need to add to drain.
+		s.size = n
+		excess := s.cur - s.size
+		if excess > 0 {
+			s.drain += excess
+			s.cur = s.size
+		}
 	}
 	s.mu.Unlock()
 }
