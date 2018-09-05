@@ -69,7 +69,7 @@ scan a
 memo
 SELECT k FROM a WHERE k = 1
 ----
-memo (optimized)
+memo (optimized, ~7KB)
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── "[presentation: k:1]"
  │         ├── best: (scan a,cols=(1),constrained)
@@ -98,7 +98,7 @@ project
 memo
 SELECT k FROM a WHERE v > 1
 ----
-memo (optimized)
+memo (optimized, ~7KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
@@ -135,7 +135,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-memo (optimized)
+memo (optimized, ~11KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
@@ -184,7 +184,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized)
+memo (optimized, ~11KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
@@ -236,7 +236,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized)
+memo (optimized, ~11KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
@@ -326,7 +326,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized)
+memo (optimized, ~7KB)
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -383,7 +383,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized)
+memo (optimized, ~12KB)
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -475,7 +475,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized)
+memo (optimized, ~12KB)
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (select G4 G5)
@@ -532,7 +532,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized)
+memo (optimized, ~17KB)
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (select G6 G7)
@@ -597,7 +597,7 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized)
+memo (optimized, ~13KB)
  ├── G1: (select G2 G4) (select G3 G4)
  │    └── "[presentation: k:1,u:2,v:3,j:4]"
  │         ├── best: (select G3 G4)
