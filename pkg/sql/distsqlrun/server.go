@@ -327,8 +327,12 @@ func (ds *ServerImpl) setupFlow(
 	}
 	if meta := req.TxnCoordMeta; meta != nil {
 		if !localState.IsLocal {
-			// The flow will run in a Txn that specifies child=true because we
-			// do not want each distributed Txn to heartbeat the transaction.
+			if meta.Txn.Status != roachpb.PENDING {
+				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
+					meta.Txn)
+			}
+			// The flow will run in a LeafTxn because we do not want each distributed
+			// Txn to heartbeat the transaction.
 			txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
 		}
 	}
