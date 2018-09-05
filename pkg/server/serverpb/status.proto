@@ -110,7 +110,7 @@ message NodeRequest {
 }
 
 // RaftState gives internal details about a Raft group's state.
-// Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
+// Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 message RaftState {
   message Progress {
     uint64 match = 1;
