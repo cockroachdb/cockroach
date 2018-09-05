@@ -117,7 +117,7 @@ limit
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-memo (optimized)
+memo (optimized, ~8KB)
  ├── G1: (limit G2 G3) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── "[presentation: s:4]"
  │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)

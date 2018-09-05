@@ -57,9 +57,9 @@ func (m *Memo) format(f *memoFmtCtx) string {
 
 	var root treeprinter.Node
 	if m.isOptimized() {
-		root = tp.Child("memo (optimized)")
+		root = tp.Childf("memo (optimized, ~%dKB)", m.MemoryEstimate()/1024)
 	} else {
-		root = tp.Child("memo (not optimized)")
+		root = tp.Childf("memo (not optimized, ~%dKB)", m.MemoryEstimate()/1024)
 	}
 
 	for i := range f.ordering {

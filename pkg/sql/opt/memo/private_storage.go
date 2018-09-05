@@ -52,6 +52,10 @@ type privateStorage struct {
 	privatesMap map[privateKey]PrivateID
 	privates    []interface{}
 
+	// memEstimate is a rough estimate of the memory usage of privateStorage, in
+	// bytes.
+	memEstimate int64
+
 	// datumCtx is used to get the string representation of datum values.
 	datumCtx tree.FmtCtx
 
@@ -74,6 +78,7 @@ type privateKey struct {
 // init prepares privateStorage for use (or reuse).
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = 0
 	ps.privatesMap = make(map[privateKey]PrivateID)
 
 	if ps.privates == nil {
@@ -86,6 +91,13 @@ func (ps *privateStorage) init() {
 		}
 		ps.privates = ps.privates[:1]
 	}
+}
+
+// memoryEstimate returns a rough estimate of the private storage memory usage,
+// in bytes. It only includes memory usage that is proportional to the number of
+// privates in the storage and their size, rather than constant overhead bytes.
+func (ps *privateStorage) memoryEstimate() int64 {
+	return ps.memEstimate
 }
 
 // lookup returns a private value previously interned by privateStorage.
@@ -548,6 +560,10 @@ func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
 }
 
 func (ps *privateStorage) addValue(key privateKey, val interface{}) PrivateID {
+	// Multiply the size of the key by 2 to account for size of the value.
+	const keySize = int(unsafe.Sizeof(privateKey{}))
+	ps.memEstimate += int64(keySize+len(key.str)) * 2
+
 	id := PrivateID(len(ps.privates))
 	ps.privates = append(ps.privates, val)
 	ps.privatesMap[key] = id

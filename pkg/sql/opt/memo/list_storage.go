@@ -14,6 +14,10 @@
 
 package memo
 
+import (
+	"unsafe"
+)
+
 // ListID identifies a variable-sized list used by a memo expression and stored
 // by the memo. The ID consists of an offset into the memo's lists slice, plus
 // the number of elements in the list. Valid lists have offsets greater than 0;
@@ -137,6 +141,14 @@ type listStorageVal struct {
 func (ls *listStorage) init() {
 	ls.index = nil
 	ls.lists = ls.lists[:0]
+}
+
+// memoryEstimate returns a rough estimate of the list storage memory usage, in
+// bytes. It only includes memory usage that is proportional to the number of
+// list items, rather than constant overhead bytes.
+func (ls *listStorage) memoryEstimate() int64 {
+	const sizeList = int64(unsafe.Sizeof(ListID{}))
+	return int64(len(ls.lists)) * sizeList
 }
 
 // intern adds the given list to storage and returns an id that can later be
