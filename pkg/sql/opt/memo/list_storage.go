@@ -133,6 +133,12 @@ type listStorageVal struct {
 	offset uint32
 }
 
+// init prepares the list storage for use (or reuse).
+func (ls *listStorage) init() {
+	ls.index = nil
+	ls.lists = ls.lists[:0]
+}
+
 // intern adds the given list to storage and returns an id that can later be
 // used to retrieve the list by calling the lookup method. If the list has been
 // previously added to storage, then intern always returns the same list id

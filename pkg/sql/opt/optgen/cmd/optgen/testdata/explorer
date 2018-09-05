@@ -205,7 +205,7 @@ func (_e *explorer) exploreInnerJoin(_rootState *exploreState, _root memo.ExprID
 				_eid := memo.MakeNormExprID(_innerJoinExpr.On())
 				_expr := _e.mem.Expr(_eid)
 				if _expr.Operator() == opt.FiltersOp || _expr.IsHasConditions() || _expr.Operator() == opt.AndOp {
-					lowerConditions := _expr.ChildGroup(_e.mem, 0)
+					lowerConditions := _expr.ChildGroup(_e.Memo(), 0)
 					t := _rootExpr.Right()
 					filters := _rootExpr.On()
 					_eid := memo.MakeNormExprID(_rootExpr.On())
@@ -275,9 +275,9 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 					_eid := memo.ExprID{Group: _groupByExpr.Input(), Expr: _ord}
 					_expr := _e.mem.Expr(_eid)
 					if _expr.Operator() == opt.InnerJoinOp || _expr.IsJoin() {
-						left := _expr.ChildGroup(_e.mem, 0)
-						right := _expr.ChildGroup(_e.mem, 1)
-						on := _expr.ChildGroup(_e.mem, 2)
+						left := _expr.ChildGroup(_e.Memo(), 0)
+						right := _expr.ChildGroup(_e.Memo(), 1)
+						on := _expr.ChildGroup(_e.Memo(), 2)
 						aggregations := _groupByExpr.Aggregations()
 						def := _groupByExpr.GroupingCols()
 						filter := _rootExpr.Filter()

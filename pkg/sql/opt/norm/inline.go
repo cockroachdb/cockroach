@@ -74,7 +74,7 @@ func (c *CustomFuncs) HasDuplicateRefs(target memo.GroupID) bool {
 		}
 
 		for i := 0; i < expr.ChildCount(); i++ {
-			if findDupRefs(expr.ChildGroup(c.f.mem, i)) {
+			if findDupRefs(expr.ChildGroup(c.mem, i)) {
 				return true
 			}
 		}
@@ -100,7 +100,7 @@ func (c *CustomFuncs) CanInline(group memo.GroupID) bool {
 
 		// Recursively verify that children are also inlinable.
 		for i := 0; i < expr.ChildCount(); i++ {
-			if !c.CanInline(expr.ChildGroup(c.f.mem, i)) {
+			if !c.CanInline(expr.ChildGroup(c.mem, i)) {
 				return false
 			}
 		}
@@ -169,7 +169,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 			return pb.buildProjections()
 		}
 
-		ev := memo.MakeNormExprView(c.f.mem, child)
+		ev := memo.MakeNormExprView(c.mem, child)
 		return ev.Replace(c.f.evalCtx, replace).Group()
 	}
 

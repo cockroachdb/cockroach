@@ -41,7 +41,7 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 	}
 	scalar.SetAvailable(props.HasHoistableSubquery)
 
-	ev := memo.MakeNormExprView(c.f.mem, group)
+	ev := memo.MakeNormExprView(c.mem, group)
 	switch ev.Operator() {
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
 		scalar.Rule.HasHoistableSubquery = !scalar.OuterCols.Empty()
@@ -528,7 +528,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(in, aggs memo.GroupID) memo.Group
 		switch expr.Operator() {
 		case opt.ConstAggOp:
 			// Translate ConstAgg(...) to ConstNotNullAgg(...).
-			newElem = c.f.ConstructConstNotNullAgg(expr.ChildGroup(c.f.mem, 0))
+			newElem = c.f.ConstructConstNotNullAgg(expr.ChildGroup(c.mem, 0))
 
 		case opt.CountRowsOp:
 			// Translate CountRows() to Count(notNullCol).
@@ -663,7 +663,7 @@ type subqueryHoister struct {
 func (r *subqueryHoister) init(c *CustomFuncs, input memo.GroupID) {
 	r.c = c
 	r.f = c.f
-	r.mem = c.f.mem
+	r.mem = c.mem
 	r.hoisted = input
 }
 
