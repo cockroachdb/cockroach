@@ -21,9 +21,9 @@ const maxSleep = 1 * time.Millisecond
 
 func HammerWeighted(t *testing.T, sem *Weighted, n int64, loops int) {
 	for i := 0; i < loops; i++ {
-		require.Nil(t, sem.Acquire(context.Background(), n))
+		require.Nil(t, sem.AcquireN(context.Background(), n))
 		time.Sleep(time.Duration(rand.Int63n(int64(maxSleep/time.Nanosecond))) * time.Nanosecond)
-		sem.Release(n)
+		sem.ReleaseN(n)
 	}
 }
 
@@ -54,7 +54,7 @@ func TestWeightedPanic(t *testing.T) {
 		}
 	}()
 	w := NewWeighted(1)
-	w.Release(1)
+	w.ReleaseN(1)
 }
 
 func TestWeightedTryAcquire(t *testing.T) {
@@ -63,15 +63,15 @@ func TestWeightedTryAcquire(t *testing.T) {
 	ctx := context.Background()
 	sem := NewWeighted(2)
 	tries := []bool{}
-	require.Nil(t, sem.Acquire(ctx, 1))
-	tries = append(tries, sem.TryAcquire(1))
-	tries = append(tries, sem.TryAcquire(1))
+	require.Nil(t, sem.AcquireN(ctx, 1))
+	tries = append(tries, sem.TryAcquireN(1))
+	tries = append(tries, sem.TryAcquireN(1))
 
-	sem.Release(2)
+	sem.ReleaseN(2)
 
-	tries = append(tries, sem.TryAcquire(1))
-	require.Nil(t, sem.Acquire(ctx, 1))
-	tries = append(tries, sem.TryAcquire(1))
+	tries = append(tries, sem.TryAcquireN(1))
+	require.Nil(t, sem.AcquireN(ctx, 1))
+	tries = append(tries, sem.TryAcquireN(1))
 
 	want := []bool{true, false, true, false}
 	for i := range tries {
@@ -89,18 +89,18 @@ func TestWeightedAcquire(t *testing.T) {
 	tryAcquire := func(n int64) bool {
 		tryCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer cancel()
-		return sem.Acquire(tryCtx, n) == nil
+		return sem.AcquireN(tryCtx, n) == nil
 	}
 
 	tries := []bool{}
-	require.Nil(t, sem.Acquire(ctx, 1))
+	require.Nil(t, sem.AcquireN(ctx, 1))
 	tries = append(tries, tryAcquire(1))
 	tries = append(tries, tryAcquire(1))
 
-	sem.Release(2)
+	sem.ReleaseN(2)
 
 	tries = append(tries, tryAcquire(1))
-	require.Nil(t, sem.Acquire(ctx, 1))
+	require.Nil(t, sem.AcquireN(ctx, 1))
 	tries = append(tries, tryAcquire(1))
 
 	want := []bool{true, false, true, false}
@@ -120,17 +120,17 @@ func TestWeightedDoesntBlockIfTooBig(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go func() {
-			require.Equal(t, context.Canceled, sem.Acquire(ctx, n+1))
+			require.Equal(t, context.Canceled, sem.AcquireN(ctx, n+1))
 		}()
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())
 	for i := n * 3; i > 0; i-- {
 		g.Go(func() error {
-			err := sem.Acquire(ctx, 1)
+			err := sem.AcquireN(ctx, 1)
 			if err == nil {
 				time.Sleep(1 * time.Millisecond)
-				sem.Release(1)
+				sem.ReleaseN(1)
 			}
 			return err
 		})
@@ -153,23 +153,23 @@ func TestLargeAcquireDoesntStarve(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(int(n))
 	for i := n; i > 0; i-- {
-		require.Nil(t, sem.Acquire(ctx, 1))
+		require.Nil(t, sem.AcquireN(ctx, 1))
 		go func() {
 			defer func() {
-				sem.Release(1)
+				sem.ReleaseN(1)
 				wg.Done()
 			}()
 			for running {
 				time.Sleep(1 * time.Millisecond)
-				sem.Release(1)
-				require.Nil(t, sem.Acquire(ctx, 1))
+				sem.ReleaseN(1)
+				require.Nil(t, sem.AcquireN(ctx, 1))
 			}
 		}()
 	}
 
-	require.Nil(t, sem.Acquire(ctx, n))
+	require.Nil(t, sem.AcquireN(ctx, n))
 	running = false
-	sem.Release(n)
+	sem.ReleaseN(n)
 	wg.Wait()
 }
 
@@ -182,7 +182,7 @@ func TestResize(t *testing.T) {
 	require.Equal(t, int64(0), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
 
-	sem.Acquire(ctx, 5)
+	require.Nil(t, sem.AcquireN(ctx, 5))
 	require.Equal(t, int64(10), sem.size)
 	require.Equal(t, int64(5), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
@@ -192,12 +192,12 @@ func TestResize(t *testing.T) {
 	require.Equal(t, int64(5), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
 
-	sem.Release(5)
+	sem.ReleaseN(5)
 	require.Equal(t, int64(15), sem.size)
 	require.Equal(t, int64(0), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
 
-	sem.Acquire(ctx, 10)
+	require.Nil(t, sem.AcquireN(ctx, 10))
 	require.Equal(t, int64(15), sem.size)
 	require.Equal(t, int64(10), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
@@ -210,8 +210,8 @@ func TestResize(t *testing.T) {
 	// Acquisition should block until resized properly.
 	allocC := make(chan struct{})
 	go func() {
-		sem.Acquire(ctx, 10)
-		sem.Release(10)
+		require.Nil(t, sem.AcquireN(ctx, 10))
+		sem.ReleaseN(10)
 		close(allocC)
 	}()
 	checkBlocked := func() {
@@ -235,7 +235,7 @@ func TestResize(t *testing.T) {
 	require.Equal(t, int64(2), sem.drain)
 	checkBlocked()
 
-	try := sem.TryAcquire(2)
+	try := sem.TryAcquireN(2)
 	require.False(t, try)
 
 	sem.Resize(18)
@@ -244,13 +244,13 @@ func TestResize(t *testing.T) {
 	require.Equal(t, int64(0), sem.drain)
 	checkBlocked()
 
-	try = sem.TryAcquire(2)
+	try = sem.TryAcquireN(2)
 	require.True(t, try)
 	require.Equal(t, int64(18), sem.size)
 	require.Equal(t, int64(12), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
 
-	sem.Release(2)
+	sem.ReleaseN(2)
 	require.Equal(t, int64(18), sem.size)
 	require.Equal(t, int64(10), sem.cur)
 	require.Equal(t, int64(0), sem.drain)
@@ -266,7 +266,7 @@ func TestResize(t *testing.T) {
 	require.Equal(t, int64(5), sem.cur)
 	require.Equal(t, int64(5), sem.drain)
 
-	sem.Release(10)
+	sem.ReleaseN(10)
 	require.Equal(t, int64(5), sem.size)
 	require.Equal(t, int64(0), sem.cur)
 	require.Equal(t, int64(0), sem.drain)

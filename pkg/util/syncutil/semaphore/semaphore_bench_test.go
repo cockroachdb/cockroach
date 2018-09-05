@@ -17,9 +17,9 @@ import (
 // weighted is an interface matching a subset of *Weighted.  It allows
 // alternate implementations for testing and benchmarking.
 type weighted interface {
-	Acquire(context.Context, int64) error
-	TryAcquire(int64) bool
-	Release(int64)
+	AcquireN(context.Context, int64) error
+	TryAcquireN(int64) bool
+	ReleaseN(int64)
 }
 
 // semChan implements Weighted using a channel for
@@ -30,14 +30,14 @@ func newSemChan(n int64) semChan {
 	return semChan(make(chan struct{}, n))
 }
 
-func (s semChan) Acquire(_ context.Context, n int64) error {
+func (s semChan) AcquireN(_ context.Context, n int64) error {
 	for i := int64(0); i < n; i++ {
 		s <- struct{}{}
 	}
 	return nil
 }
 
-func (s semChan) TryAcquire(n int64) bool {
+func (s semChan) TryAcquireN(n int64) bool {
 	if int64(len(s))+n > int64(cap(s)) {
 		return false
 	}
@@ -48,7 +48,7 @@ func (s semChan) TryAcquire(n int64) bool {
 	return true
 }
 
-func (s semChan) Release(n int64) {
+func (s semChan) ReleaseN(n int64) {
 	for i := int64(0); i < n; i++ {
 		<-s
 	}
@@ -59,12 +59,12 @@ func acquireN(b *testing.B, sem weighted, size int64, N int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < N; j++ {
-			if err := sem.Acquire(context.Background(), size); err != nil {
+			if err := sem.AcquireN(context.Background(), size); err != nil {
 				b.Fatalf("Acquire(ctx, %v) = %v", size, err)
 			}
 		}
 		for j := 0; j < N; j++ {
-			sem.Release(size)
+			sem.ReleaseN(size)
 		}
 	}
 }
@@ -74,12 +74,12 @@ func tryAcquireN(b *testing.B, sem weighted, size int64, N int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < N; j++ {
-			if !sem.TryAcquire(size) {
+			if !sem.TryAcquireN(size) {
 				b.Fatalf("TryAcquire(%v) = false, want true", size)
 			}
 		}
 		for j := 0; j < N; j++ {
-			sem.Release(size)
+			sem.ReleaseN(size)
 		}
 	}
 }

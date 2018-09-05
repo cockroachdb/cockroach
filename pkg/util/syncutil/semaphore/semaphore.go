@@ -40,12 +40,21 @@ type Weighted struct {
 	waiters list.List
 }
 
-// Acquire acquires the semaphore with a weight of n, blocking only until ctx
+// Acquire acquires the semaphore with a weight of 1, blocking only until ctx
 // is done. On success, returns nil. On failure, returns ctx.Err() and leaves
 // the semaphore unchanged.
 //
 // If ctx is already done, Acquire may still succeed without blocking.
-func (s *Weighted) Acquire(ctx context.Context, n int64) error {
+func (s *Weighted) Acquire(ctx context.Context) error {
+	return s.AcquireN(ctx, 1)
+}
+
+// AcquireN acquires the semaphore with a weight of n, blocking only until ctx
+// is done. On success, returns nil. On failure, returns ctx.Err() and leaves
+// the semaphore unchanged.
+//
+// If ctx is already done, AcquireN may still succeed without blocking.
+func (s *Weighted) AcquireN(ctx context.Context, n int64) error {
 	s.mu.Lock()
 	if s.size-s.cur >= n && s.waiters.Len() == 0 {
 		s.cur += n
@@ -85,9 +94,15 @@ func (s *Weighted) Acquire(ctx context.Context, n int64) error {
 	}
 }
 
-// TryAcquire acquires the semaphore with a weight of n without blocking.
+// TryAcquire acquires the semaphore with a weight of 1 without blocking.
 // On success, returns true. On failure, returns false and leaves the semaphore unchanged.
-func (s *Weighted) TryAcquire(n int64) bool {
+func (s *Weighted) TryAcquire() bool {
+	return s.TryAcquireN(1)
+}
+
+// TryAcquireN acquires the semaphore with a weight of n without blocking.
+// On success, returns true. On failure, returns false and leaves the semaphore unchanged.
+func (s *Weighted) TryAcquireN(n int64) bool {
 	s.mu.Lock()
 	success := s.size-s.cur >= n && s.waiters.Len() == 0
 	if success {
@@ -97,8 +112,13 @@ func (s *Weighted) TryAcquire(n int64) bool {
 	return success
 }
 
-// Release releases the semaphore with a weight of n.
-func (s *Weighted) Release(n int64) {
+// Release releases the semaphore with a weight of 1.
+func (s *Weighted) Release() {
+	s.ReleaseN(1)
+}
+
+// ReleaseN releases the semaphore with a weight of n.
+func (s *Weighted) ReleaseN(n int64) {
 	s.mu.Lock()
 	s.releaseLocked(n)
 	s.mu.Unlock()

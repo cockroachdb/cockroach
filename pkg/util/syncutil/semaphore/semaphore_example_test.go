@@ -30,13 +30,13 @@ func Example_workerPool() {
 	for i := range out {
 		// When maxWorkers goroutines are in flight, Acquire blocks until one of the
 		// workers finishes.
-		if err := sem.Acquire(ctx, 1); err != nil {
+		if err := sem.AcquireN(ctx, 1); err != nil {
 			fmt.Printf("Failed to acquire semaphore: %v", err)
 			break
 		}
 
 		go func(i int) {
-			defer sem.Release(1)
+			defer sem.ReleaseN(1)
 			out[i] = collatzSteps(i + 1)
 		}(i)
 	}
@@ -45,7 +45,7 @@ func Example_workerPool() {
 	//
 	// If you are already waiting for the workers by some other means (such as an
 	// errgroup.Group), you can omit this final Acquire call.
-	if err := sem.Acquire(ctx, int64(maxWorkers)); err != nil {
+	if err := sem.AcquireN(ctx, int64(maxWorkers)); err != nil {
 		fmt.Printf("Failed to acquire semaphore: %v", err)
 	}
 
