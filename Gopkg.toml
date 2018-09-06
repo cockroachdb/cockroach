@@ -26,11 +26,8 @@ ignored = [
   name = "golang.org/x/text"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
-# https://github.com/coreos/etcd/commit/f03ed33
-#
-# https://github.com/coreos/etcd/commit/ce0ad377
 [[constraint]]
-  name = "github.com/coreos/etcd"
+  name = "go.etcd.io/etcd"
   branch = "master"
 
 # Used for the API client; we want the latest.

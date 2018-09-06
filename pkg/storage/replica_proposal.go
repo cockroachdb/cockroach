@@ -23,10 +23,10 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
