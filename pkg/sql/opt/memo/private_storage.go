@@ -435,6 +435,18 @@ func (ps *privateStorage) internRowNumberDef(def *RowNumberDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+func (ps *privateStorage) internSubqueryDef(def *SubqueryDef) PrivateID {
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.OriginalExpr))))
+	ps.keyBuf.writeUvarint(uint64(def.Cmp))
+
+	typ := (*SubqueryDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internSetOpColMap adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internSetOpColMap always
