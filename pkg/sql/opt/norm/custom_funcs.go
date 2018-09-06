@@ -969,6 +969,29 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 	return c.f.ConstructNull(c.f.InternType(memo.InferBinaryType(op, leftType, rightType)))
 }
 
+// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
+func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+}
+
+// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
+func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
+	k := c.ExtractConstValue(key).(*tree.DString)
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+
+	builder := json.NewObjectBuilder(1)
+	builder.Add(string(*k), v.JSON)
+	j := builder.Build()
+
+	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+}
+
+// ExtractConstValue extracts the Datum from a constant value.
+func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
+	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
@@ -1000,44 +1023,53 @@ func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
 	return false
 }
 
-// CanFoldUnaryMinus checks if a constant numeric value can be negated.
-func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
-	d := c.mem.LookupPrivate(c.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
-	if t, ok := d.(*tree.DInt); ok {
-		return *t != math.MinInt64
-	}
-	return true
+// ----------------------------------------------------------------------
+//
+// Constant Folding Rules
+//   Custom match and replace functions used with fold_constants.opt
+//   rules.
+//
+// ----------------------------------------------------------------------
+
+// FoldSucceeded returns true if the result of a constant-folding operation
+// is a valid memo group.
+func (c *CustomFuncs) FoldSucceeded(result memo.GroupID) bool {
+	return result != 0
 }
 
-// NegateNumeric applies a unary minus to a numeric value.
-func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
-	ev := memo.MakeNormExprView(c.mem, input)
-	r, err := memo.EvalUnaryOp(c.f.evalCtx, opt.UnaryMinusOp, ev)
+// FoldBinary evaluates a binary expression with constant inputs. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input types, and the evaluation causes no error.
+func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	leftDatum := c.ExtractConstValue(left).(tree.Datum)
+	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+
+	o, ok := memo.FindBinaryOverload(op, leftDatum.ResolvedType(), rightDatum.ResolvedType())
+	if !ok {
+		return 0
+	}
+
+	result, err := o.Fn(c.f.evalCtx, leftDatum, rightDatum)
 	if err != nil {
-		panic(err)
+		return 0
 	}
-	return c.f.ConstructConst(c.f.InternDatum(r))
+	return c.f.ConstructConst(c.f.InternDatum(result))
 }
 
-// ExtractConstValue extracts the Datum from a constant value.
-func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
-	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
-}
+// FoldUnary evaluates a unary expression with a constant input. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input type, and the evaluation causes no error.
+func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
+	datum := c.ExtractConstValue(input).(tree.Datum)
 
-// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
-func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
-	v := c.ExtractConstValue(value).(*tree.DJSON)
-	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
-}
+	o, ok := memo.FindUnaryOverload(op, datum.ResolvedType())
+	if !ok {
+		return 0
+	}
 
-// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
-func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
-	k := c.ExtractConstValue(key).(*tree.DString)
-	v := c.ExtractConstValue(value).(*tree.DJSON)
-
-	builder := json.NewObjectBuilder(1)
-	builder.Add(string(*k), v.JSON)
-	j := builder.Build()
-
-	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+	result, err := o.Fn(c.f.evalCtx, datum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConst(c.f.InternDatum(result))
 }

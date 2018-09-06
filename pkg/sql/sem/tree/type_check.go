@@ -303,7 +303,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
-				if e.(BinOp).NullableArgs {
+				if e.(*BinOp).NullableArgs {
 					noneAcceptNull = false
 					break
 				}
@@ -332,7 +332,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 				ambiguousBinaryOpErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
 	}
 
-	binOp := fns[0].(BinOp)
+	binOp := fns[0].(*BinOp)
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = binOp
 	expr.typ = binOp.returnType()(typedSubExprs)
@@ -1143,7 +1143,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 			ambiguousUnaryOpErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
 	}
 
-	unaryOp := fns[0].(UnaryOp)
+	unaryOp := fns[0].(*UnaryOp)
 	expr.Expr = exprTyped
 	expr.fn = unaryOp
 	expr.typ = unaryOp.returnType()(typedSubExprs)
@@ -2142,9 +2142,9 @@ type stripFuncsVisitor struct{}
 func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *UnaryExpr:
-		t.fn = UnaryOp{}
+		t.fn = nil
 	case *BinaryExpr:
-		t.fn = BinOp{}
+		t.fn = nil
 	case *ComparisonExpr:
 		t.fn = CmpOp{}
 	case *FuncExpr:

@@ -1015,7 +1015,7 @@ type BinaryExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn BinOp
+	fn *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -1031,7 +1031,7 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return &node.fn
+	return node.fn
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
@@ -1109,7 +1109,7 @@ type UnaryExpr struct {
 	Expr     Expr
 
 	typeAnnotation
-	fn UnaryOp
+	fn *UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
@@ -1141,7 +1141,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr
 	node.typ = typ
 	innerType := expr.ResolvedType()
 	for _, o := range UnaryOps[op] {
-		o := o.(UnaryOp)
+		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.fn = o
 			return node
