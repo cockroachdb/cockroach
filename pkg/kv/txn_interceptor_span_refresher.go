@@ -36,10 +36,10 @@ const (
 	maxTxnRefreshAttempts = 5
 )
 
-// maxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
+// MaxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
-var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
@@ -107,6 +107,12 @@ func (sr *txnSpanRefresher) SendLocked(
 		return nil, pErr
 	}
 
+	// If the transaction is no longer pending, just return without
+	// attempting to record its refresh spans.
+	if br.Txn.Status != roachpb.PENDING {
+		return br, nil
+	}
+
 	// Iterate over and aggregate refresh spans in the requests,
 	// qualified by possible resume spans in the responses, if the txn
 	// has serializable isolation and we haven't yet exceeded the max
@@ -123,7 +129,7 @@ func (sr *txnSpanRefresher) SendLocked(
 		}
 		// Verify and enforce the size in bytes of all read-only spans
 		// doesn't exceed the max threshold.
-		if sr.refreshSpansBytes > maxTxnRefreshSpansBytes.Get(&sr.st.SV) {
+		if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
 			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
 			sr.refreshReads = nil
 			sr.refreshWrites = nil
