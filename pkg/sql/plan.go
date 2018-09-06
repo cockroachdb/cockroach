@@ -375,23 +375,21 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	p.optimizer.Init(p.EvalContext())
 	f := p.optimizer.Factory()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
-	root, props, err := bld.Build()
-
-	// Remember whether the plan was correlated before processing the
-	// error. This way, the executor will abort early with a useful error message instead of trying
-	// the heuristic planner.
-	p.curPlan.isCorrelated = bld.IsCorrelated
-
+	err := bld.Build()
 	if err != nil {
+		// isCorrelated is used in the fallback case to create a better error.
+		p.curPlan.isCorrelated = bld.IsCorrelated
 		return err
 	}
 
 	// If in the PREPARE phase, construct a dummy plan that has correct output
 	// columns. Only output columns and placeholder types are needed.
 	if p.extendedEvalCtx.PrepareOnly {
-		md := p.optimizer.Memo().Metadata()
-		resultCols := make(sqlbase.ResultColumns, len(props.Presentation))
-		for i, col := range props.Presentation {
+		mem := f.Memo()
+		md := mem.Metadata()
+		physical := mem.LookupPhysicalProps(mem.RootProps())
+		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
+		for i, col := range physical.Presentation {
 			resultCols[i].Name = col.Label
 			resultCols[i].Typ = md.ColumnType(col.ID)
 		}
@@ -399,19 +397,17 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return nil
 	}
 
-	ev := p.optimizer.Optimize(root, props)
+	ev := p.optimizer.Optimize()
 
-	factory := makeExecFactory(p)
-	plan, err := execbuilder.New(&factory, ev).Build()
+	execFactory := makeExecFactory(p)
+	plan, err := execbuilder.New(&execFactory, ev).Build()
 	if err != nil {
 		return err
 	}
 
 	p.curPlan = *plan.(*planTop)
-	// Since the assignment above just cleared the AST and isCorrelated
-	// field, we need to set them again.
+	// Since the assignment above just cleared the AST, we need to set it again.
 	p.curPlan.AST = stmt.AST
-	p.curPlan.isCorrelated = bld.IsCorrelated
 
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {

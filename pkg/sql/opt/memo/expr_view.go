@@ -211,10 +211,6 @@ func (ev ExprView) bestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
-func (ev ExprView) bestExprID() BestExprID {
-	return BestExprID{group: ev.group, ordinal: ev.best}
-}
-
 // --------------------------------------------------------------------
 // String representation.
 // --------------------------------------------------------------------
