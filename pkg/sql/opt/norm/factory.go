@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -171,22 +172,38 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
-	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
+	ev := f.mem.MemoizeNormExpr(f.evalCtx, e)
 
 	// RaceEnabled ensures that checks are run on every change (as part of make
 	// testrace) while keeping the check code out of non-test builds.
 	if util.RaceEnabled && !f.skipSanityChecks {
-		f.checkExpr(memo.MakeNormExprView(&f.mem, group))
+		f.checkExpr(ev)
 	}
-	return group
+	return ev.Group()
 }
 
 // ----------------------------------------------------------------------
 //
-// Projection construction functions
-//   General helper functions to construct Projections.
+// Convenience construction methods.
 //
 // ----------------------------------------------------------------------
+
+// ConstructConstVal constructs one of the constant value operators from the
+// given datum value. While most constants are represented with Const, there are
+// special-case operators for True, False, and Null, to make matching easier.
+func (f *Factory) ConstructConstVal(d tree.Datum) memo.GroupID {
+	if d == tree.DNull {
+		return f.ConstructNull(f.InternType(types.Unknown))
+	}
+	if boolVal, ok := d.(*tree.DBool); ok {
+		// Map True/False datums to True/False operator.
+		if *boolVal {
+			return f.ConstructTrue()
+		}
+		return f.ConstructFalse()
+	}
+	return f.ConstructConst(f.InternDatum(d))
+}
 
 // ConstructSimpleProject is a convenience wrapper for calling
 // ConstructProject when there are no synthesized columns.
