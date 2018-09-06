@@ -1021,10 +1021,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
-	}
 
-	s.storeRebalancer = NewStoreRebalancer(
-		s.cfg.AmbientCtx, cfg.Settings, s.replicateQueue, s.replRankings)
+		s.storeRebalancer = NewStoreRebalancer(
+			s.cfg.AmbientCtx, cfg.Settings, s.replicateQueue, s.replRankings)
+	}
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
@@ -1560,7 +1560,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)
 
-	s.storeRebalancer.Start(ctx, s.stopper, s.StoreID())
+	if s.storeRebalancer != nil {
+		s.storeRebalancer.Start(ctx, s.stopper)
+	}
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
@@ -4542,7 +4544,7 @@ func (s *Store) AllocatorDryRun(
 	defer cancel()
 	canTransferLease := func() bool { return true }
 	_, err := s.replicateQueue.processOneChange(
-		ctx, repl, sysCfg, canTransferLease, true /* dryRun */, false /* disableStatsBasedRebalancing */)
+		ctx, repl, sysCfg, canTransferLease, true /* dryRun */)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}
