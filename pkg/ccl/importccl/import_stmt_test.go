@@ -572,6 +572,13 @@ COPY t (a, b, c) FROM stdin;
 			data: "create table s.t (i INT)",
 			err:  `non-public schemas unsupported: s`,
 		},
+		{
+			name: "unsupported type",
+			typ:  "PGDUMP",
+			data: "create table t (t time with time zone)",
+			err: `create table t \(t time with time zone\)
+                                 \^`,
+		},
 
 		// Error
 		{
