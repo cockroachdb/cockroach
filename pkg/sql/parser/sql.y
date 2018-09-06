@@ -4272,7 +4272,7 @@ create_index_stmt:
       Inverted:    $10.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_index_name ON table_name '(' index_params ')'
+| CREATE opt_unique INVERTED INDEX opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:       tree.Name($5),
@@ -4280,9 +4280,12 @@ create_index_stmt:
       Unique:     $2.bool(),
       Inverted:   true,
       Columns:    $9.idxElems(),
+      Storing:     $11.nameList(),
+      Interleave:  $12.interleave(),
+      PartitionBy: $13.partitionBy(),
     }
   }
-| CREATE opt_unique INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')'
+| CREATE opt_unique INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($8),
@@ -4291,6 +4294,9 @@ create_index_stmt:
       Inverted:    true,
       IfNotExists: true,
       Columns:     $12.idxElems(),
+      Storing:     $14.nameList(),
+      Interleave:  $15.interleave(),
+      PartitionBy: $16.partitionBy(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX

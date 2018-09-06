@@ -87,6 +87,8 @@ func TestParse(t *testing.T) {
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
 		{`CREATE INVERTED INDEX a ON b (c)`},
 		{`CREATE INVERTED INDEX a ON b.c (d)`},
+		{`CREATE INVERTED INDEX a ON b (c) STORING (d)`},
+		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT)`},
