@@ -18,6 +18,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -144,7 +147,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 	for _, test := range testData {
 		if err := distsqlrun.WriteResumeSpan(
-			ctx, kvDB, tableDesc.ID, test.orig, test.resume, 0, registry,
+			ctx, kvDB, tableDesc.ID, mutationID, backfill.IndexMutationFilter, test.orig, test.resume, registry,
 		); err != nil {
 			t.Error(err)
 		}
@@ -172,8 +175,13 @@ func TestWriteResumeSpan(t *testing.T) {
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
 
-	got, err := distsqlrun.GetResumeSpansFromJob(ctx, registry, nil, jobID, 0)
-	if err != nil {
+	var got []roachpb.Span
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		got, _, _, err = distsqlrun.GetResumeSpans(
+			ctx, registry, txn, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+		return err
+	}); err != nil {
 		t.Error(err)
 	}
 	if len(expected) != len(got) {
