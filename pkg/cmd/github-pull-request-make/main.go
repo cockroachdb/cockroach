@@ -106,11 +106,17 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			curPkg.benchmarks = append(curPkg.benchmarks, string(newGoBenchmarkRE.ReplaceAll(line, []byte(replacement))))
 			pkgs[curPkgName] = curPkg
 		case currentGoTestRE.Match(line):
-			curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
-			curBenchmarkName = ""
-		case currentGoBenchmarkRE.Match(line):
-			curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
 			curTestName = ""
+			curBenchmarkName = ""
+			if !bytes.HasPrefix(line, []byte{'-'}) {
+				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
+			}
+		case currentGoBenchmarkRE.Match(line):
+			curTestName = ""
+			curBenchmarkName = ""
+			if !bytes.HasPrefix(line, []byte{'-'}) {
+				curBenchmarkName = string(currentGoBenchmarkRE.ReplaceAll(line, []byte(replacement)))
+			}
 		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
 			if curPkgName != "" {
 				switch {
