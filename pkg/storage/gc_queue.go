@@ -151,26 +151,22 @@ func (r gcQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (bool, float64) {
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
 	return r.ShouldQueue, r.FinalScore
 }
 
 func makeGCQueueScore(
-	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg *config.SystemConfig,
 ) gcQueueScore {
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
 	gcThreshold := *repl.mu.state.GCThreshold
 	repl.mu.Unlock()
 
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
-		return gcQueueScore{}
-	}
+	desc, zone := repl.DescAndZone()
+
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
@@ -494,7 +490,7 @@ func processAbortSpan(
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.SystemConfig) error {
+func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
 	now := repl.store.Clock().Now()
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
 	if !r.ShouldQueue {
@@ -568,17 +564,13 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 }
 
 func (gcq *gcQueue) processImpl(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig, now hlc.Timestamp,
 ) error {
 	snap := repl.store.Engine().NewSnapshot()
-	desc := repl.Desc()
 	defer snap.Close()
 
-	// Lookup the GC policy for the zone containing this key range.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
-	}
+	// Lookup the descriptor and GC policy for the zone containing this key range.
+	desc, zone := repl.DescAndZone()
 
 	info, err := RunGC(ctx, desc, snap, now, zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {

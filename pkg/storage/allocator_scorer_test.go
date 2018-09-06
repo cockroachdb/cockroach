@@ -902,7 +902,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			zone := config.ZoneConfig{
+			zone := &config.ZoneConfig{
 				Constraints: tc.constraints,
 				NumReplicas: tc.zoneNumReplicas,
 			}
@@ -1035,7 +1035,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 					StoreID: storeID,
 				})
 			}
-			zone := config.ZoneConfig{
+			zone := &config.ZoneConfig{
 				Constraints: tc.constraints,
 				NumReplicas: tc.zoneNumReplicas,
 			}

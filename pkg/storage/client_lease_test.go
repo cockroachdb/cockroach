@@ -188,8 +188,8 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	mtc.stopStore(0)
 
-	getSystemConfig := func() config.SystemConfig {
-		systemConfig, _ := mtc.gossips[0].GetSystemConfig()
+	getSystemConfig := func() *config.SystemConfig {
+		systemConfig := mtc.gossips[0].GetSystemConfig()
 		return systemConfig
 	}
 	getNodeLiveness := func() storage.Liveness {
@@ -203,7 +203,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	// Clear the system-config and node liveness gossip data. This is necessary
 	// because multiTestContext.restartStore reuse the Gossip structure.
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+		gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := mtc.gossips[0].AddInfoProto(
@@ -211,7 +211,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if !reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not empty")
 		}
 		if getNodeLiveness() != (storage.Liveness{}) {
@@ -224,7 +224,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	// data is gossiped.
 	mtc.restartStore(0)
 	testutils.SucceedsSoon(t, func() error {
-		if reflect.DeepEqual(getSystemConfig(), config.SystemConfig{}) {
+		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not gossiped")
 		}
 		if getNodeLiveness() == (storage.Liveness{}) {

@@ -280,6 +280,13 @@ func DefaultZoneConfig() ZoneConfig {
 	return defaultZoneConfig
 }
 
+// DefaultZoneConfigRef returns a reference to the default zone config.
+func DefaultZoneConfigRef() *ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return &defaultZoneConfig
+}
+
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
 // default zone config and returns a function that reverts the change.
 func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
