@@ -394,7 +394,7 @@ func (s *Store) canApplySnapshot(
 func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
-	desc := snapHeader.State.Desc
+	desc := *snapHeader.State.Desc
 	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
 		// We have an initialized replica. Preemptive snapshots can be applied with
 		// no further checks if they do not widen the existing replica. Raft
@@ -420,7 +420,7 @@ func (s *Store) canApplySnapshotLocked(
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
 	// not just the first one that getOverlappingKeyRangeLocked happens to return.
-	if exRange := s.getOverlappingKeyRangeLocked(desc); exRange != nil {
+	if exRange := s.getOverlappingKeyRangeLocked(&desc); exRange != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -454,7 +454,7 @@ func (s *Store) canApplySnapshotLocked(
 	}
 
 	placeholder := &ReplicaPlaceholder{
-		rangeDesc: *desc,
+		rangeDesc: desc,
 	}
 	return placeholder, nil
 }
