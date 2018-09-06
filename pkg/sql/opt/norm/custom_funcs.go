@@ -969,6 +969,29 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 	return c.f.ConstructNull(c.f.InternType(memo.InferBinaryType(op, leftType, rightType)))
 }
 
+// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
+func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+}
+
+// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
+func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
+	k := c.ExtractConstValue(key).(*tree.DString)
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+
+	builder := json.NewObjectBuilder(1)
+	builder.Add(string(*k), v.JSON)
+	j := builder.Build()
+
+	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+}
+
+// ExtractConstValue extracts the Datum from a constant value.
+func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
+	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
@@ -1000,44 +1023,96 @@ func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
 	return false
 }
 
-// CanFoldUnaryMinus checks if a constant numeric value can be negated.
-func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
-	d := c.mem.LookupPrivate(c.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
-	if t, ok := d.(*tree.DInt); ok {
-		return *t != math.MinInt64
+// ----------------------------------------------------------------------
+//
+// Constant Folding Rules
+//   Custom match and replace functions used with fold_constants.opt
+//   rules.
+//
+// ----------------------------------------------------------------------
+
+// CanFoldBinary finds the function overload with the correct type signature
+// for the specified binary operator and constant inputs, and checks if that
+// function needs an EvalContext for correct evaluation. If not, and if the
+// function does not return an error, CanFoldBinary returns true.
+func (c *CustomFuncs) CanFoldBinary(op opt.Operator, left, right memo.GroupID) bool {
+	leftDatum := c.ExtractConstValue(left).(tree.Datum)
+	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+	leftType := leftDatum.ResolvedType()
+	rightType := rightDatum.ResolvedType()
+
+	o, ok := memo.FindBinaryOverload(op, leftType, rightType)
+	if !ok || o.NeedsContext {
+		return false
 	}
+
+	if _, err := o.Fn(c.f.evalCtx, leftDatum, rightDatum); err != nil {
+		return false
+	}
+
 	return true
 }
 
-// NegateNumeric applies a unary minus to a numeric value.
-func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
-	ev := memo.MakeNormExprView(c.mem, input)
-	r, err := memo.EvalUnaryOp(c.f.evalCtx, opt.UnaryMinusOp, ev)
-	if err != nil {
-		panic(err)
+// FoldBinary finds the function overload with the correct type signature
+// for the specified binary operator and constant inputs, and uses the overload
+// function to evaluate the expression. It expects that CanFoldBinary was
+// already called to verify that such an overload exists and causes no error.
+func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	leftDatum := c.ExtractConstValue(left).(tree.Datum)
+	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+	leftType := leftDatum.ResolvedType()
+	rightType := rightDatum.ResolvedType()
+
+	o, ok := memo.FindBinaryOverload(op, leftType, rightType)
+	if !ok {
+		panic(fmt.Errorf("no overload found for %s applied to (%s,%s)", op, leftType, rightType))
 	}
-	return c.f.ConstructConst(c.f.InternDatum(r))
+
+	outDatum, err := o.Fn(c.f.evalCtx, leftDatum, rightDatum)
+	if err != nil {
+		panic(fmt.Errorf("error evaluating operation %s: %v", op, err))
+	}
+
+	return c.f.ConstructConst(c.f.InternDatum(outDatum))
 }
 
-// ExtractConstValue extracts the Datum from a constant value.
-func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
-	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
+// CanFoldUnary finds the function overload with the correct type signature
+// for the specified unary operator and constant input, and checks if that
+// function needs an EvalContext for correct evaluation. If not, and if the
+// function does not return an error, CanFoldUnary returns true.
+func (c *CustomFuncs) CanFoldUnary(op opt.Operator, input memo.GroupID) bool {
+	datum := c.ExtractConstValue(input).(tree.Datum)
+	typ := datum.ResolvedType()
+
+	o, ok := memo.FindUnaryOverload(op, typ)
+	if !ok || o.NeedsContext {
+		return false
+	}
+
+	if _, err := o.Fn(c.f.evalCtx, datum); err != nil {
+		return false
+	}
+
+	return true
 }
 
-// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
-func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
-	v := c.ExtractConstValue(value).(*tree.DJSON)
-	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
-}
+// FoldUnary finds the function overload with the correct type signature
+// for the specified unary operator and constant input, and uses the overload
+// function to evaluate the expression. It expects that CanFoldUnary was
+// already called to verify that such an overload exists.
+func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
+	datum := c.ExtractConstValue(input).(tree.Datum)
+	typ := datum.ResolvedType()
 
-// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
-func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
-	k := c.ExtractConstValue(key).(*tree.DString)
-	v := c.ExtractConstValue(value).(*tree.DJSON)
+	o, ok := memo.FindUnaryOverload(op, typ)
+	if !ok {
+		panic(fmt.Errorf("no overload found for %s applied to %s", op, typ))
+	}
 
-	builder := json.NewObjectBuilder(1)
-	builder.Add(string(*k), v.JSON)
-	j := builder.Build()
+	outDatum, err := o.Fn(c.f.evalCtx, datum)
+	if err != nil {
+		panic(fmt.Errorf("error evaluating operation %s: %v", op, err))
+	}
 
-	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+	return c.f.ConstructConst(c.f.InternDatum(outDatum))
 }

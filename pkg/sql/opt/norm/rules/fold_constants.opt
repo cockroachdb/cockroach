@@ -1,0 +1,32 @@
+# =============================================================================
+# fold_consants.opt contains normalization rules for folding constants.
+# =============================================================================
+
+# FoldBinary evaluates a binary operation over constant inputs,
+# replacing the entire expression with a constant. The rule applies
+# as long as the following two conditions hold:
+# 1. The evaluation would not cause an error. Any errors should be
+#    saved for execution time, since it's possible that the given
+#    operation will not be executed. For example:
+#      SELECT CASE WHEN true THEN 42 ELSE 1/0 END
+# 2. The operation does not require an EvalContext. We want to
+#    allow PREPARE to save the Memo structure for reuse, so we should not
+#    perform any operations that will need to be redone if the context
+#    changes.
+[FoldBinary, Normalize]
+(Binary
+  $left:(Const)
+  $right:(Const) & (CanFoldBinary (OpName) $left $right)
+)
+=>
+(FoldBinary (OpName) $left $right)
+
+# FoldUnary is similar to FoldBinary, but it involves a unary operation
+# over a single constant input. The same two conditions must hold in order
+# for the rule to apply.
+[FoldUnary, Normalize]
+(Unary
+  $input:(Const) & (CanFoldUnary (OpName) $input)
+)
+=>
+(FoldUnary (OpName) $input)
