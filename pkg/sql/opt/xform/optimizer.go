@@ -163,12 +163,12 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) memo.ExprView {
+func (o *Optimizer) Optimize() memo.ExprView {
 	// Optimize the root node according to the properties required of it.
-	root, requiredProps = o.optimizeRootWithProps(root, requiredProps)
+	o.optimizeRootWithProps()
 
 	// Now optimize the entire expression tree.
-	state := o.optimizeGroup(root, o.mem.InternPhysicalProps(requiredProps))
+	state := o.optimizeGroup(o.mem.RootGroup(), o.mem.RootProps())
 
 	// Validate the resulting operator.
 	ev := memo.MakeExprView(o.mem, state.best)
@@ -182,7 +182,6 @@ func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) m
 		panic(fmt.Sprintf(format, ev.Logical().Relational.OuterCols))
 	}
 
-	o.mem.SetRoot(ev)
 	return ev
 }
 
@@ -544,13 +543,14 @@ func (o *Optimizer) ensureOptState(group memo.GroupID, required memo.PhysicalPro
 // optimizeRootWithProps tries to simplify the root operator based on the
 // properties required of it. This may trigger the creation of a new root and
 // new properties.
-func (o *Optimizer) optimizeRootWithProps(
-	root memo.GroupID, rootProps *props.Physical,
-) (memo.GroupID, *props.Physical) {
+func (o *Optimizer) optimizeRootWithProps() {
+	root := o.mem.RootGroup()
+	rootProps := o.mem.LookupPhysicalProps(o.mem.RootProps())
+
 	relational := o.mem.GroupProperties(root).Relational
 	if relational == nil {
 		// Only need to optimize relational root operators.
-		return root, rootProps
+		return
 	}
 
 	// [SimplifyRootOrdering]
@@ -563,6 +563,7 @@ func (o *Optimizer) optimizeRootWithProps(
 			simplified.Ordering = rootProps.Ordering.Copy()
 			simplified.Ordering.Simplify(&relational.FuncDeps)
 			rootProps = &simplified
+			o.mem.SetRoot(root, o.mem.InternPhysicalProps(rootProps))
 
 			if o.appliedRule != nil {
 				o.appliedRule(opt.SimplifyRootOrdering, root, 0, 0)
@@ -580,13 +581,13 @@ func (o *Optimizer) optimizeRootWithProps(
 	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
 		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
 			root = o.f.CustomFuncs().PruneCols(root, neededCols)
+			o.mem.SetRoot(root, o.mem.InternPhysicalProps(rootProps))
+
 			if o.appliedRule != nil {
 				o.appliedRule(opt.PruneRootCols, root, 0, 0)
 			}
 		}
 	}
-
-	return root, rootProps
 }
 
 // optStateKey associates optState with a group that is being optimized with

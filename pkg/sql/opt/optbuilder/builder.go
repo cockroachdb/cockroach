@@ -18,9 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,10 +29,13 @@ import (
 // process. As part of the build process, it performs name resolution and
 // type checking on the expressions within Builder.stmt.
 //
-// The memo structure is the primary data structure used for query
-// optimization, so building the memo is the first step required to
-// optimize a query. The memo is maintained inside Builder.factory,
-// which exposes methods to construct expression groups inside the memo.
+// The memo structure is the primary data structure used for query optimization,
+// so building the memo is the first step required to optimize a query. The memo
+// is maintained inside Builder.factory, which exposes methods to construct
+// expression groups inside the memo. Once the expression tree has been built,
+// the builder calls SetRoot on the memo to indicate the root memo group, as
+// well as the set of physical properties (e.g., row and column ordering) that
+// at least one expression in the root group must satisfy.
 //
 // A memo is essentially a compact representation of a forest of logically-
 // equivalent query trees. Each tree is either a logical or a physical plan
@@ -116,12 +117,9 @@ func New(
 // Builder.factory from the parsed SQL statement in Builder.stmt. See the
 // comment above the Builder type declaration for details.
 //
-// The first return value `root` is the group ID of the root memo group.
-// The second return value `required` is the set of physical properties
-// (e.g., row and column ordering) that are required of the root memo group.
 // If any subroutines panic with a builderError as part of the build process,
 // the panic is caught here and returned as an error.
-func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err error) {
+func (b *Builder) Build() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -136,9 +134,12 @@ func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err erro
 		}
 	}()
 
+	// Build the memo, and call SetRoot on the memo to indicate the root group
+	// and physical properties.
 	outScope := b.buildStmt(b.stmt, b.allocScope())
-	physicalProps := outScope.makePhysicalProps()
-	return outScope.group, &physicalProps, nil
+	physical := b.factory.Memo().InternPhysicalProps(outScope.makePhysicalProps())
+	b.factory.Memo().SetRoot(outScope.group, physical)
+	return nil
 }
 
 // builderError is used for semantic errors that occur during the build process

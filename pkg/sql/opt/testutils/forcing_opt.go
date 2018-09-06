@@ -28,9 +28,6 @@ import (
 type forcingOptimizer struct {
 	o xform.Optimizer
 
-	root     memo.GroupID
-	required *props.Physical
-
 	// remaining is the number of "unused" steps remaining.
 	remaining int
 
@@ -111,16 +108,14 @@ func newForcingOptimizer(
 		},
 	)
 
-	var err error
-	fo.root, fo.required, err = tester.buildExpr(fo.o.Factory())
-	if err != nil {
+	if err := tester.buildExpr(fo.o.Factory()); err != nil {
 		return nil, err
 	}
 	return fo, nil
 }
 
 func (fo *forcingOptimizer) optimize() memo.ExprView {
-	return fo.o.Optimize(fo.root, fo.required)
+	return fo.o.Optimize()
 }
 
 // restrictToExprs sets up the optimizer to restrict the result to only those
@@ -135,7 +130,7 @@ func (fo *forcingOptimizer) restrictToExprs(
 ) {
 	coster := newForcingCoster(fo.o.Coster())
 
-	restrictToGroup(coster, mem, fo.root, group)
+	restrictToGroup(coster, mem, mem.RootGroup(), group)
 
 	for e := 0; e < mem.ExprCount(group); e++ {
 		if !exprs.Contains(e) {
@@ -151,7 +146,7 @@ func (fo *forcingOptimizer) restrictToExprs(
 func (fo *forcingOptimizer) restrictToGroup(mem *memo.Memo, group memo.GroupID) {
 	coster := newForcingCoster(fo.o.Coster())
 
-	restrictToGroup(coster, mem, fo.root, group)
+	restrictToGroup(coster, mem, mem.RootGroup(), group)
 	fo.o.SetCoster(coster)
 }
 

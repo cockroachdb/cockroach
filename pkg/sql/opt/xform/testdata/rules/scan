@@ -305,7 +305,7 @@ memo (optimized, ~2KB)
 memo
 SELECT s, i, f FROM a WHERE s='foo' ORDER BY s DESC, i
 ----
-memo (optimized, ~7KB)
+memo (optimized, ~8KB)
  ├── G1: (select G2 G3) (scan a@s_idx,cols=(2-4),constrained) (index-join G4 a,cols=(2-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]"
  │    │    ├── best: (sort G1)
