@@ -75,10 +75,10 @@ project
       ├── (i + k) = (length('foo') + 1) [type=bool, outer=(1,2)]
       ├── (i * 2) != length('bar') [type=bool, outer=(2)]
       ├── (1 - k) IS NOT DISTINCT FROM 5 [type=bool, outer=(1)]
-      ├── k IS DISTINCT FROM (10 + 1) [type=bool, outer=(1)]
+      ├── k IS DISTINCT FROM 11 [type=bool, outer=(1)]
       ├── f + 1.0 [type=float, outer=(3)]
       ├── (i * i) * (5 * length('foo')) [type=int, outer=(2)]
-      ├── (i + i) & (100 ^ 2) [type=int, outer=(2)]
+      ├── (i + i) & 10000 [type=int, outer=(2)]
       ├── (i + i) | (length('foo') + 1) [type=int, outer=(2)]
       └── (k ^ 2) # (1 - length('foo')) [type=int, outer=(1)]
 

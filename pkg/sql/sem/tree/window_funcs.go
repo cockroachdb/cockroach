@@ -95,7 +95,7 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	} else {
 		binOp = wfr.PlusOp
 	}
-	return binOp.fn(evalCtx, wfr.valueAt(wfr.RowIdx), offset)
+	return binOp.Fn(evalCtx, wfr.valueAt(wfr.RowIdx), offset)
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).

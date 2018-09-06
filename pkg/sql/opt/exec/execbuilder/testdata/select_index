@@ -390,8 +390,6 @@ output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
-# TODO(radu): we don't fold the constants to "a = 3" so we don't generate index
-# constraints.
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
 
@@ -399,10 +397,8 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/ab/1/2 -> NULL
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
-fetched: /t/ab/5/6 -> NULL
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false

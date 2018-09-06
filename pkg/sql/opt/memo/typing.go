@@ -58,7 +58,7 @@ func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 	if !ok {
 		panic(fmt.Sprintf("could not find type for binary expression %s", op))
 	}
-	return o.returnType
+	return o.ReturnType
 }
 
 // BinaryOverloadExists returns true if the given binary operator exists with the
@@ -75,7 +75,7 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
 	if !ok {
 		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
 	}
-	return o.allowNullArgs
+	return o.NullableArgs
 }
 
 // FindAggregateOverload finds an aggregate function overload that matches the
@@ -307,24 +307,11 @@ func typeColumnAccess(ev ExprView) types.T {
 	return typ.Types[colIdx]
 }
 
-// overload encapsulates information about a binary operator overload, to be
-// used for type inference and null folding. The tree.BinOp struct does not
-// work well for this use case, because it is quite large, and was not defined
-// in a way allowing it to be passed by reference (without extra allocation).
-type overload struct {
-	// returnType of the overload. This depends on the argument types.
-	returnType types.T
-
-	// allowNullArgs is true if the operator allows null arguments, and cannot
-	// therefore be folded away to null.
-	allowNullArgs bool
-}
-
 // findBinaryOverload finds the correct type signature overload for the
 // specified binary operator, given the types of its inputs. If an overload is
-// found, findBinaryOverload returns true, plus information about the overload.
+// found, findBinaryOverload returns true, plus a pointer to the overload.
 // If an overload is not found, findBinaryOverload returns false.
-func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ overload, ok bool) {
+func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.BinOp, ok bool) {
 	binOp := opt.BinaryOpReverseMap[op]
 
 	// Find the binary op that matches the type of the expression's left and
@@ -332,42 +319,50 @@ func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ overloa
 	// TestTypingBinaryAssumptions test ensures this will be the case even if
 	// new operators or overloads are added.
 	for _, binOverloads := range tree.BinOps[binOp] {
-		o := binOverloads.(tree.BinOp)
+		o := binOverloads.(*tree.BinOp)
 
 		if leftType == types.Unknown {
 			if rightType.Equivalent(o.RightType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		} else if rightType == types.Unknown {
 			if leftType.Equivalent(o.LeftType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		} else {
 			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
+				return o, true
 			}
 		}
 	}
-	return overload{}, false
+	return nil, false
 }
 
-// EvalUnaryOp evaluates a unary expression on top of a constant value, returning
-// a datum referring to the evaluated result. If an appropriate overload is not
+// EvalUnaryOp evaluates a unary expression over a constant input, returning a
+// datum referring to the evaluated result. If an appropriate overload is not
 // found, EvalUnaryOp returns an error.
-func EvalUnaryOp(evalCtx *tree.EvalContext, op opt.Operator, ev ExprView) (tree.Datum, error) {
-	if !ev.IsConstValue() {
-		panic("expected const value")
-	}
-
+func EvalUnaryOp(evalCtx *tree.EvalContext, op opt.Operator, datum tree.Datum) (tree.Datum, error) {
 	unaryOp := opt.UnaryOpReverseMap[op]
-	datum := ExtractConstDatum(ev)
-
 	typ := datum.ResolvedType()
+
 	for _, unaryOverloads := range tree.UnaryOps[unaryOp] {
-		o := unaryOverloads.(tree.UnaryOp)
+		o := unaryOverloads.(*tree.UnaryOp)
 		if o.Typ.Equivalent(typ) {
 			return o.Fn(evalCtx, datum)
 		}
 	}
 	return nil, fmt.Errorf("no overload found for %s applied to %s", op, typ)
+}
+
+// EvalBinaryOp evaluates a binary expression over constant inputs, returning a
+// datum referring to the evaluated result. If an appropriate overload is not
+// found, EvalBinaryOp returns an error.
+func EvalBinaryOp(evalCtx *tree.EvalContext, op opt.Operator, left, right tree.Datum) (tree.Datum, error) {
+	leftType := left.ResolvedType()
+	rightType := right.ResolvedType()
+
+	if o, ok := findBinaryOverload(op, leftType, rightType); ok {
+		return o.Fn(evalCtx, left, right)
+	}
+	return nil, fmt.Errorf("no overload found for %s applied to (%s,%s)", op, leftType, rightType)
 }

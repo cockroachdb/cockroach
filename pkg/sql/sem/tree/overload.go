@@ -97,8 +97,8 @@ type overloadImpl interface {
 }
 
 var _ overloadImpl = &Overload{}
-var _ overloadImpl = UnaryOp{}
-var _ overloadImpl = BinOp{}
+var _ overloadImpl = &UnaryOp{}
+var _ overloadImpl = &BinOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
 // overloadImpl.
