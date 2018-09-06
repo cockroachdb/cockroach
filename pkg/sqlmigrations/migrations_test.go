@@ -605,8 +605,8 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			return errors.New("last migration has not completed")
 		}
 
-		sysCfg, ok := s.Gossip().GetSystemConfig()
-		if !ok {
+		sysCfg := s.Gossip().GetSystemConfig()
+		if sysCfg == nil {
 			return errors.New("gossipped system config not available")
 		}
 

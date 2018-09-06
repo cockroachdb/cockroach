@@ -333,8 +333,8 @@ func (p *planner) initiateDropTable(
 		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
-		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false,
+		_, _, _, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, uint32(tableDesc.ID), false, /* getInheritedDefault */
 		)
 		if err != nil {
 			return err

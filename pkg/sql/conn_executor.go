@@ -284,7 +284,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		},
 		StatementCounters: makeStatementCounters(),
 		// dbCache will be updated on Start().
-		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.SystemConfig{})),
+		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.NewSystemConfig())),
 		pool:     pool,
 		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reCache:  tree.NewRegexpCache(512),
@@ -298,7 +298,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 		for {
 			select {
 			case <-gossipUpdateC:
-				sysCfg, _ := s.cfg.Gossip.GetSystemConfig()
+				sysCfg := s.cfg.Gossip.GetSystemConfig()
 				s.dbCache.updateSystemConfig(sysCfg)
 			case <-stopper.ShouldStop():
 				return

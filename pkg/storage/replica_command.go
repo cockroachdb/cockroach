@@ -1139,8 +1139,8 @@ func RelocateRange(
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	sysCfg, ok := r.store.cfg.Gossip.GetSystemConfig()
-	if !ok {
+	sysCfg := r.store.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
 		log.Infof(ctx, "scatter failed (system config not yet available)")
 		return roachpb.AdminScatterResponse{}, errors.New("system config not yet available")
 	}

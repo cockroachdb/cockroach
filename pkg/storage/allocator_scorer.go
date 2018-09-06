@@ -909,7 +909,7 @@ func analyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 ) analyzedConstraints {
 	result := analyzedConstraints{
 		constraints: zone.Constraints,

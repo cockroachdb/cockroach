@@ -83,18 +83,29 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
-		uint32(targetID), index, partition, false)
+	zoneID, zone, placeholderID, placeholder, err := GetZoneConfigInTxn(
+		params.ctx, params.p.txn, uint32(targetID), false, /* getInheritedDefault */
+	)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.
-		zone = config.DefaultZoneConfig()
+		defZone := config.DefaultZoneConfig()
+		zone = &defZone
 		zoneID = keys.RootNamespaceID
 	} else if err != nil {
 		return err
-	} else if subzone != nil {
-		zone = subzone.Config
+	}
+	var subzone *config.Subzone
+	if index != nil {
+		if placeholder != nil {
+			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
+				zone = &subzone.Config
+				zoneID = placeholderID
+			}
+		} else if subzone = zone.GetSubzone(uint32(index.ID), partition); subzone != nil {
+			zone = &subzone.Config
+		}
 	}
 
 	// Determine the CLI specifier for the zone config that actually applies
@@ -107,7 +118,7 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 
 	n.run.values = make(tree.Datums, len(showZoneConfigNodeColumns))
 	return generateZoneConfigIntrospectionValues(
-		n.run.values, tree.NewDInt(tree.DInt(zoneID)), &zs, &zone)
+		n.run.values, tree.NewDInt(tree.DInt(zoneID)), &zs, zone)
 }
 
 // generateZoneConfigIntrospectionValues creates a result row

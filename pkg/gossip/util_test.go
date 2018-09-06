@@ -63,7 +63,7 @@ func addKV(rng *rand.Rand, cfg *config.SystemConfig, key int) {
 // assertModified asserts that the specified keys will be considered "modified"
 // when passing the new system config through the filter.
 func assertModified(
-	t *testing.T, df *SystemConfigDeltaFilter, cfg config.SystemConfig, keys ...int,
+	t *testing.T, df *SystemConfigDeltaFilter, cfg *config.SystemConfig, keys ...int,
 ) {
 	t.Helper()
 	var modified []int
@@ -84,24 +84,24 @@ func TestSystemConfigDeltaFilter(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	df := MakeSystemConfigDeltaFilter(nil)
-	cfg := config.SystemConfig{}
+	cfg := config.NewSystemConfig()
 
 	// Add one key.
-	addKV(rng, &cfg, 1)
+	addKV(rng, cfg, 1)
 	assertModified(t, &df, cfg, 1)
 
 	// Add two keys.
-	addKV(rng, &cfg, 2)
-	addKV(rng, &cfg, 3)
+	addKV(rng, cfg, 2)
+	addKV(rng, cfg, 3)
 	assertModified(t, &df, cfg, 2, 3)
 
 	// Modify a key.
-	addKV(rng, &cfg, 2)
+	addKV(rng, cfg, 2)
 	assertModified(t, &df, cfg, 2)
 
 	// Add one key at beginning, modify one key.
-	addKV(rng, &cfg, 0)
-	addKV(rng, &cfg, 1)
+	addKV(rng, cfg, 0)
+	addKV(rng, cfg, 1)
 	assertModified(t, &df, cfg, 0, 1)
 
 	// Remove the first key.
@@ -114,24 +114,24 @@ func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	df := MakeSystemConfigDeltaFilter(keyFromInt(12))
-	cfg := config.SystemConfig{}
+	cfg := config.NewSystemConfig()
 
 	// Add one non-matching key.
-	addKV(rng, &cfg, 1)
+	addKV(rng, cfg, 1)
 	assertModified(t, &df, cfg)
 
 	// Add one matching key.
-	addKV(rng, &cfg, 123)
+	addKV(rng, cfg, 123)
 	assertModified(t, &df, cfg, 123)
 
 	// Add two keys, one matching, one non-matching.
-	addKV(rng, &cfg, 125)
-	addKV(rng, &cfg, 135)
+	addKV(rng, cfg, 125)
+	addKV(rng, cfg, 135)
 	assertModified(t, &df, cfg, 125)
 
 	// Modify two keys, one matching, one non-matching.
-	addKV(rng, &cfg, 1)
-	addKV(rng, &cfg, 123)
+	addKV(rng, cfg, 1)
+	addKV(rng, cfg, 123)
 	assertModified(t, &df, cfg, 123)
 }
 
@@ -140,14 +140,14 @@ func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	// Create two configs.
-	var cfg1, cfg2 config.SystemConfig
+	cfg1, cfg2 := config.NewSystemConfig(), config.NewSystemConfig()
 	for i := 0; i < 1000; i++ {
 		key := i + 100000 // +100000 to match filter
-		addKV(rng, &cfg1, key)
+		addKV(rng, cfg1, key)
 	}
 	for i := 0; i < 200; i++ {
 		key := i + 200000 // +200000 to avoid matching filter
-		addKV(rng, &cfg1, key)
+		addKV(rng, cfg1, key)
 	}
 	// Copy to cfg2 so that most kvs are shared.
 	cfg2.Values = append([]roachpb.KeyValue(nil), cfg1.Values...)
@@ -155,18 +155,19 @@ func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
 	// Make a few modifications to cfg2.
 	for i := 0; i < 20; i++ {
 		key := i + 1000000 // +1000000 to match filter and first group
-		addKV(rng, &cfg2, key)
+		addKV(rng, cfg2, key)
 	}
 	for i := 0; i < 20; i++ {
 		key := i + 10000 // +10000 to match filter
-		addKV(rng, &cfg2, key)
+		addKV(rng, cfg2, key)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cfg := cfg1
+		cfg := config.NewSystemConfig()
+		cfg.Values = cfg1.Values
 		if i%2 == 1 {
-			cfg = cfg2
+			cfg.Values = cfg2.Values
 		}
 		df.ForModified(cfg, func(kv roachpb.KeyValue) {
 			_ = kv
