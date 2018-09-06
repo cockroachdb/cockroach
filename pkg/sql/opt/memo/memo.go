@@ -196,6 +196,52 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.searchPath = evalCtx.SessionData.SearchPath
 }
 
+// InitFrom initializes the memo with a deep copy of the provided memo. This
+// memo can then be modified independent of the copied memo.
+func (m *Memo) InitFrom(from *Memo) {
+	if from.groups == nil {
+		panic("cannot initialize from an uninitialized memo")
+	}
+
+	m.rootGroup = from.rootGroup
+	m.rootProps = from.rootProps
+	m.memEstimate = from.memEstimate
+	m.locName = from.locName
+	m.dbName = from.dbName
+	m.searchPath = from.searchPath
+
+	// Copy the metadata.
+	m.metadata.InitFrom(&from.metadata)
+
+	// Copy the expression map.
+	m.exprMap = make(map[Fingerprint]GroupID, len(from.exprMap))
+	for k, v := range from.exprMap {
+		m.exprMap[k] = v
+	}
+
+	// Copy the groups.
+	m.groups = m.groups[:0]
+	for i := range from.groups {
+		from := &from.groups[i]
+		m.groups = append(m.groups, group{
+			id:            from.id,
+			logical:       from.logical,
+			normExpr:      from.normExpr,
+			firstBestExpr: from.firstBestExpr,
+
+			// These slices are never reused, so can share the slice prefix.
+			otherExprs:     from.otherExprs[:len(from.otherExprs):len(from.otherExprs)],
+			otherBestExprs: from.otherBestExprs[:len(from.otherBestExprs):len(from.otherBestExprs)],
+		})
+	}
+
+	// Copy all memoized lists.
+	m.listStorage.initFrom(&from.listStorage)
+
+	// Copy all private values.
+	m.privateStorage.initFrom(&from.privateStorage)
+}
+
 // MemoryEstimate returns a rough estimate of the memo's memory usage, in bytes.
 // It only includes memory usage that is proportional to the size and complexity
 // of the query, rather than constant overhead bytes.
@@ -371,10 +417,10 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then
 // MemoizeNormExpr is a no-op, and returns the existing group.
-func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
+func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	existing := m.exprMap[norm.Fingerprint()]
 	if existing != 0 {
-		return existing
+		return MakeNormExprView(m, existing)
 	}
 
 	// Use rough memory usage estimate of size of group * 4 to account for size
@@ -385,7 +431,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
-	return mgrp.id
+	return ev
 }
 
 // MemoizeDenormExpr enters a denormalized expression into the given memo

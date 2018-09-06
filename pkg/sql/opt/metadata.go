@@ -180,6 +180,15 @@ func (md *Metadata) Init() {
 	md.deps = md.deps[:0]
 }
 
+// InitFrom initializes the metadata with a copy of the provided metadata. This
+// metadata can then be modified independent of the copied metadata.
+func (md *Metadata) InitFrom(from *Metadata) {
+	md.Init()
+	md.cols = append(md.cols, from.cols...)
+	md.tables = append(md.tables, from.tables...)
+	md.deps = append(md.deps, from.deps...)
+}
+
 // AddDependency tracks one of the data sources on which the query depends, as
 // well as the privilege required to access that data source. If the Memo using
 // this metadata is cached, then a call to CheckDependencies can detect if

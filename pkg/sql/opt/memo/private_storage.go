@@ -93,6 +93,20 @@ func (ps *privateStorage) init() {
 	}
 }
 
+// initFrom initializes the private storage with a copy of all private values
+// from another private storage. This private storage can then be modified
+// independent of the other.
+func (ps *privateStorage) initFrom(from *privateStorage) {
+	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = from.memEstimate
+	ps.privatesMap = make(map[privateKey]PrivateID, len(from.privatesMap))
+	for k, v := range from.privatesMap {
+		ps.privatesMap[k] = v
+	}
+	ps.privates = make([]interface{}, len(from.privates))
+	copy(ps.privates, from.privates)
+}
+
 // memoryEstimate returns a rough estimate of the private storage memory usage,
 // in bytes. It only includes memory usage that is proportional to the number of
 // privates in the storage and their size, rather than constant overhead bytes.
