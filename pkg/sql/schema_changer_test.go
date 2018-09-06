@@ -3475,3 +3475,62 @@ func TestCancelSchemaChange(t *testing.T) {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
 }
+
+// This test checks that when a transaction containing schema changes
+// needs to be retried it gets retried internal to cockroach.
+func TestSchemaChangeRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 3
+
+	params, _ := tests.CreateTestServerParams()
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+ CREATE DATABASE t;
+ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+ `); err != nil {
+		t.Fatal(err)
+	}
+
+	// The timestamp of the transaction is initialized.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherSQLDB := tc.ServerConn(1)
+
+	// Read schema on another node that picks a later timestamp.
+	rows, err := otherSQLDB.Query("SELECT * FROM t.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE t.another (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+		CREATE UNIQUE INDEX vidx ON t.test (v);
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO(andreimatei): fix #17698. The transaction should get retried
+	// without returning this error to the user.
+	if err := tx.Commit(); !testutils.IsError(err,
+		`restart transaction: HandledRetryableTxnError: TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`,
+	) {
+		t.Fatalf("err = %+v", err)
+	}
+}
