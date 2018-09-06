@@ -284,8 +284,13 @@ func loadRangeDescriptor(
 			// doesn't parse as a range descriptor just skip it.
 			return false, nil
 		}
+		if len(kv.Value) == 0 {
+			// RangeDescriptor was deleted (range merged away).
+			return false, nil
+		}
 		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
-			return false, err
+			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
+			return false, nil
 		}
 		return desc.RangeID == rangeID, nil
 	}
