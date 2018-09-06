@@ -1105,7 +1105,6 @@ func (s *Store) SetDraining(drain bool) {
 	transferAllAway := func() int {
 		// Limit the number of concurrent lease transfers.
 		sem := make(chan struct{}, 100)
-		sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
 		// Incremented for every lease or Raft leadership transfer attempted. We try
 		// to send both the lease and the Raft leaders away, but this may not
 		// reliably work. Instead, we run the surrounding retry loop until there are
@@ -1156,15 +1155,7 @@ func (s *Store) SetDraining(drain bool) {
 					}
 
 					if needsLeaseTransfer {
-						desc := r.Desc()
-						zone := config.DefaultZoneConfig()
-						if sysCfgSet {
-							var err error
-							zone, err = sysCfg.GetZoneConfigForKey(desc.StartKey)
-							if log.V(1) && err != nil {
-								log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
-							}
-						}
+						desc, zone := r.DescAndZone()
 						leaseTransferred, err := s.replicateQueue.findTargetAndTransferLease(
 							ctx,
 							r,
@@ -1536,7 +1527,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			for {
 				select {
 				case <-gossipUpdateC:
-					cfg, _ := s.cfg.Gossip.GetSystemConfig()
+					cfg := s.cfg.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldStop():
 					return
@@ -1806,7 +1797,7 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
-func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
+func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	s.computeInitialMetrics.Do(func() {
 		ctx := s.AnnotateCtx(context.Background())
 		// Metrics depend in part on the system config. Compute them as soon as we
@@ -1818,12 +1809,18 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
-	// For every range, update its MaxBytes and check if it needs to be split or
-	// merged.
+	// For every range, update its zone config and check if it needs to
+	// be split or merged.
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		if zone, err := cfg.GetZoneConfigForKey(repl.Desc().StartKey); err == nil {
-			repl.SetByteThresholds(zone.RangeMinBytes, zone.RangeMaxBytes)
+		key := repl.Desc().StartKey
+		zone, err := sysCfg.GetZoneConfigForKey(key)
+		if err != nil {
+			if log.V(1) {
+				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
+			}
+			zone = config.DefaultZoneConfigRef()
 		}
+		repl.SetZoneConfig(zone)
 		s.mergeQueue.MaybeAdd(repl, s.cfg.Clock.Now())
 		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true // more
@@ -4303,8 +4300,8 @@ func (s *Store) updateCapacityGauges() error {
 // whenever availability changes.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// Load the system config.
-	cfg, ok := s.Gossip().GetSystemConfig()
-	if !ok {
+	cfg := s.Gossip().GetSystemConfig()
+	if cfg == nil {
 		return errors.Errorf("%s: system config not yet available", s)
 	}
 
@@ -4527,8 +4524,8 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 func (s *Store) AllocatorDryRun(
 	ctx context.Context, repl *Replica,
 ) ([]tracing.RecordedSpan, error) {
-	sysCfg, ok := s.cfg.Gossip.GetSystemConfig()
-	if !ok {
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
 		return nil, errors.New("allocator dry runs require a valid system config")
 	}
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "allocator dry run")
@@ -4561,8 +4558,8 @@ func (s *Store) ManuallyEnqueue(
 		return nil, "", errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	sysCfg, ok := s.cfg.Gossip.GetSystemConfig()
-	if !ok {
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
 		return nil, "", errors.New("cannot run queue without a valid system config; make sure the cluster " +
 			"has been initialized and all nodes connected to it")
 	}

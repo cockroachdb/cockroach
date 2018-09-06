@@ -636,8 +636,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// the original range wont work as the original and new ranges might belong
 	// to different zones.
 	// Load the system config.
-	cfg, ok := r.store.Gossip().GetSystemConfig()
-	if !ok {
+	cfg := r.store.Gossip().GetSystemConfig()
+	if cfg == nil {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
 		ctx := r.AnnotateCtx(context.TODO())
@@ -651,7 +651,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
 
-	r.SetByteThresholds(zone.RangeMinBytes, zone.RangeMaxBytes)
+	r.SetZoneConfig(zone)
 	return nil
 }
 

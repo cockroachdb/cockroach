@@ -256,7 +256,9 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 	}
 
 	cfg := config.SystemConfig{
-		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		SystemConfigEntries: config.SystemConfigEntries{
+			Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		},
 	}
 	for tcNum, tc := range testCases {
 		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
@@ -411,13 +413,17 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		config.ZoneConfigHook = originalZoneConfigHook
 	}()
 	cfg := config.SystemConfig{
-		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		SystemConfigEntries: config.SystemConfigEntries{
+			Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
+		},
 	}
 	for tcNum, tc := range testCases {
 		var objectID uint32
-		config.ZoneConfigHook = func(_ config.SystemConfig, id uint32, _ []byte) (config.ZoneConfig, bool, error) {
+		config.ZoneConfigHook = func(
+			_ *config.SystemConfig, id uint32,
+		) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
 			objectID = id
-			return config.ZoneConfig{}, false, nil
+			return &config.ZoneConfig{}, nil, false, nil
 		}
 		_, err := cfg.GetZoneConfigForKey(tc.key)
 		if err != nil {

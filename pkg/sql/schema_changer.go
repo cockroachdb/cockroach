@@ -451,9 +451,8 @@ func (sc *SchemaChanger) maybeAddDrop(
 			var timeRemaining time.Duration
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				timeRemaining = 0
-				_, zoneCfg, _, err := GetZoneConfigInTxn(
-					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "", false,
-				)
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
+					&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
 				if err != nil {
 					return err
 				}
@@ -1336,7 +1335,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := s.execCfg.Gossip.GetSystemConfig()
+				cfg := s.execCfg.Gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
@@ -1355,7 +1354,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					// and enqueued with the new TTL timeout.
 					for id, sc := range s.forGC {
 						if sc.dropTime > 0 {
-							zoneCfg, _, err := ZoneConfigHook(cfg, uint32(id), nil)
+							zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(id))
 							if err != nil {
 								log.Errorf(ctx, "no zone config for desc: %d", id)
 								return
@@ -1443,7 +1442,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 							if table.DropTime > 0 {
 								schemaChanger.dropTime = table.DropTime
-								zoneCfg, _, err := ZoneConfigHook(cfg, uint32(table.ID), nil)
+								zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(table.ID))
 								if err != nil {
 									log.Errorf(ctx, "no zone config for desc: %d", table.ID)
 									return

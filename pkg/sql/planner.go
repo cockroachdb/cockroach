@@ -211,7 +211,7 @@ func newInternalPlanner(
 	}
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.SystemConfig{}),
+		databaseCache: newDatabaseCache(config.NewSystemConfig()),
 	}
 	txnReadOnly := new(bool)
 	dataMutator := &sessionDataMutator{

@@ -30,7 +30,7 @@ import (
 // goroutines.
 type SystemConfigDeltaFilter struct {
 	keyPrefix roachpb.Key
-	lastCfg   config.SystemConfig
+	lastCfg   *config.SystemConfig
 }
 
 // MakeSystemConfigDeltaFilter creates a new SystemConfigDeltaFilter. The filter
@@ -39,17 +39,19 @@ type SystemConfigDeltaFilter struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
+		lastCfg:   config.NewSystemConfig(),
 	}
 }
 
 // ForModified calls the provided function for all SystemConfig kvs that were modified
 // since the last call to this method.
 func (df *SystemConfigDeltaFilter) ForModified(
-	newCfg config.SystemConfig, fn func(kv roachpb.KeyValue),
+	newCfg *config.SystemConfig, fn func(kv roachpb.KeyValue),
 ) {
 	// Save newCfg in the filter.
 	lastCfg := df.lastCfg
-	df.lastCfg = newCfg
+	df.lastCfg = config.NewSystemConfig()
+	df.lastCfg.Values = newCfg.Values
 
 	// SystemConfig values are always sorted by key, so scan over new and old
 	// configs in order to find new keys and modified values. Before doing so,

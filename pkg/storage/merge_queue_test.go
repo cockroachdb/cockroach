@@ -152,8 +152,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			repl := &Replica{}
 			repl.mu.state.Desc = &roachpb.RangeDescriptor{StartKey: tc.startKey, EndKey: tc.endKey}
 			repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
-			repl.mu.minBytes = tc.minBytes
-			shouldQ, priority := mq.shouldQueue(ctx, hlc.Timestamp{}, repl, config.SystemConfig{})
+			repl.SetZoneConfig(&config.ZoneConfig{RangeMinBytes: tc.minBytes})
+			shouldQ, priority := mq.shouldQueue(ctx, hlc.Timestamp{}, repl, config.NewSystemConfig())
 			if tc.expShouldQ != shouldQ {
 				t.Errorf("incorrect shouldQ: expected %v but got %v", tc.expShouldQ, shouldQ)
 			}
