@@ -361,9 +361,12 @@ func (s *server) start(addr net.Addr) {
 		s.mu.ready = ready
 	}
 
+	// We require redundant callbacks here as the broadcast callback is
+	// propagating gossip infos to other nodes and needs to propagate the new
+	// expiration info.
 	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
 		broadcast()
-	})
+	}, Redundant)
 
 	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-s.stopper.ShouldQuiesce()

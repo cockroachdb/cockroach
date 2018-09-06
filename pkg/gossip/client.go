@@ -296,8 +296,11 @@ func (c *client) gossip(
 		default:
 		}
 	}
-	// Defer calling "undoer" callback returned from registration.
-	defer g.RegisterCallback(".*", updateCallback)()
+	// We require redundant callbacks here as the update callback is propagating
+	// gossip infos to other nodes and needs to propagate the new expiration
+	// info.
+	unregister := g.RegisterCallback(".*", updateCallback, Redundant)
+	defer unregister()
 
 	errCh := make(chan error, 1)
 	// This wait group is used to allow the caller to wait until gossip
