@@ -263,7 +263,7 @@ type Replica struct {
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID roachpb.RangeID // Should only be set by the constructor.
+	RangeID roachpb.RangeID // Only set by the constructor
 
 	store        *Store
 	abortSpan    *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -380,10 +380,8 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.Timestamp
-		// Min bytes before merge.
-		minBytes int64
-		// Max bytes before split.
-		maxBytes int64
+		// A pointer to the zone config for this replica.
+		zone *config.ZoneConfig
 		// localProposals stores the Raft in-flight commands which originated at
 		// this Replica, i.e. all commands for which propose has been called,
 		// but which have not yet applied.
@@ -653,6 +651,8 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	r.mu.quiescent = true
+	r.mu.zone = config.DefaultZoneConfigRef()
+
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -1224,22 +1224,28 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 func (r *Replica) GetMinBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.minBytes
+	return r.mu.zone.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.maxBytes
+	return r.mu.zone.RangeMaxBytes
 }
 
-// SetByteThresholds sets the minimum and maximum byte thresholds.
-func (r *Replica) SetByteThresholds(minBytes, maxBytes int64) {
+// GetZoneConfig returns the replica's zone config.
+func (r *Replica) GetZoneConfig() *config.ZoneConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.zone
+}
+
+// SetZoneConfig sets the replica's zone config.
+func (r *Replica) SetZoneConfig(zone *config.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.minBytes = minBytes
-	r.mu.maxBytes = maxBytes
+	r.mu.zone = zone
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -1590,6 +1596,14 @@ func (r *Replica) isInitializedRLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 
+// DescAndZone returns the authoritative range descriptor as well
+// as the zone config for the replica.
+func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.Desc, r.mu.zone
+}
+
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
@@ -1911,7 +1925,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-	ri.RangeMaxBytes = r.mu.maxBytes
+	ri.RangeMaxBytes = r.mu.zone.RangeMaxBytes
 	return ri
 }
 
@@ -6592,14 +6606,14 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
-	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) &&
+	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
 		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		return nil
 	}
 
 	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
 	return nil
@@ -6691,7 +6705,7 @@ var errSystemConfigIntent = errors.New("must retry later due to intent on System
 
 // loadSystemConfig scans the system config span and returns the system
 // config.
-func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, error) {
+func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfig, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
@@ -6702,7 +6716,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
 	if pErr != nil {
-		return config.SystemConfig{}, pErr.GoError()
+		return nil, pErr.GoError()
 	}
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
@@ -6714,10 +6728,12 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}
-		return config.SystemConfig{}, errSystemConfigIntent
+		return nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return config.SystemConfig{Values: kvs}, nil
+	sysCfg := config.NewSystemConfig()
+	sysCfg.Values = kvs
+	return sysCfg, nil
 }
 
 // needsSplitBySize returns true if the size of the range requires it
@@ -6733,7 +6749,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
-	maxBytes := r.mu.maxBytes
+	maxBytes := r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
@@ -6798,7 +6814,7 @@ type ReplicaMetrics struct {
 func (r *Replica) Metrics(
 	ctx context.Context,
 	now hlc.Timestamp,
-	cfg config.SystemConfig,
+	cfg *config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
 ) ReplicaMetrics {
 	r.mu.RLock()
@@ -6806,6 +6822,7 @@ func (r *Replica) Metrics(
 	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
+	zone := r.mu.zone
 	raftLogSize := r.mu.raftLogSize
 	r.cmdQMu.Lock()
 	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
@@ -6821,6 +6838,7 @@ func (r *Replica) Metrics(
 		ctx,
 		now,
 		cfg,
+		zone,
 		livenessMap,
 		desc,
 		raftStatus,
@@ -6846,7 +6864,8 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
-	cfg config.SystemConfig,
+	cfg *config.SystemConfig,
+	zone *config.ZoneConfig,
 	livenessMap map[roachpb.NodeID]bool,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
@@ -6896,9 +6915,7 @@ func calcReplicaMetrics(
 		if liveReplicas < computeQuorum(len(desc.Replicas)) {
 			m.Unavailable = true
 		}
-		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
-			log.Error(ctx, err)
-		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
+		if int32(liveReplicas) < zone.NumReplicas {
 			m.Underreplicated = true
 		}
 	}

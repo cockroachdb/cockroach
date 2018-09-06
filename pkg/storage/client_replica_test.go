@@ -1766,7 +1766,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.DefaultZoneConfig()
 	expectedReplicas := expectedRanges * int(config.DefaultZoneConfig().NumReplicas)
 
 	waitForReplicas := func() error {

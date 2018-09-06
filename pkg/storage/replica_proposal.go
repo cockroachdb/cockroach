@@ -534,6 +534,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
 	if needsSplitBySize {
+		log.Infof(context.TODO(), "zone for %s: %+v", r, r.GetZoneConfig())
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 

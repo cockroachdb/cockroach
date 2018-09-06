@@ -209,7 +209,7 @@ func createTestStoreWithConfig(t testing.TB, stopper *stop.Stopper, cfg *StoreCo
 	store := createTestStoreWithoutStart(t, stopper, cfg)
 	// Put an empty system config into gossip.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig,
-		&config.SystemConfig{}, 0); err != nil {
+		config.NewSystemConfig(), 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Start(context.Background(), stopper); err != nil {
@@ -1491,11 +1491,8 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	// entry so that the store picks up the new zone configs. This new system
 	// config needs to be non-empty so that it differs from the initial value
 	// which triggers the system config callback to be run.
-	sysCfg := &config.SystemConfig{
-		Values: []roachpb.KeyValue{
-			{Key: roachpb.Key("a")},
-		},
-	}
+	sysCfg := config.NewSystemConfig()
+	sysCfg.Values = []roachpb.KeyValue{{Key: roachpb.Key("a")}}
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, sysCfg, 0); err != nil {
 		t.Fatal(err)
 	}
