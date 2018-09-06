@@ -30,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -580,10 +582,12 @@ func (tc *TxnCoordSender) Send(
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
-	ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
+	if !tracing.IsBlackHoleSpan(sp) {
+		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+	}
+	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {
-		ctx = log.WithLogTag(ctx, "ts", tc.mu.txn.Timestamp)
+		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.Timestamp)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,

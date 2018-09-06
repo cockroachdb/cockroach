@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -793,7 +794,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
 
-	ctx = log.WithLogTag(ctx, "in test", nil)
+	ctx = logtags.AddTag(ctx, "in test", nil)
 
 	log.Infof(ctx, "setting zone config to disable replication")
 	// Allow for inserting zone configs without having to go through (or

@@ -15,6 +15,7 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -107,7 +108,7 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, boo
 // the format is treated as a pre-formatted string.
 func eventInternal(ctx context.Context, isErr, withTags bool, format string, args ...interface{}) {
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		var buf msgBuf
+		var buf bytes.Buffer
 		if withTags {
 			withTags = formatTags(ctx, &buf)
 		}
