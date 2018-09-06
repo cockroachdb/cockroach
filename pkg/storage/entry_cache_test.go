@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -23,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+const noLimit = math.MaxUint64
 
 func newEntry(index, size uint64) raftpb.Entry {
 	return raftpb.Entry{
@@ -48,12 +51,12 @@ func verifyGet(
 	expEnts []raftpb.Entry,
 	expNextIndex uint64,
 ) {
-	ents, _, nextIndex := rec.getEntries(nil, rangeID, lo, hi, 0)
+	ents, _, nextIndex, _ := rec.getEntries(nil, rangeID, lo, hi, noLimit)
 	if !(len(expEnts) == 0 && len(ents) == 0) && !reflect.DeepEqual(expEnts, ents) {
 		t.Fatalf("expected entries %+v; got %+v", expEnts, ents)
 	}
 	if nextIndex != expNextIndex {
-		t.Fatalf("expected next index %d; got %d", nextIndex, expNextIndex)
+		t.Fatalf("expected next index %d; got %d", expNextIndex, nextIndex)
 	}
 	for _, e := range ents {
 		term, ok := rec.getTerm(rangeID, e.Index)
@@ -115,10 +118,10 @@ func TestEntryCacheClearTo(t *testing.T) {
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(2, 1)})
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
 	rec.clearTo(rangeID, 21)
-	if ents, _, _ := rec.getEntries(nil, rangeID, 2, 21, 0); len(ents) != 0 {
+	if ents, _, _, _ := rec.getEntries(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
 		t.Errorf("expected no entries after clearTo")
 	}
-	if ents, _, _ := rec.getEntries(nil, rangeID, 21, 22, 0); len(ents) != 1 {
+	if ents, _, _, _ := rec.getEntries(nil, rangeID, 21, 22, noLimit); len(ents) != 1 {
 		t.Errorf("expected entry 22 to remain in the cache clearTo")
 	}
 }
@@ -128,13 +131,13 @@ func TestEntryCacheEviction(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	rec := newRaftEntryCache(100)
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)})
-	ents, _, hi := rec.getEntries(nil, rangeID, 1, 3, 0)
+	ents, _, hi, _ := rec.getEntries(nil, rangeID, 1, 3, noLimit)
 	if len(ents) != 2 || hi != 3 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
 	}
 	// Add another entry to evict first.
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(3, 40)})
-	ents, _, hi = rec.getEntries(nil, rangeID, 2, 4, 0)
+	ents, _, hi, _ = rec.getEntries(nil, rangeID, 2, 4, noLimit)
 	if len(ents) != 2 || hi != 4 {
 		t.Errorf("expected only two entries; got %+v, %d", ents, hi)
 	}
