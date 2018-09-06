@@ -336,26 +336,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				v.observer.attr(name, fmt.Sprintf("aggregate %d", i), buf.String())
 			}
 			if len(n.groupCols) > 0 {
-				// Display the grouping columns as @1-@x if possible.
-				shorthand := true
-				for i, idx := range n.groupCols {
-					if idx != i {
-						shorthand = false
-						break
-					}
-				}
-				if shorthand && len(n.groupCols) > 1 {
-					v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", len(n.groupCols)))
-				} else {
-					var buf bytes.Buffer
-					for i, idx := range n.groupCols {
-						if i > 0 {
-							buf.WriteByte(',')
-						}
-						fmt.Fprintf(&buf, "@%d", idx+1)
-					}
-					v.observer.attr(name, "group by", buf.String())
-				}
+				v.observer.attr(name, "group by", colListStr(n.groupCols))
+			}
+			if len(n.orderedGroupCols) > 0 {
+				v.observer.attr(name, "ordered", colListStr(n.orderedGroupCols))
 			}
 			if n.isScalar {
 				v.observer.attr(name, "scalar", "")
@@ -605,6 +589,29 @@ func joinTypeStr(t sqlbase.JoinType) string {
 		return "anti"
 	}
 	panic(fmt.Sprintf("unknown join type %s", t))
+}
+
+func colListStr(cols []int) string {
+	// Display the columns as @1-@x if possible.
+	shorthand := true
+	for i, idx := range cols {
+		if idx != i {
+			shorthand = false
+			break
+		}
+	}
+	if shorthand && len(cols) > 1 {
+		return fmt.Sprintf("@1-@%d", len(cols))
+	}
+
+	var buf bytes.Buffer
+	for i, idx := range cols {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "@%d", idx+1)
+	}
+	return buf.String()
 }
 
 // planNodeNames is the mapping from node type to strings.  The
