@@ -2229,6 +2229,13 @@ CREATE TABLE foo(a CHAR(0))
                          ^
 `,
 		},
+		{
+			`e'\xad'::string`,
+			`invalid UTF-8 byte sequence
+e'\xad'::string
+^
+`,
+		},
 	}
 	for _, d := range testData {
 		_, err := parser.Parse(d.sql)
