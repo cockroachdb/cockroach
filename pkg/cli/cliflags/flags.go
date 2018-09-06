@@ -488,17 +488,31 @@ a public network without combining it with --listen-addr.`,
 The path to the directory containing SSL certificates and keys.
 <PRE>
 
-Cockroach looks for certificates and keys inside the directory using the
+Cockroach looks for required certificates and keys inside the directory using the
 following naming scheme:
 
-  - CA certificate and key: ca.crt, ca.key
-  - Server certificate and key: node.crt, node.key
-  - Client certificate and key: client.<user>.crt, client.<user>.key
+  - ca.crt:                               CA certificate. Used to verify all certificates.
+  - node.crt, node.key:                   Server certificate and key
+  - client.<user>.crt, client.<user>.key: Client certificate and key
+
+All certificates must be signed by ca.crt.
+node.crt must be a dual-purpose client/server certificate, contain "CN=node", and list all used
+IP addresses and DNS names for the corresponding node in the Subject Alternative Name.
+
+The following optional files can be used for separate certificate chains:
+
+  - ca-client.crt:                        CA certificate to verify client certificates.
+  - client.node.crt, client.node.key:     Client certificate and key for nodes
+  - ui.crt, ui.key:                       Server certificate and key for the Admin UI
+
+If client.node.crt exists, nodes use it to prove their client identity when talking to other nodes.
+If ca-client.crt exists, nodes use it to verify all client certificates.
+If ui.crt exists, nodes use it for the Web UI. This can be a publicly-issued certificate.
 
 When running client commands, the user can be specified with the --user flag.
 </PRE>
 
-Keys have a minimum permission requirement of 0700 (rwx------). This restriction can be
+Keys have a maximum permission requirement of 0700 (rwx------). This restriction can be
 disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK to true.`,
 	}
 
