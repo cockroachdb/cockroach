@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -89,7 +90,7 @@ const debugIteratorLeak = false
 //export rocksDBLog
 func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
 	if log.V(int32(logLevel)) {
-		ctx := log.WithLogTagStr(context.Background(), "rocksdb", "")
+		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
 		log.Info(ctx, C.GoStringN(s, n))
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -407,7 +408,7 @@ func (ie *internalExecutorImpl) execInternal(
 
 	ctx, finishSp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer finishSp()
-	ctx = log.WithLogTag(ctx, "intExec", opName)
+	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived

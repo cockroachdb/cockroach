@@ -20,6 +20,7 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -34,11 +35,11 @@ func TestAnnotateCtxTags(t *testing.T) {
 	}
 
 	ctx = context.Background()
-	ctx = WithLogTag(ctx, "a", 10)
-	ctx = WithLogTag(ctx, "aa", nil)
+	ctx = logtags.AddTag(ctx, "a", 10)
+	ctx = logtags.AddTag(ctx, "aa", nil)
 	ctx = ac.AnnotateCtx(ctx)
 
-	if exp, val := "[aa,a1,b2] test", MakeMessage(ctx, "test", nil); val != exp {
+	if exp, val := "[a1,aa,b2] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
 }
@@ -93,11 +94,11 @@ func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
 	// Test the scenario of a context being continually re-annotated as it is
 	// passed down a call stack.
 	n := AmbientContext{}
-	n.AddLogTagInt("n", 1)
+	n.AddLogTag("n", 1)
 	s := n
-	s.AddLogTagInt("s", 2)
+	s.AddLogTag("s", 2)
 	r := s
-	r.AddLogTagInt("r", 3)
+	r.AddLogTag("r", 3)
 
 	ctx := n.AnnotateCtx(context.Background())
 	ctx = s.AnnotateCtx(ctx)
@@ -105,17 +106,17 @@ func TestAnnotateCtxNodeStoreReplica(t *testing.T) {
 	if exp, val := "[n1,s2,r3] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
 	}
-	if bottom := contextBottomTag(ctx); bottom != r.tags {
-		t.Errorf("expected %p, got %p", r.tags, bottom)
+	if tags := logtags.FromContext(ctx); tags != r.tags {
+		t.Errorf("expected %p, got %p", r.tags, tags)
 	}
 }
 
 func TestResetAndAnnotateCtx(t *testing.T) {
 	ac := AmbientContext{}
-	ac.AddLogTagInt("a", 1)
+	ac.AddLogTag("a", 1)
 
 	ctx := context.Background()
-	ctx = WithLogTag(ctx, "b", 2)
+	ctx = logtags.AddTag(ctx, "b", 2)
 	ctx = ac.ResetAndAnnotateCtx(ctx)
 	if exp, val := "[a1] test", MakeMessage(ctx, "test", nil); val != exp {
 		t.Errorf("expected '%s', got '%s'", exp, val)
