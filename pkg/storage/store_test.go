@@ -697,8 +697,9 @@ func TestReplicasByKey(t *testing.T) {
 
 func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	store, _ := createTestStore(t, stopper)
 
 	rep, err := store.GetReplica(1)
@@ -717,18 +718,18 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 		}
 	}
 
-	if err := rep.setDesc(newDesc); err != nil {
+	if err := rep.setDesc(ctx, newDesc); err != nil {
 		t.Fatal(err)
 	}
 	expectedErr := "replica descriptor's ID has changed"
-	if err := store.RemoveReplica(context.Background(), rep, origDesc.NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, rep, origDesc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); !testutils.IsError(err, expectedErr) {
 		t.Fatalf("expected error %q but got %v", expectedErr, err)
 	}
 
 	// Now try a fresh descriptor and succeed.
-	if err := store.RemoveReplica(context.Background(), rep, rep.Desc().NextReplicaID, RemoveOptions{
+	if err := store.RemoveReplica(ctx, rep, rep.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)

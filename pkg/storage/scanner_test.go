@@ -66,7 +66,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			LiveCount: 1,
 		}
 
-		if err := repl.setDesc(desc); err != nil {
+		if err := repl.setDesc(context.TODO(), desc); err != nil {
 			t.Fatal(err)
 		}
 		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
