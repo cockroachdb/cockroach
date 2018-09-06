@@ -70,6 +70,9 @@ const (
 	AdminTransferLease
 	// AdminChangeReplicas is called to add or remove replicas for a range.
 	AdminChangeReplicas
+	// AdminRelocateRange is called to relocate the replicas for a range onto a
+	// specified list of stores.
+	AdminRelocateRange
 	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.
