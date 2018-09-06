@@ -72,6 +72,48 @@ SELECT jsonb_typeof('null'::JSON)
 ----
 null
 
+## array_to_json
+query T
+SELECT array_to_json(ARRAY[[1, 2], [3, 4]])
+----
+[[1, 2], [3, 4]]
+
+query T
+SELECT array_to_json('{1, 2, 3}'::INT[])
+----
+[1, 2, 3]
+
+query T
+SELECT array_to_json('{"a", "b", "c"}'::STRING[])
+----
+["a", "b", "c"]
+
+query T
+SELECT array_to_json('{1.0, 2.0, 3.0}'::DECIMAL[])
+----
+[1.0, 2.0, 3.0]
+
+query T
+SELECT array_to_json(NULL)
+----
+NULL
+
+query T
+SELECT array_to_json(ARRAY[1, 2, 3], NULL)
+----
+NULL
+
+query T
+SELECT array_to_json(ARRAY[1, 2, 3], false)
+----
+[1, 2, 3]
+
+query error pq: array_to_json\(\): pretty printing is not supported
+SELECT array_to_json(ARRAY[1, 2, 3], true)
+
+query error pq: unknown signature: array_to_json\(string\)
+SELECT array_to_json('hello world')
+
 ## to_json and to_jsonb
 
 query T
