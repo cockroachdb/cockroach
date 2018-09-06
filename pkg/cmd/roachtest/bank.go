@@ -92,7 +92,7 @@ func (s *bankState) done(ctx context.Context) bool {
 // initClient initializes the client talking to node "i".
 // It requires that the caller hold the client's write lock.
 func (s *bankState) initClient(ctx context.Context, c *cluster, i int) {
-	s.clients[i].db = c.Conn(ctx, i+1)
+	s.clients[i-1].db = c.Conn(ctx, i)
 }
 
 // Returns counts from all the clients.
@@ -146,7 +146,7 @@ CREATE TABLE bank.accounts (
 func (s *bankState) transferMoney(
 	ctx context.Context, c *cluster, idx, numAccounts, maxTransfer int,
 ) {
-	client := &s.clients[idx]
+	client := &s.clients[idx-1]
 	for !s.done(ctx) {
 		if err := client.transferMoney(numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
@@ -220,8 +220,8 @@ func (s *bankState) chaosMonkey(
 				break
 			}
 			c.l.Printf("round %d: restarting %d\n", curRound, i)
-			c.Stop(ctx, c.Node(i+1))
-			c.Start(ctx, c.Node(i+1))
+			c.Stop(ctx, c.Node(i))
+			c.Start(ctx, c.Node(i))
 			if stopClients {
 				// Reinitialize the client talking to the restarted node.
 				s.initClient(ctx, c, i)
@@ -333,9 +333,9 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
-		s.initClient(ctx, c, i)
+		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
-		go s.transferMoney(ctx, c, i, bankNumAccounts, bankMaxTransfer)
+		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
 	defer func() {
@@ -346,7 +346,11 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	c.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
-		return rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
+		nodes := rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
+		for i := range nodes {
+			nodes[i]++
+		}
+		return nodes
 	}
 	go s.chaosMonkey(ctx, t, c, true, pickNodes, -1)
 
@@ -381,7 +385,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	clientIdx := c.nodes
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
-	go s.transferMoney(ctx, c, 0, bankNumAccounts, bankMaxTransfer)
+	go s.transferMoney(ctx, c, 1, bankNumAccounts, bankMaxTransfer)
 
 	defer func() {
 		<-s.teardown
@@ -391,7 +395,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	c.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
-		return []int{rnd.Intn(clientIdx)}
+		return []int{1 + rnd.Intn(clientIdx)}
 	}
 	go s.chaosMonkey(ctx, t, c, false, pickNodes, clientIdx)
 
