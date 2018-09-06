@@ -1039,6 +1039,16 @@ func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) 
 	return addrs
 }
 
+// ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
+// for the specified node.
+func (c *cluster) ExternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
+	var addrs []string
+	for _, u := range c.ExternalAddr(ctx, node) {
+		addrs = append(addrs, addrToAdminUIAddr(c, u))
+	}
+	return addrs
+}
+
 // InternalAddr returns the internal address in the form host:port for the
 // specified nodes.
 func (c *cluster) InternalAddr(ctx context.Context, node nodeListOption) []string {

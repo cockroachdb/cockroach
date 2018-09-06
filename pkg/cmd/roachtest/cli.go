@@ -23,8 +23,8 @@ import (
 )
 
 func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
-	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Start(ctx, c.All())
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx, c.Range(1, 3))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -81,28 +81,4 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 			t.Fatalf("expected %s, but found %s:\n", expected, actual)
 		}
 	}
-}
-
-func registerCLI(r *registry) {
-	spec := testSpec{
-		Name:   "cli",
-		Stable: true, // DO NOT COPY to new tests
-		Nodes:  nodes(3),
-	}
-
-	testCases := []struct {
-		name string
-		fn   func(ctx context.Context, t *test, c *cluster)
-	}{
-		{"node-status", runCLINodeStatus},
-	}
-	for _, tc := range testCases {
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:   tc.name,
-			Stable: true, // DO NOT COPY to new tests
-			Run:    tc.fn,
-		})
-	}
-
-	r.Add(spec)
 }

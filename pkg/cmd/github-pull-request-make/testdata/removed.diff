@@ -1,0 +1,40 @@
+2018/09/05 13:18:51 GitHub API token environment variable GITHUB_API_TOKEN is not set
+diff --git a/build/teamcity-local-roachtest.sh b/build/teamcity-local-roachtest.sh
+index 4cbf88256517..5a15c8339985 100755
+--- a/build/teamcity-local-roachtest.sh
++++ b/build/teamcity-local-roachtest.sh
+@@ -23,0 +23,0 @@ tc_end_block "Compile workload/roachtest"
+
+ tc_start_block "Run local roachtests"
+ # TODO(peter,dan): curate a suite of the tests that works locally.
+-run build/builder.sh ./bin/roachtest run '(cli|kv/splits)' \
++run build/builder.sh ./bin/roachtest run '(acceptance|kv/splits)' \
+   --local \
+   --cockroach "cockroach" \
+   --workload "bin/workload" \
+diff --git a/pkg/acceptance/decommission_test.go b/pkg/acceptance/decommission_test.go
+deleted file mode 100644
+index 4605f3ec09dc..000000000000
+--- a/pkg/acceptance/decommission_test.go
++++ /dev/null
+@@ -1,20 +0,0 @@
+-// TestDecommission starts up an >3 node cluster and decomissions and
+-// recommissions nodes in various ways.
+-func TestDecommission(t *testing.T) {
+-	RunLocal(t, func(t *testing.T) {
+-		s := log.Scope(t)
+-		defer s.Close(t)
+-
+-		runTestWithCluster(t, testDecommissionInner)
+-	})
+-}
+-
+-func testDecommissionInner(
+-	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+-) {
+-	if c.NumNodes() < 4 {
+-		// TODO(tschottdorf): or we invent a way to change the ZoneConfig in
+-		// this test and test less ambitiously (or split up the tests).
+-		t.Skip("need at least four nodes")
+-	}
+-}
