@@ -945,6 +945,9 @@ func (r *Replica) applySnapshot(
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
+	// TODO(benesch): the next line updates r.mu.state.Desc, but that's supposed
+	// to be handled by the call to setDescWithoutProcessUpdate below. This is not
+	// a correctness issue right now, but it's liable to become one.
 	r.mu.state = s
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
