@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -495,11 +494,11 @@ func (ot *OptTester) Optimize() (memo.ExprView, error) {
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx)
-	root, required, err := ot.buildExpr(o.Factory())
+	err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return "", err
 	}
-	o.Optimize(root, required)
+	o.Optimize()
 	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
 }
 
@@ -767,12 +766,10 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 	return ot.builder.String(), nil
 }
 
-func (ot *OptTester) buildExpr(
-	factory *norm.Factory,
-) (root memo.GroupID, required *props.Physical, _ error) {
+func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	stmt, err := parser.ParseOne(ot.sql)
 	if err != nil {
-		return 0, nil, err
+		return err
 	}
 
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt)
@@ -790,11 +787,11 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 }
 
 func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (memo.ExprView, error) {
-	root, required, err := ot.buildExpr(o.Factory())
+	err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return memo.ExprView{}, err
 	}
-	return o.Optimize(root, required), nil
+	return o.Optimize(), nil
 }
 
 func (ot *OptTester) output(format string, args ...interface{}) {
