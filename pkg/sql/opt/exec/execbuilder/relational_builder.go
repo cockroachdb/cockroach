@@ -81,6 +81,14 @@ func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	return exec.ColumnOrdinal(ord)
 }
 
+func (ep *execPlan) getColumnOrdinalSet(cols opt.ColSet) exec.ColumnOrdinalSet {
+	var res exec.ColumnOrdinalSet
+	cols.ForEach(func(colID int) {
+		res.Add(int(ep.getColumnOrdinal(opt.ColumnID(colID))))
+	})
+	return res
+}
+
 func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	var ep execPlan
 	var err error
@@ -237,17 +245,17 @@ func (b *Builder) makeSQLOrderingFromChoice(
 		return nil
 	}
 
-	reqOrder := make(sqlbase.ColumnOrdering, len(ordering.Columns))
-	for i := range reqOrder {
-		reqOrder[i].ColIdx = int(plan.getColumnOrdinal(ordering.Columns[i].AnyID()))
+	colOrder := make(sqlbase.ColumnOrdering, len(ordering.Columns))
+	for i := range colOrder {
+		colOrder[i].ColIdx = int(plan.getColumnOrdinal(ordering.Columns[i].AnyID()))
 		if ordering.Columns[i].Descending {
-			reqOrder[i].Direction = encoding.Descending
+			colOrder[i].Direction = encoding.Descending
 		} else {
-			reqOrder[i].Direction = encoding.Ascending
+			colOrder[i].Direction = encoding.Ascending
 		}
 	}
 
-	return reqOrder
+	return colOrder
 }
 
 func (b *Builder) makeSQLOrdering(plan execPlan, ordering opt.Ordering) sqlbase.ColumnOrdering {
@@ -286,7 +294,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	needed, output := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
-	reqOrder := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
+	reqOrdering := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 
 	_, reverse := def.CanProvideOrdering(md, &ev.Physical().Ordering)
 
@@ -298,7 +306,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		def.HardLimit.RowCount(),
 		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
 		reverse,
-		reqOrder,
+		exec.OutputOrdering(reqOrdering),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -423,7 +431,7 @@ func (b *Builder) buildMergeJoin(ev memo.ExprView) (execPlan, error) {
 	ep := execPlan{outputCols: outputCols}
 	reqOrd := b.makeSQLOrderingFromChoice(ep, &ev.Physical().Ordering)
 	ep.root, err = b.factory.ConstructMergeJoin(
-		joinType, left.root, right.root, onExpr, leftOrd, rightOrd, reqOrd,
+		joinType, left.root, right.root, onExpr, leftOrd, rightOrd, exec.OutputOrdering(reqOrd),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -551,7 +559,11 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	if ev.Operator() == opt.ScalarGroupByOp {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
-		ep.root, err = b.factory.ConstructGroupBy(input.root, groupingColIdx, aggInfos)
+		orderedInputCols := input.getColumnOrdinalSet(aggOrderedCols(ev.Child(0), groupingCols))
+		reqOrdering := b.makeSQLOrderingFromChoice(ep, &ev.Physical().Ordering)
+		ep.root, err = b.factory.ConstructGroupBy(
+			input.root, groupingColIdx, orderedInputCols, aggInfos, exec.OutputOrdering(reqOrdering),
+		)
 	}
 	if err != nil {
 		return execPlan{}, err
@@ -586,35 +598,36 @@ func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
 		}
 	}
 
-	// Use the ordering that we require on the child (this is the more restrictive
-	// between def.Ordering and the ordering required on the DistinctOn itself).
-	ordering := ev.Child(0).Physical().Ordering
-	var orderedColSet opt.ColSet
-	for i := range ordering.Columns {
-		g := ordering.Columns[i].Group
-		if !g.Intersects(def.GroupingCols) {
-			// This group refers to a column that is not a grouping column.
-			// The rest of the ordering is not useful.
-			break
-		}
-		orderedColSet.UnionWith(g)
-	}
-	orderedColSet.IntersectionWith(def.GroupingCols)
-
-	var distinctCols, orderedCols exec.ColumnOrdinalSet
-	for i, ok := def.GroupingCols.Next(0); ok; i, ok = def.GroupingCols.Next(i + 1) {
-		ordinal := input.getColumnOrdinal(opt.ColumnID(i))
-		distinctCols.Add(int(ordinal))
-		if orderedColSet.Contains(i) {
-			orderedCols.Add(int(ordinal))
-		}
-	}
-
+	distinctCols := input.getColumnOrdinalSet(def.GroupingCols)
+	orderedCols := input.getColumnOrdinalSet(aggOrderedCols(ev.Child(0), def.GroupingCols))
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
 	if err != nil {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+// aggOrderedCols returns the set of columns in the input of an aggregation
+// (as ordinals
+// operator on which there is an ordering
+func aggOrderedCols(inputExpr memo.ExprView, groupingCols opt.ColSet) opt.ColSet {
+	// Use the ordering that we require on the child (this is the more restrictive
+	// between GroupByDef.Ordering and the ordering required on the aggregation
+	// operator itself).
+	ordering := inputExpr.Physical().Ordering
+	var res opt.ColSet
+	for i := range ordering.Columns {
+		g := ordering.Columns[i].Group
+		g = g.Intersection(groupingCols)
+		if !g.Intersects(groupingCols) {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		res.UnionWith(g)
+	}
+	res.IntersectionWith(groupingCols)
+	return res
 }
 
 func (b *Builder) buildSetOp(ev memo.ExprView) (execPlan, error) {
@@ -769,12 +782,14 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 	// Get sort *result column* ordinals. Don't confuse these with *table column*
 	// ordinals, which are used by the needed set. The sort columns should already
 	// be in the needed set, so no need to add anything further to that.
-	var reqOrder sqlbase.ColumnOrdering
+	var reqOrdering sqlbase.ColumnOrdering
 	if ordering == nil {
-		reqOrder = b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
+		reqOrdering = b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 	}
 
-	res.root, err = b.factory.ConstructIndexJoin(input.root, md.Table(def.Table), needed, reqOrder)
+	res.root, err = b.factory.ConstructIndexJoin(
+		input.root, md.Table(def.Table), needed, exec.OutputOrdering(reqOrdering),
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -810,7 +825,7 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	// Get sort *result column* ordinals. Don't confuse these with *table column*
 	// ordinals, which are used by the needed set. The sort columns should already
 	// be in the needed set, so no need to add anything further to that.
-	reqOrder := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
+	reqOrdering := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
 
 	ctx := buildScalarCtx{
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
@@ -830,7 +845,7 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 		keyCols,
 		lookupCols,
 		onExpr,
-		reqOrder,
+		exec.OutputOrdering(reqOrdering),
 	)
 	if err != nil {
 		return execPlan{}, err

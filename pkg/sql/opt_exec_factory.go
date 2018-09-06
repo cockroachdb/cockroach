@@ -69,7 +69,7 @@ func (ef *execFactory) ConstructScan(
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
-	reqOrder sqlbase.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -105,12 +105,12 @@ func (ef *execFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
-	for i := range reqOrder {
-		if reqOrder[i].ColIdx >= len(colCfg.wantedColumns) {
-			return nil, errors.Errorf("invalid reqOrder: %v", reqOrder)
+	for i := range reqOrdering {
+		if reqOrdering[i].ColIdx >= len(colCfg.wantedColumns) {
+			return nil, errors.Errorf("invalid reqOrdering: %v", reqOrdering)
 		}
 	}
-	scan.props.ordering = reqOrder
+	scan.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 	scan.createdByOpt = true
 	return scan, nil
 }
@@ -278,7 +278,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	left, right exec.Node,
 	onCond tree.TypedExpr,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
-	reqOrdering sqlbase.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	p := ef.planner
 	leftSrc := asDataSource(left)
@@ -321,7 +321,7 @@ func (ef *execFactory) ConstructMergeJoin(
 
 	// Set up node.props, which tells the distsql planner to maintain the
 	// resulting ordering (if needed).
-	node.props.ordering = reqOrdering
+	node.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 
 	return node, nil
 }
@@ -330,44 +330,65 @@ func (ef *execFactory) ConstructMergeJoin(
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
-	return ef.constructGroupBy(input, nil /* groupCols */, aggregations, true /* isScalar */)
+	n := &groupNode{
+		plan:     input.(planNode),
+		funcs:    make([]*aggregateFuncHolder, 0, len(aggregations)),
+		columns:  make(sqlbase.ResultColumns, 0, len(aggregations)),
+		isScalar: true,
+	}
+	if err := ef.addAggregations(n, aggregations); err != nil {
+		return nil, err
+	}
+	return n, nil
 }
 
 // ConstructGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructGroupBy(
-	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo,
-) (exec.Node, error) {
-	return ef.constructGroupBy(input, groupCols, aggregations, false /* isScalar */)
-}
-
-func (ef *execFactory) constructGroupBy(
-	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo, isScalar bool,
+	input exec.Node,
+	groupCols []exec.ColumnOrdinal,
+	orderedGroupCols exec.ColumnOrdinalSet,
+	aggregations []exec.AggInfo,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	n := &groupNode{
-		plan:      input.(planNode),
-		funcs:     make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:   make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
-		groupCols: make([]int, len(groupCols)),
-		isScalar:  isScalar,
-	}
-	for i, col := range groupCols {
-		n.groupCols[i] = int(col)
+		plan:             input.(planNode),
+		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		columns:          make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
+		groupCols:        make([]int, len(groupCols)),
+		orderedGroupCols: make([]int, 0, orderedGroupCols.Len()),
+		isScalar:         false,
+		props: physicalProps{
+			ordering: sqlbase.ColumnOrdering(reqOrdering),
+		},
 	}
 	inputCols := planColumns(n.plan)
-	for _, idx := range groupCols {
+	for i := range groupCols {
+		col := int(groupCols[i])
+		n.groupCols[i] = col
+		if orderedGroupCols.Contains(col) {
+			n.orderedGroupCols = append(n.orderedGroupCols, col)
+		}
+
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
 			builtins.AnyNotNull,
-			inputCols[idx].Typ,
-			int(idx),
+			inputCols[col].Typ,
+			col,
 			builtins.NewAnyNotNullAggregate,
 			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
-		n.columns = append(n.columns, inputCols[idx])
+		n.columns = append(n.columns, inputCols[col])
 	}
+	if err := ef.addAggregations(n, aggregations); err != nil {
+		return nil, err
+	}
+	return n, nil
+}
 
+func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo) error {
+	inputCols := planColumns(n.plan)
 	for i := range aggregations {
 		agg := &aggregations[i]
 		builtin := agg.Builtin
@@ -388,7 +409,7 @@ func (ef *execFactory) constructGroupBy(
 			}
 
 		default:
-			return nil, pgerror.UnimplementedWithIssueError(28417,
+			return pgerror.UnimplementedWithIssueError(28417,
 				"aggregate functions with multiple non-constant expressions are not supported",
 			)
 		}
@@ -410,7 +431,7 @@ func (ef *execFactory) constructGroupBy(
 			Typ:  agg.ResultType,
 		})
 	}
-	return n, nil
+	return nil
 }
 
 // ConstructDistinct is part of the exec.Factory interface.
@@ -467,7 +488,7 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 
 // ConstructIndexJoin is part of the exec.Factory interface.
 func (ef *execFactory) ConstructIndexJoin(
-	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
+	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := scanColumnsConfig{
@@ -519,7 +540,7 @@ func (ef *execFactory) ConstructIndexJoin(
 			colIDtoRowIndex:  colIDtoRowIndex,
 		},
 		props: physicalProps{
-			ordering: reqOrder,
+			ordering: sqlbase.ColumnOrdering(reqOrdering),
 		},
 	}, nil
 }
@@ -533,7 +554,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	keyCols []exec.ColumnOrdinal,
 	lookupCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
-	reqOrder sqlbase.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -559,7 +580,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		table:    tableScan,
 		joinType: joinType,
 		props: physicalProps{
-			ordering: reqOrder,
+			ordering: sqlbase.ColumnOrdering(reqOrdering),
 		},
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {

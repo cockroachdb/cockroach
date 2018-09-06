@@ -53,11 +53,6 @@ type Factory interface {
 	//     in the constraint.
 	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
 	//     the scan.
-	//
-	// The required ordering (reqOrder) is necessary for distributed execution:
-	// this annotation indicates how results from multiple nodes are merged. It
-	// refers to the scanned columns by ordinal: specifically, ColIdx=0 is the
-	// first column in the needed set, ColIdx=1 is the second column, etc.
 	ConstructScan(
 		table opt.Table,
 		index opt.Index,
@@ -65,7 +60,7 @@ type Factory interface {
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
 		reverse bool,
-		reqOrder sqlbase.ColumnOrdering,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual
@@ -104,12 +99,22 @@ type Factory interface {
 		left, right Node,
 		onCond tree.TypedExpr,
 		leftOrdering, rightOrdering sqlbase.ColumnOrdering,
-		reqOrdering sqlbase.ColumnOrdering,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructGroupBy returns a node that runs an aggregation. A set of
 	// aggregations is performed for each group of values on the groupCols.
-	ConstructGroupBy(input Node, groupCols []ColumnOrdinal, aggregations []AggInfo) (Node, error)
+	//
+	// If the input is guaranteed to have an ordering on grouping columns, a
+	// "streaming" aggregation is performed (i.e. aggregation happens separately
+	// for each distinct set of values on the orderedGroupCols).
+	ConstructGroupBy(
+		input Node,
+		groupCols []ColumnOrdinal,
+		orderedGroupCols ColumnOrdinalSet,
+		aggregations []AggInfo,
+		reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructScalarGroupBy returns a node that runs a scalar aggregation, i.e.
 	// one which performs a set of aggregations on all the input rows (as a single
@@ -140,7 +145,7 @@ type Factory interface {
 	// The input must be created by ConstructScan for the same table; cols is the
 	// set of columns produced by the index join.
 	ConstructIndexJoin(
-		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrder sqlbase.ColumnOrdering,
+		input Node, table opt.Table, cols ColumnOrdinalSet, reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructLookupJoin returns a node that preforms a lookup join.
@@ -158,7 +163,7 @@ type Factory interface {
 		keyCols []ColumnOrdinal,
 		lookupCols ColumnOrdinalSet,
 		onCond tree.TypedExpr,
-		reqOrder sqlbase.ColumnOrdering,
+		reqOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
@@ -188,6 +193,19 @@ type Factory interface {
 	// FOR SESSION statement.
 	ConstructShowTrace(typ tree.ShowTraceType, compact bool) (Node, error)
 }
+
+// OutputOrdering indicates the required output ordering on a Node that is being
+// created. It refers to the output columns of the node by ordinal.
+//
+// This ordering is used for distributed execution planning, to know how to
+// merge results from different nodes. For example, scanning a table can be
+// executed as multiple hosts scanning different pieces of the table. When the
+// results from the nodes get merged, we they are merged according to the output
+// ordering.
+//
+// The node must be able to support this output ordering given its other
+// configuration parameters.
+type OutputOrdering sqlbase.ColumnOrdering
 
 // Subquery encapsulates information about a subquery that is part of a plan.
 type Subquery struct {
