@@ -221,27 +221,27 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 		err   string
 	}{
 		{
-			"ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
 			`index "foo" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			"SHOW ZONE CONFIGURATION FOR INDEX foo",
 			`index "foo" does not exist`,
 		},
 		{
-			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"USE system; ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
 			`index "foo" does not exist`,
 		},
 		{
-			"USE system; EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			"USE system; SHOW ZONE CONFIGURATION FOR INDEX foo",
 			`index "foo" does not exist`,
 		},
 		{
-			"ALTER PARTITION p0 OF TABLE system.jobs EXPERIMENTAL CONFIGURE ZONE 'foo'",
+			"ALTER PARTITION p0 OF TABLE system.jobs CONFIGURE ZONE = 'foo'",
 			`partition "p0" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.jobs",
+			"SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.jobs",
 			`partition "p0" does not exist`,
 		},
 	} {

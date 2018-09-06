@@ -933,7 +933,7 @@ var specs = []stmtSpec{
 	{
 		name:   "set_var",
 		stmt:   "set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list"},
+		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
 			regexp.MustCompile(`'SET' 'TRANSACTION'`),
@@ -950,7 +950,7 @@ var specs = []stmtSpec{
 	{
 		name:   "set_cluster_setting",
 		stmt:   "set_stmt",
-		inline: []string{"set_csetting_stmt", "generic_set", "var_list"},
+		inline: []string{"set_csetting_stmt", "generic_set", "var_list", "to_or_eq"},
 		match: []*regexp.Regexp{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},

@@ -897,6 +897,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.SetClusterSetting(ctx, n)
 	case *tree.SetVar:
 		return p.SetVar(ctx, n)
+	case *tree.SetZoneConfig:
+		return p.SetZoneConfig(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:

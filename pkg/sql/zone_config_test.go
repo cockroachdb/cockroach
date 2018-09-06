@@ -128,7 +128,7 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName)
+					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {
 					return err
 				} else if subzone != nil {

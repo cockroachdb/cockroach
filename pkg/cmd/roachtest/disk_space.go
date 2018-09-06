@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -117,13 +118,6 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 	dbOne := c.Conn(ctx, 1)
 	defer dbOne.Close()
-	run := func(stmt string) {
-		t.Status(stmt)
-		_, err := dbOne.ExecContext(ctx, stmt)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	clusterDiskUsage := func() int {
 		totalDiskUsage := 0
@@ -137,8 +131,21 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		return totalDiskUsage
 	}
 
-	const stmtZone = "ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
-	run(stmtZone)
+	// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
+	// with 2.0 clusters we still need to try with it if the
+	// syntax without EXPERIMENTAL fails.
+	// TODO(knz): Remove this in 2.2.
+	makeStmt := func(s string) string { return fmt.Sprintf(s, "RANGE default", "'gc: {ttlseconds: 10}'") }
+	stmt := makeStmt("ALTER %[1]s CONFIGURE ZONE TO %[2]s")
+	t.Status(stmt)
+	_, err = dbOne.ExecContext(ctx, stmt)
+	if err != nil && strings.Contains(err.Error(), "syntax error") {
+		stmt = makeStmt("ALTER %[1]s EXPERIMENTAL CONFIGURE ZONE %[2]s")
+		_, err = dbOne.ExecContext(ctx, stmt)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	t.Status("Running inserts and deletes")
 	m2, ctxWorkLoad := errgroup.WithContext(ctx)

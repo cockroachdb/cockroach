@@ -254,7 +254,7 @@ func TestReportUsage(t *testing.T) {
 		{"DATABASE system", fmt.Sprintf(`experimental_lease_preferences: [[+zone=%[1]s,+%[1]s], [+%[1]s]]`, elemName)},
 	} {
 		if _, err := db.Exec(
-			fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE '%s'`, cmd.resource, cmd.config),
+			fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
 		); err != nil {
 			t.Fatalf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
 		}
@@ -644,8 +644,8 @@ func TestReportUsage(t *testing.T) {
 	}
 	sort.Strings(foundKeys)
 	expectedKeys := []string{
-		`[false,false,false] ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
-		`[false,false,false] ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
+		`[false,false,false] ALTER DATABASE _ CONFIGURE ZONE = _`,
+		`[false,false,false] ALTER TABLE _ CONFIGURE ZONE = _`,
 		`[false,false,false] CREATE DATABASE _`,
 		`[false,false,false] CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
 		`[false,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
@@ -692,8 +692,8 @@ func TestReportUsage(t *testing.T) {
 
 	for appName, expectedStatements := range map[string][]string{
 		"": {
-			`ALTER DATABASE _ EXPERIMENTAL CONFIGURE ZONE _`,
-			`ALTER TABLE _ EXPERIMENTAL CONFIGURE ZONE _`,
+			`ALTER DATABASE _ CONFIGURE ZONE = _`,
+			`ALTER TABLE _ CONFIGURE ZONE = _`,
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
 			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,

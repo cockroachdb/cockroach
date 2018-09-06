@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -1642,7 +1641,9 @@ var crdbInternalZonesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
   cli_specifier    STRING,
-  config_yaml      BYTES NOT NULL,
+  config_yaml      STRING NOT NULL,
+  config_sql       STRING, -- this column can be NULL if there is no specifier syntax
+                           -- possible (e.g. the object was deleted).
   config_protobuf  BYTES NOT NULL
 )
 `,
@@ -1663,17 +1664,19 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
+		values := make(tree.Datums, len(showZoneConfigNodeColumns))
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
+
+			var zoneSpecifier *tree.ZoneSpecifier
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
-			var cliSpecifier tree.Datum
-			if err == nil {
-				cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+			if err != nil {
+				// The database or table has been deleted so there is no way
+				// to refer to it anymore. We are still going to show
+				// something but the CLI specifier part will become NULL.
+				zoneSpecifier = nil
 			} else {
-				// The table was deleted but hasn't yet been cleaned up by the schema
-				// changer. The user has no way to refer to the zone, so provide a NULL
-				// CLI specifier.
-				cliSpecifier = tree.DNull
+				zoneSpecifier = &zs
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
@@ -1687,20 +1690,11 @@ CREATE TABLE crdb_internal.zones (
 				// Ensure subzones don't infect the value of the config_proto column.
 				configProto.Subzones = nil
 				configProto.SubzoneSpans = nil
-				configBytes, err = protoutil.Marshal(&configProto)
-				if err != nil {
+
+				if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &configProto); err != nil {
 					return err
 				}
-				configYAML, err := yaml.Marshal(configProto)
-				if err != nil {
-					return err
-				}
-				if err := addRow(
-					r[0], // id
-					cliSpecifier,
-					tree.NewDBytes(tree.DBytes(configYAML)),
-					tree.NewDBytes(tree.DBytes(configBytes)),
-				); err != nil {
+				if err := addRow(values...); err != nil {
 					return err
 				}
 			}
@@ -1715,26 +1709,17 @@ CREATE TABLE crdb_internal.zones (
 					if err != nil {
 						return err
 					}
-					if cliSpecifier != tree.DNull {
+					if zoneSpecifier != nil {
 						zs := zs
 						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
 						zs.Partition = tree.Name(s.PartitionName)
-						cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+						zoneSpecifier = &zs
 					}
-					configYAML, err := yaml.Marshal(s.Config)
-					if err != nil {
+
+					if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
-					configBytes, err := protoutil.Marshal(&s.Config)
-					if err != nil {
-						return err
-					}
-					if err := addRow(
-						r[0], // id
-						cliSpecifier,
-						tree.NewDBytes(tree.DBytes(configYAML)),
-						tree.NewDBytes(tree.DBytes(configBytes)),
-					); err != nil {
+					if err := addRow(values...); err != nil {
 						return err
 					}
 				}

@@ -120,8 +120,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	// remove CCL features from a table using an OSS binary.
 	expectCCLRequired(`ALTER TABLE t.kv PARTITION BY NOTHING`)
 	expectCCLRequired(`ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
-	expectCCLRequired(`ALTER PARTITION p1 OF TABLE t.kv EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectCCLRequired(`ALTER PARTITION p2 OF TABLE t.kv EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectCCLRequired(`ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	expectCCLRequired(`ALTER PARTITION p2 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
 
 	// Odd exception: removing partitioning is, in fact, possible when there are
 	// no zone configs for the table's indices or partitions.
