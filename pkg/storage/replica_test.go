@@ -2468,6 +2468,88 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	}
 }
 
+// TestReplicaCommandQueueCancellationCascade verifies that commands which are
+// waiting on the command queue properly handle cascading cancellations without
+// resulting in quadratic memory growth.
+func TestReplicaCommandQueueCancellationCascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a dependency graph that looks like:
+	//
+	//   --- --- --- ---
+	//    |   |   |   |
+	//   ---------------
+	//    |   |   |   |
+	//   --- --- --- ---  ...
+	//    |   |   |   |
+	//   ---------------
+	//    |   |   |   |
+	//
+	//         ...
+	//
+	// The test then creates a cascade cancellation scenario
+	// where most commands are canceled:
+	//
+	//   --- xxx xxx xxx
+	//    |   |   |   |
+	//   xxxxxxxxxxxxxxx
+	//    |   |   |   |
+	//   --- xxx xxx xxx  ...
+	//    |   |   |   |
+	//   xxxxxxxxxxxxxxx
+	//    |   |   |   |
+	//
+	//         ...
+	//
+	// Canceling commands in this pattern stresses two operations that
+	// are necessary to avoid quadratic prerequisite count growth:
+	// 1. Canceling all but the first command in each of the multi-command
+	//    levels stresses OptimisticallyResolvePrereqs. Without scanning
+	//    through all of a command's prereqs and ignoring already completed
+	//    commands, commands that were finished would be transferred to
+	//    dependent commands.
+	// 2. Alternating multi-command layers and single command layers creates
+	//    a scenario where dependencies would add duplicate prereqs to their
+	//    prereq slice if not careful. This duplication of commands would
+	//    result in quadratic growth.
+	//
+	// Without these operations, the test fails.
+	const spansPerLevel = 25
+	const levels = 25
+
+	var levelSpans [spansPerLevel]roachpb.Span
+	keyBuf := bytes.Repeat([]byte("a"), spansPerLevel+1)
+	for i := 0; i < len(levelSpans); i++ {
+		levelSpans[i] = roachpb.Span{
+			Key:    keyBuf[:i+1],
+			EndKey: keyBuf[:i+2],
+		}
+	}
+	globalSpan := roachpb.Span{
+		Key:    levelSpans[0].Key,
+		EndKey: levelSpans[len(levelSpans)-1].EndKey,
+	}
+
+	var instrs []cancelInstr
+	var cancelOrder []int
+	for level := 0; level < levels; level++ {
+		for i, span := range levelSpans {
+			if i != 0 {
+				cancelOrder = append(cancelOrder, len(instrs))
+			}
+			instrs = append(instrs, cancelInstr{span: span})
+		}
+
+		cancelOrder = append(cancelOrder, len(instrs))
+		instrs = append(instrs, cancelInstr{span: globalSpan})
+	}
+
+	// Fails with "command never left CommandQueue after cancellation"
+	// timeout without proper handling of cascade cancellation.
+	ct := newCmdQCancelTest(t)
+	ct.Run(instrs, cancelOrder)
+}
+
 // TestReplicaCommandQueueCancellationRandom verifies that commands in a
 // random dependency graph which are waiting on the command queue do not
 // execute or deadlock if their context is canceled, and that commands
@@ -7964,6 +8046,138 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
+	}
+}
+
+func TestReplicaShouldDropForwardedProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
+	data, noData := []byte("data"), []byte("")
+
+	testCases := []struct {
+		name                string
+		leader              bool
+		msg                 raftpb.Message
+		expDrop             bool
+		expRemotePropsAfter int
+	}{
+		{
+			name:   "new proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name:   "duplicate proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             true,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "partially new proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name:   "empty proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, noData)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "conf change",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryConfChange, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "non proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgApp,
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "not leader",
+			leader: false,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 0,
+		},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+
+			if c.leader {
+				// Reset the remoteProposals map to only contain cmdSeen.
+				tc.repl.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{
+					cmdSeen: {},
+				}
+			} else {
+				// Clear the remoteProposals map and set the leader ID to
+				// someone else.
+				tc.repl.mu.remoteProposals = nil
+				tc.repl.mu.leaderID = tc.repl.mu.replicaID + 1
+				defer func() { tc.repl.mu.leaderID = tc.repl.mu.replicaID }()
+			}
+
+			req := &RaftMessageRequest{Message: c.msg}
+			drop := tc.repl.shouldDropForwardedProposalLocked(req)
+
+			if c.expDrop != drop {
+				t.Errorf("expected drop=%t, found %t", c.expDrop, drop)
+			}
+			if l := len(tc.repl.mu.remoteProposals); c.expRemotePropsAfter != l {
+				t.Errorf("expected %d tracked remote proposals, found %d", c.expRemotePropsAfter, l)
+			}
+		})
 	}
 }
 

@@ -1126,7 +1126,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 }
 
 // Test that when a Raft group is not able to establish a quorum, its Raft log
-// does not grow without bound. It tests two different scenerios where this used
+// does not grow without bound. It tests two different scenarios where this used
 // to be possible (see #27772):
 // 1. The leader proposes a command and cannot establish a quorum. The leader
 //    continually re-proposes the command.
