@@ -133,6 +133,8 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
+	//
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -141,6 +143,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone get db.t
 	// .default
 	// range_min_bytes: 1048576
@@ -149,6 +152,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone get db.t@t_c2_idx
 	// .default
 	// range_min_bytes: 1048576
@@ -157,6 +161,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone set db.t.p1 --file=./../../cli/testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -164,6 +169,8 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
+	//
 	// zone get db.t.p1
 	// db.t.p1
 	// range_min_bytes: 1048576
@@ -172,6 +179,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -180,6 +188,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone ls
 	// .default
 	// .liveness
@@ -188,7 +197,6 @@ func Example_cclzone() {
 	// db.t@primary
 	// system.jobs
 	// zone rm db.t@primary
-	// CONFIGURE ZONE 1
 	// zone get db.t.p0
 	// .default
 	// range_min_bytes: 1048576
@@ -197,6 +205,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone get db.t.p1
 	// db.t.p1
 	// range_min_bytes: 1048576
@@ -205,6 +214,7 @@ func Example_cclzone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone ls
 	// .default
 	// .liveness
@@ -212,9 +222,7 @@ func Example_cclzone() {
 	// db.t.p1
 	// system.jobs
 	// zone rm db.t.p0
-	// CONFIGURE ZONE 0
 	// zone rm db.t.p1
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .liveness
@@ -228,6 +236,7 @@ func Example_cclzone() {
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
 	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
+	//
 	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs_experimental.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864

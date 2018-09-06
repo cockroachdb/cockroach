@@ -58,14 +58,14 @@ func TestShowTraceReplica(t *testing.T) {
 	tc.WaitForNodeStatuses(t)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-	sqlDB.Exec(t, `ALTER RANGE "default" EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n4]'`)
+	sqlDB.Exec(t, `ALTER RANGE "default" CONFIGURE ZONE USING constraints = '[+n4]'`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t3 (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `ALTER TABLE d.t1 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n1]'`)
-	sqlDB.Exec(t, `ALTER TABLE d.t2 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n2]'`)
-	sqlDB.Exec(t, `ALTER TABLE d.t3 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n3]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.t1 CONFIGURE ZONE USING constraints = '[+n1]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.t2 CONFIGURE ZONE USING constraints = '[+n2]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.t3 CONFIGURE ZONE USING constraints = '[+n3]'`)
 
 	tests := []struct {
 		query    string

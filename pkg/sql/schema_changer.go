@@ -444,7 +444,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				timeRemaining = 0
 				_, zoneCfg, _, err := GetZoneConfigInTxn(
-					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
+					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "", false,
 				)
 				if err != nil {
 					return err

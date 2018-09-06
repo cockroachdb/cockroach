@@ -82,7 +82,7 @@ func registerClearRange(r *registry) {
 
 				// Set a low TTL so that the ClearRange-based cleanup mechanism can kick in earlier.
 				// This could also be done after dropping the table.
-				if _, err := conn.ExecContext(ctx, `ALTER TABLE bank.bank EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 30}'`); err != nil {
+				if _, err := conn.ExecContext(ctx, `ALTER TABLE bank.bank CONFIGURE ZONE USING gc.ttlseconds = 30`); err != nil {
 					return err
 				}
 

@@ -81,6 +81,10 @@ message LeasePreference {
 }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
+//
+// Note: when adding.removing fields here, be sure to update
+// supportedZoneConfigOptions in the sql package, to synchronize
+// with the code for ALTER ... CONFIGURE ZONE.
 message ZoneConfig {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
@@ -110,7 +114,7 @@ message ZoneConfig {
   // most preferred to lease preferred. The first preference that an existing
   // replica of a range matches will take priority.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false,
-           (gogoproto.moretags) = "yaml:\"lease_preferences,flow,omitempty\""];
+           (gogoproto.moretags) = "yaml:\"lease_preferences,flow\""];
 
   // Subzones stores config overrides for "subzones", each of which represents
   // either a SQL table index or a partition of a SQL table index. Subzones are
