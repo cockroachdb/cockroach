@@ -90,10 +90,6 @@ var leaseRebalancingAggressiveness = settings.RegisterNonNegativeFloatSetting(
 	1.0,
 )
 
-func statsBasedRebalancingEnabled(st *cluster.Settings, disableStatsBasedRebalance bool) bool {
-	return EnableStatsBasedRebalancing.Get(&st.SV) && st.Version.IsActive(cluster.VersionStatsBasedRebalancing) && !disableStatsBasedRebalance
-}
-
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
 type AllocatorAction int
@@ -247,10 +243,7 @@ func MakeAllocator(
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context,
-	zone config.ZoneConfig,
-	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
+	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -341,10 +334,8 @@ func (a *Allocator) ComputeAction(
 }
 
 type decisionDetails struct {
-	Target               string
-	Existing             string  `json:",omitempty"`
-	RangeBytes           int64   `json:",omitempty"`
-	RangeWritesPerSecond float64 `json:",omitempty"`
+	Target   string
+	Existing string `json:",omitempty"`
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the
@@ -357,29 +348,14 @@ func (a *Allocator) AllocateTarget(
 	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
-	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, existing, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
-	candidates := allocateCandidates(
-		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
-	)
-	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
-	if target := candidates.selectGood(a.randGen); target != nil {
-		log.VEventf(ctx, 3, "add target: %s", target)
-		details := decisionDetails{Target: target.compactString(options)}
-		if options.statsBasedRebalancingEnabled {
-			details.RangeBytes = rangeInfo.LogicalBytes
-			details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-		}
-		detailsBytes, err := json.Marshal(details)
-		if err != nil {
-			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
-		}
-		return &target.store, string(detailsBytes), nil
+	target, details := a.allocateTargetFromList(
+		ctx, sl, zone, existing, rangeInfo, a.scorerOptions())
+
+	if target != nil {
+		return target, details, nil
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
@@ -395,13 +371,39 @@ func (a *Allocator) AllocateTarget(
 	}
 }
 
+func (a *Allocator) allocateTargetFromList(
+	ctx context.Context,
+	sl StoreList,
+	zone config.ZoneConfig,
+	existing []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+	options scorerOptions,
+) (*roachpb.StoreDescriptor, string) {
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, existing, zone)
+	candidates := allocateCandidates(
+		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+	)
+	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
+	if target := candidates.selectGood(a.randGen); target != nil {
+		log.VEventf(ctx, 3, "add target: %s", target)
+		details := decisionDetails{Target: target.compactString(options)}
+		detailsBytes, err := json.Marshal(details)
+		if err != nil {
+			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
+		}
+		return &target.store, string(detailsBytes)
+	}
+
+	return nil, ""
+}
+
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
 	zone config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
@@ -413,7 +415,7 @@ func (a Allocator) simulateRemoveTarget(
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
 	}()
 	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
-	return a.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
+	return a.RemoveTarget(ctx, zone, candidates, rangeInfo)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -426,7 +428,6 @@ func (a Allocator) RemoveTarget(
 	zone config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
@@ -441,7 +442,7 @@ func (a Allocator) RemoveTarget(
 
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
+	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
 		sl,
 		analyzedConstraints,
@@ -455,10 +456,6 @@ func (a Allocator) RemoveTarget(
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString(options)}
-				if options.statsBasedRebalancingEnabled {
-					details.RangeBytes = rangeInfo.LogicalBytes
-					details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-				}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
 					log.Warningf(ctx, "failed to marshal details for choosing remove target: %s", err)
@@ -495,7 +492,6 @@ func (a Allocator) RebalanceTarget(
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
-	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
@@ -529,7 +525,7 @@ func (a Allocator) RebalanceTarget(
 
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
+	options := a.scorerOptions()
 	results := rebalanceCandidates(
 		ctx,
 		sl,
@@ -585,8 +581,7 @@ func (a Allocator) RebalanceTarget(
 			target.store.StoreID,
 			zone,
 			replicaCandidates,
-			rangeInfo,
-			disableStatsBasedRebalancing)
+			rangeInfo)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
@@ -606,10 +601,6 @@ func (a Allocator) RebalanceTarget(
 		Target:   target.compactString(options),
 		Existing: existingCandidates.compactString(options),
 	}
-	if options.statsBasedRebalancingEnabled {
-		details.RangeBytes = rangeInfo.LogicalBytes
-		details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-	}
 	detailsBytes, err := json.Marshal(details)
 	if err != nil {
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
@@ -618,12 +609,10 @@ func (a Allocator) RebalanceTarget(
 	return &target.store, string(detailsBytes)
 }
 
-func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptions {
+func (a *Allocator) scorerOptions() scorerOptions {
 	return scorerOptions{
-		deterministic:                a.storePool.deterministic,
-		statsBasedRebalancingEnabled: statsBasedRebalancingEnabled(a.storePool.st, disableStatsBasedRebalancing),
-		rangeRebalanceThreshold:      rangeRebalanceThreshold.Get(&a.storePool.st.SV),
-		statRebalanceThreshold:       statRebalanceThreshold.Get(&a.storePool.st.SV),
+		deterministic:           a.storePool.deterministic,
+		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
