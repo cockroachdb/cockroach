@@ -164,12 +164,14 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
           </title>
         </Helmet>
         <section className="section"><h1>Statement Details</h1></section>
-        <Loading
-          loading={_.isNil(this.props.statement)}
-          className="loading-image loading-image__spinner"
-          image={spinner}
-          render={this.renderContent}
-        />
+        <section className="section section--container">
+          <Loading
+            loading={_.isNil(this.props.statement)}
+            className="loading-image loading-image__spinner"
+            image={spinner}
+            render={this.renderContent}
+          />
+        </section>
       </div>
     );
   }
