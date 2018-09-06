@@ -504,6 +504,38 @@ func (c *CustomFuncs) ProjectColsFromBoth(left, right memo.GroupID) memo.GroupID
 	return pb.buildProjections()
 }
 
+// ProjectColMapSide implements the side-agnostic logic from ProjectColMapLeft
+// and ProjectColMapRight.
+func (c *CustomFuncs) ProjectColMapSide(colMapID memo.PrivateID, fromList opt.ColList) memo.GroupID {
+	pb := projectionsBuilder{f: c.f}
+	colMap := c.mem.LookupPrivate(colMapID).(*memo.SetOpColMap)
+
+	for idx := 0; idx < len(fromList); idx += 1 {
+		fromCol := fromList[idx]
+		toCol := colMap.Out[idx]
+
+		pb.addSynthesized(c.f.ConstructVariable(c.f.InternColumnID(fromCol)), toCol)
+	}
+
+	return pb.buildProjections()
+}
+
+// ProjectColMapLeft returns a Projections operator that maps the left side columns
+// in a SetOpColMap to the output columns in it. Useful for replacing set operations
+// with simpler constructs.
+func (c *CustomFuncs) ProjectColMapLeft(colMapID memo.PrivateID) memo.GroupID {
+	colMap := c.mem.LookupPrivate(colMapID).(*memo.SetOpColMap)
+	return c.ProjectColMapSide(colMapID, colMap.Left)
+}
+
+// ProjectColMapRight returns a Projections operator that maps the right side columns
+// in a SetOpColMap to the output columns in it. Useful for replacing set operations
+// with simpler constructs.
+func (c *CustomFuncs) ProjectColMapRight(colMapID memo.PrivateID) memo.GroupID {
+	colMap := c.mem.LookupPrivate(colMapID).(*memo.SetOpColMap)
+	return c.ProjectColMapSide(colMapID, colMap.Right)
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
