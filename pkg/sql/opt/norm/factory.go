@@ -169,6 +169,16 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 	return f.mem.InternList(items)
 }
 
+// AssignPlaceholders is used just before execution of a prepared Memo. It walks
+// the tree, replacing any placeholder it finds with its assigned value. This
+// will trigger the rebuild of that node's ancestors, as well as triggering
+// additional normalization rules that can substantially rewrite the tree. Once
+// all placeholders are assigned, the exploration phase can begin.
+func (f *Factory) AssignPlaceholders() {
+	root := f.assignPlaceholders(f.Memo().RootGroup())
+	f.Memo().SetRoot(root, f.Memo().RootProps())
+}
+
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
