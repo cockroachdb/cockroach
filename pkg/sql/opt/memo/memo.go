@@ -16,6 +16,7 @@ package memo
 
 import (
 	"bytes"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -138,6 +139,9 @@ type Memo struct {
 	// root is the root of the lowest cost expression tree in the memo. It is
 	// set once after optimization is complete.
 	root BestExprID
+
+	// memEstimate is the approximate memory usage of the memo, in bytes.
+	memEstimate int64
 }
 
 // Init initializes a new empty memo instance, or resets existing state so it
@@ -163,6 +167,14 @@ func (m *Memo) Init() {
 	m.listStorage.init()
 	m.privateStorage.init()
 	m.root = BestExprID{}
+	m.memEstimate = 0
+}
+
+// MemoryEstimate returns a rough estimate of the memo's memory usage, in bytes.
+// It only includes memory usage that is proportional to the size and complexity
+// of the query, rather than constant overhead bytes.
+func (m *Memo) MemoryEstimate() int64 {
+	return m.memEstimate + m.listStorage.memoryEstimate() + m.privateStorage.memoryEstimate()
 }
 
 // Metadata returns the metadata instance associated with the memo.
@@ -277,6 +289,12 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	if existing != 0 {
 		return existing
 	}
+
+	// Use rough memory usage estimate of size of group * 4 to account for size
+	// of group struct + logical props + best exprs + expr map overhead.
+	const groupSize = int64(unsafe.Sizeof(group{}))
+	m.memEstimate += groupSize * 4
+
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
@@ -296,6 +314,11 @@ func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
 			panic("denormalized expression's group doesn't match fingerprint group")
 		}
 	} else {
+		// Use rough memory usage estimate of size of expr * 4 to account for size
+		// of expr struct + fingerprint + expr map overhead.
+		const exprSize = int64(unsafe.Sizeof(Expr{}))
+		m.memEstimate += exprSize * 4
+
 		// Add the denormalized expression to the memo.
 		m.group(group).addExpr(denorm)
 		m.exprMap[denorm.Fingerprint()] = group
