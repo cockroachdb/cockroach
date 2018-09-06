@@ -203,8 +203,8 @@ func (s *scope) makeOrderingChoice() props.OrderingChoice {
 
 // makePhysicalProps constructs physical properties using the columns in the
 // scope for presentation and s.ordering for required ordering.
-func (s *scope) makePhysicalProps() props.Physical {
-	p := props.Physical{}
+func (s *scope) makePhysicalProps() *props.Physical {
+	p := &props.Physical{}
 
 	if len(s.cols) > 0 {
 		p.Presentation = make(props.Presentation, 0, len(s.cols))
