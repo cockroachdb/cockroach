@@ -16,8 +16,12 @@ package cli
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -74,9 +78,13 @@ func initCLIDefaults() {
 	}
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.clientConnHost = ""
+	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.sqlConnURL = ""
 	cliCtx.sqlConnUser = ""
+	cliCtx.sqlConnPasswd = ""
 	cliCtx.sqlConnDBName = ""
+	cliCtx.extraConnURLOptions = nil
 
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
@@ -128,6 +136,16 @@ func initCLIDefaults() {
 	sqlfmtCtx.execStmts = nil
 
 	initPreFlagsDefaults()
+
+	// Clear the "Changed" state of all the registered command-line flags.
+	clearFlagChanges(cockroachCmd)
+}
+
+func clearFlagChanges(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	for _, subCmd := range cmd.Commands() {
+		clearFlagChanges(subCmd)
+	}
 }
 
 // cliContext captures the command-line parameters of most CLI commands.
@@ -156,9 +174,22 @@ type cliContext struct {
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
 
+	// clientConnHost is the hostname/address to use to connect to a server.
+	clientConnHost string
+
+	// clientConnPort is the port name/number to use to connect to a server.
+	clientConnPort string
+
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.
 	sqlConnURL, sqlConnUser, sqlConnDBName string
+
+	// The client password to use. This can be set via the --url flag.
+	sqlConnPasswd string
+
+	// extraConnURLOptions contains any additional query URL options
+	// specified in --url that do not have discrete equivalents.
+	extraConnURLOptions url.Values
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.

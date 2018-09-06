@@ -47,7 +47,6 @@ import (
 //   flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
-var clientConnHost, clientConnPort string
 var localityAdvertiseHosts localityList
 
 // initPreFlagsDefaults initializes the values of the global variables
@@ -60,8 +59,6 @@ func initPreFlagsDefaults() {
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
 
-	clientConnHost = ""
-	clientConnPort = base.DefaultPort
 	localityAdvertiseHosts = localityList{}
 }
 
@@ -382,8 +379,8 @@ func init() {
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		VarFlag(f, addrSetter{&clientConnHost, &clientConnPort}, cliflags.ClientHost)
-		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
+		VarFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		StringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort, cliCtx.clientConnPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
@@ -439,17 +436,27 @@ func init() {
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
-		f := cmd.PersistentFlags()
+		f := cmd.Flags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
 
 		if cmd != demoCmd {
-			StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+			VarFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
 			StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
 		}
 
 		if cmd == sqlShellCmd {
 			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
 		}
+	}
+
+	// Make the other non-SQL client commands also recognize --url in
+	// strict SSL mode.
+	for _, cmd := range clientCmds {
+		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+			// --url already registered above, nothing to do.
+			continue
+		}
+		VarFlag(cmd.PersistentFlags(), urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 	}
 
 	// Commands that print tables.
@@ -464,18 +471,19 @@ func init() {
 	// By default, query times are not displayed. The default is overridden
 	// in the CLI shell.
 	for _, cmd := range tableOutputCommands {
-		f := cmd.Flags()
+		f := cmd.PersistentFlags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// sqlfmt command.
-	VarFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.execStmts, cliflags.Execute)
+	fmtFlags := sqlfmtCmd.Flags()
+	VarFlag(fmtFlags, &sqlfmtCtx.execStmts, cliflags.Execute)
 	cfg := tree.DefaultPrettyCfg()
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
+	IntFlag(fmtFlags, &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
+	IntFlag(fmtFlags, &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
+	BoolFlag(fmtFlags, &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
 
 	// Debug commands.
 	{
@@ -517,7 +525,7 @@ func extraServerFlagInit() {
 }
 
 func extraClientFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
