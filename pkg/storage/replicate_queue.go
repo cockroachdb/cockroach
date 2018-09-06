@@ -181,7 +181,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
@@ -195,13 +195,8 @@ func (rq *replicateQueue) shouldQueue(
 		return
 	}
 
-	// Find the zone config for this range.
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Error(ctx, err)
-		return
-	}
+	// Get the descriptor and zone config for this range.
+	desc, zone := repl.DescAndZone()
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
@@ -236,7 +231,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
 ) error {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -278,11 +273,11 @@ func (rq *replicateQueue) process(
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
-	sysCfg config.SystemConfig,
+	sysCfg *config.SystemConfig,
 	canTransferLease func() bool,
 	dryRun bool,
 ) (requeue bool, _ error) {
-	desc := repl.Desc()
+	desc, zone := repl.DescAndZone()
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
@@ -293,11 +288,6 @@ func (rq *replicateQueue) processOneChange(
 			return false, newQuorumError(
 				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)", lr, quorum)
 		}
-	}
-
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return false, err
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
@@ -566,7 +556,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
 	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* brandNewReplicaID */)

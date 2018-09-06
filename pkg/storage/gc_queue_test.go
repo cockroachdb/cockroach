@@ -476,8 +476,8 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -734,8 +734,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -853,8 +853,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
@@ -909,8 +909,8 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 
@@ -1009,8 +1009,8 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	cfg, ok := tc.gossip.GetSystemConfig()
-	if !ok {
+	cfg := tc.gossip.GetSystemConfig()
+	if cfg == nil {
 		t.Fatal("config not set")
 	}
 	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))

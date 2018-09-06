@@ -133,7 +133,7 @@ func (s *Store) ForceRaftSnapshotQueueProcess() {
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
 func (s *Store) ConsistencyQueueShouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, cfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, cfg *config.SystemConfig,
 ) (bool, float64) {
 	return s.consistencyQueue.shouldQueue(ctx, now, r, cfg)
 }
@@ -217,8 +217,8 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
-	cfg, ok := s.Gossip().GetSystemConfig()
-	if !ok {
+	cfg := s.Gossip().GetSystemConfig()
+	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.TODO())

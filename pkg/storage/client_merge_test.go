@@ -2220,12 +2220,14 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setThresholds := func(minBytes, maxBytes int64) {
-		lhs().SetByteThresholds(minBytes, maxBytes)
-		rhs().SetByteThresholds(minBytes, maxBytes)
+	setZones := func(zone *config.ZoneConfig) {
+		lhs().SetZoneConfig(zone)
+		rhs().SetZoneConfig(zone)
 	}
 
 	defaultZone := config.DefaultZoneConfig()
+	zoneTwiceMin := defaultZone
+	zoneTwiceMin.RangeMinBytes *= 2
 
 	reset := func(t *testing.T) {
 		t.Helper()
@@ -2239,7 +2241,7 @@ func TestMergeQueue(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		setThresholds(defaultZone.RangeMinBytes, defaultZone.RangeMaxBytes)
+		setZones(&defaultZone)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -2276,7 +2278,7 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
+		setZones(&zoneTwiceMin)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
@@ -2291,7 +2293,7 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
+		setZones(&zoneTwiceMin)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
@@ -2301,7 +2303,10 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		setThresholds(200, 200)
+		zone := defaultZone
+		zone.RangeMinBytes = 200
+		zone.RangeMaxBytes = 200
+		setZones(&zone)
 		bytes := randutil.RandBytes(rng, 100)
 		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
 			t.Fatal(err)
@@ -2312,7 +2317,8 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setThresholds(200, 400)
+		zone.RangeMaxBytes = 400
+		setZones(&zone)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
