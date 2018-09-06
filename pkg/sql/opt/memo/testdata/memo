@@ -129,7 +129,7 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized)
+memo (optimized, ~17KB)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
@@ -182,7 +182,7 @@ SELECT 1 AS a, 1+z AS b, left(x, 10)::TIMESTAMP AS c, left(x, 10)::TIMESTAMPTZ A
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
-memo (optimized)
+memo (optimized, ~12KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: a:3,b:4,c:5,d:6]"
  │         ├── best: (project G2 G3)
@@ -215,7 +215,7 @@ memo (optimized)
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G2 G3)
@@ -246,7 +246,7 @@ memo raw-memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
 root: G12, [presentation: x:1]
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (scan a)
  │    └── ""
  │         ├── best: (scan a)
@@ -278,7 +278,7 @@ memo (optimized)
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized)
+memo (optimized, ~6KB)
  ├── G1: (union G2 G3)
  │    └── "[presentation: x:7,y:8]"
  │         ├── best: (union G2 G3)
@@ -305,7 +305,7 @@ memo (optimized)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized)
+memo (optimized, ~4KB)
  ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -321,7 +321,7 @@ memo (optimized)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
-memo (optimized)
+memo (optimized, ~4KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (project G2 G3)
@@ -342,7 +342,7 @@ memo (optimized)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
-memo (optimized)
+memo (optimized, ~3KB)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
@@ -361,7 +361,7 @@ memo (optimized)
 memo
 SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized)
+memo (optimized, ~6KB)
  ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── "[presentation: field:3]"
  │         ├── best: (distinct-on G2 G3 cols=(3))
@@ -386,7 +386,7 @@ memo (optimized)
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized)
+memo (optimized, ~3KB)
  ├── G1: (distinct-on G2 G3 cols=(4))
  │    └── "[presentation: tag:4]"
  │         ├── best: (distinct-on G2 G3 cols=(4))

@@ -86,7 +86,7 @@ TABLE xyz
 memo
 SELECT * FROM abc JOIN xyz ON a=z
 ----
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (inner-join G2 G4 G5) (inner-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (inner-join G2 G4 G5)
@@ -114,7 +114,7 @@ memo (optimized)
 memo
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
 ----
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (full-join G2 G3 G5) (full-join G3 G2 G5) (merge-join G2 G3 G4)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (full-join G2 G3 G5)
@@ -181,7 +181,7 @@ full-join
 memo
 SELECT * FROM abc LEFT OUTER JOIN xyz ON a=z
 ----
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (left-join G2 G3 G5) (right-join G3 G2 G5) (merge-join G2 G3 G4)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (left-join G2 G3 G5)
@@ -228,7 +228,7 @@ right-join
 memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
-memo (optimized)
+memo (optimized, ~9KB)
  ├── G1: (right-join G2 G4 G5) (left-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (right-join G2 G4 G5)
@@ -293,7 +293,7 @@ inner-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-memo (optimized)
+memo (optimized, ~10KB)
  ├── G1: (inner-join G3 G5 G6) (inner-join G5 G3 G6) (merge-join G3 G5 G2) (lookup-join G3 G6 xyz@xy,keyCols=[1],lookupCols=(5-7)) (merge-join G5 G3 G4) (lookup-join G5 G6 abc@ab,keyCols=[5],lookupCols=(1-3))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (merge-join G3="[ordering: +1]" G5="[ordering: +5]" G2)
@@ -381,7 +381,7 @@ inner-join
 memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized)
+memo (optimized, ~15KB)
  ├── G1: (inner-join G5 G7 G8) (inner-join G7 G5 G8) (merge-join G5 G7 G2) (merge-join G5 G7 G3) (lookup-join G5 G8 stu,keyCols=[1 2 3],lookupCols=(4-6)) (lookup-join G5 G8 stu@uts,keyCols=[3 2 1],lookupCols=(4-6)) (merge-join G7 G5 G4) (merge-join G7 G5 G6) (lookup-join G7 G8 stu,keyCols=[4 5 6],lookupCols=(1-3)) (lookup-join G7 G8 stu@uts,keyCols=[6 5 4],lookupCols=(1-3))
  │    └── "[presentation: s:1,t:2,u:3,s:4,t:5,u:6]"
  │         ├── best: (merge-join G5="[ordering: +1,+2,+3]" G7="[ordering: +4,+5,+6]" G2)
@@ -611,7 +611,7 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized)
+memo (optimized, ~12KB)
  ├── G1: (inner-join G3 G2 G4) (inner-join G2 G3 G4)
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (inner-join G2 G3 G4)
@@ -653,7 +653,7 @@ TABLE kfloat
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
 ----
-memo (optimized)
+memo (optimized, ~7KB)
  ├── G1: (inner-join G3 G2 G4) (inner-join G2 G3 G4)
  │    └── "[presentation: a:1,b:2,c:3,k:5]"
  │         ├── best: (inner-join G3 G2 G4)
