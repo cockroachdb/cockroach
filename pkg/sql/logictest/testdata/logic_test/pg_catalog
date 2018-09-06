@@ -1613,3 +1613,13 @@ query OOTT colnames
 SELECT objoid, classoid, provider, label FROM pg_catalog.pg_shseclabel
 ----
 objoid  classoid  provider  label
+
+subtest collated_string_type
+
+statement ok
+CREATE TABLE coltab (a STRING COLLATE en)
+
+query OT
+SELECT typ.oid, typ.typname FROM pg_attribute att JOIN pg_type typ ON atttypid=typ.oid WHERE attrelid='coltab'::regclass AND attname='a'
+----
+25 text
