@@ -17,11 +17,14 @@ package cli
 import (
 	"context"
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"fmt"
+	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -147,6 +150,200 @@ func TestClockOffsetFlagValue(t *testing.T) {
 		}
 		if td.expected != time.Duration(serverCfg.MaxOffset) {
 			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, serverCfg.MaxOffset)
+		}
+	}
+}
+
+func TestClientURLFlagEquivalence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	// Prepare a dummy default certificate directory.
+	defCertsDirPath, err := ioutil.TempDir("", "defCerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
+	cleanup := createTestCerts(defCertsDirPath)
+	defer func() { _ = cleanup() }()
+
+	// Prepare a custom certificate directory.
+	testCertsDirPath, err := ioutil.TempDir("", "customCerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
+	cleanup2 := createTestCerts(testCertsDirPath)
+	defer func() { _ = cleanup2() }()
+
+	anyCmd := []string{"sql", "quit"}
+	anyNonSQL := []string{"quit", "init"}
+	anySQL := []string{"sql", "dump"}
+	sqlShell := []string{"sql"}
+	anyNonSQLShell := []string{"dump", "quit"}
+
+	testData := []struct {
+		cmds    []string
+		flags   []string
+		refargs []string
+		expErr  string
+	}{
+		// Check individual URL components.
+		{anyCmd, []string{"--url=http://foo"}, nil, `URL scheme must be "postgresql"`},
+		{anyCmd, []string{"--url=postgresql:foo/bar"}, nil, `unknown URL format`},
+
+		{anyCmd, []string{"--url=postgresql://foo"}, []string{"--host=foo"}, ""},
+		{anyCmd, []string{"--url=postgresql://:foo"}, []string{"--port=foo"}, ""},
+
+		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, ""},
+		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, ""},
+
+		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, ""},
+		{anyNonSQL, []string{"--url=postgresql://foo@bar"}, []string{"--host=bar" /*user ignored*/}, ""},
+
+		{sqlShell, []string{"--url=postgresql://a@b:c/d"}, []string{"--user=a", "--host=b", "--port=c", "--database=d"}, ""},
+		{anySQL, []string{"--url=postgresql://a@b:c"}, []string{"--user=a", "--host=b", "--port=c"}, ""},
+		{anyNonSQL, []string{"--url=postgresql://b:c"}, []string{"--host=b", "--port=c"}, ""},
+
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full"},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, ""},
+
+		// URL picks up previous flags if component not specified.
+		{anyCmd, []string{"--host=baz", "--url=postgresql://:foo"}, []string{"--host=baz", "--port=foo"}, ""},
+		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, ""},
+		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, ""},
+		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, ""},
+		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, ""},
+		{anyCmd, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, ""},
+
+		// URL overrides previous flags if component specified.
+		{anyCmd, []string{"--host=baz", "--url=postgresql://bar"}, []string{"--host=bar"}, ""},
+		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, []string{"--host=foo", "--port=bar"}, ""},
+		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, ""},
+		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, ""},
+		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, ""},
+		{anyCmd, []string{"--insecure", "--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, ""},
+
+		// Discrete flag overrides URL if specified afterwards.
+		{anyCmd, []string{"--url=postgresql://bar", "--host=baz"}, []string{"--host=baz"}, ""},
+		{anyCmd, []string{"--url=postgresql://foo:bar", "--port=baz"}, []string{"--host=foo", "--port=baz"}, ""},
+		{sqlShell, []string{"--url=postgresql://foo/bar", "--database=baz"}, []string{"--host=foo", "--database=baz"}, ""},
+		{anySQL, []string{"--url=postgresql://bar@foo", "--user=baz"}, []string{"--host=foo", "--user=baz"}, ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, ""},
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, ""},
+
+		// Check that the certs dir is extracted properly.
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=" + testCertsDirPath + "/ca.crt"}, []string{"--host=foo", "--certs-dir=" + testCertsDirPath}, ""},
+		{anyNonSQL, []string{"--certs-dir=blah", "--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt"}, nil, "non-homogeneous certificate directory"},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/ca.crt&sslcert=blah/client.root.crt"}, nil, "non-homogeneous certificate directory"},
+
+		// Check the cert component file names are checked.
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`},
+	}
+
+	type capturedFlags struct {
+		connHost     string
+		connPort     string
+		connUser     string
+		connDatabase string
+		insecure     bool
+		certsDir     string
+	}
+
+	// capture saves the parameter values computed in a round of
+	// command-line argument parsing.
+	capture := func(cmd *cobra.Command) capturedFlags {
+		certsDir := defCertsDirPath
+		if f := cmd.Flags().Lookup(cliflags.CertsDir.Name); f != nil && f.Changed {
+			certsDir = baseCfg.SSLCertsDir
+		}
+		return capturedFlags{
+			insecure:     baseCfg.Insecure,
+			connUser:     cliCtx.sqlConnUser,
+			connDatabase: cliCtx.sqlConnDBName,
+			connHost:     cliCtx.clientConnHost,
+			connPort:     cliCtx.clientConnPort,
+			certsDir:     certsDir,
+		}
+	}
+
+	for _, test := range testData {
+		for _, cmdName := range test.cmds {
+			t.Run(fmt.Sprintf("%s/%s", cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
+				cmd, _, _ := cockroachCmd.Find([]string{cmdName})
+
+				// Parse using the URL.
+				// This checks the URL parser works and/or that it produces the expected error.
+				initCLIDefaults()
+				cliCtx.SSLCertsDir = defCertsDirPath
+				err := cmd.ParseFlags(test.flags)
+				if !testutils.IsError(err, test.expErr) {
+					t.Fatalf("expected %q, got %v", test.expErr, err)
+				}
+				if err != nil {
+					return
+				}
+				urlParams := capture(cmd)
+				connURL, err := cliCtx.makeClientConnURL()
+				if err != nil {
+					t.Fatal(err)
+				}
+				resultURL := connURL.String()
+
+				// Parse using the discrete flags.
+				// We use this to generate the reference parameter values for the comparison below.
+				initCLIDefaults()
+				cliCtx.SSLCertsDir = defCertsDirPath
+				if err := cmd.ParseFlags(test.refargs); err != nil {
+					t.Fatal(err)
+				}
+				discreteParams := capture(cmd)
+				connURL, err = cliCtx.makeClientConnURL()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defaultURL := connURL.String()
+
+				// Verify that parsing the URL produces the same parameters as parsing the discrete flags.
+				if urlParams != discreteParams {
+					t.Fatalf("mismatch: URL %q parses\n%+v,\ndiscrete parses\n%+v", resultURL, urlParams, discreteParams)
+				}
+
+				// Re-parse using the derived URL.
+				// We'll want to ensure below that the derived URL specifies the same parameters
+				// (i.e. check makeClientConnURL does its work properly).
+				initCLIDefaults()
+				cliCtx.SSLCertsDir = defCertsDirPath
+				if err := cmd.ParseFlags([]string{"--url=" + resultURL}); err != nil {
+					t.Fatal(err)
+				}
+				urlParams2 := capture(cmd)
+
+				// Verify that makeClientConnURL is still specifying the same things.
+				if urlParams2 != discreteParams {
+					t.Fatalf("mismatch during reparse: derived URL %q parses\n%+v,\ndiscrete parses\n%+v", resultURL, urlParams2, discreteParams)
+				}
+
+				// Re-parse using the derived URL from discrete parameters.
+				// We're checking here that makeClientConnURL is also doing its job
+				// properly when computing a URL from discrete parameters.
+				initCLIDefaults()
+				cliCtx.SSLCertsDir = defCertsDirPath
+				if err := cmd.ParseFlags([]string{"--url=" + defaultURL}); err != nil {
+					t.Fatal(err)
+				}
+				urlParams3 := capture(cmd)
+
+				if urlParams2 != urlParams3 {
+					t.Fatalf("mismatch during reparse 2: derived URL %q parses\n%+v,\ndefault URL %q reparses\n%+v", resultURL, urlParams2, defaultURL, urlParams3)
+				}
+			})
 		}
 	}
 }

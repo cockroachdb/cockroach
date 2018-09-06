@@ -24,12 +24,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
 
 	f := StartCmd.Flags()
 
@@ -75,6 +79,13 @@ func TestInitInsecure(t *testing.T) {
 
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	// In addition to the usual initCLIDefaults, we need to reset
+	// the serverCfg because --store modifies it in a way that
+	// initCLIDefaults does not restore.
+	defer func(save server.Config) { serverCfg = save }(serverCfg)
+	defer initCLIDefaults()
 
 	f := StartCmd.Flags()
 
