@@ -3904,39 +3904,14 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// we expect the originator to campaign instead.
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
-		if req.Message.Type == raftpb.MsgProp {
-			// A proposal was forwarded to this replica.
-			if r.mu.replicaID == r.mu.leaderID {
-				// This replica is the leader. Record that the proposal
-				// was seen and drop the proposal if it was already seen.
-				// This prevents duplicate forwarded proposals from each
-				// being appended to a leader's raft log.
-				allSeen := true
-				for _, e := range req.Message.Entries {
-					switch e.Type {
-					case raftpb.EntryNormal:
-						cmdID, _ := DecodeRaftCommand(e.Data)
-						if r.mu.remoteProposals == nil {
-							r.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{}
-						}
-						if _, ok := r.mu.remoteProposals[cmdID]; !ok {
-							r.mu.remoteProposals[cmdID] = struct{}{}
-							allSeen = false
-						}
-					case raftpb.EntryConfChange:
-						// We could peek into the EntryConfChange to find the
-						// command ID, but we don't expect follower-initiated
-						// conf changes.
-						allSeen = false
-					default:
-						log.Fatalf(context.TODO(), "unexpected Raft entry: %v", e)
-					}
-				}
-				if allSeen {
-					return false /* unquiesceAndWakeLeader */, nil
-				}
-			}
+
+		// Check if the message is a proposal that should be dropped.
+		if r.shouldDropForwardedProposalLocked(req) {
+			// If we could signal to the sender that it's proposal was
+			// accepted or dropped then we wouldn't need to track anything.
+			return false /* unquiesceAndWakeLeader */, nil
 		}
+
 		err := raftGroup.Step(req.Message)
 		if err == raft.ErrProposalDropped {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -3948,6 +3923,53 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		}
 		return false /* unquiesceAndWakeLeader */, err
 	})
+}
+
+func (r *Replica) shouldDropForwardedProposalLocked(req *RaftMessageRequest) bool {
+	if req.Message.Type != raftpb.MsgProp {
+		// Not a proposal.
+		return false
+	}
+
+	if r.mu.replicaID != r.mu.leaderID {
+		// Always continue to forward proposals if we're not the leader.
+		return false
+	}
+
+	// Record that the proposal was seen and drop the proposal if it was
+	// already seen. This prevents duplicate forwarded proposals from each
+	// being appended to a leader's raft log.
+	drop := true
+	for _, e := range req.Message.Entries {
+		switch e.Type {
+		case raftpb.EntryNormal:
+			cmdID, data := DecodeRaftCommand(e.Data)
+			if len(data) == 0 {
+				// An empty command is proposed to unquiesce a range and
+				// wake the leader. Don't keep track of these forwarded
+				// proposals because they will never be cleaned up.
+				drop = false
+			} else {
+				// Record that the proposal was seen so that we can catch
+				// duplicate proposals in the future.
+				if r.mu.remoteProposals == nil {
+					r.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{}
+				}
+				if _, ok := r.mu.remoteProposals[cmdID]; !ok {
+					r.mu.remoteProposals[cmdID] = struct{}{}
+					drop = false
+				}
+			}
+		case raftpb.EntryConfChange:
+			// We could peek into the EntryConfChange to find the
+			// command ID, but we don't expect follower-initiated
+			// conf changes.
+			drop = false
+		default:
+			log.Fatalf(context.TODO(), "unexpected Raft entry: %v", e)
+		}
+	}
+	return drop
 }
 
 type handleRaftReadyStats struct {
