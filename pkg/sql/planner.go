@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
@@ -197,7 +198,7 @@ func newInternalPlanner(
 	// asking the caller for one is hard to explain. What we need is better and
 	// separate interfaces for planning and running plans, which could take
 	// suitable contexts.
-	ctx := log.WithLogTagStr(context.Background(), opName, "")
+	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
 		SearchPath:    sqlbase.DefaultSearchPath,

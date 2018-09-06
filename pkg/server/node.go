@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -811,7 +812,7 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 }
 
 func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
-	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
 	pm := metric.MakePrometheusExporter()
 
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -838,7 +839,7 @@ func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
 // startWriteNodeStatus begins periodically persisting status summaries for the
 // node and its stores.
 func (n *Node) startWriteNodeStatus(frequency time.Duration) {
-	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "summaries", nil)
+	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "summaries", nil)
 	// Immediately record summaries once on server startup.
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Write a status summary immediately; this helps the UI remain
