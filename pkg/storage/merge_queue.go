@@ -273,6 +273,11 @@ func (mq *mergeQueue) process(
 		// as purgatory-worthy.
 		return rangeMergePurgatoryError{err}
 	}
+	if testingAggressiveConsistencyChecks {
+		if err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
+			log.Warning(ctx, err)
+		}
+	}
 	return nil
 }
 
