@@ -17,10 +17,12 @@ package log
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
+
+	opentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // AmbientContext is a helper type used to "annotate" context.Contexts with log
@@ -63,39 +65,16 @@ type AmbientContext struct {
 	// log or an open span (if not nil).
 	eventLog *ctxEventLog
 
-	tags *logTag
+	tags *logtags.Buffer
 
 	// Cached annotated version of context.{TODO,Background}, to avoid annotating
 	// these contexts repeatedly.
 	backgroundCtx context.Context
 }
 
-func (ac *AmbientContext) addTag(field otlog.Field) {
-	ac.tags = &logTag{Field: field, parent: ac.tags}
-	ac.refreshCache()
-}
-
-// AddLogTag adds a tag; see WithLogTag.
+// AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
-	ac.addTag(otlog.Object(name, value))
-	ac.refreshCache()
-}
-
-// AddLogTagInt adds an integer tag; see WithLogTagInt.
-func (ac *AmbientContext) AddLogTagInt(name string, value int) {
-	ac.addTag(otlog.Int(name, value))
-	ac.refreshCache()
-}
-
-// AddLogTagInt64 adds an integer tag; see WithLogTagInt64.
-func (ac *AmbientContext) AddLogTagInt64(name string, value int64) {
-	ac.addTag(otlog.Int64(name, value))
-	ac.refreshCache()
-}
-
-// AddLogTagStr adds a string tag; see WithLogTagStr.
-func (ac *AmbientContext) AddLogTagStr(name string, value string) {
-	ac.addTag(otlog.String(name, value))
+	ac.tags = ac.tags.Add(name, value)
 	ac.refreshCache()
 }
 
@@ -157,7 +136,7 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 			ctx = embedCtxEventLog(ctx, ac.eventLog)
 		}
 		if ac.tags != nil {
-			ctx = context.WithValue(ctx, contextTagKeyType{}, ac.tags)
+			ctx = logtags.WithTags(ctx, ac.tags)
 		}
 		return ctx
 	}
@@ -168,7 +147,7 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
 	if ac.tags != nil {
-		ctx = augmentTagChain(ctx, ac.tags)
+		ctx = logtags.AddTags(ctx, ac.tags)
 	}
 	return ctx
 }
@@ -192,7 +171,7 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	default:
 		if ac.tags != nil {
-			ctx = augmentTagChain(ctx, ac.tags)
+			ctx = logtags.AddTags(ctx, ac.tags)
 		}
 	}
 
@@ -208,9 +187,3 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 	rootSpan := ac.Tracer.StartSpan(opName)
 	return opentracing.ContextWithSpan(ctx, rootSpan), rootSpan
 }
-
-// TODO(radu): remove once they start getting used.
-var _ = AmbientContext{}.Tracer
-var _ = (*AmbientContext).AddLogTagInt
-var _ = (*AmbientContext).AddLogTagInt64
-var _ = (*AmbientContext).AddLogTagStr

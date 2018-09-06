@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -234,7 +235,7 @@ func (c *conn) serveImpl(
 		return err
 	}
 
-	ctx = log.WithLogTagStr(ctx, "user", c.sessionArgs.User)
+	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	ctx, stopReader := context.WithCancel(ctx)
 	defer stopReader() // This calms the linter that wants these callbacks to always be called.
 	var ctxCanceled bool

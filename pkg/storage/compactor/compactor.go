@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -100,7 +101,7 @@ func (c *Compactor) poke() {
 // provided stopper indicates. Processing is done with a periodicity of
 // compactionMinInterval, but only if there are compactions pending.
 func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
-	ctx = log.WithLogTagStr(ctx, "compactor", "")
+	ctx = logtags.AddTag(ctx, "compactor", "")
 
 	// Wake up immediately to examine the queue and set the bytes queued metric.
 	// Note that the compactor may have received suggestions before having been

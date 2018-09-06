@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -70,7 +71,7 @@ func (*backfiller) OutputTypes() []sqlbase.ColumnType {
 // Run is part of the Processor interface.
 func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
-	ctx = log.WithLogTagInt(ctx, opName, int(b.spec.Table.ID))
+	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
 	ctx, span := processorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
 
