@@ -260,7 +260,7 @@ func (s *Store) AssertInvariants() {
 				log.Fatalf(ctx, "%v misplaced in replicasByKey; found %v instead", repl, ex)
 			}
 		} else if _, ok := s.mu.uninitReplicas[repl.RangeID]; !ok {
-			log.Fatalf(ctx, "%v missing from unitReplicas", repl)
+			log.Fatalf(ctx, "%v missing from uninitReplicas", repl)
 		}
 		return true // keep iterating
 	})
