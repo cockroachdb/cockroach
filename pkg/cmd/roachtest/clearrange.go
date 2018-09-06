@@ -23,6 +23,8 @@ import (
 )
 
 func registerClearRange(r *registry) {
+	const aggressiveConsistencyChecks = true
+
 	r.Add(testSpec{
 		Name:       `clearrange`,
 		MinVersion: `v2.1.0`,
@@ -52,7 +54,13 @@ func registerClearRange(r *registry) {
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			if aggressiveConsistencyChecks {
+				// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
+				// This slows down merges, so it might hide some races.
+				c.Start(ctx, startArgs("--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true"))
+			} else {
+				c.Start(ctx)
+			}
 
 			// Also restore a much smaller table. We'll use it to run queries against
 			// the cluster after having dropped the large table above, verifying that
@@ -68,12 +76,50 @@ func registerClearRange(r *registry) {
 
 			t.Status()
 
+			// Set up a convenience function that we can call to learn the number of
+			// ranges for the bank.bank table (even after it's been dropped).
+			numBankRanges := func() func() int {
+				conn := c.Conn(ctx, 1)
+				defer conn.Close()
+
+				var startHex string
+				// NB: set this to false to save yourself some time during development. Selecting
+				// from crdb_internal.ranges is very slow because it contacts all of the leaseholders.
+				// You may actually want to run a version of cockroach that doesn't do that because
+				// it'll still slow you down every time the method returned below is called.
+				if true {
+					if err := conn.QueryRow(
+						`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE "database" = 'bank' AND "table" = 'bank' ORDER BY start_key ASC LIMIT 1`,
+					).Scan(&startHex); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					startHex = "bd" // extremely likely to be the right thing (b'\275').
+				}
+				return func() int {
+					conn := c.Conn(ctx, 1)
+					defer conn.Close()
+					var n int
+					if err := conn.QueryRow(
+						`SELECT count(*) FROM crdb_internal.ranges WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
+					).Scan(&n); err != nil {
+						t.Fatal(err)
+					}
+					return n
+				}
+			}()
+
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				conn := c.Conn(ctx, 1)
 				defer conn.Close()
 
 				if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`); err != nil {
+					return err
+				}
+
+				// Merge as fast as possible to put maximum stress on the system.
+				if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_interval = '0s'`); err != nil {
 					return err
 				}
 
@@ -86,41 +132,46 @@ func registerClearRange(r *registry) {
 					return err
 				}
 
+				t.WorkerStatus("computing number of ranges")
+				initialBankRanges := numBankRanges()
+
+				t.WorkerStatus("dropping bank table")
 				if _, err := conn.ExecContext(ctx, `DROP TABLE bank.bank`); err != nil {
 					return err
 				}
 
-				// Spend a few minutes reading data with a timeout to make sure the
+				// Spend some time reading data with a timeout to make sure the
 				// DROP above didn't brick the cluster. At the time of writing,
-				// clearing all of the table data takes ~6min. We run for 2.5x that
-				// time to verify that nothing has gone wonky on the cluster.
-				//
-				// Don't lower this number, or the test may pass erroneously.
-				const minutes = 45
-				t.WorkerStatus("repeatedly running count(*) on small table")
-				for i := 0; i < minutes; i++ {
-					after := time.After(time.Minute)
+				// clearing all of the table data takes ~6min, so we want to run
+				// for at least a multiple of that duration.
+				const minDuration = 45 * time.Minute
+				deadline := timeutil.Now().Add(minDuration)
+				curBankRanges := numBankRanges()
+				t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", minDuration, " to pass)")
+				for timeutil.Now().Before(deadline) || curBankRanges > 1 {
+					after := time.After(5 * time.Minute)
+					curBankRanges = numBankRanges() // this call takes minutes, unfortunately
+					t.WorkerProgress(1 - float64(curBankRanges)/float64(initialBankRanges))
+
 					var count int
 					// NB: context cancellation in QueryRowContext does not work as expected.
 					// See #25435.
-					if _, err := conn.ExecContext(ctx, `SET statement_timeout = '10s'`); err != nil {
+					if _, err := conn.ExecContext(ctx, `SET statement_timeout = '5s'`); err != nil {
 						return err
 					}
-					// If we can't aggregate over 80kb in 10s, the database is far from usable.
-					start := timeutil.Now()
+					// If we can't aggregate over 80kb in 5s, the database is far from usable.
 					if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM tinybank.bank`).Scan(&count); err != nil {
 						return err
 					}
-					c.l.Printf("read %d rows in %0.1fs\n", count, timeutil.Since(start).Seconds())
-					t.WorkerProgress(float64(i+1) / float64(minutes))
+
 					select {
 					case <-after:
 					case <-ctx.Done():
 						return ctx.Err()
 					}
 				}
-				// TODO(benesch): verify that every last range in the table has been
-				// merged away. For now, just exercising the merge code is a good start.
+				// TODO(tschottdorf): verify that disk space usage drops below to <some small amount>, but that
+				// may not actually happen (see https://github.com/cockroachdb/cockroach/issues/29290).
 				return nil
 			})
 			m.Wait()
