@@ -185,7 +185,7 @@ func maybeInlineSideloadedRaftCommand(
 	// We could unmarshal this yet again, but if it's committed we
 	// are very likely to have appended it recently, in which case
 	// we can save work.
-	cachedSingleton, _, _ := entryCache.getEntries(
+	cachedSingleton, _, _, _ := entryCache.getEntries(
 		nil, rangeID, ent.Index, ent.Index+1, 1<<20,
 	)
 
