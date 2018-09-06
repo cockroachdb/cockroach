@@ -77,7 +77,7 @@ opt
 SELECT *
 FROM a
 WHERE
-    i+1 = 2 AND
+    k+1 = 2 AND
     (f+f)+2 < 5 AND
     1::decimal+i <= length('foo') AND
     i+2+2 > 10 AND
@@ -85,18 +85,20 @@ WHERE
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── i = (2 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (f + f) < (5.0 - 2.0) [type=bool, outer=(3)]
+ │    ├── constraint: /1: [/1 - /1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-5)
+ └── filters [type=bool, outer=(2,3), constraints=(/2: [/7 - ])]
+      ├── (f + f) < 3.0 [type=bool, outer=(3)]
       ├── i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── i > ((10 - 2) - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── i::INTERVAL >= ('02:00:00' - '01:00:00') [type=bool, outer=(2)]
+      ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
+      └── i::INTERVAL >= '1h' [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
@@ -120,7 +122,7 @@ opt
 SELECT *
 FROM a
 WHERE
-    i-1 = 2 AND
+    k-1 = 2 AND
     (f+f)-2 < 5 AND
     i-1::decimal <= length('foo') AND
     i-2-2 > 10 AND
@@ -128,18 +130,20 @@ WHERE
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── i = (2 + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (f + f) < (5.0 + 2.0) [type=bool, outer=(3)]
+ │    ├── constraint: /1: [/3 - /3]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-5)
+ └── filters [type=bool, outer=(2,3), constraints=(/2: [/15 - ])]
+      ├── (f + f) < 7.0 [type=bool, outer=(3)]
       ├── i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (f + i::FLOAT8) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
+      ├── i > 14 [type=bool, outer=(2), constraints=(/2: [/15 - ]; tight)]
+      └── (f + i::FLOAT8) >= 110.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Plus overload is not defined.
 opt
@@ -163,7 +167,7 @@ opt
 SELECT *
 FROM a
 WHERE
-    1-i = 2 AND
+    1-k = 2 AND
     2-(f+f) < 5 AND
     1::decimal-i <= length('foo') AND
     2-(2-i) > 10 AND
@@ -171,18 +175,20 @@ WHERE
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── i = (1 - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── (f + f) > (2.0 - 5.0) [type=bool, outer=(3)]
+ │    ├── constraint: /1: [/-1 - /-1]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1-5)
+ └── filters [type=bool, outer=(2,3), constraints=(/2: [/11 - ])]
+      ├── (f + f) > -3.0 [type=bool, outer=(3)]
       ├── i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      ├── i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      └── (f + i::FLOAT8) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
+      ├── i > 10 [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
+      └── (f + i::FLOAT8) <= -90.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
