@@ -107,9 +107,16 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 
 // TypeCheck is part of the tree.Expr interface.
 func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
-	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
+	// The FuncExpr contained in this aggregateInfo was already type checked in
+	// scope.replaceAggregate. However, after all aggregates in an expression
+	// tree are replaced with aggregateInfos, the full expression tree is type
+	// checked in scope.resolveType, which causes this function to be called.
+
+	// Check that this aggregate is allowed in the current context.
+	if _, err := a.ResolveAndCheck(ctx); err != nil {
 		return nil, err
 	}
+
 	return a, nil
 }
 
@@ -118,8 +125,12 @@ func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("aggregateInfo must be replaced before evaluation")
 }
 
+// Variable implements the VariableExpr interface.
+func (a *aggregateInfo) Variable() {}
+
 var _ tree.Expr = &aggregateInfo{}
 var _ tree.TypedExpr = &aggregateInfo{}
+var _ tree.VariableExpr = &aggregateInfo{}
 
 func (b *Builder) needsAggregation(sel *tree.SelectClause, scope *scope) bool {
 	// We have an aggregation if:

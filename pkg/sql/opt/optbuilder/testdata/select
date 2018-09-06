@@ -157,7 +157,7 @@ project
            │    └── variable: b [type=int]
            └── variable: c [type=int]
 
-build allow-unsupported
+build
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 project
@@ -577,7 +577,7 @@ project
  └── scan boolean_table
       └── columns: id:1(int!null) value:2(bool)
 
-build allow-unsupported
+build skip-fold-constants
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 project
@@ -591,6 +591,16 @@ project
            │    ├── null [type=unknown]
            │    └── const: 1 [type=int]
            └── const: 2 [type=int]
+
+build
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+project
+ ├── columns: case:1(int!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 2 [type=int]
 
 build
 SELECT 0 * b AS r, b % 1 AS s, 0 % b AS t from abc
@@ -615,15 +625,11 @@ build
 SELECT 1 IN (1, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── in [type=bool]
-           ├── const: 1 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── const: 2 [type=int]
+      └── true [type=bool]
 
 build
 SELECT NULL IN (1, 2) AS r
@@ -633,11 +639,8 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── in [type=bool]
-           ├── null [type=unknown]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 1 [type=int]
-                └── const: 2 [type=int]
+      └── cast: BOOL [type=bool]
+           └── null [type=unknown]
 
 build
 SELECT 1 IN (NULL, 2) AS r
@@ -647,11 +650,8 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── in [type=bool]
-           ├── const: 1 [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── null [type=unknown]
-                └── const: 2 [type=int]
+      └── cast: BOOL [type=bool]
+           └── null [type=unknown]
 
 build
 SELECT (1, NULL) IN ((1, 1)) AS r
@@ -661,14 +661,8 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── in [type=bool]
-           ├── tuple [type=tuple{int, int}]
-           │    ├── const: 1 [type=int]
-           │    └── null [type=unknown]
-           └── tuple [type=tuple{tuple{int, int}}]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── const: 1 [type=int]
+      └── cast: BOOL [type=bool]
+           └── null [type=unknown]
 
 # Tests with a tuple coming from a subquery.
 build
@@ -709,8 +703,7 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
-                └── cast: INT [type=int]
-                     └── null [type=unknown]
+                └── null [type=unknown]
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a)) AS r
@@ -752,8 +745,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                     └── null [type=unknown]
 
 # Tests with an empty IN tuple.
 build
@@ -806,7 +798,60 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
+                └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── filters [type=bool]
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
                 └── cast: INT [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
+----
+project
+ ├── columns: r:4(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── filters [type=bool]
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
                      └── null [type=unknown]
 
 build
@@ -861,8 +906,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
+                     └── null [type=unknown]
 
 build
 SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
@@ -916,63 +960,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
-
-build
-SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1) AS r
-----
-project
- ├── columns: r:2(bool)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
-                ├── select
-                │    ├── columns: column1:1(int!null)
-                │    ├── values
-                │    │    ├── columns: column1:1(int)
-                │    │    └── tuple [type=tuple{int}]
-                │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
-                │         └── gt [type=bool]
-                │              ├── variable: column1 [type=int]
-                │              └── const: 1 [type=int]
-                └── cast: INT [type=int]
                      └── null [type=unknown]
-
-build
-SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1) AS r
-----
-project
- ├── columns: r:4(bool)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── not [type=bool]
-           └── any: eq [type=bool]
-                ├── project
-                │    ├── columns: column3:3(tuple{int, int})
-                │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
-                │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
-                │    │    │    └── tuple [type=tuple{int, int}]
-                │    │    │         ├── const: 1 [type=int]
-                │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
-                │    │         └── gt [type=bool]
-                │    │              ├── variable: column1 [type=int]
-                │    │              └── const: 1 [type=int]
-                │    └── projections
-                │         └── tuple [type=tuple{int, int}]
-                │              ├── variable: column1 [type=int]
-                │              └── variable: column2 [type=int]
-                └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── cast: INT [type=int]
-                          └── null [type=unknown]
 
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)

@@ -59,8 +59,12 @@ func (s *srf) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("srf must be replaced before evaluation")
 }
 
+// Variable implements the VariableExpr interface.
+func (s *srf) Variable() {}
+
 var _ tree.Expr = &srf{}
 var _ tree.TypedExpr = &srf{}
+var _ tree.VariableExpr = &srf{}
 
 // buildZip builds a set of memo groups which represent a functional zip over
 // the given expressions.
@@ -93,13 +97,18 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			panic(builderError{err})
 		}
 		texpr := inScope.resolveType(expr, types.Any)
-		def, err := texpr.(*tree.FuncExpr).Func.Resolve(b.semaCtx.SearchPath)
-		if err != nil {
-			panic(builderError{err})
+
+		// After the above call, the function may have been converted to a constant.
+		var def *tree.FunctionDefinition
+		if f, ok := texpr.(*tree.FuncExpr); ok {
+			def, err = f.Func.Resolve(b.semaCtx.SearchPath)
+			if err != nil {
+				panic(builderError{err})
+			}
 		}
 
 		var outCol *scopeColumn
-		if def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
+		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
 
