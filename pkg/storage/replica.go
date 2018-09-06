@@ -1691,34 +1691,31 @@ func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the Store handle the descriptor
 // update. Requires raftMu to be locked.
-func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
-	r.setDescWithoutProcessUpdate(desc)
+func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) error {
+	r.setDescWithoutProcessUpdate(ctx, desc)
 	if r.store == nil {
 		// r.rm is null in some tests.
 		return nil
 	}
-	return r.store.processRangeDescriptorUpdate(r.AnnotateCtx(context.TODO()), r)
+	return r.store.processRangeDescriptorUpdate(ctx, r)
 }
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate. Requires raftMu to be locked.
-func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
+func (r *Replica) setDescWithoutProcessUpdate(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
 	if r.mu.state.Desc != nil && !r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
 			r.mu.state.Desc.StartKey, desc.StartKey)
 	}

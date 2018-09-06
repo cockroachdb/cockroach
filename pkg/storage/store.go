@@ -2450,7 +2450,7 @@ func (s *Store) SplitRange(
 		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, leftRepl)
 	}
 
-	leftRepl.setDescWithoutProcessUpdate(&newLeftDesc)
+	leftRepl.setDescWithoutProcessUpdate(ctx, &newLeftDesc)
 
 	// Clear the LHS txn wait queue, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate
@@ -2586,7 +2586,7 @@ func (s *Store) MergeRange(
 	}
 
 	// Update the subsuming range's descriptor.
-	return leftRepl.setDesc(&newLeftDesc)
+	return leftRepl.setDesc(ctx, &newLeftDesc)
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the

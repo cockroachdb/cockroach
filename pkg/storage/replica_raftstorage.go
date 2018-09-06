@@ -969,7 +969,7 @@ func (r *Replica) applySnapshot(
 		panic(err)
 	}
 
-	r.setDescWithoutProcessUpdate(s.Desc)
+	r.setDescWithoutProcessUpdate(ctx, s.Desc)
 	return nil
 }
 
