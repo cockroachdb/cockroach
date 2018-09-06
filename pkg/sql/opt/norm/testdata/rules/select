@@ -1150,3 +1150,58 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
+
+# --------------------------------------------------
+# EliminateUnionAllLeft
+# --------------------------------------------------
+
+opt
+SELECT k FROM
+  (SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b WHERE i < 4 AND i > 10)
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── variable: b.k [type=int, outer=(1)]
+
+# --------------------------------------------------
+# EliminateUnionAllRight
+# --------------------------------------------------
+
+opt
+SELECT k FROM
+  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  UNION ALL
+  (SELECT k FROM b)
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:6(int!null)
+ │    └── key: (6)
+ └── projections [outer=(6)]
+      └── variable: b.k [type=int, outer=(6)]
+
+opt
+SELECT k FROM
+  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  UNION ALL
+  (SELECT k FROM b WHERE i < 4 AND i > 10)
+----
+project
+ ├── columns: k:11(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── values
+ │    ├── columns: b.k:1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── projections [outer=(1)]
+      └── variable: b.k [type=int, outer=(1)]
