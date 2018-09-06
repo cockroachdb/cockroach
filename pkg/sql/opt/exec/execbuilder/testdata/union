@@ -58,3 +58,32 @@ sort                 ·         ·            (a)     +a
            └── scan  ·         ·            (a, b)  ·
 ·                    table     abc@primary  ·       ·
 ·                    spans     ALL          ·       ·
+
+statement ok
+INSERT INTO abc VALUES (1,2,3)
+
+statement ok
+INSERT INTO uniontest VALUES (1,2)
+
+statement ok
+INSERT INTO uniontest VALUES (3,4)
+
+# Check that UNION ALL columns are mapped correctly
+query I
+SELECT a FROM (SELECT a FROM abc UNION ALL SELECT k FROM uniontest)
+----
+1
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM abc WHERE b > 3 AND b < 1 UNION ALL SELECT k FROM uniontest)
+----
+1
+3
+
+query I
+SELECT k FROM (SELECT k FROM uniontest UNION ALL SELECT a FROM abc WHERE b > 3 AND b < 1)
+----
+1
+3
