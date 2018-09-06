@@ -459,3 +459,11 @@ func (m *MergeOnDef) CanProvideOrdering(required *props.OrderingChoice) bool {
 		return false
 	}
 }
+
+// SubqueryDef contains information related to a subquery (Subquery, Any,
+// Exists).
+type SubqueryDef struct {
+	OriginalExpr *tree.Subquery
+	// Cmp is only used for AnyOp.
+	Cmp opt.Operator
+}
