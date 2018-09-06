@@ -31,6 +31,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 )
 
 func TestStopper(t *testing.T) {
@@ -359,7 +360,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 		func() {
 			_ = s.RunLimitedAsyncTask(
 				context.Background(), "test",
-				make(chan struct{}, 1),
+				semaphore.NewWeighted(1),
 				true, /* wait */
 				func(ctx context.Context) { explode(ctx) },
 			)
@@ -534,7 +535,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	const maxConcurrency = 5
 	const numTasks = maxConcurrency * 3
-	sem := make(chan struct{}, maxConcurrency)
+	sem := semaphore.NewWeighted(maxConcurrency)
 	taskSignal := make(chan struct{}, maxConcurrency)
 	var mu syncutil.Mutex
 	concurrency := 0
@@ -588,8 +589,10 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 			peakConcurrency, maxConcurrency)
 	}
 
-	sem = make(chan struct{}, 1)
-	sem <- struct{}{}
+	sem = semaphore.NewWeighted(1)
+	if err := sem.Acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	err := s.RunLimitedAsyncTask(
 		context.Background(), "test", sem, false /* wait */, func(_ context.Context) {
 		},
@@ -605,7 +608,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	defer s.Stop(context.Background())
 
 	const maxConcurrency = 5
-	sem := make(chan struct{}, maxConcurrency)
+	sem := semaphore.NewWeighted(maxConcurrency)
 
 	// Synchronization channels.
 	workersDone := make(chan struct{})

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -166,7 +167,7 @@ type DistSender struct {
 	rpcContext       *rpc.Context
 	nodeDialer       *nodedialer.Dialer
 	rpcRetryOptions  retry.Options
-	asyncSenderSem   chan struct{}
+	asyncSenderSem   semaphore.Weighted
 
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
@@ -202,11 +203,12 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		st:         cfg.Settings,
-		clock:      cfg.Clock,
-		gossip:     g,
-		metrics:    makeDistSenderMetrics(),
-		nodeDialer: cfg.NodeDialer,
+		st:             cfg.Settings,
+		clock:          cfg.Clock,
+		gossip:         g,
+		metrics:        makeDistSenderMetrics(),
+		nodeDialer:     cfg.NodeDialer,
+		asyncSenderSem: semaphore.MakeWeighted(defaultSenderConcurrency),
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -245,7 +247,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		}
 	}
 	ds.nodeDialer = cfg.NodeDialer
-	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
 
 	if g != nil {
 		ctx := ds.AnnotateCtx(context.Background())
@@ -996,7 +997,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 ) bool {
 	if err := ds.rpcContext.Stopper.RunLimitedAsyncTask(
 		ctx, "kv.DistSender: sending partial batch",
-		ds.asyncSenderSem, false, /* wait */
+		&ds.asyncSenderSem, false, /* wait */
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)

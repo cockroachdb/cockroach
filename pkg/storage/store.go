@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1097,7 +1098,7 @@ func (s *Store) SetDraining(drain bool) {
 	ctx := log.WithLogTag(context.Background(), "drain", nil)
 	transferAllAway := func() int {
 		// Limit the number of concurrent lease transfers.
-		sem := make(chan struct{}, 100)
+		sem := semaphore.NewWeighted(100)
 		sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
 		// Incremented for every lease or Raft leadership transfer attempted. We try
 		// to send both the lease and the Raft leaders away, but this may not

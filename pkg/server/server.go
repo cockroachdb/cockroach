@@ -554,7 +554,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.initServer = newInitServer(s)
-	s.initServer.semaphore.acquire()
+	if err := s.initServer.sem.Acquire(ctx); err != nil {
+		return nil, err
+	}
 
 	serverpb.RegisterInitServer(s.grpc, s.initServer)
 
@@ -1414,7 +1416,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 		// Note that when we created the init server, we acquired its semaphore
 		// (to stop anyone from rushing in).
-		s.initServer.semaphore.release()
+		s.initServer.sem.Release()
 
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
@@ -1428,13 +1430,15 @@ func (s *Server) Start(ctx context.Context) error {
 
 		// Reacquire the semaphore, allowing the code below to be oblivious to
 		// the fact that this branch was taken.
-		s.initServer.semaphore.acquire()
+		if err := s.initServer.sem.Acquire(ctx); err != nil {
+			return errors.Wrap(err, "acquiring init server semaphore")
+		}
 	}
 
 	// Release the semaphore of the init server. Anyone still managing to talk
 	// to it may do so, but will be greeted with an error telling them that the
 	// cluster is already initialized.
-	s.initServer.semaphore.release()
+	s.initServer.sem.Release()
 
 	// This opens the main listener.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {

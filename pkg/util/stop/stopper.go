@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -336,27 +337,23 @@ func (s *Stopper) RunAsyncTask(
 // available. Returns an error if the Stopper is quiescing, in which
 // case the function is not executed.
 func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, taskName string, sem chan struct{}, wait bool, f func(context.Context),
+	ctx context.Context, taskName string, sem *semaphore.Weighted, wait bool, f func(context.Context),
 ) error {
 	// Wait for permission to run from the semaphore.
-	select {
-	case sem <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.ShouldQuiesce():
-		return ErrUnavailable
-	default:
+	if !sem.TryAcquire() {
 		if !wait {
 			return ErrThrottled
 		}
 		log.Eventf(ctx, "stopper throttling task from %s due to semaphore", taskName)
-		// Retry the select without the default.
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.ShouldQuiesce():
-			return ErrUnavailable
+		semCtx, done := s.WithCancelOnQuiesce(ctx)
+		defer done()
+		if err := sem.Acquire(semCtx); err != nil {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.mu.quiescing {
+				return ErrUnavailable
+			}
+			return err
 		}
 	}
 
@@ -364,13 +361,13 @@ func (s *Stopper) RunLimitedAsyncTask(
 	// if the context is canceled.
 	select {
 	case <-ctx.Done():
-		<-sem
+		sem.Release()
 		return ctx.Err()
 	default:
 	}
 
 	if !s.runPrelude(taskName) {
-		<-sem
+		sem.Release()
 		return ErrUnavailable
 	}
 
@@ -379,7 +376,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer func() { <-sem }()
+		defer sem.Release()
 		defer tracing.FinishSpan(span)
 
 		f(ctx)

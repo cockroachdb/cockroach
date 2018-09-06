@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -358,8 +359,8 @@ func (cq *contentionQueue) add(
 type intentResolver struct {
 	store *Store
 
-	sem         chan struct{}    // Semaphore to limit async goroutines.
-	contentionQ *contentionQueue // manages contention on individual keys
+	sem         semaphore.Weighted // Semaphore to limit async goroutines.
+	contentionQ *contentionQueue   // manages contention on individual keys
 
 	mu struct {
 		syncutil.Mutex
@@ -376,7 +377,7 @@ type intentResolver struct {
 func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 	ir := &intentResolver{
 		store:       store,
-		sem:         make(chan struct{}, taskLimit),
+		sem:         semaphore.MakeWeighted(int64(taskLimit)),
 		contentionQ: newContentionQueue(store),
 		every:       log.Every(time.Minute),
 	}
@@ -634,7 +635,7 @@ func (ir *intentResolver) runAsyncTask(
 		// this work from our caller's context and timeout.
 		ir.store.AnnotateCtx(context.Background()),
 		"storage.intentResolver: processing intents",
-		ir.sem,
+		&ir.sem,
 		false, /* wait */
 		taskFn,
 	)
@@ -781,7 +782,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 		// timeout.
 		ir.store.AnnotateCtx(context.Background()),
 		"processing txn intents",
-		ir.sem,
+		&ir.sem,
 		// We really do not want to hang up the GC queue on this kind of
 		// processing, so it's better to just skip txns which we can't
 		// pass to the async processor (wait=false). Their intents will
