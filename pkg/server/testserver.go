@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"runtime"
 	"sync"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -426,17 +428,36 @@ func WaitForInitialSplits(db *client.DB) error {
 	if err != nil {
 		return err
 	}
-	return retry.ForDuration(initialSplitsTimeout, func() error {
+	err = retry.ForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			return err
 		}
 		if a, e := len(rows), expectedRanges; a != e {
-			return errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			err := errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			log.InfoDepth(context.Background(), 3, err)
+			return err
 		}
 		return nil
 	})
+	if err == nil {
+		return nil
+	}
+
+	// TODO(peter): This is a debugging aid to track down the difficult to
+	// reproduce failures with the initial splits not finishing promptly.
+	for bufSize := 1 << 20; ; bufSize *= 2 {
+		buf := make([]byte, bufSize)
+		length := runtime.Stack(buf, true)
+		// If this wasn't large enough to accommodate the full set of
+		// stack traces, increase by 2 and try again.
+		if length == bufSize {
+			continue
+		}
+		log.Infof(context.TODO(), "%s\n%s", err, buf)
+		return err
+	}
 }
 
 // Stores returns the collection of stores from this TestServer's node.
