@@ -2352,7 +2352,7 @@ may increase either contention or retry errors, or both.`,
 				delim := string(tree.MustBeDString(args[1]))
 				return arrayToString(arr, delim, nil)
 			},
-			Info: "Join an array into a string with a delimiter.",
+			Info: "Join an array into a stringF with a delimiter.",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
@@ -2586,9 +2586,12 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_typeof": makeBuiltin(jsonProps(), jsonTypeOfImpl),
 
+	"array_to_json": arrayToJsonImpls,
+
 	"to_json": makeBuiltin(jsonProps(), toJSONImpl),
 
 	"to_jsonb": makeBuiltin(jsonProps(), toJSONImpl),
+
 
 	"json_build_array": makeBuiltin(jsonPropsNullableArgs(), jsonBuildArrayImpl),
 
@@ -3287,6 +3290,39 @@ var toJSONImpl = tree.Overload{
 	},
 	Info: "Returns the value as JSON or JSONB.",
 }
+
+var arrayToJsonImpls = makeBuiltin(jsonProps(),
+	tree.Overload{
+		Types:      tree.ArgTypes{{"array", types.AnyArray}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			j, err := tree.AsJSON(args[0])
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDJSON(j), nil
+		},
+		Info: "Returns the array as JSON or JSONB.",
+	},
+	tree.Overload{
+		Types:      tree.ArgTypes{{"array", types.AnyArray}, {"pretty_bool", types.Bool}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			prettyPrint := *(args[1].(*tree.DBool))
+			if prettyPrint {
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeInvalidParameterValueError, "pretty printing is not supported")
+			}
+
+			j, err := tree.AsJSON(args[0])
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDJSON(j), nil
+		},
+		Info: "Returns the array as JSON or JSONB.",
+	},
+)
 
 var jsonBuildArrayImpl = tree.Overload{
 	Types:      tree.VariadicType{VarType: types.Any},

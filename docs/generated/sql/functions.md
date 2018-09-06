@@ -217,7 +217,7 @@
 </span></td></tr>
 <tr><td><code>array_replace(array: varbit[], toreplace: varbit, replacewith: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
-<tr><td><code>array_to_string(input: anyelement[], delim: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a string with a delimiter.</p>
+<tr><td><code>array_to_string(input: anyelement[], delim: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a stringF with a delimiter.</p>
 </span></td></tr>
 <tr><td><code>array_to_string(input: anyelement[], delimiter: <a href="string.html">string</a>, null: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a string with a delimiter, replacing NULLs with a null string.</p>
 </span></td></tr>
@@ -419,6 +419,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>array_to_json(array: anyelement[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
+<tr><td><code>array_to_json(array: anyelement[], pretty_bool: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
 <tr><td><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>
 <tr><td><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
