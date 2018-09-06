@@ -1189,6 +1189,22 @@ ORDER BY company_id;
 ----
 company_id  string_agg
 
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+
 statement OK
 INSERT INTO string_agg_test VALUES
   (1, 1, 'A'),
@@ -1256,6 +1272,86 @@ company_id  string_agg
 4           DDDD
 
 query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           A
+2           BB
+3           CCC
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, ',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, b',')
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+3           NULL
+4           NULL
+
+query error pq: ambiguous call: string_agg\(unknown, unknown\)
+SELECT company_id, string_agg(NULL, NULL)
+FROM string_agg_test
+GROUP BY company_id
+ORDER BY company_id;
+
+# Now test the window function version of string_agg.
+
+query IT colnames
 SELECT company_id, string_agg(employee, ',')
 OVER (PARTITION BY company_id ORDER BY id)
 FROM string_agg_test
@@ -1326,6 +1422,156 @@ company_id  string_agg
 4           DD
 4           DDD
 4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(employee::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           A
+2           B
+2           BB
+3           C
+3           CC
+3           CCC
+4           D
+4           DD
+4           DDD
+4           DDDD
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, employee)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, employee::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::STRING, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL::BYTES, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::STRING)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query IT colnames
+SELECT company_id, string_agg(NULL, NULL::BYTES)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
+----
+company_id  string_agg
+1           NULL
+2           NULL
+2           NULL
+3           NULL
+3           NULL
+3           NULL
+4           NULL
+4           NULL
+4           NULL
+4           NULL
+
+query error pq: ambiguous call: string_agg\(unknown, unknown\)
+SELECT company_id, string_agg(NULL, NULL)
+OVER (PARTITION BY company_id ORDER BY id)
+FROM string_agg_test
+ORDER BY company_id, id;
 
 query IT colnames
 SELECT company_id, string_agg(employee, lower(employee))
@@ -1436,6 +1682,32 @@ ORDER BY e.company_id;
 ----
 company_id  string_agg
 1           D, C, B, A
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, NULL)
+FROM (
+  SELECT employee, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           DCBA
+
+query IT colnames
+SELECT e.company_id, string_agg(e.employee, NULL)
+FROM (
+  SELECT employee::BYTES, company_id
+  FROM string_agg_test
+  ORDER BY employee DESC
+  ) AS e
+GROUP BY e.company_id
+ORDER BY e.company_id;
+----
+company_id  string_agg
+1           DCBA
 
 statement OK
 DROP TABLE string_agg_test

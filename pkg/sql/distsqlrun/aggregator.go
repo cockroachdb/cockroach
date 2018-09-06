@@ -57,7 +57,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -66,6 +66,9 @@ func GetAggregateInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
