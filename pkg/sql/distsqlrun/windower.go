@@ -67,7 +67,7 @@ func GetWindowFunctionInfo(
 			"function is neither an aggregate nor a window function",
 		)
 	}
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -76,6 +76,9 @@ func GetWindowFunctionInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
