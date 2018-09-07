@@ -42,7 +42,9 @@ func registerRebalanceLoad(r *registry) {
 	// In other words, this test should always pass with
 	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
 	// usually (but not always fail) with it set to false.
-	rebalanceLoadRun := func(ctx context.Context, t *test, c *cluster, duration time.Duration, concurrency int) {
+	rebalanceLoadRun := func(
+		ctx context.Context, t *test, c *cluster, rebalanceMode string, duration time.Duration, concurrency int,
+	) {
 		roachNodes := c.Range(1, c.nodes-1)
 		appNode := c.Node(c.nodes)
 
@@ -80,7 +82,7 @@ func registerRebalanceLoad(r *registry) {
 			defer db.Close()
 
 			if _, err := db.ExecContext(
-				ctx, `SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled=true`,
+				ctx, `SET CLUSTER SETTING kv.allocator.load_based_rebalancing=$1::string`, rebalanceMode,
 			); err != nil {
 				return err
 			}
@@ -118,7 +120,7 @@ func registerRebalanceLoad(r *registry) {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
-			rebalanceLoadRun(ctx, t, c, 2*time.Minute, concurrency)
+			rebalanceLoadRun(ctx, t, c, "leases", 2*time.Minute, concurrency)
 		},
 	})
 	r.Add(testSpec{
@@ -130,7 +132,7 @@ func registerRebalanceLoad(r *registry) {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
-			rebalanceLoadRun(ctx, t, c, 5*time.Minute, concurrency)
+			rebalanceLoadRun(ctx, t, c, "leases and replicas", 5*time.Minute, concurrency)
 		},
 	})
 }
