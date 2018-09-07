@@ -237,6 +237,7 @@ func fetchTableDescriptorVersions(
 		StartTime:     startTS,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
+		OmitChecksum:  true,
 	}
 	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
