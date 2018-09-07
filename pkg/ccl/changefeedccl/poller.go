@@ -209,12 +209,20 @@ func (p *poller) Run(ctx context.Context) error {
 					return errors.Wrapf(
 						pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
 				}
+				startTime = timeutil.Now()
 				for _, file := range res.(*roachpb.ExportResponse).Files {
 					if err := p.slurpSST(ctx, file.SST); err != nil {
 						return err
 					}
 				}
-				return p.buf.AddResolved(ctx, span, nextHighWater)
+				if err := p.buf.AddResolved(ctx, span, nextHighWater); err != nil {
+					return err
+				}
+				if log.V(2) {
+					log.Infof(ctx, `finished buffering [%s,%s) took %s`,
+						span.Key, span.EndKey, timeutil.Since(startTime))
+				}
+				return nil
 			})
 		}
 		if err := g.Wait(); err != nil {
