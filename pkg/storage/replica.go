@@ -1717,6 +1717,11 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
+	if r.mu.state.Desc != nil && !r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
+			r.mu.state.Desc.StartKey, desc.StartKey)
+	}
 
 	newMaxID := maxReplicaID(desc)
 	if newMaxID > r.mu.lastReplicaAdded {
