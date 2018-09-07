@@ -8,13 +8,63 @@ CREATE TABLE t (
 	c INT,
 	PRIMARY KEY (a, b)
 )
- INTERLEAVE IN PARENT p2 (i)
- PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
+INTERLEAVE IN PARENT p2 (
+	i
+)
+PARTITION BY LIST (
+	a
+) (
+	PARTITION p1 VALUES IN (1),
+	PARTITION p2 VALUES IN (2)
+)
+
+23:
+-----------------------
+CREATE TABLE t (
+	a INT,
+	b INT,
+	c INT,
+	PRIMARY KEY (a, b)
+)
+INTERLEAVE IN PARENT p2 (
+	i
+)
+PARTITION BY LIST (a) (
+	PARTITION p1 VALUES IN (1),
+	PARTITION p2 VALUES IN (2)
+)
+
+27:
+---------------------------
+CREATE TABLE t (
+	a INT,
+	b INT,
+	c INT,
+	PRIMARY KEY (a, b)
+)
+INTERLEAVE IN PARENT p2 (i)
+PARTITION BY LIST (a) (
+	PARTITION p1 VALUES IN (1),
+	PARTITION p2 VALUES IN (2)
+)
 
 56:
 --------------------------------------------------------
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b))
- INTERLEAVE IN PARENT p2 (i)
- PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
+INTERLEAVE IN PARENT p2 (i)
+PARTITION BY LIST (a) (
+	PARTITION p1 VALUES IN (1),
+	PARTITION p2 VALUES IN (2)
+)
+
+78:
+------------------------------------------------------------------------------
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b))
+INTERLEAVE IN PARENT p2 (i)
+PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
+
+163:
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT p2 (i) PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))
 
 
