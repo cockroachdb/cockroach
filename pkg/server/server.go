@@ -1897,6 +1897,8 @@ func (s *Server) PGServer() *pgwire.Server {
 	return s.pgServer
 }
 
+// TODO(benesch): Use https://github.com/NYTimes/gziphandler instead.
+// gzipResponseWriter reinvents the wheel and is not as robust.
 type gzipResponseWriter struct {
 	gz gzip.Writer
 	http.ResponseWriter
@@ -1919,6 +1921,11 @@ func (w *gzipResponseWriter) Reset(rw http.ResponseWriter) {
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	// The underlying http.ResponseWriter can't sniff gzipped data properly, so we
+	// do our own sniffing on the uncompressed data.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", http.DetectContentType(b))
+	}
 	return w.gz.Write(b)
 }
 
