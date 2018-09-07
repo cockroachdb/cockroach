@@ -23,7 +23,17 @@ env=(
 build/builder.sh env "${env[@]}" bash <<'EOF'
 set -euxo pipefail
 go install ./pkg/cmd/github-post
-make stress PKG="$PKG" TESTTIMEOUT=40m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS="-maxruns 100 -maxfails 1 -stderr $STRESSFLAGS" \
+# We're going to run stress, pipe its output to test2json to add a bit of
+# structure, then pipe that to our github-post script which creates issues for
+# failed tests.
+# Note that, even though we stream the results into test2json, this streaming is
+# meaningless for the purposes of the timing information recorded by test2json
+# because stress captures the test output and prints it all at once. github-post
+# compensates for this.
+#
+# We've set pipefail, so the exit status is going to come from stress if there
+# are test failures.
+make stress PKG="$PKG" TESTTIMEOUT=40m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS="-maxruns 100 -maxfails 1 -stderr $STRESSFLAGS" 2>&1 \
   | tee artifacts/stress.log \
-  || { go tool test2json < artifacts/stress.log | github-post; exit 1; }
+  | go tool test2json -t | github-post
 EOF

@@ -41,7 +41,8 @@ const (
 	goFlagsEnv           = "GOFLAGS"
 	githubUser           = "cockroachdb"
 	githubRepo           = "cockroach"
-	cockroachPkgPrefix   = "github.com/cockroachdb/cockroach/pkg/"
+	// CockroachPkgPrefix is the crdb package prefix.
+	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 )
 
 var (
@@ -243,8 +244,15 @@ func (p *poster) init() {
 	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
 }
 
+// DefaultStressFailureTitle provides the default title for stress failure
+// issues.
+func DefaultStressFailureTitle(packageName, testName string) string {
+	trimmedPkgName := strings.TrimPrefix(packageName, CockroachPkgPrefix)
+	return fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, testName)
+}
+
 func (p *poster) post(
-	ctx context.Context, detail, packageName, testName, message, authorEmail string,
+	ctx context.Context, title, packageName, testName, message, authorEmail string,
 ) error {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
@@ -266,9 +274,6 @@ Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
 	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
-		trimmedPkgName := strings.TrimPrefix(packageName, cockroachPkgPrefix)
-		title := fmt.Sprintf("%s: %s failed%s",
-			trimmedPkgName, testName, detail)
 		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName) + messageTemplate
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
@@ -393,16 +398,16 @@ var defaultP struct {
 
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(ctx context.Context, detail, packageName, testName, message, authorEmail string) error {
+func Post(ctx context.Context, title, packageName, testName, message, authorEmail string) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	err := defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+	err := defaultP.post(ctx, title, packageName, testName, message, authorEmail)
 	if !isInvalidAssignee(err) {
 		return err
 	}
-	return defaultP.post(ctx, detail, packageName, testName, message, "tobias.schottdorf@gmail.com")
+	return defaultP.post(ctx, title, packageName, testName, message, "tobias.schottdorf@gmail.com")
 }
 
 // CanPost returns true if the github API token environment variable is set.
