@@ -156,6 +156,8 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
+	debugLog := log.V(3)
+
 	var rows RowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
@@ -182,7 +184,9 @@ func evalExport(
 			continue
 		}
 
-		if log.V(3) {
+		if debugLog {
+			// Calling log.V is more expensive than you'd think. Keep it out of
+			// the hot path.
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
@@ -207,10 +211,13 @@ func evalExport(
 		return result.Result{}, err
 	}
 
-	// Compute the checksum before we upload and remove the local file.
-	checksum, err := SHA512ChecksumData(sstContents)
-	if err != nil {
-		return result.Result{}, err
+	var checksum []byte
+	if !args.OmitChecksum {
+		// Compute the checksum before we upload and remove the local file.
+		checksum, err = SHA512ChecksumData(sstContents)
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	exported := roachpb.ExportResponse_File{
