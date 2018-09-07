@@ -58,6 +58,10 @@ func PlanAndRunExport(
 	resultRows *RowResultWriter,
 ) error {
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+
+	rec, err := dsp.checkSupportForNode(in)
+	planCtx.isLocal = err != nil || rec == cannotDistribute
+
 	p, err := dsp.createPlanForNode(&planCtx, in)
 	if err != nil {
 		return errors.Wrap(err, "constructing distSQL plan")
