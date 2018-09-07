@@ -39,9 +39,9 @@ func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode,
 	return p.showTableDetails(ctx, "SHOW CREATE", n.Name, showCreateQuery)
 }
 
-// showCreateView returns a valid SQL representation of the CREATE
+// ShowCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
-func (p *planner) showCreateView(
+func ShowCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
@@ -59,7 +59,7 @@ func (p *planner) showCreateView(
 	return f.CloseAndGetString(), nil
 }
 
-func (p *planner) printForeignKeyConstraint(
+func printForeignKeyConstraint(
 	ctx context.Context,
 	buf *bytes.Buffer,
 	dbPrefix string,
@@ -104,9 +104,9 @@ func (p *planner) printForeignKeyConstraint(
 	return nil
 }
 
-// showCreateSequence returns a valid SQL representation of the
+// ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
-func (p *planner) showCreateSequence(
+func ShowCreateSequence(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
@@ -123,7 +123,7 @@ func (p *planner) showCreateSequence(
 	return f.CloseAndGetString(), nil
 }
 
-// showCreateTable returns a valid SQL representation of the CREATE
+// ShowCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
 // The names of the tables references by foreign keys, and the
@@ -131,7 +131,7 @@ func (p *planner) showCreateSequence(
 // unless it is equal to the given dbPrefix. This allows us to elide
 // the prefix when the given table references other tables in the
 // current database.
-func (p *planner) showCreateTable(
+func ShowCreateTable(
 	ctx context.Context,
 	tn *tree.Name,
 	dbPrefix string,
@@ -171,7 +171,7 @@ func (p *planner) showCreateTable(
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")
-			if err := p.printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
+			if err := printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
 				return "", err
 			}
 		}
@@ -181,7 +181,7 @@ func (p *planner) showCreateTable(
 			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := p.showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
+			if err := showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
@@ -220,7 +220,7 @@ func (p *planner) showCreateTable(
 
 	f.WriteString("\n)")
 
-	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
@@ -249,7 +249,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 // The name of the parent table is prefixed by its database name unless
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
-func (p *planner) showCreateInterleave(
+func showCreateInterleave(
 	ctx context.Context,
 	idx *sqlbase.IndexDescriptor,
 	buf *bytes.Buffer,
