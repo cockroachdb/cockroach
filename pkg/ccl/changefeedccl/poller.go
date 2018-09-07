@@ -193,6 +193,7 @@ func (p *poller) Run(ctx context.Context) error {
 					StartTime:     p.highWater,
 					MVCCFilter:    roachpb.MVCCFilter_All,
 					ReturnSST:     true,
+					OmitChecksum:  true,
 				}
 				if req.StartTime == (hlc.Timestamp{}) {
 					req.MVCCFilter = roachpb.MVCCFilter_Latest
@@ -359,6 +360,7 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 						StartTime:     hlc.Timestamp{},
 						MVCCFilter:    roachpb.MVCCFilter_Latest,
 						ReturnSST:     true,
+						OmitChecksum:  true,
 					}
 					startTime := timeutil.Now()
 					res, pErr := client.SendWrappedWith(ctx, sender, header, req)
