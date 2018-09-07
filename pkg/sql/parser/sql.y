@@ -1741,7 +1741,7 @@ import_stmt:
 // %Help: EXPORT - export data to file in a distributed manner
 // %Category: CCL
 // %Text:
-// EXPORT <format> (<datafile> [WITH <option> [= value] [,...]]) FROM <query>
+// EXPORT INTO <format> (<datafile> [WITH <option> [= value] [,...]]) FROM <query>
 //
 // Formats:
 //    CSV
