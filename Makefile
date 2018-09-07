@@ -778,11 +778,6 @@ buildshort: $(COCKROACHSHORT)
 build buildoss buildshort: $(DOCGEN_TARGETS)
 build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGE))
 
-# For historical reasons, symlink cockroach to cockroachshort.
-# TODO(benesch): see if it would break anyone's workflow to remove this.
-buildshort:
-	ln -sf $(COCKROACHSHORT) $(COCKROACH)
-
 .PHONY: install
 install: ## Install the CockroachDB binary.
 install: $(COCKROACH)
