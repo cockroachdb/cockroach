@@ -61,7 +61,11 @@ func runTC(branches []string, queueBuild func(string, string, map[string]string)
 		// Queue stress builds. One per configuration per package.
 		for _, opts := range []map[string]string{
 			{}, // uninstrumented
-			{"env.GOFLAGS": "-race"},
+			// The race detector is CPU intensive, so we want to run less processes in
+			// parallel. (Stress, by default, will run one process per CPU.)
+			//
+			// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
+			{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
 		} {
 			for _, importPath := range importPaths {
 				opts["env.PKG"] = importPath
