@@ -94,7 +94,7 @@ func TestCDC(t *testing.T) {
 		t.Run(`Description`, func(t *testing.T) { testDescription(ctx, t, c, k) })
 		t.Run(`PauseUnpause`, func(t *testing.T) { testPauseUnpause(ctx, t, c, k) })
 		t.Run(`Bank`, func(t *testing.T) { testBank(ctx, t, c, k) })
-		t.Run(`Errors`, func(t *testing.T) { testErrors(ctx, t) })
+		t.Run(`Errors`, func(t *testing.T) { testErrors(ctx, t, k) })
 	})
 }
 
@@ -271,7 +271,7 @@ func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *do
 	}
 }
 
-func testErrors(ctx context.Context, t *testing.T) {
+func testErrors(ctx context.Context, t *testing.T, k *dockerKafka) {
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
@@ -282,6 +282,25 @@ func testErrors(ctx context.Context, t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	); !testutils.IsError(err, `client has run out of available brokers`) {
 		t.Errorf(`expected 'client has run out of available brokers' error got: %+v`, err)
+	}
+
+	into := `kafka://localhost:` + k.kafkaPort + `?kafka_topic_prefix=Errors_`
+	if _, err := sqlDBRaw.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, into,
+	); !testutils.IsError(err, `unknown sink query parameter: kafka_topic_prefix`) {
+		t.Errorf(`expected "unknown sink query parameter: kafka_topic_prefix" error got: %v`, err)
+	}
+	into = `kafka://localhost:` + k.kafkaPort + `?schema_topic=foo`
+	if _, err := sqlDBRaw.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, into,
+	); !testutils.IsError(err, `schema_topic is not yet supported`) {
+		t.Errorf(`expected "schema_topic is not yet supported" error got: %v`, err)
+	}
+	into = `kafka://localhost:` + k.kafkaPort + `?confluent_schema_registry=foo`
+	if _, err := sqlDBRaw.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, into,
+	); !testutils.IsError(err, `confluent_schema_registry is not yet supported`) {
+		t.Errorf(`expected "confluent_schema_registry is not yet supported" error got: %v`, err)
 	}
 }
 

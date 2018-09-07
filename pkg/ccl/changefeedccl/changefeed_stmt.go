@@ -35,25 +35,34 @@ func init() {
 }
 
 type envelopeType string
+type formatType string
 
 const (
 	optCursor             = `cursor`
 	optEnvelope           = `envelope`
+	optFormat             = `format`
 	optResolvedTimestamps = `resolved`
 	optUpdatedTimestamps  = `updated`
 
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
+	optEnvelopeDiff    envelopeType = `diff`
 
-	sinkParamTopicPrefix      = `topic_prefix`
-	sinkSchemeBuffer          = ``
-	sinkSchemeExperimentalSQL = `experimental-sql`
-	sinkSchemeKafka           = `kafka`
+	optFormatJSON formatType = `json`
+	optFormatAvro formatType = `avro`
+
+	sinkParamConfluentSchemaRegistry = `confluent_schema_registry`
+	sinkParamTopicPrefix             = `topic_prefix`
+	sinkParamSchemaTopic             = `schema_topic`
+	sinkSchemeBuffer                 = ``
+	sinkSchemeExperimentalSQL        = `experimental-sql`
+	sinkSchemeKafka                  = `kafka`
 )
 
 var changefeedOptionExpectValues = map[string]bool{
 	optCursor:             true,
 	optEnvelope:           true,
+	optFormat:             true,
 	optResolvedTimestamps: false,
 	optUpdatedTimestamps:  false,
 }
@@ -267,9 +276,23 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
+	case optEnvelopeDiff:
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
+			`%s=%s is not yet supported`, optEnvelope, optEnvelopeDiff)
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])
+	}
+
+	switch formatType(details.Opts[optFormat]) {
+	case ``, optFormatJSON:
+		details.Opts[optFormat] = string(optFormatJSON)
+	case optFormatAvro:
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
+			`%s=%s is not yet supported`, optFormat, optFormatAvro)
+	default:
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
+			`unknown %s: %s`, optFormat, details.Opts[optFormat])
 	}
 
 	return details, nil

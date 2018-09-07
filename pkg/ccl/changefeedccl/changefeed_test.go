@@ -766,6 +766,28 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo WITH format=avro`,
+	); !testutils.IsError(err, `format=avro is not yet supported`) {
+		t.Errorf(`expected 'format=avro is not yet supported' error got: %+v`, err)
+	}
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo WITH format=nope`,
+	); !testutils.IsError(err, `unknown format: nope`) {
+		t.Errorf(`expected 'unknown format: nope' error got: %+v`, err)
+	}
+
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo WITH envelope=diff`,
+	); !testutils.IsError(err, `envelope=diff is not yet supported`) {
+		t.Errorf(`expected 'envelope=diff is not yet supported' error got: %+v`, err)
+	}
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
+	); !testutils.IsError(err, `unknown envelope: nope`) {
+		t.Errorf(`expected 'unknown envelope: nope' error got: %+v`, err)
+	}
+
+	if _, err := sqlDB.DB.Exec(
 		`CREATE CHANGEFEED FOR foo INTO ''`,
 	); !testutils.IsError(err, `omit the SINK clause`) {
 		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
