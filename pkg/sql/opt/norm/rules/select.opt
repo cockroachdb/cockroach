@@ -328,3 +328,32 @@
 )
 =>
 (ConstructEmptyValues (OutputCols $input))
+
+# EliminateUnionAllLeft replaces a union all with a right side having a
+# cardinality of zero, with just the left side operand.
+[EliminateUnionAllLeft, Normalize]
+(UnionAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
+)
+=>
+(Project
+    $left
+    (ProjectColMapLeft $colmap)
+)
+
+
+# EliminateUnionAllRight replaces a union all with a left side having a
+# cardinality of zero, with just the right side operand.
+[EliminateUnionAllRight, Normalize]
+(UnionAll
+    $left:* & (HasZeroRows $left)
+    $right:*
+    $colmap:*
+)
+=>
+(Project
+    $right
+    (ProjectColMapRight $colmap)
+)
