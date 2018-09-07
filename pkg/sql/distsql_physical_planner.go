@@ -173,11 +173,6 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver distsqlplan.SpanResolver
 	dsp.spanResolver = spanResolver
 }
 
-// SpanResolver returns the planner's SpanResolver.
-func (dsp *DistSQLPlanner) SpanResolver() distsqlplan.SpanResolver {
-	return dsp.spanResolver
-}
-
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {
@@ -585,11 +580,11 @@ func identityMapInPlace(slice []int) []int {
 	return slice
 }
 
-// spanPartition is the intersection between a set of spans for a certain
+// SpanPartition is the intersection between a set of spans for a certain
 // operation (e.g table scan) and the set of ranges owned by a given node.
-type spanPartition struct {
-	node  roachpb.NodeID
-	spans roachpb.Spans
+type SpanPartition struct {
+	Node  roachpb.NodeID
+	Spans roachpb.Spans
 }
 
 func (dsp *DistSQLPlanner) checkNodeHealth(
@@ -680,23 +675,23 @@ func checkNodeHealth(
 	return nil
 }
 
-// partitionSpans finds out which nodes are owners for ranges touching the
+// PartitionSpans finds out which nodes are owners for ranges touching the
 // given spans, and splits the spans according to owning nodes. The result is a
-// set of spanPartitions (guaranteed one for each relevant node), which form a
+// set of SpanPartitions (guaranteed one for each relevant node), which form a
 // partitioning of the spans (i.e. they are non-overlapping and their union is
 // exactly the original set of spans).
 //
-// partitionSpans does its best to not assign ranges on nodes that are known to
+// PartitionSpans does its best to not assign ranges on nodes that are known to
 // either be unhealthy or running an incompatible version. The ranges owned by
 // such nodes are assigned to the gateway.
-func (dsp *DistSQLPlanner) partitionSpans(
+func (dsp *DistSQLPlanner) PartitionSpans(
 	planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]spanPartition, error) {
+) ([]SpanPartition, error) {
 	if len(spans) == 0 {
 		panic("no spans")
 	}
 	ctx := planCtx.ctx
-	partitions := make([]spanPartition, 0, 1)
+	partitions := make([]SpanPartition, 0, 1)
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
@@ -787,7 +782,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 				if !inNodeMap {
 					partitionIdx = len(partitions)
-					partitions = append(partitions, spanPartition{node: nodeID})
+					partitions = append(partitions, SpanPartition{Node: nodeID})
 					nodeMap[nodeID] = partitionIdx
 				}
 			}
@@ -795,9 +790,9 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
-				partition.spans[len(partition.spans)-1].EndKey = endKey.AsRawKey()
+				partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 			} else {
-				partition.spans = append(partition.spans, roachpb.Span{
+				partition.Spans = append(partition.Spans, roachpb.Span{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				})
@@ -1051,12 +1046,12 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return PhysicalPlan{}, err
 	}
 
-	var spanPartitions []spanPartition
+	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
-		spanPartitions = []spanPartition{{dsp.nodeDesc.NodeID, n.spans}}
+		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
 	} else if n.hardLimit == 0 && n.softLimit == 0 {
 		// No limit - plan all table readers where their data live.
-		spanPartitions, err = dsp.partitionSpans(planCtx, n.spans)
+		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -1070,7 +1065,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		spanPartitions = []spanPartition{{nodeID, n.spans}}
+		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
 	var p PhysicalPlan
@@ -1083,10 +1078,10 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = makeTableReaderSpans(sp.spans)
+		tr.Spans = makeTableReaderSpans(sp.Spans)
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
