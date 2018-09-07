@@ -288,8 +288,6 @@ func fetchTableDescriptorVersions(
 					return err
 				}
 				if tableDesc := desc.GetTable(); tableDesc != nil {
-					// WIP
-					log.Infof(ctx, "%s %d %s", desc.GetName(), tableDesc.Version, it.UnsafeKey().Timestamp)
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}
