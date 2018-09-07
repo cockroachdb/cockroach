@@ -15,8 +15,8 @@ build/builder.sh go install ./pkg/cmd/github-post
 build/builder.sh env COCKROACH_NIGHTLY_STRESS=true \
 		 make stress \
 		 PKG="$PKG" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
-		 TESTTIMEOUT=30m TESTFLAGS='-test.v' \
-		 STRESSFLAGS='-maxtime 15m -maxfails 1 -stderr' \
+		 TESTTIMEOUT=45m TESTFLAGS='-test.v' \
+		 STRESSFLAGS='-maxruns 100 -maxfails 1 -stderr' \
 		 2>&1 \
     | tee artifacts/stress.log \
     || exit_status=$?
