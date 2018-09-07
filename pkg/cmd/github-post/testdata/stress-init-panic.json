@@ -1,0 +1,19 @@
+{"Time":"2018-09-09T11:26:48.060060422-04:00","Action":"output","Output":"Running make with -j4\n"}
+{"Time":"2018-09-09T11:26:48.064690722-04:00","Action":"output","Output":"GOPATH set to /Users/andrei/work\n"}
+{"Time":"2018-09-09T11:26:48.433032833-04:00","Action":"output","Output":"go test  -exec 'stress ' -tags ' make x86_64_apple_darwin17.7.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.2.0-alpha.00000000-607-geca01b0f19-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=eca01b0f1989ab46e2410389e59fa84ff37f694d\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin17.7.0\"  ' -run \"TestXX\" -timeout 0 ./pkg/kv -count=1 -v -args -test.timeout 5s\n"}
+{"Time":"2018-09-09T11:27:01.369560017-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:27:01.36963707-04:00","Action":"output","Output":"panic: induced panic\n"}
+{"Time":"2018-09-09T11:27:01.369657606-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:27:01.369670653-04:00","Action":"output","Output":"goroutine 1 [running]:\n"}
+{"Time":"2018-09-09T11:27:01.369686906-04:00","Action":"output","Output":"github.com/cockroachdb/cockroach/pkg/kv.init.1()\n"}
+{"Time":"2018-09-09T11:27:01.369698334-04:00","Action":"output","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender_test.go:2513 +0x39\n"}
+{"Time":"2018-09-09T11:27:01.369722056-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:27:01.369735287-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:27:01.36974924-04:00","Action":"output","Output":"ERROR: exit status 2\n"}
+{"Time":"2018-09-09T11:27:01.369760758-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:27:01.369775782-04:00","Action":"output","Output":"1 runs completed, 1 failures, over 0s\n"}
+{"Time":"2018-09-09T11:27:01.372662648-04:00","Action":"output","Output":"context canceled\n"}
+{"Time":"2018-09-09T11:27:01.372726757-04:00","Action":"output","Output":"FAIL\n"}
+{"Time":"2018-09-09T11:27:01.373634184-04:00","Action":"output","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/kv\t0.098s\n"}
+{"Time":"2018-09-09T11:27:01.38638485-04:00","Action":"output","Output":"make: *** [stress] Error 1\n"}
+{"Time":"2018-09-09T11:27:01.386772338-04:00","Action":"fail","Elapsed":13.326}
