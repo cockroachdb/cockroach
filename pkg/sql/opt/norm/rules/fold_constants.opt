@@ -1,0 +1,31 @@
+# =============================================================================
+# fold_constants.opt contains normalization rules for folding constants.
+# =============================================================================
+
+# FoldBinary evaluates a binary operation over constant inputs, replacing the
+# entire expression with a constant. The rule applies as long as the evaluation
+# would not cause an error. Any errors should be saved for execution time,
+# since it's possible that the given operation will not be executed. For
+# example:
+#
+#   SELECT CASE WHEN true THEN 42 ELSE 1/0 END
+#
+# In this query, the ELSE clause is not executed, so the divide-by-zero error
+# should not be triggered.
+[FoldBinary, Normalize]
+(Binary
+  $left:(Const)
+  $right:(Const) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
+)
+=>
+$result
+
+# FoldUnary is similar to FoldBinary, but it involves a unary operation over a
+# single constant input. As with FoldBinary, FoldUnary applies as long as the
+# evaluation would not cause an error.
+[FoldUnary, Normalize]
+(Unary
+  $input:(Const) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
+)
+=>
+$result

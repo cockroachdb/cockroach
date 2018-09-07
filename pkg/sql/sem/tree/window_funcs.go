@@ -48,7 +48,7 @@ type WindowFrameRun struct {
 	FilterColIdx     int
 	OrdColIdx        int                // Column over which rows are ordered within the partition. It is only required in RANGE mode.
 	OrdDirection     encoding.Direction // Direction of the ordering over OrdColIdx.
-	PlusOp, MinusOp  BinOp              // Binary operators for addition and subtraction required only in RANGE mode.
+	PlusOp, MinusOp  *BinOp             // Binary operators for addition and subtraction required only in RANGE mode.
 	PeerHelper       PeerGroupsIndicesHelper
 
 	// changes for each peer group
@@ -65,15 +65,15 @@ type WindowFrameRangeOps struct{}
 // LookupImpl looks up implementation of Plus and Minus binary operators for
 // provided left and right types and returns them along with a boolean which
 // indicates whether lookup is successful.
-func (o WindowFrameRangeOps) LookupImpl(left, right types.T) (BinOp, BinOp, bool) {
+func (o WindowFrameRangeOps) LookupImpl(left, right types.T) (*BinOp, *BinOp, bool) {
 	plusOverloads, minusOverloads := BinOps[Plus], BinOps[Minus]
 	plusOp, found := plusOverloads.lookupImpl(left, right)
 	if !found {
-		return BinOp{}, BinOp{}, false
+		return nil, nil, false
 	}
 	minusOp, found := minusOverloads.lookupImpl(left, right)
 	if !found {
-		return BinOp{}, BinOp{}, false
+		return nil, nil, false
 	}
 	return plusOp, minusOp, true
 }
@@ -89,13 +89,13 @@ func (wfr *WindowFrameRun) getValueByOffset(
 		// addition/subtraction to default ascending order.
 		negative = !negative
 	}
-	var binOp BinOp
+	var binOp *BinOp
 	if negative {
 		binOp = wfr.MinusOp
 	} else {
 		binOp = wfr.PlusOp
 	}
-	return binOp.fn(evalCtx, wfr.valueAt(wfr.RowIdx), offset)
+	return binOp.Fn(evalCtx, wfr.valueAt(wfr.RowIdx), offset)
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).

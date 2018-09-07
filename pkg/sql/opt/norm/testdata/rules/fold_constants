@@ -1,0 +1,373 @@
+# --------------------------------------------------
+# FoldBinary
+# --------------------------------------------------
+
+# Fold constant.
+opt
+SELECT 1 + 2
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 3 [type=int]
+
+# Don't fold: out of range error.
+opt
+SELECT 9223372036854775800::INT + 9223372036854775800::INT
+----
+project
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── 9223372036854775800 + 9223372036854775800 [type=int]
+
+# Fold constant.
+opt
+SELECT 1::INT - 2::INT
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: -1 [type=int]
+
+# Don't fold: out of range error.
+opt
+SELECT (-9223372036854775800)::INT - 9223372036854775800::INT
+----
+project
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── -9223372036854775800 - 9223372036854775800 [type=int]
+
+# Fold constant.
+opt
+SELECT 1 * 2
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 2 [type=int]
+
+# Don't fold: out of range error.
+opt
+SELECT 9223372036854775800::INT * 9223372036854775800::INT
+----
+project
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── 9223372036854775800 * 9223372036854775800 [type=int]
+
+# Fold constant.
+opt
+SELECT 1 / 2
+----
+project
+ ├── columns: "?column?":1(decimal!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 0.5 [type=decimal]
+
+# Don't fold: divide by zero error.
+opt
+SELECT 1 / 0
+----
+project
+ ├── columns: "?column?":1(decimal)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections [side-effects]
+      └── 1 / 0 [type=decimal, side-effects]
+
+# Fold constant.
+opt
+SELECT B'01' # B'11'
+----
+project
+ ├── columns: "?column?":1(varbit!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: B'10' [type=varbit]
+
+# Don't fold: cannot mix bit array sizes error.
+opt
+SELECT B'01' # B'11001001010101'
+----
+project
+ ├── columns: "?column?":1(varbit)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── B'01' # B'11001001010101' [type=varbit]
+
+# Fold constant.
+opt
+SELECT B'01' | B'11'
+----
+project
+ ├── columns: "?column?":1(varbit!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: B'11' [type=varbit]
+
+# Don't fold: cannot mix bit array sizes error.
+opt
+SELECT B'01' | B'11001001010101'
+----
+project
+ ├── columns: "?column?":1(varbit)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── B'01' | B'11001001010101' [type=varbit]
+
+# Fold constant.
+opt
+SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMP
+----
+project
+ ├── columns: "?column?":1(interval!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: '-24h' [type=interval]
+
+# Fold constant.
+opt
+SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMPTZ
+----
+project
+ ├── columns: "?column?":1(interval!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: '-21h' [type=interval]
+
+# --------------------------------------------------
+# FoldUnary
+# --------------------------------------------------
+opt
+SELECT -(1:::int)
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: -1 [type=int]
+
+opt
+SELECT -(1:::float)
+----
+project
+ ├── columns: "?column?":1(float!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: -1.0 [type=float]
+
+# TODO(justin): it would be better if this produced an error in the optimizer
+# rather than falling back to execution to error.
+opt format=show-all
+SELECT -((-9223372036854775808)::int)
+----
+project
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.03
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.01
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── unary-minus [type=int]
+           └── const: -9223372036854775808 [type=int]
+
+opt format=show-all
+SELECT -(1:::decimal)
+----
+project
+ ├── columns: "?column?":1(decimal!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.03
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.01
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: -1 [type=decimal]
+
+opt format=show-all
+SELECT -('-1d'::interval);
+----
+project
+ ├── columns: "?column?":1(interval!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.03
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.01
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: '1d' [type=interval]
+
+# TODO(justin): this seems incorrect but it's consistent with the existing
+# planner. Revisit this: #26932.
+opt
+SELECT -('-9223372036854775808d'::interval);
+----
+project
+ ├── columns: "?column?":1(interval!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: '-9223372036854775808d' [type=interval]
+
+# Fold constant.
+opt
+SELECT ~(500::INT)
+----
+project
+ ├── columns: "?column?":1(int!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: -501 [type=int]
+
+# Fold constant.
+opt
+SELECT ~('35.231.178.195'::INET)
+----
+project
+ ├── columns: "?column?":1(inet!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: '220.24.77.60' [type=inet]

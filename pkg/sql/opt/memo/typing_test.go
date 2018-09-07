@@ -67,7 +67,7 @@ func TestBinaryAllowsNullArgs(t *testing.T) {
 func TestTypingUnaryAssumptions(t *testing.T) {
 	for name, overloads := range tree.UnaryOps {
 		for i, overload := range overloads {
-			op := overload.(tree.UnaryOp)
+			op := overload.(*tree.UnaryOp)
 
 			// Check for basic ambiguity where two different unary op overloads
 			// both allow equivalent operand types.
@@ -76,7 +76,7 @@ func TestTypingUnaryAssumptions(t *testing.T) {
 					continue
 				}
 
-				op2 := overload2.(tree.UnaryOp)
+				op2 := overload2.(*tree.UnaryOp)
 				if op.Typ.Equivalent(op2.Typ) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)
@@ -95,7 +95,7 @@ func TestTypingUnaryAssumptions(t *testing.T) {
 func TestTypingBinaryAssumptions(t *testing.T) {
 	for name, overloads := range tree.BinOps {
 		for i, overload := range overloads {
-			op := overload.(tree.BinOp)
+			op := overload.(*tree.BinOp)
 
 			// Check for basic ambiguity where two different binary op overloads
 			// both allow equivalent operand types.
@@ -104,7 +104,7 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 					continue
 				}
 
-				op2 := overload2.(tree.BinOp)
+				op2 := overload2.(*tree.BinOp)
 				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)
@@ -119,7 +119,7 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 						continue
 					}
 
-					op2 := overload2.(tree.BinOp)
+					op2 := overload2.(*tree.BinOp)
 					if !op2.NullableArgs {
 						continue
 					}
