@@ -22,22 +22,56 @@ $oldcomm
 #
 #     <long description>
 #
-#     Release note (category): <release note description>
+#     Release note (impact area): <release note description>
 #     ---
 #
 # Wrap long lines! 72 columns is best.
 #
-# The release note must be present if your commit has
-# user-facing changes. Leave the default above if not.
+# Release note:
+# - use one IMPACT and one or more AREA separated by a space (see below).
+# - use past tense for past actions: "CockroachDB was changed...", "Bug has been fixed..."
+# - use present tense for new behavior: "CockroachDB now recognizes..."
+# - for bug fixes: what was the bug, what is the new behavior.
+# - for new/changed features: what is new, why/when is it useful.
 #
-# Categories for release notes:
-# - cli change
-# - sql change
-# - admin ui change
-# - general change (e.g., change of required Go version)
-# - build change (e.g., compatibility with older CPUs)
-# - enterprise change (e.g., change to backup/restore)
-# - backwards-incompatible change
-# - performance improvement
-# - bug fix
+# IMPACT:
+# bwi - Backward-incompatible change
+# prf - Performance improvement or change
+# new - New user-facing feature or extension
+# chg - Feature change or update
+# fix - Bug fix
+#
+# AREA:
+# ccl - Enterprise Edition
+# srv - Server infrastructure (server / gossip / RPC / HTTP endpoints)
+# wui - Web UI
+# mon - Monitoring and telemetry (time series, reporting loop, stat uploads, etc)
+# tsr - Transactions, Storage and Replication (core / kv / distsender)
+# sql - SQL language and semantics: syntax, type checking, vtables, SQL correctness
+# opt - SQL planning and optimization
+# qex - SQL query execution / distsql / built-in impls / txn state
+# sch - SQL schema changes
+# pgw - SQL low-level network protocol and authentication (pgwire)
+# bio - Bulk I/O (IMPORT/EXPORT, BACKUP/RESTORE)
+# adm - Cluster administration: cluster settings, roles, authentication, zones, jobs
+# dbg - Debugging and troubleshooting facilities (debug UI pages, cockroach debug, etc.)
+# cli - CLI utilities, command-line flags, text UI
+# bld - Build system and testing infrastructure
+# doc - Documentation update
+#
+# Examples (good):
+#
+#    Release note (new cli): cockroach client commands now support specifying
+#    a port number via --host, e.g. --host=localhost:26257. This is meant to
+#    ease copy-pasting of connection settings from other sources.
+#
+#    Release note (fix sql): The output of SHOW GRANTS was not deterministically
+#    sorted. This has been fixed.
+#
+# Examples (bad)
+#
+#    Release note (new cli): support --host=hostname:port in client commands.
+#
+#    Release note (fix sql): sort the output of SHOW GRANTS.
+#
 EOF

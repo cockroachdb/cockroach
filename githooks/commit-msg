@@ -128,14 +128,10 @@ else
                     "enterprise change") ;;
                     "backward-incompatible change") ;;
                     "performance improvement") ;;
-                    "bug fix") ;;
-                    bugfix)
-                        hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
-                    sql*)
-                        hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
+                    "bug fix"|bugfix)
+                        hint "Try 'Release note (bugfix)' -> 'Release note (fix AREA)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
                         hint "Try '$lcat' -> 'backward-incompatible change'" ;;
-                    *) hint "unknown category '$lcat'" ;;
                 esac
             done
         fi
