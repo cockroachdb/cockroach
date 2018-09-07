@@ -2,26 +2,28 @@
 #
 # Prepare the commit message by adding a release note.
 
-if [ -n "$2" ]; then
-  exit 0
+oldmain=$(cat "$1"|grep -v '^#')
+oldcomm=$(cat "$1"|grep '^#' | sed -ne '/^# Changes to be committed/{q;};p')
+
+echo "$oldmain" >"$1"
+echo >> "$1"
+if ! grep -q '^Release note' "$1"; then
+	echo "Release note: None" >> "$1"
+	echo >> "$1"
 fi
 
-old=$(sed -n '1!p' "$1")
-
-cat > "$1" << EOF
-
-
-Release note: None
-
-# Write a commit message of the form:
+cat >> "$1" << EOF
+$oldcomm
 #
-# ---
-# <pkg>: <short description>
+# Commit message recommendations:
 #
-# <long description>
+#     ---
+#     <pkg>: <short description>
 #
-# Release note (category): <release note description>
-# ---
+#     <long description>
+#
+#     Release note (category): <release note description>
+#     ---
 #
 # Wrap long lines! 72 columns is best.
 #
@@ -39,4 +41,3 @@ Release note: None
 # - performance improvement
 # - bug fix
 EOF
-echo "${old}" >> "$1"
