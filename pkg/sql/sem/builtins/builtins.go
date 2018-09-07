@@ -2352,7 +2352,7 @@ may increase either contention or retry errors, or both.`,
 				delim := string(tree.MustBeDString(args[1]))
 				return arrayToString(arr, delim, nil)
 			},
-			Info: "Join an array into a stringF with a delimiter.",
+			Info: "Join an array into a string with a delimiter.",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
