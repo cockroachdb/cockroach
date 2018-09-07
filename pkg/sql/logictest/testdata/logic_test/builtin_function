@@ -325,6 +325,42 @@ SELECT crc32ieee('abc'), crc32c('abc')
 ----
 891568578  910901175
 
+# Regression tests for #29754
+query T
+SELECT md5(NULL::STRING)
+----
+NULL
+
+query T
+SELECT md5('')
+----
+d41d8cd98f00b204e9800998ecf8427e
+
+query T
+SELECT md5(NULL::STRING, NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha1(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha256(NULL::STRING)
+----
+NULL
+
+query T
+SELECT sha512(NULL::STRING, NULL::STRING)
+----
+NULL
+
+query T
+SELECT fnv32(NULL::STRING)
+----
+NULL
+
 query T
 SELECT to_hex(2147483647)
 ----
@@ -1923,7 +1959,6 @@ true false true false true false true true true
 # don't change.
 query T
 SELECT i FROM (VALUES
-  (sha512(NULL::string)),
   (sha512(true::string)),
   (sha512(false::string)),
   (sha512(1::int::string)),
@@ -1935,7 +1970,6 @@ SELECT i FROM (VALUES
   (sha512(b'bar'::bytes))
 ) AS a(i)
 ----
-cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
 9120cd5faef07a08e971ff024a3fcbea1e3a6b44142a6d82ca28c6c42e4f852595bcf53d81d776f10541045abdb7c37950629415d0dc66c8d86c64a5606d32de
 719fa67eef49c4b2a2b83f0c62bddd88c106aaadb7e21ae057c8802b700e36f81fe3f144812d8b05d66dc663d908b25645e153262cf6d457aa34e684af9e328d
 4dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b37b89903a740e1ee172da793a6e79d560e5f7f9bd058a12a280433ed6fa46510a
