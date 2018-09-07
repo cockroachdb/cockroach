@@ -2592,7 +2592,6 @@ may increase either contention or retry errors, or both.`,
 
 	"to_jsonb": makeBuiltin(jsonProps(), toJSONImpl),
 
-
 	"json_build_array": makeBuiltin(jsonPropsNullableArgs(), jsonBuildArrayImpl),
 
 	"jsonb_build_array": makeBuiltin(jsonPropsNullableArgs(), jsonBuildArrayImpl),
