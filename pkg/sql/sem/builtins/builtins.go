@@ -3291,6 +3291,8 @@ var toJSONImpl = tree.Overload{
 	Info: "Returns the value as JSON or JSONB.",
 }
 
+var prettyPrintNotSupportedError = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "pretty printing is not supported")
+
 var arrayToJsonImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"array", types.AnyArray}},
@@ -3310,8 +3312,7 @@ var arrayToJsonImpls = makeBuiltin(jsonProps(),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			prettyPrint := *(args[1].(*tree.DBool))
 			if prettyPrint {
-				return nil, pgerror.NewErrorf(
-					pgerror.CodeInvalidParameterValueError, "pretty printing is not supported")
+				return nil, prettyPrintNotSupportedError
 			}
 
 			j, err := tree.AsJSON(args[0])

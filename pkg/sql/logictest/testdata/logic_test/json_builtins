@@ -72,6 +72,25 @@ SELECT jsonb_typeof('null'::JSON)
 ----
 null
 
+## array_to_json
+query T
+SELECT array_to_json(ARRAY[[1, 2], [3, 4]])
+----
+[[1, 2], [3, 4]]
+
+query T
+SELECT array_to_json('{1, 2, 3}'::INT[])
+----
+[1, 2, 3]
+
+query T
+SELECT array_to_json(ARRAY[1, 2, 3], false)
+----
+[1, 2, 3]
+
+query error pq: array_to_json\(\): pretty printing is not supported
+SELECT array_to_json(ARRAY[1, 2, 3], true)
+
 ## to_json and to_jsonb
 
 query T
