@@ -668,7 +668,7 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root memo.GroupID, err error) {
+func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -683,5 +683,7 @@ func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root memo.GroupID, err erro
 		}
 	}()
 
-	return sb.buildScalar(expr, &sb.scope, nil, nil, nil), nil
+	group := sb.buildScalar(expr, &sb.scope, nil, nil, nil)
+	sb.factory.Memo().SetRoot(group, memo.MinPhysPropsID)
+	return nil
 }

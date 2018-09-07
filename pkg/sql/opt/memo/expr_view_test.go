@@ -51,11 +51,11 @@ func BenchmarkExprView(b *testing.B) {
 			bld := optbuilder.New(
 				context.Background(), &semaCtx, &evalCtx, catalog, o.Factory(), stmt,
 			)
-			root, props, err := bld.Build()
+			err = bld.Build()
 			if err != nil {
 				b.Fatal(err)
 			}
-			exprView := o.Optimize(root, props)
+			exprView := o.Optimize()
 
 			stack := make([]memo.ExprView, 16)
 			for i := 0; i < b.N; i++ {

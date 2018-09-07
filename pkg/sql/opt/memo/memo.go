@@ -136,9 +136,13 @@ type Memo struct {
 	// there are so many duplicates.
 	privateStorage privateStorage
 
-	// root is the root of the lowest cost expression tree in the memo. It is
-	// set once after optimization is complete.
-	root BestExprID
+	// rootGroup is the root group of the memo expression forest. It is set via
+	// a call to SetRoot.
+	rootGroup GroupID
+
+	// rootProps are the physical properties required of the root memo group. It
+	// is set via a call to SetRoot.
+	rootProps PhysicalPropsID
 
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
@@ -166,7 +170,8 @@ func (m *Memo) Init() {
 
 	m.listStorage.init()
 	m.privateStorage.init()
-	m.root = BestExprID{}
+	m.rootGroup = 0
+	m.rootProps = 0
 	m.memEstimate = 0
 }
 
@@ -182,30 +187,45 @@ func (m *Memo) Metadata() *opt.Metadata {
 	return &m.metadata
 }
 
-// Root returns the root of the memo's lowest cost expression tree. It can only
-// be accessed once the memo has been fully optimized.
-func (m *Memo) Root() ExprView {
-	if !m.isOptimized() {
-		panic("memo has not yet been optimized and had its root expression set")
-	}
-	return MakeExprView(m, m.root)
+// RootGroup returns the root memo group previously set via a call to SetRoot.
+func (m *Memo) RootGroup() GroupID {
+	return m.rootGroup
 }
 
-// SetRoot stores the root of the memo's lowest cost expression tree.
-func (m *Memo) SetRoot(root ExprView) {
-	if root.mem != m {
-		panic("the given root is in a different memo")
+// RootProps returns the physical properties required of the root memo group,
+// previously set via a call to SetRoot.
+func (m *Memo) RootProps() PhysicalPropsID {
+	return m.rootProps
+}
+
+// Root returns an ExprView wrapper around the root of the memo. If the memo has
+// not yet been optimized, this will be a view over the normalized expression
+// tree. Otherwise, it's a view over the lowest cost expression tree.
+func (m *Memo) Root() ExprView {
+	if m.isOptimized() {
+		root := m.group(m.rootGroup)
+		for i, n := 0, root.bestExprCount(); i < n; i++ {
+			be := root.bestExpr(bestOrdinal(i))
+			if be.required == m.rootProps {
+				return MakeExprView(m, BestExprID{group: m.rootGroup, ordinal: bestOrdinal(i)})
+			}
+		}
+		panic("could not find best expression that matches the root properties")
 	}
-	if root.best == normBestOrdinal {
-		panic("cannot set the memo root to be a normalized expression tree")
-	}
-	m.root = root.bestExprID()
+	return MakeNormExprView(m, m.rootGroup)
+}
+
+// SetRoot stores the root memo group, as well as the physical properties
+// required of the root group.
+func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
+	m.rootGroup = group
+	m.rootProps = physical
 }
 
 // isOptimized returns true if the memo has been fully optimized.
 func (m *Memo) isOptimized() bool {
 	// The memo is optimized once a best expression has been set at the root.
-	return m.root.ordinal != normBestOrdinal
+	return m.rootGroup != 0 && m.group(m.rootGroup).firstBestExpr.initialized()
 }
 
 // --------------------------------------------------------------------

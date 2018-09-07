@@ -56,7 +56,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	def := memo.ExplainOpDef{
 		Options: opts,
 		ColList: colsToColList(outScope.cols),
-		Props:   stmtScope.makePhysicalProps(),
+		Props:   *stmtScope.makePhysicalProps(),
 	}
 	outScope.group = b.factory.ConstructExplain(stmtScope.group, b.factory.InternExplainOpDef(&def))
 	return outScope

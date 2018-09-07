@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -108,11 +107,11 @@ func TestBuilder(t *testing.T) {
 				o.DisableOptimizations()
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
 				b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
-				group, err := b.Build(typedExpr)
+				err = b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				exprView := o.Optimize(group, &props.Physical{})
+				exprView := o.Optimize()
 				return exprView.FormatString(tester.Flags.ExprFormat)
 
 			default:

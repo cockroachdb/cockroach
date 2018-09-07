@@ -145,11 +145,11 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, &f)
 				b.AllowUnsupportedExpr = true
-				group, err := b.Build(typedExpr)
+				err = b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
-				ev := memo.MakeNormExprView(f.Memo(), group)
+				ev := f.Memo().Root()
 
 				var ic idxconstraint.Instance
 				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
@@ -256,11 +256,11 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
 
-			group, err := bld.Build(typedExpr)
+			err = bld.Build(typedExpr)
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := memo.MakeNormExprView(f.Memo(), group)
+			ev := f.Memo().Root()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance

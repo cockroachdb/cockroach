@@ -316,8 +316,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, query string)
 		h.optimizer.DisableOptimizations()
 	}
 	bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.cat, h.optimizer.Factory(), h.stmt)
-	root, props, err := bld.Build()
-	if err != nil {
+	if err := bld.Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}
 
@@ -325,5 +324,5 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, query string)
 		return
 	}
 
-	h.optimizer.Optimize(root, props)
+	h.optimizer.Optimize()
 }
