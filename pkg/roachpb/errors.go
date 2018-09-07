@@ -410,6 +410,15 @@ func NewTransactionNotFoundStatusError() *TransactionStatusError {
 	}
 }
 
+// NewTransactionCommittedStatusError initializes a new TransactionStatusError
+// with a REASON_TXN_COMMITTED.
+func NewTransactionCommittedStatusError() *TransactionStatusError {
+	return &TransactionStatusError{
+		Msg:    "already committed",
+		Reason: TransactionStatusError_REASON_TXN_COMMITTED,
+	}
+}
+
 func (e *TransactionStatusError) Error() string {
 	return fmt.Sprintf("TransactionStatusError: %s (%s)", e.Msg, e.Reason)
 }
