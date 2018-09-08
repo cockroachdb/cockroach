@@ -170,7 +170,7 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 // will be part of the same recording.
 //
 // Recording is not supported by noop spans; to ensure a real span is always
-// created, use the Force option to StartSpan.
+// created, use the Recordable option to StartSpan.
 //
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
@@ -179,7 +179,7 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 		panic("StartRecording called with NoRecording")
 	}
 	if _, noop := os.(*noopSpan); noop {
-		panic("StartRecording called on NoopSpan; use the Force option for StartSpan")
+		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
 	os.(*span).enableRecording(new(spanGroup), recType)
 }
@@ -362,17 +362,16 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
-	if s.isRecording() {
-		if !locked {
-			s.mu.Lock()
-		}
-		if s.mu.tags == nil {
-			s.mu.tags = make(opentracing.Tags)
-		}
-		s.mu.tags[key] = value
-		if !locked {
-			s.mu.Unlock()
-		}
+	// The internal tags will be used if we start a recording on this span.
+	if !locked {
+		s.mu.Lock()
+	}
+	if s.mu.tags == nil {
+		s.mu.tags = make(opentracing.Tags)
+	}
+	s.mu.tags[key] = value
+	if !locked {
+		s.mu.Unlock()
 	}
 	return s
 }
@@ -590,7 +589,7 @@ func (n *noopSpan) Log(data opentracing.LogData)                           {}
 
 func (n *noopSpan) SetBaggageItem(key, val string) opentracing.Span {
 	if key == Snowball {
-		panic("attempting to set Snowball on a noop span; use the Force option to StartSpan")
+		panic("attempting to set Snowball on a noop span; use the Recordable option to StartSpan")
 	}
 	return n
 }

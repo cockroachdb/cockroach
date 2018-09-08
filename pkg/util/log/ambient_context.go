@@ -72,6 +72,11 @@ type AmbientContext struct {
 	backgroundCtx context.Context
 }
 
+// LogTags returns the tags in the ambient context.
+func (ac *AmbientContext) LogTags() *logtags.Buffer {
+	return ac.tags
+}
+
 // AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.tags = ac.tags.Add(name, value)

@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1089,13 +1090,20 @@ func (st *SessionTracing) StartTracing(
 
 	opName := "session recording"
 	var sp opentracing.Span
-	if parentSp := opentracing.SpanFromContext(st.ex.ctxHolder.connCtx); parentSp != nil {
+	connCtx := st.ex.ctxHolder.connCtx
+	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span while recording.
-		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(opName, tracing.Recordable)
+		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(
+			opName, tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	}
 	tracing.StartRecording(sp, recType)
 	st.connSpan = sp
@@ -1453,6 +1461,7 @@ func getMessagesForSubtrace(
 		}
 		spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s: %s", name, value))
 	}
+	sort.Strings(spanStartMsgs[1:])
 
 	// This message holds all the spanStartMsgs and marks the beginning of the
 	// span, to indicate the start time and duration of the span.

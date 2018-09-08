@@ -14,6 +14,8 @@
 
 package logtags
 
+import "fmt"
+
 // Tag is a log tag, which has a string key and an arbitrary value.
 // The value must support testing for equality. It can be nil.
 type Tag struct {
@@ -29,4 +31,19 @@ func (t *Tag) Key() string {
 // Value returns the value.
 func (t *Tag) Value() interface{} {
 	return t.value
+}
+
+// ValueStr returns the value as a string.
+func (t *Tag) ValueStr() string {
+	if t.value == nil {
+		return ""
+	}
+	switch v := t.value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprint(t.value)
+	}
 }
