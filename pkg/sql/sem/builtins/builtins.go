@@ -3542,10 +3542,14 @@ func bytesOverload1(
 	}
 }
 
-func feedHash(h hash.Hash, args tree.Datums) {
+// feedHash returns true if it encounters any non-Null datum.
+func feedHash(h hash.Hash, args tree.Datums) bool {
+	var nonNullSeen bool
 	for _, datum := range args {
 		if datum == tree.DNull {
 			continue
+		} else {
+			nonNullSeen = true
 		}
 		var buf string
 		if d, ok := datum.(*tree.DBytes); ok {
@@ -3553,10 +3557,12 @@ func feedHash(h hash.Hash, args tree.Datums) {
 		} else {
 			buf = string(tree.MustBeDString(datum))
 		}
-		if _, err := h.Write([]byte(buf)); err != nil {
+		_, err := h.Write([]byte(buf))
+		if err != nil {
 			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 		}
 	}
+	return nonNullSeen
 }
 
 func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
@@ -3566,7 +3572,9 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
@@ -3576,7 +3584,9 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
@@ -3591,7 +3601,9 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info: info,
@@ -3601,7 +3613,9 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info: info,
@@ -3616,7 +3630,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info: info,
@@ -3626,7 +3642,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
-				feedHash(h, args)
+				if !feedHash(h, args) {
+					return tree.DNull, nil
+				}
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info: info,
