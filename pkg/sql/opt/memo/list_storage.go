@@ -143,6 +143,17 @@ func (ls *listStorage) init() {
 	ls.lists = ls.lists[:0]
 }
 
+// initFrom initializes the list storage with a copy of all lists from another
+// list storage. This list storage can then be modified independent of that one.
+func (ls *listStorage) initFrom(from *listStorage) {
+	ls.index = make(map[listStorageKey]listStorageVal, len(from.index))
+	for k, v := range from.index {
+		ls.index[k] = v
+	}
+	ls.lists = ls.lists[:0]
+	ls.lists = append(ls.lists, from.lists...)
+}
+
 // memoryEstimate returns a rough estimate of the list storage memory usage, in
 // bytes. It only includes memory usage that is proportional to the number of
 // list items, rather than constant overhead bytes.
