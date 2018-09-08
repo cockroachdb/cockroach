@@ -383,7 +383,7 @@ func (b *Builder) buildScalar(
 		return b.buildScalar(t.TypedInnerExpr(), inScope, outScope, outCol, colRefs)
 
 	case *tree.Placeholder:
-		if b.evalCtx.HasPlaceholders() {
+		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			// Replace placeholders with their value.
 			d, err := t.Eval(b.evalCtx)
 			if err != nil {

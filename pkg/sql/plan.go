@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -353,7 +354,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	return nil
 }
 
-// makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
+// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// Ensure that p.curPlan is populated in case an error occurs early,
@@ -374,17 +375,72 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	p.optimizer.Init(p.EvalContext())
 	f := p.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
-	err := bld.Build()
-	if err != nil {
-		// isCorrelated is used in the fallback case to create a better error.
-		p.curPlan.isCorrelated = bld.IsCorrelated
-		return err
+
+	// If the statement includes a PreparedStatement, then separate planning into
+	// two distinct phases:
+	//
+	//   PREPARE - Build the Memo (optbuild) and apply normalization rules to it.
+	//             If the query contains placeholders, values are not assigned
+	//             during this phase, as that only happens during the EXECUTE
+	//             phase. If the query does not contain placeholders, then also
+	//             apply exploration rules to the Memo so that there's even less
+	//             to do during the EXECUTE phase.
+	//
+	//   EXECUTE - Before the query can be executed, first any placeholders must
+	//             be assigned values. This can trigger additional normalization
+	//             rules, such as with this example:
+	//
+	//               SELECT * FROM abc WHERE b = $1 - 5
+	//
+	//             Without folding the Sub expression, any index on the "b" column
+	//             won't be found. This also means that after placeholders are
+	//             assigned, exploration rules must be applied (vs. applying them
+	//             during PREPARE when there are no placeholders).
+	//
+	//             Whether there were placeholders or not, after exploration the
+	//             plan tree must be built (execbuild). This tree is set as the
+	//             planner.curPlan, and the EXECUTE phase of planning is complete.
+	//
+	var prepMemo *memo.Memo
+	inPreparePhase := p.EvalContext().PrepareOnly
+	if stmt.Prepared != nil {
+		// Don't use memo if it was never prepared, typically because of fallback
+		// to the heuristic planner.
+		if inPreparePhase || stmt.Prepared.Memo.RootGroup() != 0 {
+			prepMemo = &stmt.Prepared.Memo
+		}
+	}
+
+	// If this is the prepare phase, or if a prepared memo:
+	//   1. doesn't yet exist, or
+	//   2. it's been invalidated by schema or other changes
+	//
+	// Then entirely rebuild the memo from the AST.
+	if inPreparePhase || prepMemo == nil || prepMemo.IsStale(ctx, p.EvalContext(), &catalog) {
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
+		bld.KeepPlaceholders = prepMemo != nil
+		err := bld.Build()
+		if err != nil {
+			// isCorrelated is used in the fallback case to create a better error.
+			p.curPlan.isCorrelated = bld.IsCorrelated
+			return err
+		}
+
+		if prepMemo != nil {
+			// If the memo doesn't have placeholders, then fully optimize it, since
+			// it can be reused without further changes to build the execution tree.
+			if !f.Memo().HasPlaceholders() {
+				p.optimizer.Optimize()
+			}
+
+			// Update the prepared memo.
+			prepMemo.InitFrom(f.Memo())
+		}
 	}
 
 	// If in the PREPARE phase, construct a dummy plan that has correct output
 	// columns. Only output columns and placeholder types are needed.
-	if p.extendedEvalCtx.PrepareOnly {
+	if inPreparePhase {
 		mem := f.Memo()
 		md := mem.Metadata()
 		physical := mem.LookupPhysicalProps(mem.RootProps())
@@ -397,8 +453,23 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		return nil
 	}
 
-	ev := p.optimizer.Optimize()
+	// This is the EXECUTE phase, so finish optimization by assigning any
+	// remaining placeholders and applying exploration rules.
+	var ev memo.ExprView
+	if prepMemo == nil {
+		ev = p.optimizer.Optimize()
+	} else {
+		if prepMemo.HasPlaceholders() {
+			// Assign placeholders in the prepared memo.
+			f.Memo().InitFrom(prepMemo)
+			f.AssignPlaceholders()
+			ev = p.optimizer.Optimize()
+		} else {
+			ev = prepMemo.Root()
+		}
+	}
 
+	// Build the plan tree and store it in planner.curPlan.
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, ev).Build()
 	if err != nil {

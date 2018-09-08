@@ -86,8 +86,8 @@ func TestMemoInitFrom(t *testing.T) {
 	if mem1.String() != mem3.String() {
 		t.Errorf("expected: %s, actual: %s", mem3.String(), mem1.String())
 	}
-	if mem2Str != mem2.String() {
-		t.Errorf("expected: %s, actual: %s", mem2.String(), mem2Str)
+	if mem2.String() != mem2Str {
+		t.Errorf("expected: %s, actual: %s", mem2Str, mem2.String())
 	}
 }
 

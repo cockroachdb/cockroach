@@ -220,7 +220,11 @@ func (m *Memo) InitFrom(from *Memo) {
 	}
 
 	// Copy the groups.
-	m.groups = m.groups[:0]
+	if m.groups == nil {
+		m.groups = make([]group, 0, len(from.groups))
+	} else {
+		m.groups = m.groups[:0]
+	}
 	for i := range from.groups {
 		from := &from.groups[i]
 		m.groups = append(m.groups, group{
@@ -289,6 +293,12 @@ func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
 	m.rootProps = physical
 }
 
+// HasPlaceholders returns true if the memo contains at least one placeholder
+// operator.
+func (m *Memo) HasPlaceholders() bool {
+	return m.GroupProperties(m.rootGroup).Relational.HasPlaceholder
+}
+
 // IsStale returns true if the memo has been invalidated by changes to any of
 // its dependencies. Once a memo is known to be stale, it must be ejected from
 // any query cache or prepared statement and replaced with a recompiled memo
@@ -301,7 +311,7 @@ func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
 //      related types are constructed and compared.
 //   4. Data source schema: this determines most aspects of how the query is
 //      compiled.
-//   5. Data source privileges: current user may no longer has access to one or
+//   5. Data source privileges: current user may no longer have access to one or
 //      more data sources.
 //
 func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog opt.Catalog) bool {
@@ -311,7 +321,11 @@ func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog o
 	}
 
 	// Memo is stale if the search path has changed. Assume it's changed if the
-	// slice's array has changed, even if the values are the same (for speed).
+	// slice length is different, or if it no longer points to the same underlying
+	// array. If two slices are the same length and point to the same underlying
+	// array, then they are guaranteed to be identical. Note that GetPathArray
+	// already specifies that the slice must not be modified, so its elements will
+	// never be modified in-place.
 	left := m.searchPath.GetPathArray()
 	right := evalCtx.SessionData.SearchPath.GetPathArray()
 	if len(left) != len(right) {
@@ -416,7 +430,7 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then
-// MemoizeNormExpr is a no-op, and returns the existing group.
+// MemoizeNormExpr is a no-op, and returns the existing ExprView.
 func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	existing := m.exprMap[norm.Fingerprint()]
 	if existing != 0 {
