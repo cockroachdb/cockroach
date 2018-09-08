@@ -2,6 +2,12 @@
 #
 # Prepare the commit message by adding a release note.
 
+if test "$2" = "message"; then
+    # This git command is non-interactive, and will not filter out the
+    # comments out so there is nothing for us to do here.
+    exit 0
+fi
+
 oldmain=$(cat "$1"|grep -v '^#')
 oldcomm=$(cat "$1"|grep '^#' | sed -ne '/^# Changes to be committed/{q;};p')
 
