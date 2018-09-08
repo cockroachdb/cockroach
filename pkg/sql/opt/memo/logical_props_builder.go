@@ -1074,9 +1074,9 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		return logical
 	}
 
-	// By default, derive OuterCols and CanHaveSideEffects from all children,
-	// both relational and scalar. Derive HasCorrelatedSubquery from scalar
-	// children.
+	// By default, derive OuterCols, HasPlaceholder, and CanHaveSideEffects from
+	// all children, both relational and scalar. Derive HasCorrelatedSubquery from
+	// scalar children.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childLogical := &ev.childGroup(i).logical
 

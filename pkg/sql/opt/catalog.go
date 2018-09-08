@@ -38,6 +38,11 @@ const PrimaryIndex = 0
 // data source changes in any way, then the fingerprint must also change. This
 // enables cached data sources (or other data structures dependent on the data
 // sources) to be invalidated when their schema changes.
+//
+// For sqlbase data sources, the fingerprint is simply the concatenation of the
+// 32-bit descriptor ID and version fields. The version is incremented each time
+// a change to a table/view/sequence occurs, including changes to any associated
+// indexes.
 type Fingerprint uint64
 
 // Catalog is an interface to a database catalog, exposing only the information

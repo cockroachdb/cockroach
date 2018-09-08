@@ -432,3 +432,293 @@ PREPARE forbar AS insert into bar (id) VALUES (1)
 
 statement ok
 COMMIT TRANSACTION
+
+# Test placeholder in aggregate.
+statement ok
+CREATE TABLE aggtab (a INT PRIMARY KEY);
+INSERT INTO aggtab (a) VALUES (1)
+
+statement ok
+PREPARE aggprep AS SELECT max(a + $1:::int) FROM aggtab
+
+query I
+EXECUTE aggprep(10)
+----
+11
+
+query I
+EXECUTE aggprep(20)
+----
+21
+
+#
+# Test prepared statements that rely on context, and ensure they are invalidated
+# when that context changes.
+#
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+USE otherdb
+
+statement ok
+CREATE TABLE othertable (a INT PRIMARY KEY, b INT); INSERT INTO othertable (a, b) VALUES (1, 10)
+
+## Current database change: Use current_database function, and ensure its return
+## value changes when current database changes.
+statement ok
+PREPARE change_db AS SELECT current_database()
+
+query T
+EXECUTE change_db
+----
+otherdb
+
+statement ok
+USE test
+
+query T
+EXECUTE change_db
+----
+test
+
+statement ok
+USE otherdb
+
+## Name resolution change: Query table in current database. Ensure that it is
+## not visible in another database.
+statement ok
+PREPARE change_db_2 AS SELECT * FROM othertable
+
+query II
+EXECUTE change_db_2
+----
+1  10
+
+statement ok
+USE test
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_db_2
+
+statement ok
+USE otherdb
+
+## Search path change: Change the search path and ensure that the prepared plan
+## is invalidated.
+statement ok
+PREPARE change_search_path AS SELECT * FROM othertable
+
+query II
+EXECUTE change_search_path
+----
+1  10
+
+statement ok
+SET search_path = pg_catalog
+
+query error pq: relation "othertable" does not exist
+EXECUTE change_search_path
+
+statement ok
+RESET search_path
+
+## Functions: Use function which depends on context, and which is constant-
+## folded by the heuristic planner. Ensure that it's not constant folded when
+## part of prepared plan.
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+false
+
+statement ok
+GRANT ALL ON othertable TO testuser
+
+query B
+SELECT has_column_privilege('testuser', 'othertable', 1, 'SELECT')
+----
+true
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+## Location change: Change the current location (affects timezone) and make
+## sure the query is invalidated.
+statement ok
+PREPARE change_loc AS SELECT '2000-01-01 18:05:10.123'::timestamptz
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 +0000 +0000
+
+statement ok
+SET TIME ZONE 'EST';
+
+query T
+EXECUTE change_loc
+----
+2000-01-01 18:05:10.123 -0500 -0500
+
+statement ok
+SET TIME ZONE 'UTC';
+
+## Permissions: Grant and then revoke permission to select from a table. The
+## prepared plan should be invalidated.
+statement ok
+GRANT ALL ON othertable TO testuser
+
+user testuser
+
+statement ok
+USE otherdb
+
+statement ok
+PREPARE change_privileges AS SELECT * FROM othertable
+
+query II
+EXECUTE change_privileges
+----
+1  10
+
+user root
+
+statement ok
+REVOKE ALL ON othertable FROM testuser
+
+user testuser
+
+query error pq: user testuser does not have SELECT privilege on relation othertable
+EXECUTE change_privileges
+
+user root
+
+## Schema change (rename): Rename column in table and ensure that the prepared
+## statement is updated to incorporate it.
+statement ok
+PREPARE change_rename AS SELECT * FROM othertable
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_rename
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_rename
+----
+a  b
+1  10
+
+## Schema change (placeholders): Similar to previous case, but with placeholder
+## present.
+statement ok
+PREPARE change_placeholders AS SELECT * FROM othertable WHERE a=$1
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  c
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN c TO b
+
+query II colnames
+EXECUTE change_placeholders(1)
+----
+a  b
+1  10
+
+## Schema change (view): Change view name and ensure that prepared query is
+## invalidated.
+statement ok
+CREATE VIEW otherview AS SELECT a, b FROM othertable
+
+statement ok
+PREPARE change_view AS SELECT * FROM otherview
+
+query II
+EXECUTE change_view
+----
+1  10
+
+statement ok
+ALTER VIEW otherview RENAME TO otherview2
+
+query error pq: relation "otherview" does not exist
+EXECUTE change_view
+
+statement ok
+DROP VIEW otherview2
+
+## Schema change: Drop column and ensure that correct error is reported.
+statement ok
+PREPARE change_drop AS SELECT * FROM othertable WHERE b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+statement ok
+ALTER TABLE othertable DROP COLUMN b
+
+query error pq: column "b" does not exist
+EXECUTE change_drop
+
+statement ok
+ALTER TABLE othertable ADD COLUMN b INT; UPDATE othertable SET b=10
+
+query II
+EXECUTE change_drop
+----
+1  10
+
+## Uncommitted schema change: Rename column in table in same transaction as
+## execution of prepared statement and make prepared statement incorporates it.
+statement ok
+PREPARE change_schema_uncommitted AS SELECT * FROM othertable
+
+statement ok
+BEGIN TRANSACTION
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  b
+1  10
+
+statement ok
+ALTER TABLE othertable RENAME COLUMN b TO c
+
+query II colnames
+EXECUTE change_schema_uncommitted
+----
+a  c
+1  10
+
+statement ok
+ROLLBACK TRANSACTION

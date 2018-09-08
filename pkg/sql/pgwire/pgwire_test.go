@@ -1456,6 +1456,72 @@ func TestPGPrepareNameQual(t *testing.T) {
 	}
 }
 
+// TestPGPrepareInvalidate ensures that changing table schema triggers recompile
+// of a prepared query.
+func TestPGPrepareInvalidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	testCases := []struct {
+		stmt    string
+		prep    bool
+		numCols int
+	}{
+		{
+			stmt: `CREATE DATABASE IF NOT EXISTS testing`,
+		},
+		{
+			stmt: `CREATE TABLE IF NOT EXISTS ab (a INT PRIMARY KEY, b INT)`,
+		},
+		{
+			stmt:    `INSERT INTO ab (a, b) VALUES (1, 10)`,
+			prep:    true,
+			numCols: 2,
+		},
+		{
+			stmt:    `ALTER TABLE ab ADD COLUMN c INT`,
+			numCols: 3,
+		},
+		{
+			stmt:    `ALTER TABLE ab DROP COLUMN c`,
+			numCols: 2,
+		},
+	}
+
+	var prep *gosql.Stmt
+	for _, tc := range testCases {
+		if _, err = db.Exec(tc.stmt); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create the prepared statement.
+		if tc.prep {
+			if prep, err = db.Prepare(`SELECT * FROM ab WHERE b=10`); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if prep != nil {
+			rows, _ := prep.Query()
+			defer rows.Close()
+			cols, _ := rows.Columns()
+			if len(cols) != tc.numCols {
+				t.Fatalf("expected %d cols, got %d cols", tc.numCols, len(cols))
+			}
+		}
+	}
+}
+
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
