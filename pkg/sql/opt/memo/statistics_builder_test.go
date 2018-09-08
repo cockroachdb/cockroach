@@ -92,7 +92,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	}
 
 	var mem Memo
-	mem.Init()
+	mem.Init(&evalCtx)
 	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
 	tabID := mem.Metadata().AddTable(tab)
 

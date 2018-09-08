@@ -393,19 +393,12 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 // resolveDataSource returns the data source in the catalog with the given name.
 // If the name does not resolve to a table, or if the current user does not have
 // the right privileges, then resolveDataSource raises an error.
-func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt.DataSource {
+func (b *Builder) resolveDataSource(tn *tree.TableName) opt.DataSource {
 	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
 	if err != nil {
 		panic(builderError{err})
 	}
-
-	if !b.skipSelectPrivilegeChecks {
-		err := ds.CheckPrivilege(b.ctx, priv)
-		if err != nil {
-			panic(builderError{err})
-		}
-	}
-
+	b.checkPrivilege(ds)
 	return ds
 }
 
@@ -413,18 +406,33 @@ func (b *Builder) resolveDataSource(tn *tree.TableName, priv privilege.Kind) opt
 // the given TableRef spec. If no data source matches, or if the current user
 // does not have the right privileges, then resolveDataSourceFromRef raises an
 // error.
-func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) opt.DataSource {
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef) opt.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, ref.TableID)
 	if err != nil {
 		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
+	b.checkPrivilege(ds)
+	return ds
+}
 
+// checkPrivilege ensures that the current user has the privilege needed to
+// access the given data source in the catalog. If not, then checkPrivilege
+// raises an error. It also adds the data source as a dependency to the
+// metadata, so that the privileges can be re-checked on reuse of the memo.
+//
+// TODO(andyk): Add privilegeKind field to Builder when privileges other than
+// SELECT are needed.
+func (b *Builder) checkPrivilege(ds opt.DataSource) {
+	var priv privilege.Kind
 	if !b.skipSelectPrivilegeChecks {
+		priv = privilege.SELECT
 		err := ds.CheckPrivilege(b.ctx, priv)
 		if err != nil {
 			panic(builderError{err})
 		}
 	}
 
-	return ds
+	// Add dependency on this data source to the metadata, so that the metadata
+	// can be cached and later checked for freshness.
+	b.factory.Metadata().AddDependency(ds, priv)
 }

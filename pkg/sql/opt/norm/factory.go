@@ -109,7 +109,7 @@ type Factory struct {
 // This must be called before the factory can be used (or reused).
 func (f *Factory) Init(evalCtx *tree.EvalContext) {
 	f.evalCtx = evalCtx
-	f.mem.Init()
+	f.mem.Init(evalCtx)
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil

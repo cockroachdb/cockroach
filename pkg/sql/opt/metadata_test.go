@@ -72,7 +72,7 @@ func TestMetadataTables(t *testing.T) {
 	var md opt.Metadata
 
 	// Add a table reference to the metadata.
-	a := &testcat.Table{}
+	a := &testcat.Table{TabFingerprint: 1}
 	a.TabName = tree.MakeUnqualifiedTableName(tree.Name("a"))
 	x := &testcat.Column{Name: "x"}
 	y := &testcat.Column{Name: "y"}
@@ -99,7 +99,7 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	// Add a table reference without a name to the metadata.
-	b := &testcat.Table{}
+	b := &testcat.Table{TabFingerprint: 1}
 	b.TabName = tree.MakeUnqualifiedTableName(tree.Name("b"))
 	b.Columns = append(b.Columns, &testcat.Column{Name: "x"})
 

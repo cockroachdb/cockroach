@@ -232,6 +232,8 @@ func BenchmarkIndexConstraints(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
@@ -239,7 +241,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 			var f norm.Factory
-			f.Init(nil /* evalCtx */)
+			f.Init(&evalCtx)
 			md := f.Metadata()
 			for i, typ := range varTypes {
 				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)

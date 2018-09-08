@@ -34,6 +34,12 @@ import (
 // index, even if it meant adding a hidden unique rowid column.
 const PrimaryIndex = 0
 
+// Fingerprint uniquely identifies a catalog data source. If the schema of the
+// data source changes in any way, then the fingerprint must also change. This
+// enables cached data sources (or other data structures dependent on the data
+// sources) to be invalidated when their schema changes.
+type Fingerprint uint64
+
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
 type Catalog interface {
@@ -52,6 +58,11 @@ type Catalog interface {
 // DataSource is an interface to a database object that provides rows, like a
 // table, a view, or a sequence.
 type DataSource interface {
+	// Fingerprint uniquely identifies this data source. If the schema of this
+	// data source changes, then so will the value of this fingerprint. If two
+	// data sources have the same fingerprint, then they are identical.
+	Fingerprint() Fingerprint
+
 	// Name returns the fully normalized, fully qualified, and fully resolved
 	// name of the data source. The ExplicitCatalog and ExplicitSchema fields
 	// will always be true, since all parts of the name are always specified.

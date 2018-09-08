@@ -15,11 +15,19 @@
 package memo_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -38,6 +46,99 @@ func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars
 	runDataDrivenTest(t, "testdata/stats/", flags)
+}
+
+func TestMemoIsStale(t *testing.T) {
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Revoke access to the underlying table. The user should retain indirect
+	// access via the view.
+	catalog.Table(tree.NewTableName("t", "abc")).Revoked = true
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	// Initialize context with starting values.
+	searchPath := []string{"path1", "path2"}
+	evalCtx.SessionData.Database = "t"
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
+
+	stmt, err := parser.ParseOne("SELECT a, b+1 FROM abcview WHERE c='foo'")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var o xform.Optimizer
+	o.Init(&evalCtx)
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("memo should not be stale")
+	}
+
+	// Stale current database.
+	evalCtx.SessionData.Database = "newdb"
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale current database")
+	}
+	evalCtx.SessionData.Database = "t"
+
+	// Stale search path.
+	evalCtx.SessionData.SearchPath = sessiondata.SearchPath{}
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale search path")
+	}
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath([]string{"path1", "path2"})
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale search path")
+	}
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
+
+	// Stale location.
+	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale location")
+	}
+	evalCtx.SessionData.DataConversion.Location = time.UTC
+
+	// Stale schema.
+	_, err = catalog.ExecuteDDL("DROP TABLE abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale schema")
+	}
+	catalog = testcat.New()
+	_, _ = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	_, _ = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+
+	// User no longer has access to view.
+	catalog.View(tree.NewTableName("t", "abcview")).Revoked = true
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected user not to have SELECT privilege on view")
+	}
+	catalog.View(tree.NewTableName("t", "abcview")).Revoked = false
+
+	// Ensure that memo is not stale after restoring to original state.
+	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("memo should not be stale")
+	}
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
