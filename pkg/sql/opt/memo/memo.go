@@ -289,6 +289,12 @@ func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
 	m.rootProps = physical
 }
 
+// HasPlaceholders returns true if the memo contains at least one placeholder
+// operator.
+func (m *Memo) HasPlaceholders() bool {
+	return m.GroupProperties(m.rootGroup).Relational.HasPlaceholder
+}
+
 // IsStale returns true if the memo has been invalidated by changes to any of
 // its dependencies. Once a memo is known to be stale, it must be ejected from
 // any query cache or prepared statement and replaced with a recompiled memo

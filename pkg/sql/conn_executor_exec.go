@@ -304,6 +304,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		stmt.AST = ps.Statement
+		stmt.Prepared = ex.tryReusePreparedState(ps.PreparedStatement)
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.Statement)
