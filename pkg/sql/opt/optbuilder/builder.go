@@ -56,6 +56,11 @@ type Builder struct {
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
 
+	// KeepPlaceholders is a control knob: if set, optbuilder will never replace
+	// a placeholder operator with its assigned value, even when it is available.
+	// This is used when re-preparing invalidated queries.
+	KeepPlaceholders bool
+
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
 	// the table name in all column labels before adding them to the metadata.
