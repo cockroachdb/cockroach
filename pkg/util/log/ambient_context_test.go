@@ -70,6 +70,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 			event: a
 			event: c
 		span child:
+			tags: ambient=
 			event: [ambient] b
 	`); err != nil {
 		t.Fatal(err)
