@@ -241,8 +241,12 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
 			}
 		}
+
 		if logProps.Relational.CanHaveSideEffects {
 			tp.Child("side-effects")
+		}
+		if logProps.Relational.HasPlaceholder {
+			tp.Child("has-placeholder")
 		}
 	}
 
