@@ -17,6 +17,7 @@ env=(
   "PKG=$PKG"
   "GOFLAGS=${GOFLAGS:-}"
   "TAGS=${TAGS:-}"
+  "STRESSFLAGS=${STRESSFLAGS:-}"
 )
 
 build/builder.sh env "${env[@]}" bash <<'EOF'
