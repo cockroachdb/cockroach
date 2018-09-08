@@ -4657,3 +4657,7 @@ func (s *Store) setConsistencyQueueActive(active bool) {
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
 }
+
+func init() {
+	tracing.RegisterTagRemapping("s", "store")
+}
