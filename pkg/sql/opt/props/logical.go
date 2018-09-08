@@ -99,6 +99,10 @@ type Relational struct {
 	// comment for Logical.CanHaveSideEffects.
 	CanHaveSideEffects bool
 
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
+
 	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
 	// relationships between columns in a base or derived relation. Given two sets
 	// of columns A and B, a functional dependency A-->B holds if A uniquely
@@ -261,6 +265,10 @@ type Scalar struct {
 	// return the same output given the same input. For more details, see the
 	// comment for Logical.CanHaveSideEffects.
 	CanHaveSideEffects bool
+
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
 
 	// HasCorrelatedSubquery is true if the scalar expression tree contains a
 	// subquery having one or more outer columns. The subquery can be a Subquery,
@@ -435,6 +443,15 @@ func (p *Logical) CanHaveSideEffects() bool {
 		return p.Scalar.CanHaveSideEffects
 	}
 	return p.Relational.CanHaveSideEffects
+}
+
+// HasPlaceholder is true if the subtree rooted at this expression contains
+// at least one Placeholder operator.
+func (p *Logical) HasPlaceholder() bool {
+	if p.Scalar != nil {
+		return p.Scalar.HasPlaceholder
+	}
+	return p.Relational.HasPlaceholder
 }
 
 // Verify runs consistency checks against the logical properties, in order to
