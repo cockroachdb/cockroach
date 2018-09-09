@@ -777,7 +777,7 @@ func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 8)
+	items := make([]pretty.RLTableRow, 0, 8)
 	items = append(items, node.With.docRow(p))
 	kw := "INSERT"
 	if node.OnConflict.IsUpsertAlias() {
