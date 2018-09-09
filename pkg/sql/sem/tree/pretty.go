@@ -1531,3 +1531,14 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return p.rlTable(items...)
 }
+
+func (node *Export) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 5)
+	items = append(items, p.row("EXPORT", pretty.Nil))
+	items = append(items, p.row("INTO "+node.FileFormat, p.Doc(node.File)))
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	items = append(items, p.row("FROM", p.Doc(node.Query)))
+	return p.rlTable(items...)
+}
