@@ -1183,6 +1183,46 @@ func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 	)
 }
 
+func (node *ListPartition) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Fold(pretty.ConcatSpace,
+		pretty.Text(`PARTITION`),
+		p.Doc(&node.Name),
+		pretty.Text(`VALUES IN (`),
+	)
+	d = pretty.BracketDoc(
+		d,
+		p.Doc(&node.Exprs),
+		pretty.Text(")"),
+	)
+	if node.Subpartition != nil {
+		d = p.nestUnder(d, p.Doc(node.Subpartition))
+	}
+	return d
+}
+
+func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Fold(pretty.ConcatSpace,
+		pretty.Text(`PARTITION`),
+		p.Doc(&node.Name),
+		pretty.Text(`VALUES`),
+	)
+	from := pretty.Bracket(
+		"FROM (",
+		p.Doc(&node.From),
+		")",
+	)
+	to := pretty.Bracket(
+		"TO (",
+		p.Doc(&node.To),
+		")",
+	)
+	d = p.nestUnder(d, pretty.Group(pretty.Stack(from, to)))
+	if node.Subpartition != nil {
+		d = p.nestUnder(d, p.Doc(node.Subpartition))
+	}
+	return d
+}
+
 func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	title := pretty.Fold(
 		pretty.ConcatSpace,
