@@ -1417,3 +1417,73 @@ func (node *ReferenceActions) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return pretty.Fold(pretty.ConcatSpace, docs...)
 }
+
+func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 6)
+
+	items = append(items, p.row("BACKUP", pretty.Nil))
+	items = append(items, node.Targets.docRow(p))
+	items = append(items, p.row("TO", p.Doc(node.To)))
+
+	if node.AsOf.Expr != nil {
+		items = append(items, node.AsOf.docRow(p))
+	}
+	if node.IncrementalFrom != nil {
+		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
+	}
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	return p.rlTable(items...)
+}
+
+func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 5)
+
+	items = append(items, p.row("RESTORE", pretty.Nil))
+	items = append(items, node.Targets.docRow(p))
+	items = append(items, p.row("FROM", p.Doc(&node.From)))
+
+	if node.AsOf.Expr != nil {
+		items = append(items, node.AsOf.docRow(p))
+	}
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	return p.rlTable(items...)
+}
+
+func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *TargetList) docRow(p *PrettyCfg) pretty.RLTableRow {
+	if node.Databases != nil {
+		return p.row("DATABASE", p.Doc(&node.Databases))
+	}
+	return p.row("TABLE", p.Doc(&node.Tables))
+}
+
+func (node *AsOfClause) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *AsOfClause) docRow(p *PrettyCfg) pretty.RLTableRow {
+	return p.row("AS OF SYSTEM TIME", p.Doc(node.Expr))
+}
+
+func (node *KVOptions) doc(p *PrettyCfg) pretty.Doc {
+	var opts []pretty.Doc
+	for _, opt := range *node {
+		d := p.Doc(&opt.Key)
+		if opt.Value != nil {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("="),
+				p.Doc(opt.Value),
+			)
+		}
+		opts = append(opts, d)
+	}
+	return pretty.Join(",", opts...)
+}
