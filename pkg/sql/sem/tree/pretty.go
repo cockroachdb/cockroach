@@ -1278,3 +1278,142 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return pretty.Group(pretty.Stack(docs...))
 }
+
+func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.ConcatSpace(
+		p.Doc(&node.Name),
+		pretty.Text(coltypes.ColTypeAsString(node.Type)),
+	)
+	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
+		d = pretty.Fold(pretty.ConcatSpace,
+			d,
+			pretty.Text("CONSTRAINT"),
+			p.Doc(&node.Nullable.ConstraintName),
+		)
+	}
+	switch node.Nullable.Nullability {
+	case Null:
+		d = pretty.ConcatSpace(d, pretty.Text("NULL"))
+	case NotNull:
+		d = pretty.ConcatSpace(d, pretty.Text("NOT NULL"))
+	}
+	if node.PrimaryKey || node.Unique {
+		if node.UniqueConstraintName != "" {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.UniqueConstraintName),
+			)
+		}
+		if node.PrimaryKey {
+			d = pretty.ConcatSpace(d, pretty.Text("PRIMARY KEY"))
+		} else if node.Unique {
+			d = pretty.ConcatSpace(d, pretty.Text("UNIQUE"))
+		}
+	}
+	if node.HasDefaultExpr() {
+		if node.DefaultExpr.ConstraintName != "" {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.DefaultExpr.ConstraintName),
+			)
+		}
+		d = pretty.Fold(pretty.ConcatSpace,
+			d,
+			pretty.Text("DEFAULT"),
+			p.Doc(node.DefaultExpr.Expr),
+		)
+	}
+	for _, checkExpr := range node.CheckExprs {
+		if checkExpr.ConstraintName != "" {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&checkExpr.ConstraintName),
+			)
+		}
+		d = p.nestUnder(d, pretty.Bracket(
+			"CHECK (",
+			p.Doc(checkExpr.Expr),
+			")",
+		))
+	}
+	if node.HasFKConstraint() {
+		if node.References.ConstraintName != "" {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.References.ConstraintName),
+			)
+		}
+		d = pretty.Fold(pretty.ConcatSpace,
+			d,
+			pretty.Text("REFERENCES"),
+			p.Doc(&node.References.Table),
+		)
+		if node.References.Col != "" {
+			d = pretty.ConcatSpace(d, pretty.Bracket(
+				"(",
+				p.Doc(&node.References.Col),
+				")",
+			))
+		}
+		d = pretty.ConcatSpace(d, p.Doc(&node.References.Actions))
+	}
+	if node.IsComputed() {
+		d = p.nestUnder(d, pretty.Bracket(
+			"AS (",
+			p.Doc(node.Computed.Expr),
+			") STORED",
+		))
+	}
+	if node.HasColumnFamily() {
+		if node.Family.Create {
+			d = pretty.ConcatSpace(d, pretty.Text("CREATE"))
+		}
+		if node.Family.IfNotExists {
+			d = pretty.ConcatSpace(d, pretty.Text("IF NOT EXISTS"))
+		}
+		d = pretty.ConcatSpace(d, pretty.Text("FAMILY"))
+		if len(node.Family.Name) > 0 {
+			d = pretty.ConcatSpace(d, p.Doc(&node.Family.Name))
+		}
+	}
+	return d
+}
+
+func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Nil
+	if node.Name != "" {
+		d = pretty.ConcatSpace(
+			pretty.Text("CONSTRAINT"),
+			p.Doc(&node.Name),
+		)
+	}
+	return pretty.ConcatSpace(
+		d,
+		pretty.Bracket(
+			"CHECK (",
+			p.Doc(node.Expr),
+			")",
+		),
+	)
+}
+
+func (node *ReferenceActions) doc(p *PrettyCfg) pretty.Doc {
+	var docs []pretty.Doc
+	if node.Delete != NoAction {
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("ON DELETE"),
+			pretty.Text(node.Delete.String()),
+		))
+	}
+	if node.Update != NoAction {
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("ON UPDATE"),
+			pretty.Text(node.Update.String()),
+		))
+	}
+	return pretty.Fold(pretty.ConcatSpace, docs...)
+}
