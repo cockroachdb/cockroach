@@ -16,6 +16,7 @@ package tree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -1541,4 +1542,24 @@ func (node *Export) doc(p *PrettyCfg) pretty.Doc {
 	}
 	items = append(items, p.row("FROM", p.Doc(node.Query)))
 	return p.rlTable(items...)
+}
+
+func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Text("EXPLAIN")
+	if len(node.Options) > 0 {
+		var opts []pretty.Doc
+		for _, opt := range node.Options {
+			upperCaseOpt := strings.ToUpper(opt)
+			if upperCaseOpt == "ANALYZE" {
+				d = pretty.ConcatSpace(d, pretty.Text("ANALYZE"))
+			} else {
+				opts = append(opts, pretty.Text(upperCaseOpt))
+			}
+		}
+		d = pretty.ConcatSpace(
+			d,
+			pretty.Bracket("(", pretty.Join(",", opts...), ")"),
+		)
+	}
+	return p.nestUnder(d, p.Doc(node.Statement))
 }
