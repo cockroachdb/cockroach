@@ -1236,3 +1236,43 @@ func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return d
 }
+
+func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Text("CREATE")
+	if node.Unique {
+		d = pretty.ConcatSpace(d, pretty.Text("UNIQUE"))
+	}
+	if node.Inverted {
+		d = pretty.ConcatSpace(d, pretty.Text("INVERTED"))
+	}
+	d = pretty.ConcatSpace(d, pretty.Text("INDEX"))
+	if node.IfNotExists {
+		d = pretty.ConcatSpace(d, pretty.Text("IF NOT EXISTS"))
+	}
+	if node.Name != "" {
+		d = pretty.ConcatSpace(d, p.Doc(&node.Name))
+	}
+	docs := []pretty.Doc{
+		pretty.Fold(
+			pretty.ConcatSpace,
+			d,
+			pretty.Text("ON"),
+			p.Doc(&node.Table),
+			pretty.Bracket("(", p.Doc(&node.Columns), ")")),
+	}
+
+	if len(node.Storing) > 0 {
+		docs = append(docs, pretty.Bracket(
+			"STORING (",
+			p.Doc(&node.Storing),
+			")",
+		))
+	}
+	if node.Interleave != nil {
+		docs = append(docs, p.Doc(node.Interleave))
+	}
+	if node.PartitionBy != nil {
+		docs = append(docs, p.Doc(node.PartitionBy))
+	}
+	return pretty.Group(pretty.Stack(docs...))
+}
