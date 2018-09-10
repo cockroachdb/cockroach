@@ -386,11 +386,14 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	txnReqs := []roachpb.RequestUnion{
-		{Value: &roachpb.RequestUnion_BeginTransaction{BeginTransaction: &roachpb.BeginTransactionRequest{}}},
-		{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}},
-		{Value: &roachpb.RequestUnion_EndTransaction{EndTransaction: &roachpb.EndTransactionRequest{}}},
-	}
+	txnReqs := make([]roachpb.RequestUnion, 3)
+	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
+	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
+	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{})
+	txnReqsNoRefresh := make([]roachpb.RequestUnion, 3)
+	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
+	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
+	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{NoRefreshSpans: true})
 	testCases := []struct {
 		bu      []roachpb.RequestUnion
 		isTxn   bool
@@ -413,6 +416,14 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{txnReqs, true, false, true, enginepb.SNAPSHOT, false},
 		{txnReqs, true, true, true, enginepb.SERIALIZABLE, false},
 		{txnReqs, true, true, true, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, false, false, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, false, false, enginepb.SNAPSHOT, true},
+		{txnReqsNoRefresh, true, true, false, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, true, false, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, false, true, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, false, true, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, true, true, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, true, true, enginepb.SNAPSHOT, false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -10058,6 +10069,19 @@ func TestReplicaLocalRetries(t *testing.T) {
 			},
 			expTSCUpdateKeys: []string{"b-iput"},
 		},
+		{
+			name: "serializable push without retry",
+			setupFn: func() (hlc.Timestamp, error) {
+				return get("a")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				put := putArgs(roachpb.Key("a"), []byte("put2"))
+				ba.Add(&put)
+				return
+			},
+		},
 		// Non-1PC serializable txn cput will fail with write too old error.
 		{
 			name: "no local retry of write too old on non-1PC txn",
@@ -10214,6 +10238,26 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 			expTSCUpdateKeys: []string{"h"},
+		},
+		// Serializable 1PC transaction will commit with forwarded timestamp
+		// using the 1PC path if no refresh spans.
+		{
+			name: "serializable commit with forwarded timestamp on 1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return get("a")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("a", ts.Prev())
+				expTS = ts.Next()
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				cput := putArgs(ba.Txn.Key, []byte("put"))
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.Require1PC = true     // don't allow this to bypass the 1PC optimization
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				ba.Add(&bt, &cput, &et)
+				assignSeqNumsForReqs(ba.Txn, &bt, &cput, &et)
+				return
+			},
 		},
 		// Serializable transaction will commit with WriteTooOld flag if no refresh spans.
 		{
