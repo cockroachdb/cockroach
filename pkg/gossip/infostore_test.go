@@ -187,22 +187,57 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 }
 
-// Verify that combine will not add infos that originated on the local node.
-func TestCombineInfosLocalNode(t *testing.T) {
+func TestCombineInfosRatchetMonotonic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	is, stopper := newTestInfoStore()
-	defer stopper.Stop(context.Background())
-	info := is.newInfo(nil, time.Second)
-	info.OrigStamp = 1
-	fresh, err := is.combine(map[string]*Info{"hello": info}, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fresh != 0 {
-		t.Fatalf("expected no infos to be added, but found %d", fresh)
-	}
-	if i := is.getInfo("hello"); i != nil {
-		t.Fatalf("expected to not find info, but found: %+v", i)
+
+	for _, local := range []bool{true, false} {
+		t.Run(fmt.Sprintf("local=%t", local), func(t *testing.T) {
+			is, stopper := newTestInfoStore()
+			defer stopper.Stop(context.Background())
+
+			// Generate an info with a timestamp in the future.
+			info := &Info{
+				NodeID:    is.nodeID.Get(),
+				TTLStamp:  math.MaxInt64,
+				OrigStamp: monotonicUnixNano() + int64(time.Hour),
+			}
+			if !local {
+				info.NodeID++
+			}
+
+			// Reset the monotonic clock.
+			monoTime.Lock()
+			monoTime.last = 0
+			monoTime.Unlock()
+
+			fresh, err := is.combine(map[string]*Info{"hello": info}, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fresh != 1 {
+				t.Fatalf("expected no infos to be added, but found %d", fresh)
+			}
+
+			// Verify the monotonic clock was ratcheted if the info was generated
+			// locally.
+			monoTime.Lock()
+			last := monoTime.last
+			monoTime.Unlock()
+			var expectedLast int64
+			if local {
+				expectedLast = info.OrigStamp
+				if now := monotonicUnixNano(); now <= last {
+					t.Fatalf("expected mono-time to increase: %d <= %d", now, last)
+				}
+			}
+			if expectedLast != last {
+				t.Fatalf("expected mono-time %d, but found %d", expectedLast, last)
+			}
+
+			if i := is.getInfo("hello"); i == nil {
+				t.Fatalf("expected to find info\n%v", is.Infos)
+			}
+		})
 	}
 }
 
