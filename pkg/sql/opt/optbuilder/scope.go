@@ -855,7 +855,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 // the variables referenced by the aggregate (or the current scope if the
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
-func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) *aggregateInfo {
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.Filter != nil {
 		panic(unimplementedf("aggregates with FILTER are not supported yet"))
 	}
@@ -875,6 +875,10 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	if err != nil {
 		panic(builderError{err})
 	}
+	if typedFunc == tree.DNull {
+		return tree.DNull
+	}
+
 	f = typedFunc.(*tree.FuncExpr)
 
 	funcDef := memo.FuncOpDef{
