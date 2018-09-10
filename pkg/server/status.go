@@ -23,7 +23,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -88,6 +91,10 @@ const (
 	// omittedKeyStr is the string returned in place of a key when keys aren't
 	// permitted in responses.
 	omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
+
+	// heapDir is the directory name where the heap profiler stores profiles
+	// when there is a potential OOM situation.
+	heapDir = "heap_profiler"
 )
 
 var (
@@ -588,6 +595,72 @@ func (s *statusServer) Details(
 	}
 
 	return resp, nil
+}
+
+// GetFiles returns a list of files of type defined in the request.
+func (s *statusServer) GetFiles(
+	ctx context.Context, req *serverpb.GetFilesRequest,
+) (*serverpb.GetFilesResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, remoteDebuggingErr
+	}
+
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.GetFiles(ctx, req)
+	}
+
+	var dir string
+	switch req.Type {
+	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
+	// intead of reading indididual entries.
+	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
+		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, heapDir)
+	default:
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
+	}
+	var resp serverpb.GetFilesResponse
+	for _, pattern := range req.Patterns {
+		if err := checkFilePattern(pattern); err != nil {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		}
+		filepaths, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, "bad pattern: %s", pattern)
+		}
+
+		for _, path := range filepaths {
+			fileinfo, _ := os.Stat(path)
+			var contents []byte
+			if !req.ListOnly {
+				contents, err = ioutil.ReadFile(path)
+				if err != nil {
+					return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+				}
+			}
+			resp.Files = append(resp.Files,
+				&serverpb.File{Name: fileinfo.Name(), FileSize: fileinfo.Size(), Contents: contents})
+		}
+	}
+	return &resp, err
+}
+
+// checkFilePattern checks if a pattern is acceptable for the GetFiles call.
+// Only patterns to match filenames are acceptable, not more general paths.
+func checkFilePattern(pattern string) error {
+	if strings.Contains(pattern, string(os.PathSeparator)) {
+		return errors.New("invalid pattern: cannot have path seperators")
+	}
+	return nil
 }
 
 // LogFilesList returns a list of available log files.
