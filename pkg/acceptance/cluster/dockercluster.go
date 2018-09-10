@@ -502,7 +502,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		"start",
 		"--certs-dir=/certs/",
 		"--listen-addr=" + node.nodeStr,
-		"--verbosity=1",
+		"--vmodule=*=1",
 	}
 
 	// Forward the vmodule flag to the nodes.

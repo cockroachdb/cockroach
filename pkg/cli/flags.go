@@ -222,11 +222,13 @@ func init() {
 		// TODO(peter): Decide if we want to make the lightstep flags visible.
 		if strings.HasPrefix(flag.Name, "lightstep_") {
 			flag.Hidden = true
-		} else if flag.Name == logflags.NoRedirectStderrName {
+		}
+		switch flag.Name {
+		case logflags.NoRedirectStderrName:
 			flag.Hidden = true
-		} else if flag.Name == logflags.ShowLogsName {
+		case logflags.ShowLogsName:
 			flag.Hidden = true
-		} else if flag.Name == logflags.LogToStderrName {
+		case logflags.LogToStderrName:
 			// The actual default value for --logtostderr is overridden in
 			// cli.Main. We don't override it here as doing so would affect all of
 			// the cli tests and any package which depends on cli. The following line
