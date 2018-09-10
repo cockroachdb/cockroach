@@ -92,7 +92,7 @@ func makeSpans(
 		index: index,
 	}
 	var o xform.Optimizer
-	o.Init(nil /* evalCtx */)
+	o.Init(p.EvalContext())
 	for _, c := range desc.Columns {
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}

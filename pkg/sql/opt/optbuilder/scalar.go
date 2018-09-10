@@ -283,7 +283,7 @@ func (b *Builder) buildScalar(
 			elseExpr := b.buildScalar(texpr, inScope, nil, nil, colRefs)
 			whens = append(whens, elseExpr)
 		} else {
-			whens = append(whens, b.buildDatum(tree.DNull))
+			whens = append(whens, b.factory.ConstructConstVal(tree.DNull))
 		}
 		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
 
@@ -301,7 +301,7 @@ func (b *Builder) buildScalar(
 		e1 := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		e2 := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		whens := []memo.GroupID{
-			b.factory.ConstructWhen(e2, b.buildDatum(tree.DNull)),
+			b.factory.ConstructWhen(e2, b.factory.ConstructConstVal(tree.DNull)),
 			e1,
 		}
 		out = b.factory.ConstructCase(e1, b.factory.InternList(whens))
@@ -383,13 +383,13 @@ func (b *Builder) buildScalar(
 		return b.buildScalar(t.TypedInnerExpr(), inScope, outScope, outCol, colRefs)
 
 	case *tree.Placeholder:
-		if b.evalCtx.HasPlaceholders() {
+		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			// Replace placeholders with their value.
 			d, err := t.Eval(b.evalCtx)
 			if err != nil {
 				panic(builderError{err})
 			}
-			out = b.buildDatum(d)
+			out = b.factory.ConstructConstVal(d)
 		} else {
 			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
 		}
@@ -431,7 +431,7 @@ func (b *Builder) buildScalar(
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		out = b.buildDatum(t)
+		out = b.factory.ConstructConstVal(t)
 
 	default:
 		if b.AllowUnsupportedExpr {
@@ -470,21 +470,6 @@ func (b *Builder) buildAnyScalar(
 		out = b.factory.ConstructNot(out)
 	}
 	return out
-}
-
-// buildDatum maps certain datums to separate operators, for easier matching.
-func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
-	if d == tree.DNull {
-		return b.factory.ConstructNull(b.factory.InternType(types.Unknown))
-	}
-	if boolVal, ok := d.(*tree.DBool); ok {
-		// Map True/False datums to True/False operator.
-		if *boolVal {
-			return b.factory.ConstructTrue()
-		}
-		return b.factory.ConstructFalse()
-	}
-	return b.factory.ConstructConst(b.factory.InternDatum(d))
 }
 
 // buildFunction builds a set of memo groups that represent a function

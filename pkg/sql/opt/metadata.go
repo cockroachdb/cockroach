@@ -15,8 +15,10 @@
 package opt
 
 import (
+	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -124,6 +126,16 @@ type Metadata struct {
 
 	// tables stores information about each metadata table, indexed by TableID.
 	tables []mdTable
+
+	// deps stores information about all data sources depended on by the query,
+	// as well as the privileges required to access those data sources.
+	deps []mdDependency
+}
+
+type mdDependency struct {
+	ds DataSource
+
+	priv privilege.Kind
 }
 
 // mdTable stores information about one of the tables stored in the metadata.
@@ -165,6 +177,47 @@ func (md *Metadata) Init() {
 	}
 	md.cols = md.cols[:0]
 	md.tables = md.tables[:0]
+	md.deps = md.deps[:0]
+}
+
+// InitFrom initializes the metadata with a copy of the provided metadata. This
+// metadata can then be modified independent of the copied metadata.
+func (md *Metadata) InitFrom(from *Metadata) {
+	md.Init()
+	md.cols = append(md.cols, from.cols...)
+	md.tables = append(md.tables, from.tables...)
+	md.deps = append(md.deps, from.deps...)
+}
+
+// AddDependency tracks one of the data sources on which the query depends, as
+// well as the privilege required to access that data source. If the Memo using
+// this metadata is cached, then a call to CheckDependencies can detect if
+// changes to schema or permissions on the data source has invalidated the
+// cached metadata.
+func (md *Metadata) AddDependency(ds DataSource, priv privilege.Kind) {
+	md.deps = append(md.deps, mdDependency{ds: ds, priv: priv})
+}
+
+// CheckDependencies resolves each data source on which this metadata depends,
+// in order to check that the fully qualified data source names still resolve to
+// the same data source (i.e. having the same fingerprint), and that the user
+// still has sufficient privileges to access the data source.
+func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool {
+	for _, dep := range md.deps {
+		ds, err := catalog.ResolveDataSource(ctx, dep.ds.Name())
+		if err != nil {
+			return false
+		}
+		if dep.ds.Fingerprint() != ds.Fingerprint() {
+			return false
+		}
+		if dep.priv != 0 {
+			if err = ds.CheckPrivilege(ctx, dep.priv); err != nil {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // AddColumn assigns a new unique id to a column within the query and records

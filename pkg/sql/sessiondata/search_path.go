@@ -35,7 +35,8 @@ type SearchPath struct {
 	containsPgCatalog bool
 }
 
-// MakeSearchPath returns a new SearchPath struct.
+// MakeSearchPath returns a new SearchPath struct. The paths slice must not be
+// modified after hand-off to MakeSearchPath.
 func MakeSearchPath(paths []string) SearchPath {
 	containsPgCatalog := false
 	for _, e := range paths {

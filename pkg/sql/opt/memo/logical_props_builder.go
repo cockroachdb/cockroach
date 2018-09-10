@@ -114,9 +114,12 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 
 	// If CanHaveSideEffects is true for any child, it's true for the expression.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		if ev.childGroup(i).logical.CanHaveSideEffects() {
+		childLogical := ev.childGroup(i).logical
+		if childLogical.CanHaveSideEffects() {
 			logical.Relational.CanHaveSideEffects = true
-			break
+		}
+		if childLogical.HasPlaceholder() {
+			logical.Relational.HasPlaceholder = true
 		}
 	}
 
@@ -1065,11 +1068,15 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		// Variable introduces outer column.
 		scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return logical
+
+	case opt.PlaceholderOp:
+		scalar.HasPlaceholder = true
+		return logical
 	}
 
-	// By default, derive OuterCols and CanHaveSideEffects from all children,
-	// both relational and scalar. Derive HasCorrelatedSubquery from scalar
-	// children.
+	// By default, derive OuterCols, HasPlaceholder, and CanHaveSideEffects from
+	// all children, both relational and scalar. Derive HasCorrelatedSubquery from
+	// scalar children.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childLogical := &ev.childGroup(i).logical
 
@@ -1077,6 +1084,10 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 
 		if childLogical.CanHaveSideEffects() {
 			scalar.CanHaveSideEffects = true
+		}
+
+		if childLogical.HasPlaceholder() {
+			scalar.HasPlaceholder = true
 		}
 
 		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {

@@ -70,6 +70,38 @@ func (_f *Factory) ConstructFuncCall(
 	return _f.onConstruct(memo.Expr(_funcCallExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.NotOp:
+		notExpr := expr.AsNot()
+		input := f.assignPlaceholders(notExpr.Input())
+		return f.ConstructNot(input)
+	case opt.FuncCallOp:
+		funcCallExpr := expr.AsFuncCall()
+		lb := MakeListBuilder(&f.funcs)
+		name := f.assignPlaceholders(funcCallExpr.Name())
+		for _, item := range f.mem.LookupList(funcCallExpr.Args()) {
+			lb.AddItem(f.assignPlaceholders(item))
+		}
+		args := lb.BuildList()
+		def := funcCallExpr.Def()
+		return f.ConstructFuncCall(name, args, def)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -153,6 +185,29 @@ func (_f *Factory) ConstructInnerJoin(
 	}
 
 	return _f.onConstruct(memo.Expr(_innerJoinExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.InnerJoinOp:
+		innerJoinExpr := expr.AsInnerJoin()
+		left := f.assignPlaceholders(innerJoinExpr.Left())
+		right := f.assignPlaceholders(innerJoinExpr.Right())
+		return f.ConstructInnerJoin(left, right)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -373,6 +428,44 @@ func (_f *Factory) ConstructConst(
 	return _f.onConstruct(memo.Expr(_constExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.EqOp:
+		eqExpr := expr.AsEq()
+		left := f.assignPlaceholders(eqExpr.Left())
+		right := f.assignPlaceholders(eqExpr.Right())
+		return f.ConstructEq(left, right)
+	case opt.LtOp:
+		ltExpr := expr.AsLt()
+		left := f.assignPlaceholders(ltExpr.Left())
+		right := f.assignPlaceholders(ltExpr.Right())
+		return f.ConstructLt(left, right)
+	case opt.PlusOp:
+		plusExpr := expr.AsPlus()
+		left := f.assignPlaceholders(plusExpr.Left())
+		right := f.assignPlaceholders(plusExpr.Right())
+		return f.ConstructPlus(left, right)
+	case opt.MinusOp:
+		minusExpr := expr.AsMinus()
+		left := f.assignPlaceholders(minusExpr.Left())
+		right := f.assignPlaceholders(minusExpr.Right())
+		return f.ConstructMinus(left, right)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -515,6 +608,34 @@ func (_f *Factory) ConstructVariable(
 	}
 
 	return _f.onConstruct(memo.Expr(_variableExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.FuncOp:
+		funcExpr := expr.AsFunc()
+		lb := MakeListBuilder(&f.funcs)
+		name := f.assignPlaceholders(funcExpr.Name())
+		for _, item := range f.mem.LookupList(funcExpr.Args()) {
+			lb.AddItem(f.assignPlaceholders(item))
+		}
+		args := lb.BuildList()
+		def := funcExpr.Def()
+		return f.ConstructFunc(name, args, def)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -708,6 +829,49 @@ func (_f *Factory) ConstructAnd(
 	}
 
 	return _f.onConstruct(memo.Expr(_andExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.SelectOp:
+		selectExpr := expr.AsSelect()
+		input := f.assignPlaceholders(selectExpr.Input())
+		filter := f.assignPlaceholders(selectExpr.Filter())
+		return f.ConstructSelect(input, filter)
+	case opt.InnerJoinOp:
+		innerJoinExpr := expr.AsInnerJoin()
+		left := f.assignPlaceholders(innerJoinExpr.Left())
+		right := f.assignPlaceholders(innerJoinExpr.Right())
+		return f.ConstructInnerJoin(left, right)
+	case opt.FullJoinOp:
+		fullJoinExpr := expr.AsFullJoin()
+		left := f.assignPlaceholders(fullJoinExpr.Left())
+		right := f.assignPlaceholders(fullJoinExpr.Right())
+		return f.ConstructFullJoin(left, right)
+	case opt.UnionOp:
+		unionExpr := expr.AsUnion()
+		left := f.assignPlaceholders(unionExpr.Left())
+		right := f.assignPlaceholders(unionExpr.Right())
+		return f.ConstructUnion(left, right)
+	case opt.AndOp:
+		andExpr := expr.AsAnd()
+		left := f.assignPlaceholders(andExpr.Left())
+		right := f.assignPlaceholders(andExpr.Right())
+		return f.ConstructAnd(left, right)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -909,6 +1073,47 @@ func (_f *Factory) ConstructLookupJoin(
 	return _f.onConstruct(memo.Expr(_lookupJoinExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.SelectOp:
+		selectExpr := expr.AsSelect()
+		input := f.assignPlaceholders(selectExpr.Input())
+		filter := f.assignPlaceholders(selectExpr.Filter())
+		return f.ConstructSelect(input, filter)
+	case opt.GroupByOp:
+		groupByExpr := expr.AsGroupBy()
+		input := f.assignPlaceholders(groupByExpr.Input())
+		aggs := f.assignPlaceholders(groupByExpr.Aggs())
+		def := groupByExpr.Def()
+		return f.ConstructGroupBy(input, aggs, def)
+	case opt.ScalarGroupByOp:
+		scalarGroupByExpr := expr.AsScalarGroupBy()
+		input := f.assignPlaceholders(scalarGroupByExpr.Input())
+		aggs := f.assignPlaceholders(scalarGroupByExpr.Aggs())
+		def := scalarGroupByExpr.Def()
+		return f.ConstructScalarGroupBy(input, aggs, def)
+	case opt.LookupJoinOp:
+		lookupJoinExpr := expr.AsLookupJoin()
+		input := f.assignPlaceholders(lookupJoinExpr.Input())
+		on := f.assignPlaceholders(lookupJoinExpr.On())
+		def := lookupJoinExpr.Def()
+		return f.ConstructLookupJoin(input, on, def)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -1040,6 +1245,32 @@ func (_f *Factory) ConstructList(
 	return _f.onConstruct(memo.Expr(_listExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.ListOp:
+		listExpr := expr.AsList()
+		lb := MakeListBuilder(&f.funcs)
+		for _, item := range f.mem.LookupList(listExpr.Items()) {
+			lb.AddItem(f.assignPlaceholders(item))
+		}
+		items := lb.BuildList()
+		return f.ConstructList(items)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -1117,6 +1348,30 @@ func (_f *Factory) ConstructJoin(
 	}
 
 	return _f.onConstruct(memo.Expr(_joinExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.JoinOp:
+		joinExpr := expr.AsJoin()
+		left := f.assignPlaceholders(joinExpr.Left())
+		right := f.assignPlaceholders(joinExpr.Right())
+		on := f.assignPlaceholders(joinExpr.On())
+		return f.ConstructJoin(left, right, on)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1227,6 +1482,37 @@ func (_f *Factory) ConstructOp(
 	}
 
 	return _f.onConstruct(memo.Expr(_opExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.ListOp:
+		listExpr := expr.AsList()
+		lb := MakeListBuilder(&f.funcs)
+		for _, item := range f.mem.LookupList(listExpr.Items()) {
+			lb.AddItem(f.assignPlaceholders(item))
+		}
+		items := lb.BuildList()
+		return f.ConstructList(items)
+	case opt.OpOp:
+		opExpr := expr.AsOp()
+		empty := f.assignPlaceholders(opExpr.Empty())
+		single := f.assignPlaceholders(opExpr.Single())
+		return f.ConstructOp(empty, single)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1406,6 +1692,34 @@ func (_f *Factory) ConstructNe(
 	return _f.onConstruct(memo.Expr(_neExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.EqOp:
+		eqExpr := expr.AsEq()
+		left := f.assignPlaceholders(eqExpr.Left())
+		right := f.assignPlaceholders(eqExpr.Right())
+		return f.ConstructEq(left, right)
+	case opt.NeOp:
+		neExpr := expr.AsNe()
+		left := f.assignPlaceholders(neExpr.Left())
+		right := f.assignPlaceholders(neExpr.Right())
+		return f.ConstructNe(left, right)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -1545,6 +1859,34 @@ func (_f *Factory) ConstructNull() memo.GroupID {
 	}
 
 	return _f.onConstruct(memo.Expr(_nullExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.PlusOp:
+		plusExpr := expr.AsPlus()
+		left := f.assignPlaceholders(plusExpr.Left())
+		right := f.assignPlaceholders(plusExpr.Right())
+		return f.ConstructPlus(left, right)
+	case opt.MinusOp:
+		minusExpr := expr.AsMinus()
+		left := f.assignPlaceholders(minusExpr.Left())
+		right := f.assignPlaceholders(minusExpr.Right())
+		return f.ConstructMinus(left, right)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1700,6 +2042,43 @@ func (_f *Factory) ConstructNot(
 	}
 
 	return _f.onConstruct(memo.Expr(_notExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.LtOp:
+		ltExpr := expr.AsLt()
+		left := f.assignPlaceholders(ltExpr.Left())
+		right := f.assignPlaceholders(ltExpr.Right())
+		return f.ConstructLt(left, right)
+	case opt.GtOp:
+		gtExpr := expr.AsGt()
+		left := f.assignPlaceholders(gtExpr.Left())
+		right := f.assignPlaceholders(gtExpr.Right())
+		return f.ConstructGt(left, right)
+	case opt.ContainsOp:
+		containsExpr := expr.AsContains()
+		left := f.assignPlaceholders(containsExpr.Left())
+		right := f.assignPlaceholders(containsExpr.Right())
+		return f.ConstructContains(left, right)
+	case opt.NotOp:
+		notExpr := expr.AsNot()
+		input := f.assignPlaceholders(notExpr.Input())
+		return f.ConstructNot(input)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1866,6 +2245,28 @@ func (_f *Factory) ConstructProject(
 	return _f.onConstruct(memo.Expr(_projectExpr))
 }
 
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.ProjectOp:
+		projectExpr := expr.AsProject()
+		input := f.assignPlaceholders(projectExpr.Input())
+		return f.ConstructProject(input)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
+}
+
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
 var dynConstructLookup [opt.NumOperators]dynConstructFunc
@@ -1962,6 +2363,30 @@ func (_f *Factory) ConstructInnerJoin(
 	}
 
 	return _f.onConstruct(memo.Expr(_innerJoinExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.InnerJoinOp:
+		innerJoinExpr := expr.AsInnerJoin()
+		left := f.assignPlaceholders(innerJoinExpr.Left())
+		right := f.assignPlaceholders(innerJoinExpr.Right())
+		on := f.assignPlaceholders(innerJoinExpr.On())
+		return f.ConstructInnerJoin(left, right, on)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -2080,6 +2505,29 @@ func (_f *Factory) ConstructScan() memo.GroupID {
 	}
 
 	return _f.onConstruct(memo.Expr(_scanExpr))
+}
+
+func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+	if !f.mem.GroupProperties(group).HasPlaceholder() {
+		return group
+	}
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
+	case opt.LimitOp:
+		limitExpr := expr.AsLimit()
+		input := f.assignPlaceholders(limitExpr.Input())
+		limit := f.assignPlaceholders(limitExpr.Limit())
+		return f.ConstructLimit(input, limit)
+	case opt.PlaceholderOp:
+		value := expr.AsPlaceholder().Value()
+		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
+		d, err := placeholder.Eval(f.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		return f.ConstructConstVal(d)
+	}
+	panic("unhandled operator")
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID

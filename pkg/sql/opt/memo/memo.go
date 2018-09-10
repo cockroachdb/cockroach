@@ -16,11 +16,13 @@ package memo
 
 import (
 	"bytes"
+	"context"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // PhysicalPropsID identifies a set of physical properties that has been
@@ -146,11 +148,27 @@ type Memo struct {
 
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
+
+	// locName is the location which the memo is compiled against. This determines
+	// the timezone, which is used for time-related data type construction and
+	// comparisons. If the location changes, then this memo is invalidated.
+	locName string
+
+	// dbName is the current database at the time the memo was compiled. If this
+	// changes, then the memo is invalidated.
+	dbName string
+
+	// searchPath is the current search path at the time the memo was compiled.
+	// If this changes, then the memo is invalidated.
+	searchPath sessiondata.SearchPath
 }
 
 // Init initializes a new empty memo instance, or resets existing state so it
-// can be reused. It must be called before use (or reuse).
-func (m *Memo) Init() {
+// can be reused. It must be called before use (or reuse). The memo collects
+// information about the context in which it is compiled from the evalContext
+// argument. If any of that changes, then the memo must be invalidated (see the
+// IsStale method for more details).
+func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
@@ -173,6 +191,59 @@ func (m *Memo) Init() {
 	m.rootGroup = 0
 	m.rootProps = 0
 	m.memEstimate = 0
+	m.locName = evalCtx.GetLocation().String()
+	m.dbName = evalCtx.SessionData.Database
+	m.searchPath = evalCtx.SessionData.SearchPath
+}
+
+// InitFrom initializes the memo with a deep copy of the provided memo. This
+// memo can then be modified independent of the copied memo.
+func (m *Memo) InitFrom(from *Memo) {
+	if from.groups == nil {
+		panic("cannot initialize from an uninitialized memo")
+	}
+
+	m.rootGroup = from.rootGroup
+	m.rootProps = from.rootProps
+	m.memEstimate = from.memEstimate
+	m.locName = from.locName
+	m.dbName = from.dbName
+	m.searchPath = from.searchPath
+
+	// Copy the metadata.
+	m.metadata.InitFrom(&from.metadata)
+
+	// Copy the expression map.
+	m.exprMap = make(map[Fingerprint]GroupID, len(from.exprMap))
+	for k, v := range from.exprMap {
+		m.exprMap[k] = v
+	}
+
+	// Copy the groups.
+	if m.groups == nil {
+		m.groups = make([]group, 0, len(from.groups))
+	} else {
+		m.groups = m.groups[:0]
+	}
+	for i := range from.groups {
+		from := &from.groups[i]
+		m.groups = append(m.groups, group{
+			id:            from.id,
+			logical:       from.logical,
+			normExpr:      from.normExpr,
+			firstBestExpr: from.firstBestExpr,
+
+			// These slices are never reused, so can share the slice prefix.
+			otherExprs:     from.otherExprs[:len(from.otherExprs):len(from.otherExprs)],
+			otherBestExprs: from.otherBestExprs[:len(from.otherBestExprs):len(from.otherBestExprs)],
+		})
+	}
+
+	// Copy all memoized lists.
+	m.listStorage.initFrom(&from.listStorage)
+
+	// Copy all private values.
+	m.privateStorage.initFrom(&from.privateStorage)
 }
 
 // MemoryEstimate returns a rough estimate of the memo's memory usage, in bytes.
@@ -220,6 +291,62 @@ func (m *Memo) Root() ExprView {
 func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
 	m.rootGroup = group
 	m.rootProps = physical
+}
+
+// HasPlaceholders returns true if the memo contains at least one placeholder
+// operator.
+func (m *Memo) HasPlaceholders() bool {
+	return m.GroupProperties(m.rootGroup).Relational.HasPlaceholder
+}
+
+// IsStale returns true if the memo has been invalidated by changes to any of
+// its dependencies. Once a memo is known to be stale, it must be ejected from
+// any query cache or prepared statement and replaced with a recompiled memo
+// that takes into account the changes. IsStale checks the following
+// dependencies:
+//
+//   1. Current database: this can change name resolution.
+//   2. Current search path: this can change name resolution.
+//   3. Current location: this determines time zone, and can change how time-
+//      related types are constructed and compared.
+//   4. Data source schema: this determines most aspects of how the query is
+//      compiled.
+//   5. Data source privileges: current user may no longer have access to one or
+//      more data sources.
+//
+func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog opt.Catalog) bool {
+	// Memo is stale if the current database has changed.
+	if m.dbName != evalCtx.SessionData.Database {
+		return true
+	}
+
+	// Memo is stale if the search path has changed. Assume it's changed if the
+	// slice length is different, or if it no longer points to the same underlying
+	// array. If two slices are the same length and point to the same underlying
+	// array, then they are guaranteed to be identical. Note that GetPathArray
+	// already specifies that the slice must not be modified, so its elements will
+	// never be modified in-place.
+	left := m.searchPath.GetPathArray()
+	right := evalCtx.SessionData.SearchPath.GetPathArray()
+	if len(left) != len(right) {
+		return true
+	}
+	if len(left) != 0 && &left[0] != &right[0] {
+		return true
+	}
+
+	// Memo is stale if the location has changed.
+	if m.locName != evalCtx.GetLocation().String() {
+		return true
+	}
+
+	// Memo is stale if the fingerprint of any data source in the memo's metadata
+	// has changed, or if the current user no longer has sufficient privilege to
+	// access the data source.
+	if !m.Metadata().CheckDependencies(ctx, catalog) {
+		return true
+	}
+	return false
 }
 
 // isOptimized returns true if the memo has been fully optimized.
@@ -303,11 +430,11 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then
-// MemoizeNormExpr is a no-op, and returns the existing group.
-func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
+// MemoizeNormExpr is a no-op, and returns the existing ExprView.
+func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	existing := m.exprMap[norm.Fingerprint()]
 	if existing != 0 {
-		return existing
+		return MakeNormExprView(m, existing)
 	}
 
 	// Use rough memory usage estimate of size of group * 4 to account for size
@@ -318,7 +445,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
-	return mgrp.id
+	return ev
 }
 
 // MemoizeDenormExpr enters a denormalized expression into the given memo

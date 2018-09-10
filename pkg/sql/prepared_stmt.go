@@ -18,6 +18,7 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,6 +40,10 @@ type PreparedStatement struct {
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
 	Statement tree.Statement
+	// Memo is the memoized data structure constructed by the cost-based optimizer
+	// during prepare of a SQL statement. It can significantly speed up execution
+	// if it is used by the optimizer as a starting point.
+	Memo memo.Memo
 	// TypeHints contains the types of the placeholders set by the client. It
 	// dictates how input parameters for those placeholders will be parsed. If a
 	// placeholder has no type hint, it will be populated during type checking.
