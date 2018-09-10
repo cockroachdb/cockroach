@@ -799,9 +799,8 @@ func (txn *Txn) Send(
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
-	requestTxnID := txn.ID()
-
 	txn.mu.Lock()
+	requestTxnID := txn.mu.ID
 	sender := txn.mu.sender
 	txn.mu.Unlock()
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
