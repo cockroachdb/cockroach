@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -89,7 +90,7 @@ func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncremen
 
 // Seek advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (i *MVCCIncrementalIterator) Seek(startKey engine.MVCCKey) {
+func (i *MVCCIncrementalIterator) Seek(startKey mvcc.Key) {
 	i.iter.Seek(startKey)
 	i.err = nil
 	i.valid = true
@@ -190,7 +191,7 @@ func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() engine.MVCCKey {
+func (i *MVCCIncrementalIterator) Key() mvcc.Key {
 	return i.iter.Key()
 }
 
@@ -201,7 +202,7 @@ func (i *MVCCIncrementalIterator) Value() []byte {
 
 // UnsafeKey returns the same key as Key, but the memory is invalidated on the
 // next call to {Next,Reset,Close}.
-func (i *MVCCIncrementalIterator) UnsafeKey() engine.MVCCKey {
+func (i *MVCCIncrementalIterator) UnsafeKey() mvcc.Key {
 	return i.iter.UnsafeKey()
 }
 

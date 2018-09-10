@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -96,7 +97,7 @@ func TestMultiIterator(t *testing.T) {
 						v = []byte{input[i+1]}
 					}
 					i += 2
-					if err := batch.Put(engine.MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+					if err := batch.Put(mvcc.Key{Key: k, Timestamp: ts}, v); err != nil {
 						t.Fatalf("%+v", err)
 					}
 				}
@@ -117,7 +118,7 @@ func TestMultiIterator(t *testing.T) {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; subtest.fn(it) {
+					for it.Seek(mvcc.Key{Key: keys.MinKey}); ; subtest.fn(it) {
 						ok, err := it.Valid()
 						if err != nil {
 							t.Fatalf("unexpected error: %+v", err)

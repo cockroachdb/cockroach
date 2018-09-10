@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -299,9 +300,9 @@ func (c *Compactor) fetchSuggestions(
 	defer delBatch.Close()
 
 	err = c.eng.Iterate(
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
-		func(kv engine.MVCCKeyValue) (bool, error) {
+		mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMin},
+		mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv mvcc.KeyValue) (bool, error) {
 			var sc storagebase.SuggestedCompaction
 			var err error
 			sc.StartKey, sc.EndKey, err = keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
@@ -406,7 +407,7 @@ func (c *Compactor) processCompaction(
 			c.Metrics.BytesSkipped.Inc(sc.Bytes)
 		}
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
-		if err := delBatch.Clear(engine.MVCCKey{Key: key}); err != nil {
+		if err := delBatch.Clear(mvcc.Key{Key: key}); err != nil {
 			log.Fatal(ctx, err) // should never happen on a batch
 		}
 	}
@@ -467,9 +468,9 @@ func (c *Compactor) aggregateCompaction(
 func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	var totalBytes int64
 	if err := c.eng.Iterate(
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
-		func(kv engine.MVCCKeyValue) (bool, error) {
+		mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMin},
+		mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv mvcc.KeyValue) (bool, error) {
 			var c storagebase.Compaction
 			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {
 				return false, err
@@ -493,7 +494,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 	key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 	var existing storagebase.Compaction
 	//lint:ignore SA1019 historical usage of deprecated c.eng.GetProto is OK
-	ok, _, _, err := c.eng.GetProto(engine.MVCCKey{Key: key}, &existing)
+	ok, _, _, err := c.eng.GetProto(mvcc.Key{Key: key}, &existing)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "unable to record suggested compaction: %s", err)
 		return
@@ -510,7 +511,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 
 	// Store the new compaction.
 	//lint:ignore SA1019 historical usage of deprecated engine.PutProto is OK
-	if _, _, err = engine.PutProto(c.eng, engine.MVCCKey{Key: key}, &sc.Compaction); err != nil {
+	if _, _, err = engine.PutProto(c.eng, mvcc.Key{Key: key}, &sc.Compaction); err != nil {
 		log.Warningf(ctx, "unable to record suggested compaction: %s", err)
 	}
 

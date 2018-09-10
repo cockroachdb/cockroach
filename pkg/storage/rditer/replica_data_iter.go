@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
 // KeyRange is a helper struct for the ReplicaDataIterator.
 type KeyRange struct {
-	Start, End engine.MVCCKey
+	Start, End mvcc.Key
 }
 
 // ReplicaDataIterator provides a complete iteration over all key / value
@@ -142,7 +143,7 @@ func (ri *ReplicaDataIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
+func (ri *ReplicaDataIterator) Key() mvcc.Key {
 	key := ri.it.UnsafeKey()
 	ri.a, key.Key = ri.a.Copy(key.Key, 0)
 	return key

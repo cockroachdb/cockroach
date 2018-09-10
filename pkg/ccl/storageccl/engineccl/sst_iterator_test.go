@@ -15,18 +15,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engine.MVCCKeyValue) {
+func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []mvcc.KeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
-		var kvs []engine.MVCCKeyValue
+		var kvs []mvcc.KeyValue
 		for iter.Seek(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
@@ -35,8 +36,8 @@ func runTestSSTIterator(t *testing.T, iter engine.SimpleIterator, allKVs []engin
 			if !ok {
 				break
 			}
-			kv := engine.MVCCKeyValue{
-				Key: engine.MVCCKey{
+			kv := mvcc.KeyValue{
+				Key: mvcc.Key{
 					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
 					Timestamp: iter.UnsafeKey().Timestamp,
 				},
@@ -64,10 +65,10 @@ func TestSSTIterator(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer sst.Close()
-	var allKVs []engine.MVCCKeyValue
+	var allKVs []mvcc.KeyValue
 	for i := byte(0); i < 10; i++ {
-		kv := engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
+		kv := mvcc.KeyValue{
+			Key: mvcc.Key{
 				Key:       []byte{i},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
@@ -112,18 +113,18 @@ func TestSSTIterator(t *testing.T) {
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyAMetadata := engine.EncodeKey(engine.MVCCKey{
+	keyAMetadata := engine.EncodeKey(mvcc.Key{
 		Key: []byte("a"),
 	})
-	keyA2 := engine.EncodeKey(engine.MVCCKey{
+	keyA2 := engine.EncodeKey(mvcc.Key{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
-	keyA1 := engine.EncodeKey(engine.MVCCKey{
+	keyA1 := engine.EncodeKey(mvcc.Key{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
 	})
-	keyB2 := engine.EncodeKey(engine.MVCCKey{
+	keyB2 := engine.EncodeKey(mvcc.Key{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})

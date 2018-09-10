@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -103,7 +104,7 @@ func Load(
 	var tableDesc *sqlbase.TableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
-	var kvs []engine.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 	var kvBytes int64
 	backup := backupccl.BackupDescriptor{
 		Descriptors: []sqlbase.Descriptor{
@@ -208,8 +209,8 @@ func Load(
 				}
 				prevKey = kv.Key
 				kvBytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
-				kvs = append(kvs, engine.MVCCKeyValue{
-					Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
+				kvs = append(kvs, mvcc.KeyValue{
+					Key:   mvcc.Key{Key: kv.Key, Timestamp: kv.Value.Timestamp},
 					Value: kv.Value.RawBytes,
 				})
 			})
@@ -368,7 +369,7 @@ func writeSST(
 	backup *backupccl.BackupDescriptor,
 	base storageccl.ExportStorage,
 	tempPrefix string,
-	kvs []engine.MVCCKeyValue,
+	kvs []mvcc.KeyValue,
 	ts hlc.Timestamp,
 ) error {
 	if len(kvs) == 0 {

@@ -17,7 +17,6 @@ package engine
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -35,16 +35,14 @@ import (
 
 const (
 	// The size of the timestamp portion of MVCC version keys (used to update stats).
-	mvccVersionTimestampSize int64 = 12
+	mvccVersionTimestampSize int64 = mvcc.VersionTimestampSize
 )
 
-var (
-	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
-	// all other keys.`
-	MVCCKeyMax = MakeMVCCMetadataKey(roachpb.KeyMax)
-	// NilKey is the nil MVCCKey.
-	NilKey = MVCCKey{}
-)
+// MVCCKey is an alias to mvcc.Key to ease refactoring.
+type MVCCKey = mvcc.Key
+
+// MVCCKeyValue is an alias to mvcc.KeyValue to ease refactoring.
+type MVCCKeyValue = mvcc.KeyValue
 
 // AccountForLegacyMVCCStats adjusts ms to account for the predicted impact it
 // will have on the values that it records when the structure is initially stored.
@@ -52,7 +50,7 @@ var (
 // that its creation will have an impact on system-local data size and key count.
 func AccountForLegacyMVCCStats(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
 	key := keys.RangeStatsLegacyKey(rangeID)
-	metaKey := MakeMVCCMetadataKey(key)
+	metaKey := mvcc.MakeMVCCMetadataKey(key)
 
 	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
 	value := roachpb.Value{}
@@ -74,81 +72,6 @@ func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 // transaction.
 func IsIntentOf(meta enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
 	return meta.Txn != nil && txn != nil && meta.Txn.ID == txn.ID
-}
-
-// MVCCKey is a versioned key, distinguished from roachpb.Key with the addition
-// of a timestamp.
-type MVCCKey struct {
-	Key       roachpb.Key
-	Timestamp hlc.Timestamp
-}
-
-// MakeMVCCMetadataKey creates an MVCCKey from a roachpb.Key.
-func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
-	return MVCCKey{Key: key}
-}
-
-// Next returns the next key.
-func (k MVCCKey) Next() MVCCKey {
-	ts := k.Timestamp.Prev()
-	if ts == (hlc.Timestamp{}) {
-		return MVCCKey{
-			Key: k.Key.Next(),
-		}
-	}
-	return MVCCKey{
-		Key:       k.Key,
-		Timestamp: ts,
-	}
-}
-
-// Less compares two keys.
-func (k MVCCKey) Less(l MVCCKey) bool {
-	if c := k.Key.Compare(l.Key); c != 0 {
-		return c < 0
-	}
-	if !k.IsValue() {
-		return l.IsValue()
-	} else if !l.IsValue() {
-		return false
-	}
-	return l.Timestamp.Less(k.Timestamp)
-}
-
-// Equal returns whether two keys are identical.
-func (k MVCCKey) Equal(l MVCCKey) bool {
-	return k.Key.Compare(l.Key) == 0 && k.Timestamp == l.Timestamp
-}
-
-// IsValue returns true iff the timestamp is non-zero.
-func (k MVCCKey) IsValue() bool {
-	return k.Timestamp != (hlc.Timestamp{})
-}
-
-// EncodedSize returns the size of the MVCCKey when encoded.
-func (k MVCCKey) EncodedSize() int {
-	n := len(k.Key) + 1
-	if k.IsValue() {
-		// Note that this isn't quite accurate: timestamps consume between 8-13
-		// bytes. Fixing this only adjusts the accounting for timestamps, not the
-		// actual on disk storage.
-		n += int(mvccVersionTimestampSize)
-	}
-	return n
-}
-
-// String returns a string-formatted version of the key.
-func (k MVCCKey) String() string {
-	if !k.IsValue() {
-		return k.Key.String()
-	}
-	return fmt.Sprintf("%s/%s", k.Key, k.Timestamp)
-}
-
-// MVCCKeyValue contains the raw bytes of the value for a key.
-type MVCCKeyValue struct {
-	Key   MVCCKey
-	Value []byte
 }
 
 // isSysLocal returns whether the whether the key is system-local.
@@ -1143,6 +1066,11 @@ func maybeGetValue(
 	return valueFn(exVal)
 }
 
+// MakeMVCCMetadataKey creates an MVCCKey from a roachpb.Key.
+func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
+	return mvcc.MakeMVCCMetadataKey(key)
+}
+
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value. valueFn is
 // an optional alternative to supplying value directly. It is passed
@@ -1166,7 +1094,7 @@ func mvccPutInternal(
 		return emptyKeyError()
 	}
 
-	metaKey := MakeMVCCMetadataKey(key)
+	metaKey := mvcc.MakeMVCCMetadataKey(key)
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if err != nil {
 		return err
@@ -1594,7 +1522,7 @@ func MVCCMerge(
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	metaKey := MakeMVCCMetadataKey(key)
+	metaKey := mvcc.MakeMVCCMetadataKey(key)
 
 	buf := newPutBuffer()
 
@@ -2175,7 +2103,7 @@ func mvccResolveWriteIntent(
 	buf *putBuffer,
 	forRange bool,
 ) (bool, error) {
-	metaKey := MakeMVCCMetadataKey(intent.Key)
+	metaKey := mvcc.MakeMVCCMetadataKey(intent.Key)
 	meta := &buf.meta
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, meta)
 	if err != nil {
@@ -2488,8 +2416,8 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	intent roachpb.Intent,
 	max int64,
 ) (int64, *roachpb.Span, error) {
-	encKey := MakeMVCCMetadataKey(intent.Key)
-	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
+	encKey := mvcc.MakeMVCCMetadataKey(intent.Key)
+	encEndKey := mvcc.MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
 
 	var keyBuf []byte
@@ -2567,7 +2495,7 @@ func MVCCGarbageCollect(
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
-		encKey := MakeMVCCMetadataKey(gcKey.Key)
+		encKey := mvcc.MakeMVCCMetadataKey(gcKey.Key)
 		ok, metaKeySize, metaValSize, err := mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
@@ -2722,7 +2650,7 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.Seek(MakeMVCCMetadataKey(key.AsRawKey()))
+	it.Seek(mvcc.MakeMVCCMetadataKey(key.AsRawKey()))
 	if ok, err := it.Valid(); err != nil {
 		return nil, err
 	} else if !ok {
@@ -2740,9 +2668,9 @@ func MVCCFindSplitKey(
 	}
 
 	splitKey, err := it.FindSplitKey(
-		MakeMVCCMetadataKey(key.AsRawKey()),
-		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
+		mvcc.MakeMVCCMetadataKey(key.AsRawKey()),
+		mvcc.MakeMVCCMetadataKey(endKey.AsRawKey()),
+		mvcc.MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
 		targetSize)
 	if err != nil {
 		return nil, err

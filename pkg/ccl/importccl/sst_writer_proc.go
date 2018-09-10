@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -368,7 +369,7 @@ func makeSSTs(
 		return nil
 	}
 
-	var kv engine.MVCCKeyValue
+	var kv mvcc.KeyValue
 	kv.Key.Timestamp.WallTime = walltime
 	// firstKey is always the first key of the span. lastKey, if nil, means the
 	// current SST hasn't yet filled up. Once the SST has filled up, lastKey is

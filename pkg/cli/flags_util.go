@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	humanize "github.com/dustin/go-humanize"
@@ -140,14 +141,14 @@ func (m *dumpMode) Set(s string) error {
 	return nil
 }
 
-type mvccKey engine.MVCCKey
+type mvccKey mvcc.Key
 
 // Type implements the pflag.Value interface.
-func (k *mvccKey) Type() string { return "engine.MVCCKey" }
+func (k *mvccKey) Type() string { return "mvcc.Key" }
 
 // String implements the pflag.Value interface.
 func (k *mvccKey) String() string {
-	return engine.MVCCKey(*k).String()
+	return mvcc.Key(*k).String()
 }
 
 // Set implements the pflag.Value interface.

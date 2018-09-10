@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -708,7 +709,7 @@ func runBenchmarkClearRange(
 
 	for i := 0; i < b.N; i++ {
 		batch := eng.NewWriteOnlyBatch()
-		if err := clearRange(eng, batch, NilKey, MVCCKeyMax); err != nil {
+		if err := clearRange(eng, batch, mvcc.NilKey, mvcc.KeyMax); err != nil {
 			b.Fatal(err)
 		}
 		// NB: We don't actually commit the batch here as we don't want to delete

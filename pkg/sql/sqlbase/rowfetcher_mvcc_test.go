@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -41,7 +42,7 @@ func slurpUserDataKVs(t testing.TB, e engine.Engine) []roachpb.KeyValue {
 	var kvs []roachpb.KeyValue
 	it := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
-	for it.Seek(engine.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
+	for it.Seek(mvcc.Key{Key: keys.UserTableDataMin}); ; it.NextKey() {
 		ok, err := it.Valid()
 		if err != nil {
 			t.Fatal(err)

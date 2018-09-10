@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -338,17 +339,17 @@ func TestEnginePutGetDelete(t *testing.T) {
 		// Test for correct handling of empty keys, which should produce errors.
 		for i, err := range []error{
 			engine.Put(mvccKey(""), []byte("")),
-			engine.Put(NilKey, []byte("")),
+			engine.Put(mvcc.NilKey, []byte("")),
 			func() error {
 				_, err := engine.Get(mvccKey(""))
 				return err
 			}(),
-			engine.Clear(NilKey),
+			engine.Clear(mvcc.NilKey),
 			func() error {
-				_, err := engine.Get(NilKey)
+				_, err := engine.Get(mvcc.NilKey)
 				return err
 			}(),
-			engine.Clear(NilKey),
+			engine.Clear(mvcc.NilKey),
 			engine.Clear(mvccKey("")),
 		} {
 			if err == nil {

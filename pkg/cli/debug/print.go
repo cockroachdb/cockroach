@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -34,22 +34,22 @@ import (
 
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv engine.MVCCKeyValue, sizes bool) {
+func PrintKeyValue(kv mvcc.KeyValue, sizes bool) {
 	fmt.Println(SprintKeyValue(kv, sizes))
 }
 
 // SprintKeyValue is like PrintKeyValue, but returns a string.
-func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
+func SprintKeyValue(kv mvcc.KeyValue, sizes bool) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s: ", kv.Key.Timestamp, kv.Key.Key)
-	decoders := []func(kv engine.MVCCKeyValue) (string, error){
+	decoders := []func(kv mvcc.KeyValue) (string, error){
 		tryRaftLogEntry,
 		tryRangeDescriptor,
 		tryMeta,
 		tryTxn,
 		tryRangeIDKey,
 		tryIntent,
-		func(kv engine.MVCCKeyValue) (string, error) {
+		func(kv mvcc.KeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
 		},
@@ -65,7 +65,7 @@ func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
 	panic("unreachable")
 }
 
-func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
+func tryRangeDescriptor(kv mvcc.KeyValue) (string, error) {
 	if err := IsRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
 	}
@@ -76,7 +76,7 @@ func tryRangeDescriptor(kv engine.MVCCKeyValue) (string, error) {
 	return descStr(desc), nil
 }
 
-func tryIntent(kv engine.MVCCKeyValue) (string, error) {
+func tryIntent(kv mvcc.KeyValue) (string, error) {
 	if len(kv.Value) == 0 {
 		return "", errors.New("empty")
 	}
@@ -91,7 +91,7 @@ func tryIntent(kv engine.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
-func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
+func tryRaftLogEntry(kv mvcc.KeyValue) (string, error) {
 	var ent raftpb.Entry
 	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
 		return "", err
@@ -133,7 +133,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	return "", fmt.Errorf("unknown log entry type: %s", &ent)
 }
 
-func tryTxn(kv engine.MVCCKeyValue) (string, error) {
+func tryTxn(kv mvcc.KeyValue) (string, error) {
 	var txn roachpb.Transaction
 	if err := maybeUnmarshalInline(kv.Value, &txn); err != nil {
 		return "", err
@@ -141,7 +141,7 @@ func tryTxn(kv engine.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
+func tryRangeIDKey(kv mvcc.KeyValue) (string, error) {
 	if kv.Key.Timestamp != (hlc.Timestamp{}) {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
@@ -224,7 +224,7 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	return msg.String(), nil
 }
 
-func tryMeta(kv engine.MVCCKeyValue) (string, error) {
+func tryMeta(kv mvcc.KeyValue) (string, error) {
 	if !bytes.HasPrefix(kv.Key.Key, keys.Meta1Prefix) && !bytes.HasPrefix(kv.Key.Key, keys.Meta2Prefix) {
 		return "", errors.New("not a meta key")
 	}
@@ -240,7 +240,7 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 }
 
 // IsRangeDescriptorKey returns nil if the key decodes as a RangeDescriptor.
-func IsRangeDescriptorKey(key engine.MVCCKey) error {
+func IsRangeDescriptorKey(key mvcc.Key) error {
 	_, suffix, _, err := keys.DecodeRangeKey(key.Key)
 	if err != nil {
 		return err

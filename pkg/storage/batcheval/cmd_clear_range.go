@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -65,8 +66,8 @@ func ClearRange(
 
 	// Encode MVCCKey values for start and end of clear span.
 	args := cArgs.Args.(*roachpb.ClearRangeRequest)
-	from := engine.MVCCKey{Key: args.Key}
-	to := engine.MVCCKey{Key: args.EndKey}
+	from := mvcc.Key{Key: args.Key}
+	to := mvcc.Key{Key: args.EndKey}
 	var pd result.Result
 
 	// Before clearing, compute the delta in MVCCStats.
@@ -83,7 +84,7 @@ func ClearRange(
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
 		if err := batch.Iterate(
 			from, to,
-			func(kv engine.MVCCKeyValue) (bool, error) {
+			func(kv mvcc.KeyValue) (bool, error) {
 				return false, batch.Clear(kv.Key)
 			},
 		); err != nil {
@@ -119,7 +120,7 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to engine.MVCCKey,
+	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to mvcc.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats

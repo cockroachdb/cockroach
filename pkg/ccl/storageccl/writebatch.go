@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -53,8 +54,8 @@ func evalWriteBatch(
 		return result.Result{}, errors.New("data spans multiple ranges")
 	}
 
-	mvccStartKey := engine.MVCCKey{Key: args.Key}
-	mvccEndKey := engine.MVCCKey{Key: args.EndKey}
+	mvccStartKey := mvcc.Key{Key: args.Key}
+	mvccEndKey := mvcc.Key{Key: args.EndKey}
 
 	// Verify that the keys in the batch are within the range specified by the
 	// request header.
@@ -79,11 +80,11 @@ func evalWriteBatch(
 }
 
 func clearExistingData(
-	ctx context.Context, batch engine.ReadWriter, start, end engine.MVCCKey, nowNanos int64,
+	ctx context.Context, batch engine.ReadWriter, start, end mvcc.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ engine.MVCCKeyValue) (bool, error) {
+		if err := batch.Iterate(start, end, func(_ mvcc.KeyValue) (bool, error) {
 			isEmpty = false
 			return true, nil // stop right away
 		}); err != nil {

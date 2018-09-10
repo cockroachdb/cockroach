@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/pkg/errors"
 )
 
@@ -39,9 +40,7 @@ func init() {
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
-func VerifyBatchRepr(
-	repr []byte, start, end engine.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
+func VerifyBatchRepr(repr []byte, start, end mvcc.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 	// We store a 4 byte checksum of each key/value entry in the value. Make
 	// sure the all ones in this BatchRepr validate.
 	//
@@ -109,7 +108,7 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 }
 
-func goToCKey(key engine.MVCCKey) C.DBKey {
+func goToCKey(key mvcc.Key) C.DBKey {
 	return C.DBKey{
 		key:       goToCSlice(key.Key),
 		wall_time: C.int64_t(key.Timestamp.WallTime),

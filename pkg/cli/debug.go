@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -130,7 +131,7 @@ func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engin
 	return db, nil
 }
 
-func printKey(kv engine.MVCCKeyValue) (bool, error) {
+func printKey(kv mvcc.KeyValue) (bool, error) {
 	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
@@ -150,7 +151,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 
 	printer := printKey
 	if debugCtx.values {
-		printer = func(kv engine.MVCCKeyValue) (bool, error) {
+		printer = func(kv mvcc.KeyValue) (bool, error) {
 			debug.PrintKeyValue(kv, debugCtx.sizes)
 			return false, nil
 		}
@@ -252,7 +253,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		debug.PrintKeyValue(engine.MVCCKeyValue{
+		debug.PrintKeyValue(mvcc.KeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
 		}, debugCtx.sizes)
@@ -274,7 +275,7 @@ func loadRangeDescriptor(
 	db engine.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv engine.MVCCKeyValue) (bool, error) {
+	handleKV := func(kv mvcc.KeyValue) (bool, error) {
 		if kv.Key.Timestamp == (hlc.Timestamp{}) {
 			// We only want values, not MVCCMetadata.
 			return false, nil
@@ -321,7 +322,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
-	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, func(kv mvcc.KeyValue) (bool, error) {
 		if debug.IsRangeDescriptorKey(kv.Key) != nil {
 			return false, nil
 		}
@@ -382,13 +383,13 @@ Decode and print a hexadecimal-encoded key-value pair.
 			// is already a roachpb.Key, so make a half-assed attempt to support both.
 			fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
 				"if the result below looks like garbage, then it likely is:\n\n", err)
-			k = engine.MVCCKey{
+			k = mvcc.Key{
 				Key:       bs[0],
 				Timestamp: hlc.Timestamp{WallTime: 987654321},
 			}
 		}
 
-		debug.PrintKeyValue(engine.MVCCKeyValue{
+		debug.PrintKeyValue(mvcc.KeyValue{
 			Key:   k,
 			Value: bs[1],
 		}, debugCtx.sizes)
@@ -423,7 +424,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
 
-	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, func(kv mvcc.KeyValue) (bool, error) {
 		debug.PrintKeyValue(kv, debugCtx.sizes)
 		return false, nil
 	})

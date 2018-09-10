@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,7 +55,7 @@ func newWrappedEngine() *wrappedEngine {
 }
 
 func (we *wrappedEngine) GetSSTables() engine.SSTableInfos {
-	key := func(s string) engine.MVCCKey {
+	key := func(s string) mvcc.Key {
 		return engine.MakeMVCCMetadataKey([]byte(s))
 	}
 	ssti := engine.SSTableInfos{
@@ -574,9 +575,9 @@ func TestCompactorThresholds(t *testing.T) {
 				// spans have been cleared and uncompacted spans remain.
 				var idx int
 				return we.Iterate(
-					engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
-					engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
-					func(kv engine.MVCCKeyValue) (bool, error) {
+					mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMin},
+					mvcc.Key{Key: keys.LocalStoreSuggestedCompactionsMax},
+					func(kv mvcc.KeyValue) (bool, error) {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {
 							t.Fatalf("failed to decode suggested compaction key: %s", err)

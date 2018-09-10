@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,7 +29,7 @@ func TestIterStats(t *testing.T) {
 	db := setupMVCCInMemRocksDB(t, "test_iter_stats")
 	defer db.Close()
 
-	k := MakeMVCCMetadataKey(roachpb.Key("foo"))
+	k := mvcc.MakeMVCCMetadataKey(roachpb.Key("foo"))
 	if err := db.Put(k, []byte("abc")); err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +56,8 @@ func TestIterStats(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			// Seeking past the tombstone manually counts it.
 			for i := 0; i < 10; i++ {
-				iter.Seek(NilKey)
-				iter.Seek(MVCCKeyMax)
+				iter.Seek(mvcc.NilKey)
+				iter.Seek(mvcc.KeyMax)
 				stats := iter.Stats()
 				if e, a := i+1, stats.InternalDeleteSkippedCount; a != e {
 					t.Errorf("expected internal delete skipped count of %d, not %d", e, a)

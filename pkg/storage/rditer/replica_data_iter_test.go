@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,9 +68,7 @@ func uuidFromString(input string) uuid.UUID {
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
 // data.
-func createRangeData(
-	t *testing.T, eng engine.Engine, desc roachpb.RangeDescriptor,
-) []engine.MVCCKey {
+func createRangeData(t *testing.T, eng engine.Engine, desc roachpb.RangeDescriptor) []mvcc.Key {
 	testTxnID := uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	testTxnID2 := uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 
@@ -111,12 +110,12 @@ func createRangeData(
 		{fakePrevKey(desc.EndKey), ts},
 	}
 
-	keys := []engine.MVCCKey{}
+	keys := []mvcc.Key{}
 	for _, keyTS := range keyTSs {
 		if err := engine.MVCCPut(context.Background(), eng, nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
-		keys = append(keys, engine.MVCCKey{Key: keyTS.key, Timestamp: keyTS.ts})
+		keys = append(keys, mvcc.Key{Key: keyTS.key, Timestamp: keyTS.ts})
 	}
 	return keys
 }
@@ -126,7 +125,7 @@ func verifyRDIter(
 	desc *roachpb.RangeDescriptor,
 	eng engine.ReadWriter,
 	replicatedOnly bool,
-	expectedKeys []engine.MVCCKey,
+	expectedKeys []mvcc.Key,
 ) {
 	t.Helper()
 	testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
@@ -185,7 +184,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		EndKey:   roachpb.RKey("z"),
 	}
 
-	verifyRDIter(t, desc, eng, false /* replicatedOnly */, []engine.MVCCKey{})
+	verifyRDIter(t, desc, eng, false /* replicatedOnly */, []mvcc.Key{})
 }
 
 // TestReplicaDataIterator creates three ranges {"a"-"b" (pre), "b"-"c"
@@ -245,7 +244,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		desc *roachpb.RangeDescriptor
-		keys []engine.MVCCKey
+		keys []mvcc.Key
 	}{
 		{"pre", &descPre, preKeys},
 		{"post", &descPost, postKeys},

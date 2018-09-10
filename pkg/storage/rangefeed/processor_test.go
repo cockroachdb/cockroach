@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -456,7 +457,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	rtsIter := newTestIterator([]engine.MVCCKeyValue{
+	rtsIter := newTestIterator([]mvcc.KeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),
@@ -546,7 +547,7 @@ func TestProcessorCatchUpScan(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{}, p.rts.Get())
 
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	catchUpIter := newTestIterator([]engine.MVCCKeyValue{
+	catchUpIter := newTestIterator([]mvcc.KeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),

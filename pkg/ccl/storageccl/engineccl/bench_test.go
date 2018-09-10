@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -146,7 +147,7 @@ func runIterate(
 		endTime := hlc.Timestamp{WallTime: int64(loadFactor * numBatches * batchTimeSpan)}
 		it := makeIterator(eng, startTime, endTime)
 		defer it.Close()
-		for it.Seek(engine.MVCCKey{}); ; it.Next() {
+		for it.Seek(mvcc.Key{}); ; it.Next() {
 			if ok, err := it.Valid(); !ok {
 				if err != nil {
 					b.Fatal(err)

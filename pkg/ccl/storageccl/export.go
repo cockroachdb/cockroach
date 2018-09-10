@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -194,7 +195,7 @@ func evalExport(
 		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
 			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+		if err := sst.Add(mvcc.KeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
 			return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
 	}

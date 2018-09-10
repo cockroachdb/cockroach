@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -113,7 +114,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Errorf("GetProto: unexpected error %v", err)
 	}
 	if err := batch.Iterate(outsideKey, outsideKey2,
-		func(v engine.MVCCKeyValue) (bool, error) {
+		func(v mvcc.KeyValue) (bool, error) {
 			return false, errors.Errorf("unexpected callback: %v", v)
 		},
 	); !isReadSpanErr(err) {

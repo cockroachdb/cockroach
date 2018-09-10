@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -1224,8 +1225,8 @@ func getAllRevisions(
 		if err := sst.IngestExternalFile(file.SST); err != nil {
 			return nil, err
 		}
-		start, end := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
-		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		start, end := mvcc.Key{Key: startKey}, mvcc.Key{Key: endKey}
+		if err := sst.Iterate(start, end, func(kv mvcc.KeyValue) (bool, error) {
 			if len(res) == 0 || !res[len(res)-1].Key.Equal(kv.Key.Key) {
 				res = append(res, versionedValues{Key: kv.Key.Key})
 			}
