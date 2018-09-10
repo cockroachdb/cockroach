@@ -89,3 +89,71 @@ func registerDebug(r *registry) {
 		})
 	}
 }
+
+func registerDebugHeap(r *registry) {
+	runDebug := func(ctx context.Context, t *test, c *cluster) {
+		nodes := c.nodes
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Start(ctx, c.Range(1, nodes))
+		db := c.Conn(ctx, nodes)
+
+		// Run debug zip command against a node, produce a zip file, extract it, and
+		// check information from heap profiler is present.
+		debugExtractExist := func(node int, file string) error {
+			port := fmt.Sprintf("{pgport:%d}", node)
+
+			for i := 1; i <= node; i++ {
+				if err := c.RunE(ctx, c.Node(i), "touch {log-dir}/heap_profiler/memprof.fraction_system_memory.foo"); err != nil {
+					return err
+				}
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "./cockroach debug zip "+file+" --insecure --host=:"+port); err != nil {
+				return err
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "unzip -v || sudo apt-get install unzip"); err != nil {
+				return err
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "unzip "+file); err != nil {
+				return err
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "find debug/ -print | grep 'memprof.fraction_system_memory'"); err != nil {
+				return err
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "rm -rf debug"); err != nil {
+				return err
+			}
+
+			for i := 1; i <= node; i++ {
+				if err := c.RunE(ctx, c.Node(i), "rm {log-dir}/heap_profiler/memprof.fraction_system_memory.foo"); err != nil {
+					return err
+				}
+			}
+
+			return c.RunE(ctx, c.Node(node), "rm "+file)
+		}
+
+		waitForFullReplication(t, db)
+
+		// Run debug zip command against the last node, extract the output.zip,
+		// and check heap information is present
+		if err := debugExtractExist(nodes, "output.zip"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, n := range []int{3} {
+		r.Add(testSpec{
+			Name:   fmt.Sprintf("debug/heap/nodes=%d", n),
+			Nodes:  nodes(n),
+			Stable: true, // DO NOT COPY to new tests
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runDebug(ctx, t, c)
+			},
+		})
+	}
+}
