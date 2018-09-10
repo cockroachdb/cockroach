@@ -429,26 +429,18 @@ func Example_logging() {
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--log-backtrace-at=foo.go:1`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--log-dir=`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--verbosity=0`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--vmodule=foo=1`, `-e`, `select 1 as "1"`})
 
 	// Output:
 	// sql --logtostderr=false -e select 1 as "1"
 	// 1
 	// 1
-	// sql --log-backtrace-at=foo.go:1 -e select 1 as "1"
-	// 1
-	// 1
 	// sql --log-dir= -e select 1 as "1"
 	// 1
 	// 1
 	// sql --logtostderr=true -e select 1 as "1"
-	// 1
-	// 1
-	// sql --verbosity=0 -e select 1 as "1"
 	// 1
 	// 1
 	// sql --vmodule=foo=1 -e select 1 as "1"
@@ -1830,7 +1822,6 @@ Available Commands:
 
 Flags:
   -h, --help                             help for cockroach
-      --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
       --log-dir string                   if non-empty, write log files in this directory
       --log-dir-max-size bytes           maximum combined size of all log files (default 100 MiB)
       --log-file-max-size bytes          maximum size of each log file (default 10 MiB)
@@ -1881,7 +1872,7 @@ Use "cockroach [command] --help" for more information about a command.
 			}
 
 			// Filter out all test flags.
-			testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule|rewrite)`)
+			testFlagRE := regexp.MustCompile(`--(test\.|vmodule|rewrite)`)
 			lines := strings.Split(buf.String(), "\n")
 			final := []string{}
 			for _, l := range lines {
