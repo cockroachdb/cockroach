@@ -300,14 +300,33 @@ message StacksRequest {
   string node_id = 1;
 }
 
+enum ProfileType { HEAP = 0; }
+
+message ProfileListRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  
+  // The type of profile to retrieve.
+  ProfileType type = 5;
+}
+
+message ProfileListResponse {
+  repeated string filenames = 1;
+}
+
 message ProfileRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 
-  enum Type { HEAP = 0; }
   // The type of profile to retrieve.
-  Type type = 5;
+  ProfileType type = 5;
+  string filename = 6;
+}
+
+message ProfileResponse {
+  bytes data = 1;
 }
 
 message MetricsRequest {
@@ -741,6 +760,16 @@ service Status {
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/metrics/{node_id}"
+    };
+  }
+  rpc ProfileList(ProfileListRequest) returns (ProfileListResponse) {
+    option (google.api.http) = {
+      get : "/_status/readprofile/{node_id}"
+    };
+  }
+  rpc ReadProfile(ProfileRequest) returns (ProfileResponse) {
+    option (google.api.http) = {
+      get : "/_status/readprofile/{node_id}/{filename}"
     };
   }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
