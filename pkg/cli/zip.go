@@ -278,6 +278,27 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				{
 					ctx, cancel := timeoutCtx(baseCtx)
 					defer cancel()
+					if profiles, err := status.GetFiles(ctx, &serverpb.GetFilesRequest{
+						NodeId:   id,
+						Type:     serverpb.FileType_HEAP,
+						Patterns: []string{"*"},
+					}); err != nil {
+						if err := z.createError(prefix+"/heapfiles", err); err != nil {
+							return err
+						}
+					} else {
+						for _, doc := range profiles.Files {
+							name := prefix + "/heapprof/" + doc.FileName
+							if err := z.createRaw(name, doc.FileContents); err != nil {
+								return err
+							}
+						}
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
 					if logs, err := status.LogFilesList(
 						ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
 						if err := z.createError(prefix+"/logs", err); err != nil {
