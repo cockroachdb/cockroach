@@ -300,6 +300,29 @@ message StacksRequest {
   string node_id = 1;
 }
 
+// Represents the type of file.
+enum FileType { HEAP = 0; }
+
+message File {
+  string file_name = 1;
+  int64 file_size = 2;
+  bytes file_contents = 3;
+}
+
+// TODO(ridwanmsharif): Get log files with the same endpoint.
+message GetFilesRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  bool list_only = 2;
+  FileType type = 5;
+  repeated string patterns= 6;
+}
+
+message GetFilesResponse {
+  repeated File files = 1;
+}
+
 message ProfileRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -741,6 +764,11 @@ service Status {
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/metrics/{node_id}"
+    };
+  }
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse) {
+    option (google.api.http) = {
+      get : "/_status/files/{node_id}"
     };
   }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
