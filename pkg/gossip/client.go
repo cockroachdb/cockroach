@@ -60,9 +60,9 @@ func extractKeys(delta map[string]*Info) string {
 // newClient creates and returns a client struct.
 func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *client {
 	return &client{
-		AmbientContext: ambient,
-		createdAt:      timeutil.Now(),
-		addr:           addr,
+		AmbientContext:        ambient,
+		createdAt:             timeutil.Now(),
+		addr:                  addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 		clientMetrics:         makeMetrics(),

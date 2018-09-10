@@ -3,7 +3,7 @@
 # Detect whether the installed version of Go can build this version of
 # CockroachDB.
 #
-# To bump the required version of Go, edit the last conditional appropriately.s
+# To bump the required version of Go, edit the last conditional appropriately.
 
 go=${1-go}
 
@@ -19,7 +19,7 @@ fi
 
 version_major=$(cut -f1 -d. <<< "$version")
 version_minor=$(cut -f2 -d. <<< "$version")
-if (( version_major != 1 )) || (( version_minor < 10 )); then
+if (( version_major != 1 )) || (( version_minor < 11 )); then
   echo "go1.10+ required (detected go$version)" >&2
   exit 1
 fi
