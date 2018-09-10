@@ -809,6 +809,57 @@ SELECT jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}'::STRING[], '[2,3,4]')
 [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
 
 query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"');
+----
+{"a": [0, "new_value", 1, 2]}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, {"a": ["a", "b", "d"]}, 4]', '{3, a, 2}'::STRING[], '"c"')
+----
+[0, 1, 2, {"a": ["a", "b", "c", "d"]}, 4]
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{b}'::STRING[], '"bar"')
+----
+{"a": "foo", "b": "bar"}
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{b, null}'::STRING[], '"bar"')
+----
+{"a": "foo"}
+
+query T
+SELECT jsonb_insert(NULL, '{a}', NULL, false)
+----
+NULL
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, "new_value", 2]}
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, -1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, 2, "new_value"]}
+
+query error pq: jsonb_insert\(\): cannot replace existing key
+SELECT jsonb_insert('{"a": "foo"}', '{a}'::STRING[], '"new_value"', false)
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{a, 0}'::STRING[], '"new_value"', false)
+----
+{"a": "foo"}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, 3]', '{3}'::STRING[], '10', true)
+----
+[0, 1, 2, 3, 10]
+
+query error pq: jsonb_insert\(\): cannot set path in scalar
+SELECT jsonb_insert('1', '{a}'::STRING[], '10', true);
+
+query T
 SELECT jsonb_strip_nulls(NULL)
 ----
 NULL

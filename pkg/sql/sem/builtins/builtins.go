@@ -2567,6 +2567,8 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
 
+	"jsonb_insert": makeBuiltin(jsonProps(), jsonInsertImpl, jsonInsertWithInsertAfterImpl),
+
 	"jsonb_pretty": makeBuiltin(jsonProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.JSON}},
@@ -3205,6 +3207,61 @@ var jsonSetWithCreateMissingImpl = tree.Overload{
 	Info: "Returns the JSON value pointed to by the variadic arguments. " +
 		"If `create_missing` is false, new keys will not be inserted to objects " +
 		"and values will not be prepended or appended to arrays.",
+}
+
+var jsonInsertImpl = tree.Overload{
+	Types: tree.ArgTypes{
+		{"target", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"new_val", types.JSON},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		ary := *tree.MustBeDArray(args[1])
+		// jsonb_insert only errors if there is a null at the first position, but not
+		// at any other positions.
+		if err := checkHasNullAtPositionOne(ary); err != nil {
+			return nil, err
+		}
+		path, ok := darrayToStringSlice(ary)
+		if !ok {
+			return args[0], nil
+		}
+		j, err := json.DeepInsert(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, false)
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments.",
+}
+
+var jsonInsertWithInsertAfterImpl = tree.Overload{
+	Types: tree.ArgTypes{
+		{"target", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"new_val", types.JSON},
+		{"insert_after", types.Bool},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		ary := *tree.MustBeDArray(args[1])
+		// jsonb_insert only errors if there is a null at the first position, but not
+		// at any other positions.
+		if err := checkHasNullAtPositionOne(ary); err != nil {
+			return nil, err
+		}
+		path, ok := darrayToStringSlice(ary)
+		if !ok {
+			return args[0], nil
+		}
+		j, err := json.DeepInsert(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, bool(tree.MustBeDBool(args[3])))
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments.",
 }
 
 var jsonTypeOfImpl = tree.Overload{
