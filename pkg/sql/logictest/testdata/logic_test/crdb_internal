@@ -104,10 +104,10 @@ Channel
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
-query ITTTTTTTTTRTTI colnames
+query ITTTTTTTTTTRTTI colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-job_id  job_type  description  user_name  descriptor_ids  status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
+job_id  job_type  description  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
