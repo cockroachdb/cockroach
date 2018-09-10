@@ -32,18 +32,18 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s BRANCH...\n", os.Args[0])
+	if len(os.Args) != 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", os.Args[0])
 		os.Exit(1)
 	}
-	branches := os.Args[1:]
 
+	branch := cmdutil.RequireEnv("TC_BUILD_BRANCH")
 	serverURL := cmdutil.RequireEnv("TC_SERVER_URL")
 	username := cmdutil.RequireEnv("TC_API_USER")
 	password := cmdutil.RequireEnv("TC_API_PASSWORD")
 
 	tcClient := teamcity.New(serverURL, username, password)
-	runTC(branches, func(buildID, branch string, opts map[string]string) {
+	runTC(func(buildID string, opts map[string]string) {
 		build, err := tcClient.QueueBuild(buildID, branch, opts)
 		if err != nil {
 			log.Fatalf("failed to create teamcity build (buildID=%s, branch=%s, opts=%+v): %s",
@@ -54,23 +54,21 @@ func main() {
 	})
 }
 
-func runTC(branches []string, queueBuild func(string, string, map[string]string)) {
+func runTC(queueBuild func(string, map[string]string)) {
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
 
-	for _, branch := range branches {
-		// Queue stress builds. One per configuration per package.
-		for _, opts := range []map[string]string{
-			{}, // uninstrumented
-			// The race detector is CPU intensive, so we want to run less processes in
-			// parallel. (Stress, by default, will run one process per CPU.)
-			//
-			// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
-			{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
-		} {
-			for _, importPath := range importPaths {
-				opts["env.PKG"] = importPath
-				queueBuild("Cockroach_Nightlies_Stress", branch, opts)
-			}
+	// Queue stress builds. One per configuration per package.
+	for _, opts := range []map[string]string{
+		{}, // uninstrumented
+		// The race detector is CPU intensive, so we want to run less processes in
+		// parallel. (Stress, by default, will run one process per CPU.)
+		//
+		// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
+		{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
+	} {
+		for _, importPath := range importPaths {
+			opts["env.PKG"] = importPath
+			queueBuild("Cockroach_Nightlies_Stress", opts)
 		}
 	}
 }
