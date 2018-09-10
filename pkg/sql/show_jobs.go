@@ -24,8 +24,8 @@ import (
 // Privileges: None.
 func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW JOBS",
-		`SELECT job_id, job_type, description, user_name, status, created, started, finished, modified,
-            fraction_completed, error, coordinator_id
+		`SELECT job_id, job_type, description, user_name, status, running_status, created,
+            started, finished, modified, fraction_completed, error, coordinator_id
        FROM crdb_internal.jobs`,
 		nil, nil)
 }
