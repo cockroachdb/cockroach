@@ -228,7 +228,8 @@ func (r *Registry) NewJob(record Record) *Job {
 		Details:       jobspb.WrapPayloadDetails(record.Details),
 	}
 	job.mu.progress = jobspb.Progress{
-		Details: jobspb.WrapProgressDetails(record.Progress),
+		Details:       jobspb.WrapProgressDetails(record.Progress),
+		RunningStatus: string(RunningStatusGeneral),
 	}
 	return job
 }

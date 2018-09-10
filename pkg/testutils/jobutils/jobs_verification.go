@@ -129,13 +129,12 @@ func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 	return jobCount
 }
 
-// VerifySystemJob checks that that job records are created as expected.
-func VerifySystemJob(
+func verifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
 	offset int,
 	expectedType jobspb.Type,
-	expectedStatus jobs.Status,
+	expectedStatus string,
 	expected jobs.Record,
 ) error {
 	var actual jobs.Record
@@ -165,14 +164,43 @@ func VerifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := expectedStatus, jobs.Status(statusString); e != a {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
+	if expectedStatus != statusString {
+		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}
 	if e, a := expectedType.String(), actualType; e != a {
 		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
 	}
 
 	return nil
+}
+
+// VerifyRunningSystemJob checks that job records are created as expected
+// and is marked as running.
+func VerifyRunningSystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedRunningStatus jobs.RunningStatus,
+	expected jobs.Record,
+) error {
+	expectedStatus := "running"
+	if expectedRunningStatus != jobs.RunningStatusGeneral {
+		expectedStatus += " (" + string(expectedRunningStatus) + ")"
+	}
+	return verifySystemJob(t, db, offset, expectedType, expectedStatus, expected)
+}
+
+// VerifySystemJob checks that job records are created as expected.
+func VerifySystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus jobs.Status,
+	expected jobs.Record,
+) error {
+	return verifySystemJob(t, db, offset, expectedType, string(expectedStatus), expected)
 }
 
 // GetJobID gets a particular job's ID.
