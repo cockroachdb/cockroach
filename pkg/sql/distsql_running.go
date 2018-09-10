@@ -676,8 +676,9 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 		case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
 			var result tree.DTuple
-			for i := 0; i < rows.Len(); i++ {
-				row := rows.At(i)
+			for rows.Len() > 0 {
+				row := rows.At(0)
+				rows.PopFirst()
 				if row.Len() == 1 {
 					// This seems hokey, but if we don't do this then the subquery expands
 					// to a tuple of tuples instead of a tuple of values and an expression
