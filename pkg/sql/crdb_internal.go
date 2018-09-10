@@ -471,6 +471,15 @@ CREATE TABLE crdb_internal.jobs (
 						fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 					}
 					modified = tsOrNull(progress.ModifiedMicros)
+
+					if len(progress.RunningStatus) > 0 {
+						if s, ok := status.(*tree.DString); ok {
+							statusStr := string(*s)
+							if jobs.Status(statusStr) == jobs.StatusRunning {
+								status = tree.NewDString(statusStr + " (" + progress.RunningStatus + ")")
+							}
+						}
+					}
 				}
 			}
 

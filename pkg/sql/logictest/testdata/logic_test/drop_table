@@ -26,6 +26,11 @@ statement ok
 DROP TABLE a
 
 query T
+SELECT status FROM [SHOW JOBS]
+----
+running (waiting for GC TTL)
+
+query T
 SHOW TABLES FROM test
 ----
 b
