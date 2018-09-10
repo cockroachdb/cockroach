@@ -205,3 +205,52 @@
   $val
   (MakeSingleKeyJSONObject $key $right)
 )
+
+# CaseWhenTrueSimplify simplifes a CASE where a branch is known to match
+# to its expr.
+# This transforms
+#
+#   CASE ... WHEN true THEN a ... END
+#
+# to
+#
+#   a
+#
+[CaseWhenTrueSimplify, Normalize]
+(Case
+  (True)
+  [ ... (When (True) $val:*) ... ]
+)
+=>
+$val
+
+# CaseWhenTrueRemoveFalse removes branches known to not match.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a END
+#
+# to
+#
+#   CASE WHEN v THEN 1 END
+#
+[CaseWhenTrueRemoveFalse, Normalize]
+(Case
+  $input:(True)
+  $whens:[ ... $false:(When (False) *) ... ]
+)
+=>
+(Case
+  $input
+  (RemoveListItem $whens $false)
+)
+
+# CaseOnlyElse converts CASE expressions with the final ELSE present
+# to its expr. This rule is only useful with CaseWhenTrueRemoveFalse
+# because it is not possible to create a CASE with only an ELSE from SQL.
+[CaseOnlyElse, Normalize]
+(Case
+  *
+  [ $item:* ]
+)
+=>
+$item

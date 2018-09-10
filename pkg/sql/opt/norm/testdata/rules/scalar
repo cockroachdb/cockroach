@@ -520,3 +520,54 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters [type=bool, outer=(5)]
       └── (j->'a') @> '"b"' [type=bool, outer=(5)]
+
+# --------------------------------------------------
+# CaseWhenTrueSimplify
+# --------------------------------------------------
+opt
+SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' ELSE 'three' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'two' [type=string]
+
+# --------------------------------------------------
+# CaseWhenTrueRemoveFalse and CaseOnlyElse
+# --------------------------------------------------
+opt
+SELECT CASE WHEN false THEN 'one' ELSE 'three' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt
+SELECT CASE WHEN false THEN 'one' END
+----
+project
+ ├── columns: case:1(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── null [type=unknown]
