@@ -40,7 +40,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 		return PhysicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
+	spanPartitions, err := dsp.PartitionSpans(planCtx, n.spans)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -51,13 +51,13 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			tr.Spans[j].Span = sp.spans[j]
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		for j := range sp.Spans {
+			tr.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
