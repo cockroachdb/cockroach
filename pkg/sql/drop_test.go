@@ -27,12 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -969,4 +973,191 @@ CREATE VIEW test.acol(a) AS SELECT a FROM test.t;
 		_, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY);`)
 		return err
 	})
+}
+
+// Tests that a job is created for a dropped table and succeeds when the data is deleted.
+func TestDropTableJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	const numRows = 2*sql.TableTruncateChunkSize + 1
+
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MinNonPredefinedUserDescID, "kv")
+	gr, err := kvDB.Get(ctx, nameKey)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !gr.Exists() {
+		t.Fatalf("Name entry %q does not exist", nameKey)
+	}
+
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Data hasn't been GC-ed.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusRunning, jobs.Record{
+		Username:    security.RootUser,
+		Description: "DROP TABLE t.public.kv",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The closure pushes a zone config reducing the TTL to 0 for descriptor.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		return descExists(sqlDB, false, tableDesc.ID)
+	})
+
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: "DROP TABLE t.public.kv",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Tests that a job is created for a dropped database and succeeds when the data is deleted.
+func TestDropDatabaseJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
+INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.kv2 (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
+INSERT INTO t.kv2 VALUES ('a', 'b'), ('c', 'd'), ('d', 'a');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	r, err := kvDB.Get(ctx, dbNameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Exists() {
+		t.Fatalf(`database "t" does not exist`)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tableDesc2 := sqlbase.GetTableDescriptor(kvDB, "t", "kv2")
+
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MinNonPredefinedUserDescID, "kv")
+	nameKey2 := sqlbase.MakeNameMetadataKey(keys.MinNonPredefinedUserDescID, "kv2")
+	gr, err := kvDB.Get(ctx, nameKey)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gr2, err := kvDB.Get(ctx, nameKey2)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !gr.Exists() || !gr2.Exists() {
+		t.Fatalf("Name entry %q or %q does not exist", nameKey, nameKey2)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Data hasn't been GC-ed.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusRunning, jobs.Record{
+		Username:    security.RootUser,
+		Description: "DROP DATABASE t CASCADE",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID, tableDesc2.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The closure pushes a zone config reducing the TTL to 0 for descriptor 1.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		return descExists(sqlDB, false, tableDesc.ID)
+	})
+
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusRunning, jobs.Record{
+		Username:    security.RootUser,
+		Description: "DROP DATABASE t CASCADE",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID, tableDesc2.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc2.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		return descExists(sqlDB, false, tableDesc2.ID)
+	})
+
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: "DROP DATABASE t CASCADE",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID, tableDesc2.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }

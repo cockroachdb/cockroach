@@ -313,7 +313,11 @@ func (sc *SchemaChanger) ExtendLease(
 
 // DropTableDesc removes a descriptor from the KV database.
 func DropTableDesc(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	db *client.DB,
+	traceKV bool,
+	job *jobs.Job,
 ) error {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
@@ -330,8 +334,33 @@ func DropTableDesc(
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
+
+		if job != nil {
+
+			job.WithTxn(txn)
+			details, ok := job.Details().(jobspb.SchemaChangeDetails)
+			if ok {
+				found := false
+				for i := 0; i < len(details.RemainingDroppedTables); i++ {
+					if tableDesc.ID == details.RemainingDroppedTables[i].ID {
+						found = true
+						details.RemainingDroppedTables = append(details.RemainingDroppedTables[:i], details.RemainingDroppedTables[i+1:]...)
+						break
+					}
+				}
+
+				if found {
+					var err error
+					if len(details.RemainingDroppedTables) > 0 {
+						err = job.SetDetails(ctx, details)
+					} else {
+						err = job.Succeeded(ctx, jobs.NoopFn)
+					}
+					if err != nil {
+						return errors.Wrapf(err, "failed to update job %d", *job.ID())
+					}
+				}
+			}
 		}
 		return txn.Run(ctx, b)
 	})
@@ -463,8 +492,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 		if err := sc.truncateTable(ctx, lease, table, evalCtx); err != nil {
 			return false, err
 		}
-
-		return true, DropTableDesc(ctx, table, sc.db, false /* traceKV */)
+		return true, DropTableDesc(ctx, table, sc.db, false /* traceKV */, sc.job)
 	}
 
 	if table.Adding() {
@@ -591,6 +619,22 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
+	// Find our job.
+	foundJobID := false
+	if sc.mutationID != sqlbase.InvalidMutationID {
+		for _, g := range tableDesc.MutationJobs {
+			if g.MutationID == sc.mutationID {
+				job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
+				if err != nil {
+					return err
+				}
+				sc.job = job
+				foundJobID = true
+				break
+			}
+		}
+	}
+
 	if drop, err := sc.maybeAddDrop(ctx, inSession, &lease, tableDesc, evalCtx); err != nil {
 		return err
 	} else if drop {
@@ -607,24 +651,6 @@ func (sc *SchemaChanger) exec(
 		}
 	}()
 
-	if sc.mutationID == sqlbase.InvalidMutationID {
-		// Nothing more to do.
-		return nil
-	}
-
-	// Find our job.
-	foundJobID := false
-	for _, g := range tableDesc.MutationJobs {
-		if g.MutationID == sc.mutationID {
-			job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
-			if err != nil {
-				return err
-			}
-			sc.job = job
-			foundJobID = true
-			break
-		}
-	}
 	if !foundJobID {
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.
@@ -1427,6 +1453,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								log.Infof(ctx,
 									"%s: queue up pending drop table GC; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
+							}
+
+							if len(table.MutationJobs) > 0 {
+								schemaChanger.mutationID = table.MutationJobs[len(table.MutationJobs)-1].MutationID
 							}
 
 							if table.DropTime > 0 {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,17 +120,41 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.td))
+	tableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.td))
+
+	for _, toDel := range n.td {
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: toDel.tn.FQString(),
+			ID:   toDel.desc.ID,
+		})
+		tableDescs = append(tableDescs, toDel.desc)
+	}
+
+	job, err := p.createSchemaChangesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
+		tree.FmtAlwaysQualifyTableNames))
+	if err != nil {
+		return err
+	}
+
+	if err := job.WithTxn(params.p.txn).Started(ctx); err != nil {
+		if log.V(2) {
+			log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+		}
+	}
+
 	for _, toDel := range n.td {
 		tbDesc := toDel.desc
+		mutationID := tbDesc.MutationJobs[len(tbDesc.MutationJobs)-1].MutationID
 		if tbDesc.IsView() {
-			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
+			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade, mutationID)
 			if err != nil {
 				return err
 			}
 			// TODO(knz): dependent dropped views should be qualified here.
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := p.dropTableImpl(params, tbDesc)
+			cascadedViews, err := p.dropTableImpl(params, tbDesc, mutationID)
 			if err != nil {
 				return err
 			}

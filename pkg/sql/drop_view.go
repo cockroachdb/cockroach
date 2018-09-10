@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -83,7 +84,22 @@ func (n *dropViewNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
-		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
+
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		job, err := params.p.createSchemaChangesJob(ctx, sqlbase.TableDescriptors{droppedDesc}, []jobspb.DroppedTableDetails{droppedDetails}, tree.AsStringWithFlags(n.n,
+			tree.FmtAlwaysQualifyTableNames))
+		if err != nil {
+			return err
+		}
+
+		if err := job.WithTxn(params.p.txn).Started(ctx); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+			}
+		}
+
+		mutationID := droppedDesc.MutationJobs[len(droppedDesc.MutationJobs)-1].MutationID
+		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior, mutationID)
 		if err != nil {
 			return err
 		}
@@ -165,14 +181,17 @@ func (p *planner) removeDependentView(
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	return p.dropViewImpl(ctx, viewDesc, tree.DropCascade)
+	return p.dropViewImpl(ctx, viewDesc, tree.DropCascade, sqlbase.InvalidMutationID)
 }
 
 // dropViewImpl does the work of dropping a view (and views that depend on it
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
-	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context,
+	viewDesc *sqlbase.TableDescriptor,
+	behavior tree.DropBehavior,
+	mutationID sqlbase.MutationID,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
@@ -203,7 +222,7 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, behavior)
+			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, behavior, sqlbase.InvalidMutationID)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
@@ -212,7 +231,7 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
-	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */, mutationID); err != nil {
 		return cascadeDroppedViews, err
 	}
 

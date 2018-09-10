@@ -633,6 +633,56 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
+func (p *planner) createSchemaChangesJob(
+	ctx context.Context,
+	tableDescs []*sqlbase.TableDescriptor,
+	droppedDetails []jobspb.DroppedTableDetails,
+	stmt string,
+) (*jobs.Job, error) {
+
+	descriptorIDs := make([]sqlbase.ID, 0, len(tableDescs))
+	mutationIDs := make(map[*sqlbase.TableDescriptor]sqlbase.MutationID)
+	var spanList []jobspb.ResumeSpanList
+
+	for _, tableDesc := range tableDescs {
+		descriptorIDs = append(descriptorIDs, tableDesc.ID)
+		span := tableDesc.PrimaryIndexSpan()
+		mutationID, err := tableDesc.FinalizeMutation()
+		if err != nil {
+			return nil, err
+		}
+		mutationIDs[tableDesc] = mutationID
+
+		for i := 0; i < len(tableDesc.Mutations); i++ {
+			if tableDesc.Mutations[i].MutationID == mutationID {
+				spanList = append(spanList,
+					jobspb.ResumeSpanList{
+						ResumeSpans: []roachpb.Span{span},
+					},
+				)
+			}
+		}
+	}
+
+	jobRecord := jobs.Record{
+		Description:   stmt,
+		Username:      p.User(),
+		DescriptorIDs: descriptorIDs,
+		Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList, RemainingDroppedTables: droppedDetails},
+		Progress:      jobspb.SchemaChangeProgress{},
+	}
+	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
+	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
+		return nil, err
+	}
+
+	for _, tableDesc := range tableDescs {
+		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+			MutationID: mutationIDs[tableDesc], JobID: *job.ID()})
+	}
+	return job, nil
+}
+
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
 func (p *planner) queueSchemaChange(
@@ -677,10 +727,6 @@ func (p *planner) writeSchemaChangeToBatch(
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
 	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b)
-}
-
-func (p *planner) writeDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
-	return p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) writeTableDesc(

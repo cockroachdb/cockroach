@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,7 +42,8 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
-	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
+	toTraverse := make([]sqlbase.ID, 0, len(n.Tables))
+	tableDescs := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(n.Tables))
 	for _, name := range n.Tables {
 		tn, err := name.Normalize()
 		if err != nil {
@@ -58,7 +60,41 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		}
 
 		toTruncate[tableDesc.ID] = tn.FQString()
-		toTraverse = append(toTraverse, *tableDesc)
+		toTraverse = append(toTraverse, tableDesc.ID)
+		tableDescs[tableDesc.ID] = tableDesc
+	}
+
+	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
+	// MutationJob related to the created job of the TRUNCATE statement.
+	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
+	isStmtTable := make(map[sqlbase.ID]bool, len(n.Tables))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
+	for id, name := range toTruncate {
+		isStmtTable[id] = true
+		stmtTableDescs = append(stmtTableDescs, tableDescs[id])
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: name,
+			ID:   id,
+		})
+	}
+
+	job, err := p.createSchemaChangesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
+		tree.FmtAlwaysQualifyTableNames))
+	if err != nil {
+		return nil, err
+	}
+
+	// Save the table descriptor with the created schema change job before it is re-read again in `truncateTable`.
+	for _, tableDesc := range stmtTableDescs {
+		if err := p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := job.WithTxn(p.txn).Started(ctx); err != nil {
+		if log.V(2) {
+			log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+		}
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -66,7 +102,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	for len(toTraverse) > 0 {
 		// Pick last element.
 		idx := len(toTraverse) - 1
-		tableDesc := toTraverse[idx]
+		tableDesc := tableDescs[toTraverse[idx]]
 		toTraverse = toTraverse[:idx]
 
 		maybeEnqueue := func(ref sqlbase.ForeignKeyReference, msg string) error {
@@ -90,7 +126,8 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 				return err
 			}
 			toTruncate[other.ID] = otherName
-			toTraverse = append(toTraverse, *other)
+			toTraverse = append(toTraverse, other.ID)
+			tableDescs[other.ID] = other
 			return nil
 		}
 
@@ -122,7 +159,13 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, traceKV); err != nil {
+
+		tableDesc := tableDescs[id]
+		mutationID := sqlbase.InvalidMutationID
+		if isStmtTable[id] {
+			mutationID = tableDesc.MutationJobs[len(tableDesc.MutationJobs)-1].MutationID
+		}
+		if err := p.truncateTable(ctx, id, traceKV, mutationID); err != nil {
 			return nil, err
 		}
 
@@ -134,10 +177,11 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 			int32(id),
 			int32(p.extendedEvalCtx.NodeID),
 			struct {
-				TableName string
-				Statement string
-				User      string
-			}{name, n.String(), p.SessionData().User},
+				TableName  string
+				Statement  string
+				User       string
+				MutationID uint32
+			}{name, n.String(), p.SessionData().User, uint32(mutationID)},
 		); err != nil {
 			return nil, err
 		}
@@ -149,7 +193,9 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
-func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
+func (p *planner) truncateTable(
+	ctx context.Context, id sqlbase.ID, traceKV bool, mutationID sqlbase.MutationID,
+) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
@@ -187,7 +233,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 
 	// Drop table.
-	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */, mutationID); err != nil {
 		return err
 	}
 
