@@ -2567,6 +2567,8 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
 
+	"jsonb_insert": makeBuiltin(jsonProps(), jsonInsertImpl, jsonInsertWithInsertAfterImpl),
+
 	"jsonb_pretty": makeBuiltin(jsonProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.JSON}},
@@ -3084,8 +3086,6 @@ var (
 		"null value not allowed for object key")
 	errJSONObjectMismatchedArrayDim = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 		"mismatched array dimensions")
-	errNullAtPositionOne = pgerror.NewError(pgerror.CodeNullValueNotAllowedError,
-		"path element at position 1 is null")
 )
 
 var jsonExtractPathImpl = tree.Overload{
@@ -3128,15 +3128,6 @@ func darrayToStringSlice(d tree.DArray) (result []string, ok bool) {
 	return result, true
 }
 
-// checkHasNullAtPositionOne returns an error if the given array has a NULL at
-// the first position. This mimics the error behavior of jsonb_set.
-func checkHasNullAtPositionOne(ary tree.DArray) error {
-	if len(ary.Array) > 0 && ary.Array[0] == tree.DNull {
-		return errNullAtPositionOne
-	}
-	return nil
-}
-
 // checkHasNulls returns an appropriate error if the array contains a NULL.
 func checkHasNulls(ary tree.DArray) error {
 	if ary.HasNulls {
@@ -3157,21 +3148,7 @@ var jsonSetImpl = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		ary := *tree.MustBeDArray(args[1])
-		// jsonb_set only errors if there is a null at the first position, but not
-		// at any other positions.
-		if err := checkHasNullAtPositionOne(ary); err != nil {
-			return nil, err
-		}
-		path, ok := darrayToStringSlice(ary)
-		if !ok {
-			return args[0], nil
-		}
-		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, true)
-		if err != nil {
-			return nil, err
-		}
-		return &tree.DJSON{JSON: j}, nil
+		return jsonDatumSet(args[0], args[1], args[2], tree.DBoolTrue)
 	},
 	Info: "Returns the JSON value pointed to by the variadic arguments.",
 }
@@ -3185,26 +3162,80 @@ var jsonSetWithCreateMissingImpl = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		ary := *tree.MustBeDArray(args[1])
-		// jsonb_set only errors if there is a null at the first position, but not
-		// at any other positions.
-		if err := checkHasNullAtPositionOne(ary); err != nil {
-			return nil, err
-		}
-		path, ok := darrayToStringSlice(ary)
-		// If any other NULLs appeared, this function is a no-op.
-		if !ok {
-			return args[0], nil
-		}
-		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, bool(*(args[3].(*tree.DBool))))
-		if err != nil {
-			return nil, err
-		}
-		return &tree.DJSON{JSON: j}, nil
+		return jsonDatumSet(args[0], args[1], args[2], args[3])
 	},
 	Info: "Returns the JSON value pointed to by the variadic arguments. " +
 		"If `create_missing` is false, new keys will not be inserted to objects " +
 		"and values will not be prepended or appended to arrays.",
+}
+
+func jsonDatumSet(
+	targetD tree.Datum, pathD tree.Datum, toD tree.Datum, createMissingD tree.Datum,
+) (tree.Datum, error) {
+	ary := *tree.MustBeDArray(pathD)
+	// jsonb_set only errors if there is a null at the first position, but not
+	// at any other positions.
+	if err := checkHasNulls(ary); err != nil {
+		return nil, err
+	}
+	path, ok := darrayToStringSlice(ary)
+	if !ok {
+		return targetD, nil
+	}
+	j, err := json.DeepSet(tree.MustBeDJSON(targetD).JSON, path, tree.MustBeDJSON(toD).JSON, bool(tree.MustBeDBool(createMissingD)))
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DJSON{JSON: j}, nil
+}
+
+var jsonInsertImpl = tree.Overload{
+	Types: tree.ArgTypes{
+		{"target", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"new_val", types.JSON},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		return insertToJSONDatum(args[0], args[1], args[2], tree.DBoolFalse)
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments. `new_val` will be inserted before path target.",
+}
+
+var jsonInsertWithInsertAfterImpl = tree.Overload{
+	Types: tree.ArgTypes{
+		{"target", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"new_val", types.JSON},
+		{"insert_after", types.Bool},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		return insertToJSONDatum(args[0], args[1], args[2], args[3])
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments. " +
+		"If `insert_after` is true (default is false), `new_val` will be inserted after path target.",
+}
+
+func insertToJSONDatum(
+	targetD tree.Datum, pathD tree.Datum, newValD tree.Datum, insertAfterD tree.Datum,
+) (tree.Datum, error) {
+	ary := *tree.MustBeDArray(pathD)
+
+	// jsonb_insert only errors if there is a null at the first position, but not
+	// at any other positions.
+	if err := checkHasNulls(ary); err != nil {
+		return nil, err
+	}
+	path, ok := darrayToStringSlice(ary)
+	if !ok {
+		return targetD, nil
+	}
+	j, err := json.DeepInsert(tree.MustBeDJSON(targetD).JSON, path, tree.MustBeDJSON(newValD).JSON, bool(tree.MustBeDBool(insertAfterD)))
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DJSON{JSON: j}, nil
 }
 
 var jsonTypeOfImpl = tree.Overload{

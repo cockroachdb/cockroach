@@ -1026,27 +1026,7 @@ func setValKeyOrIdx(j JSON, key string, to JSON, createMissing bool) (JSON, erro
 		}
 		return setValKeyOrIdx(n, key, to, createMissing)
 	case jsonObject:
-		result := make(jsonObject, 0, len(v)+1)
-		curIdx := 0
-		for curIdx < len(v) && string(v[curIdx].k) < key {
-			result = append(result, v[curIdx])
-			curIdx++
-		}
-		keyAlreadyExists := curIdx < len(v) && string(v[curIdx].k) == key
-		if createMissing || keyAlreadyExists {
-			result = append(result, jsonKeyValuePair{
-				k: jsonString(key),
-				v: to,
-			})
-		}
-		if keyAlreadyExists {
-			curIdx++
-		}
-		for curIdx < len(v) {
-			result = append(result, v[curIdx])
-			curIdx++
-		}
-		return result, nil
+		return v.SetKey(key, to, createMissing)
 	case jsonArray:
 		idx, err := strconv.Atoi(key)
 		if err != nil {
@@ -1118,6 +1098,94 @@ func deepSet(j JSON, path []string, to JSON, createMissing bool) (JSON, error) {
 	}
 }
 
+var errCannotReplaceExistingKey = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot replace existing key")
+
+func insertValKeyOrIdx(j JSON, key string, newVal JSON, insertAfter bool) (JSON, error) {
+	switch v := j.(type) {
+	case *jsonEncoded:
+		n, err := v.shallowDecode()
+		if err != nil {
+			return nil, err
+		}
+		return insertValKeyOrIdx(n, key, newVal, insertAfter)
+	case jsonObject:
+		result, err := v.SetKey(key, newVal, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(result) == len(v) {
+			return nil, errCannotReplaceExistingKey
+		}
+		return result, nil
+	case jsonArray:
+		idx, err := strconv.Atoi(key)
+		if err != nil {
+			return nil, err
+		}
+		if idx < 0 {
+			idx = len(v) + idx
+		}
+		if insertAfter {
+			idx++
+		}
+
+		var result = make(jsonArray, len(v)+1)
+		if idx <= 0 {
+			copy(result[1:], v)
+			result[0] = newVal
+		} else if idx >= len(v) {
+			copy(result, v)
+			result[len(result)-1] = newVal
+		} else {
+			copy(result[:idx], v[:idx])
+			copy(result[idx+1:], v[idx:])
+			result[idx] = newVal
+		}
+		return result, nil
+	}
+	return j, nil
+}
+
+// DeepInsert inserts a value at a path in a JSON document.
+// Implements the jsonb_insert builtin.
+func DeepInsert(j JSON, path []string, to JSON, insertAfter bool) (JSON, error) {
+	if j.isScalar() {
+		return nil, errCannotSetPathInScalar
+	}
+	return deepInsert(j, path, to, insertAfter)
+}
+
+func deepInsert(j JSON, path []string, to JSON, insertAfter bool) (JSON, error) {
+	switch len(path) {
+	case 0:
+		return j, nil
+	case 1:
+		return insertValKeyOrIdx(j, path[0], to, insertAfter)
+	default:
+		switch v := j.(type) {
+		case *jsonEncoded:
+			n, err := v.shallowDecode()
+			if err != nil {
+				return nil, err
+			}
+			return deepInsert(n, path, to, insertAfter)
+		default:
+			fetched, err := j.FetchValKeyOrIdx(path[0])
+			if err != nil {
+				return nil, err
+			}
+			if fetched == nil {
+				return j, nil
+			}
+			sub, err := deepInsert(fetched, path[1:], to, insertAfter)
+			if err != nil {
+				return nil, err
+			}
+			return setValKeyOrIdx(j, path[0], sub, true)
+		}
+	}
+}
+
 func (j jsonObject) FetchValKeyOrIdx(key string) (JSON, error) {
 	return j.FetchValKey(key)
 }
@@ -1141,6 +1209,34 @@ func (jsonNumber) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
 
 var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
 var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
+
+func (j jsonObject) SetKey(key string, to JSON, createMissing bool) (jsonObject, error) {
+	result := make(jsonObject, 0, len(j)+1)
+	curIdx := 0
+
+	for curIdx < len(j) && string(j[curIdx].k) < key {
+		result = append(result, j[curIdx])
+		curIdx++
+	}
+
+	keyAlreadyExists := curIdx < len(j) && string(j[curIdx].k) == key
+	if createMissing || keyAlreadyExists {
+		result = append(result, jsonKeyValuePair{
+			k: jsonString(key),
+			v: to,
+		})
+	}
+	if keyAlreadyExists {
+		curIdx++
+	}
+
+	for curIdx < len(j) {
+		result = append(result, j[curIdx])
+		curIdx++
+	}
+
+	return result, nil
+}
 
 func (j jsonArray) RemoveString(s string) (JSON, bool, error) {
 	b := NewArrayBuilder(j.Len())
