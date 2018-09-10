@@ -72,6 +72,21 @@ func TestListStorage(t *testing.T) {
 	if s := groupsToString(ls.lookup(catalogingID)); s != "cataloging" {
 		t.Fatalf("unexpected lookup: %v", s)
 	}
+
+	// Copy the list storage, and make sure the original and copy can be modified
+	// independently. TestMemoInitFrom also indirectly tests this.
+	var ls2 listStorage
+	ls2.initFrom(&ls)
+
+	donutID := ls.intern(stringToGroups("donut"))
+	if donutID != (ListID{Offset: 24, Length: 5}) {
+		t.Fatalf("unexpected id: %v", donutID)
+	}
+
+	doorID := ls2.intern(stringToGroups("door"))
+	if doorID != (ListID{Offset: 24, Length: 4}) {
+		t.Fatalf("unexpected id: %v", doorID)
+	}
 }
 
 func stringToGroups(s string) []GroupID {

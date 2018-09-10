@@ -164,6 +164,10 @@ func (ex *connExecutor) prepare(
 	prepared.Statement = stmt.AST
 	prepared.AnonymizedStr = anonymizeStmt(stmt)
 
+	// Point to the prepared state, which can be further populated during query
+	// preparation.
+	stmt.Prepared = prepared
+
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
@@ -243,16 +247,14 @@ func (ex *connExecutor) prepare(
 		return nil, err
 	}
 
-	// Account for the memory used by this prepared statement: for now we are just
-	// counting the size of the query string (we'll account for the statement name
-	// at a higher layer). When we start storing the prepared query plan during
-	// prepare, this should be tallied up to the monitor as well.
-	if err := prepared.memAcc.Grow(ctx,
-		int64(len(prepared.Str)+int(unsafe.Sizeof(*prepared))),
-	); err != nil {
+	// Account for the memory used by this prepared statement:
+	//   1. Size of the query string and prepared struct.
+	//   2. Size of the prepared memo, if using the cost-based optimizer.
+	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
+	size += prepared.Memo.MemoryEstimate()
+	if err := prepared.memAcc.Grow(ctx, size); err != nil {
 		return nil, err
 	}
-
 	return prepared, nil
 }
 
