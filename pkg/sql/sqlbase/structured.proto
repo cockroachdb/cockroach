@@ -825,6 +825,10 @@ message TableDescriptor {
     READWRITE = 1;
   }
   optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
+
+  // The job id for a drop job is the id in the system.jobs table of the
+  // dropping of this table.
+  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
