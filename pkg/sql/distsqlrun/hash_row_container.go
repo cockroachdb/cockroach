@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -398,7 +398,7 @@ type hashDiskRowContainer struct {
 	// rows are stored with one less column (which usually specifies that row's
 	// mark).
 	shouldMark    bool
-	engine        engine.Engine
+	engine        diskmap.Factory
 	scratchEncRow sqlbase.EncDatumRow
 }
 
@@ -412,7 +412,9 @@ var (
 // makeHashDiskRowContainer creates a hashDiskRowContainer with the given engine
 // as the underlying store that rows are stored on. shouldMark specifies whether
 // the hashDiskRowContainer should set itself up to mark rows.
-func makeHashDiskRowContainer(diskMonitor *mon.BytesMonitor, e engine.Engine) hashDiskRowContainer {
+func makeHashDiskRowContainer(
+	diskMonitor *mon.BytesMonitor, e diskmap.Factory,
+) hashDiskRowContainer {
 	return hashDiskRowContainer{
 		diskMonitor: diskMonitor,
 		engine:      e,
