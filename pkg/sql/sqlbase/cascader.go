@@ -201,6 +201,18 @@ func spanForIndexValues(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (roachpb.Span, error) {
+	// Currently, we only offer MATCH FULL, so this checks to ensure that if a
+	// reference is composed of all NULLs, then we don't cascade it.
+	nulls := true
+	for _, rowIndex := range indexColIDs {
+		if values[rowIndex] != tree.DNull {
+			nulls = false
+			break
+		}
+	}
+	if nulls {
+		return roachpb.Span{}, nil
+	}
 	keyBytes, _, err := EncodePartialIndexKey(table, index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
@@ -255,7 +267,9 @@ func batchRequestForIndexValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, nil, err
 		}
-		req.Add(&roachpb.ScanRequest{Span: span})
+		if span.EndKey != nil {
+			req.Add(&roachpb.ScanRequest{Span: span})
+		}
 	}
 	return req, colIDtoRowIndex, nil
 }
@@ -286,7 +300,9 @@ func batchRequestForPKValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, err
 		}
-		req.Add(&roachpb.ScanRequest{Span: span})
+		if span.EndKey != nil {
+			req.Add(&roachpb.ScanRequest{Span: span})
+		}
 	}
 	return req, nil
 }
@@ -483,6 +499,10 @@ func (c *cascader) deleteRows(
 	if err != nil {
 		return nil, nil, 0, err
 	}
+	// If there are no spans to search, there is no need to cascade.
+	if len(req.Requests) == 0 {
+		return nil, nil, 0, nil
+	}
 	br, roachErr := c.txn.Send(ctx, req)
 	if roachErr != nil {
 		return nil, nil, 0, roachErr.GoError()
@@ -544,6 +564,10 @@ func (c *cascader) deleteRows(
 		return nil, nil, 0, err
 	}
 	primaryKeysToDelete.Clear(ctx)
+	// If there are no spans to search, there is no need to cascade.
+	if len(pkLookupReq.Requests) == 0 {
+		return nil, nil, 0, nil
+	}
 	pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
 	if roachErr != nil {
 		return nil, nil, 0, roachErr.GoError()
@@ -704,6 +728,10 @@ func (c *cascader) updateRows(
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
+		// If there are no spans to search, there is no need to cascade.
+		if len(req.Requests) == 0 {
+			return nil, nil, nil, 0, nil
+		}
 		br, roachErr := c.txn.Send(ctx, req)
 		if roachErr != nil {
 			return nil, nil, nil, 0, roachErr.GoError()
@@ -759,6 +787,10 @@ func (c *cascader) updateRows(
 			return nil, nil, nil, 0, err
 		}
 		primaryKeysToUpdate.Clear(ctx)
+		// If there are no spans to search, there is no need to cascade.
+		if len(pkLookupReq.Requests) == 0 {
+			return nil, nil, nil, 0, nil
+		}
 		pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
 		if roachErr != nil {
 			return nil, nil, nil, 0, roachErr.GoError()

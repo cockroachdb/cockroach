@@ -3710,3 +3710,147 @@ UPDATE a SET id = 'updated' WHERE id = 'original';
 # Clean up after the test.
 statement ok
 DROP TABLE b, a;
+
+subtest NoNullCascades
+
+# First with a non-composite index
+statement ok
+CREATE TABLE IF NOT EXISTS example (
+  a INT UNIQUE,
+  b INT REFERENCES example (a) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO example VALUES (20, NULL);
+INSERT INTO example VALUES (30, 20);
+INSERT INTO example VALUES (NULL, 30);
+
+statement ok
+DELETE FROM example where a = 30;
+
+query II colnames
+SELECT * FROM example;
+----
+a  b
+20 NULL
+
+# Clean up after the test.
+statement ok
+DROP TABLE example;
+
+# With a composite index
+statement ok
+CREATE TABLE a (
+  x INT
+ ,y INT
+ ,UNIQUE (x, y)
+);
+
+statement ok
+CREATE TABLE b (
+  x INT
+ ,y INT
+ ,INDEX (x, y)
+ ,FOREIGN KEY (x, y) REFERENCES a (x, y) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
+INSERT INTO b VALUES (NULL, NULL), (NULL, 1), (2, NULL), (3, 3);
+
+# Note that these match our current incorrect style of MATCH FULL and allow
+# matching of NULLs if one exists in the referencing table.
+
+statement ok
+DELETE FROM a WHERE y = 1;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+2    NULL
+3    3
+
+statement ok
+DELETE FROM a WHERE x = 2;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+3    3
+
+statement ok
+DELETE FROM a;
+
+# A match consisting of only NULLs is not cascaded.
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+
+query II colnames
+SELECT * FROM a ORDER BY x;
+----
+x    y
+
+# Now try the same with inserts
+statement ok
+TRUNCATE b, a;
+INSERT INTO a VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
+INSERT INTO b VALUES (NULL, NULL), (NULL, 4), (5, NULL), (6, 6);
+
+statement ok
+UPDATE a SET y = y*10 WHERE y > 0;
+UPDATE a SET x = x*10 WHERE x > 0;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL  NULL
+NULL  40
+50    NULL
+60    60
+
+statement ok
+UPDATE a SET y = 100 WHERE y IS NULL;
+UPDATE a SET x = 100 WHERE x IS NULL;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+50   100
+60   60
+100  40
+
+# Note that the double NULL should not get cascaded.
+statement ok
+UPDATE a SET (x,y) = (100, 100) WHERE y IS NULL AND x IS NULL;
+
+query II colnames
+SELECT * FROM b ORDER BY x, y;
+----
+x    y
+NULL NULL
+50   100
+60   60
+100  40
+
+query II colnames
+SELECT * FROM a ORDER BY x, y;
+----
+x    y
+50   100
+60   60
+100  40
+100  100
+
+# Clean up after the test.
+statement ok
+DROP TABLE b, a;
