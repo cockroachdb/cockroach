@@ -1,0 +1,50 @@
+{"Time":"2018-09-09T11:25:09.680462675-04:00","Action":"output","Output":"Running make with -j4\n"}
+{"Time":"2018-09-09T11:25:09.692253861-04:00","Action":"output","Output":"GOPATH set to /Users/andrei/work\n"}
+{"Time":"2018-09-09T11:25:10.134996403-04:00","Action":"output","Output":"go test  -exec 'stress ' -tags ' make x86_64_apple_darwin17.7.0' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags \"\" -X \"github.com/cockroachdb/cockroach/pkg/build.tag=v2.2.0-alpha.00000000-607-geca01b0f19-dirty\" -X \"github.com/cockroachdb/cockroach/pkg/build.rev=eca01b0f1989ab46e2410389e59fa84ff37f694d\" -X \"github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin17.7.0\"  ' -run \"TestXX\" -timeout 0 ./pkg/kv -count=1 -v -args -test.timeout 5s\n"}
+{"Time":"2018-09-09T11:25:26.001522696-04:00","Action":"output","Output":"\n"}
+{"Time":"2018-09-09T11:25:26.001593204-04:00","Action":"run","Test":"TestXXA"}
+{"Time":"2018-09-09T11:25:26.001616118-04:00","Action":"output","Test":"TestXXA","Output":"=== RUN   TestXXA\n"}
+{"Time":"2018-09-09T11:25:26.001635317-04:00","Action":"run","Test":"TestXXA/sub1"}
+{"Time":"2018-09-09T11:25:26.00165241-04:00","Action":"output","Test":"TestXXA/sub1","Output":"=== RUN   TestXXA/sub1\n"}
+{"Time":"2018-09-09T11:25:26.001694085-04:00","Action":"output","Test":"TestXXA","Output":"--- PASS: TestXXA (1.00s)\n"}
+{"Time":"2018-09-09T11:25:26.001716717-04:00","Action":"output","Test":"TestXXA/sub1","Output":"    --- PASS: TestXXA/sub1 (1.00s)\n"}
+{"Time":"2018-09-09T11:25:26.00174224-04:00","Action":"pass","Test":"TestXXA/sub1","Elapsed":1}
+{"Time":"2018-09-09T11:25:26.001774166-04:00","Action":"pass","Test":"TestXXA","Elapsed":1}
+{"Time":"2018-09-09T11:25:26.001791437-04:00","Action":"run","Test":"TestXXB"}
+{"Time":"2018-09-09T11:25:26.001808107-04:00","Action":"output","Test":"TestXXB","Output":"=== RUN   TestXXB\n"}
+{"Time":"2018-09-09T11:25:26.001825524-04:00","Action":"run","Test":"TestXXB/sub1"}
+{"Time":"2018-09-09T11:25:26.001841708-04:00","Action":"output","Test":"TestXXB/sub1","Output":"=== RUN   TestXXB/sub1\n"}
+{"Time":"2018-09-09T11:25:26.001860276-04:00","Action":"output","Test":"TestXXB","Output":"--- PASS: TestXXB (1.00s)\n"}
+{"Time":"2018-09-09T11:25:26.001882681-04:00","Action":"output","Test":"TestXXB/sub1","Output":"    --- PASS: TestXXB/sub1 (1.00s)\n"}
+{"Time":"2018-09-09T11:25:26.001901543-04:00","Action":"pass","Test":"TestXXB/sub1","Elapsed":1}
+{"Time":"2018-09-09T11:25:26.001918584-04:00","Action":"pass","Test":"TestXXB","Elapsed":1}
+{"Time":"2018-09-09T11:25:26.00193523-04:00","Action":"run","Test":"TestXXX"}
+{"Time":"2018-09-09T11:25:26.00195155-04:00","Action":"output","Test":"TestXXX","Output":"=== RUN   TestXXX\n"}
+{"Time":"2018-09-09T11:25:26.001969102-04:00","Action":"run","Test":"TestXXX/sub1"}
+{"Time":"2018-09-09T11:25:26.001985453-04:00","Action":"output","Test":"TestXXX/sub1","Output":"=== RUN   TestXXX/sub1\n"}
+{"Time":"2018-09-09T11:25:26.002008093-04:00","Action":"run","Test":"TestXXX/sub2"}
+{"Time":"2018-09-09T11:25:26.002025053-04:00","Action":"output","Test":"TestXXX/sub2","Output":"=== RUN   TestXXX/sub2\n"}
+{"Time":"2018-09-09T11:25:26.002042645-04:00","Action":"output","Test":"TestXXX/sub2","Output":"panic: induced panic [recovered]\n"}
+{"Time":"2018-09-09T11:25:26.00206678-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\tpanic: induced panic\n"}
+{"Time":"2018-09-09T11:25:26.002085034-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\n"}
+{"Time":"2018-09-09T11:25:26.002106696-04:00","Action":"output","Test":"TestXXX/sub2","Output":"goroutine 35 [running]:\n"}
+{"Time":"2018-09-09T11:25:26.0021244-04:00","Action":"output","Test":"TestXXX/sub2","Output":"testing.tRunner.func1(0xc420766000)\n"}
+{"Time":"2018-09-09T11:25:26.002141978-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:742 +0x29d\n"}
+{"Time":"2018-09-09T11:25:26.002159523-04:00","Action":"output","Test":"TestXXX/sub2","Output":"panic(0x5c1cf20, 0x6459c30)\n"}
+{"Time":"2018-09-09T11:25:26.002176521-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\t/Users/andrei/work/src/go/src/runtime/panic.go:505 +0x229\n"}
+{"Time":"2018-09-09T11:25:26.002219985-04:00","Action":"output","Test":"TestXXX/sub2","Output":"github.com/cockroachdb/cockroach/pkg/kv.TestXXX.func2(0xc420766000)\n"}
+{"Time":"2018-09-09T11:25:26.002235909-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\t/Users/andrei/work/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender_test.go:2502 +0x39\n"}
+{"Time":"2018-09-09T11:25:26.002256611-04:00","Action":"output","Test":"TestXXX/sub2","Output":"testing.tRunner(0xc420766000, 0x60bb1b8)\n"}
+{"Time":"2018-09-09T11:25:26.002271438-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:777 +0xd0\n"}
+{"Time":"2018-09-09T11:25:26.002286227-04:00","Action":"output","Test":"TestXXX/sub2","Output":"created by testing.(*T).Run\n"}
+{"Time":"2018-09-09T11:25:26.002299739-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\t/Users/andrei/work/src/go/src/testing/testing.go:824 +0x2e0\n"}
+{"Time":"2018-09-09T11:25:26.002313521-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\n"}
+{"Time":"2018-09-09T11:25:26.00232693-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\n"}
+{"Time":"2018-09-09T11:25:26.002345073-04:00","Action":"output","Test":"TestXXX/sub2","Output":"ERROR: exit status 2\n"}
+{"Time":"2018-09-09T11:25:26.002358961-04:00","Action":"output","Test":"TestXXX/sub2","Output":"\n"}
+{"Time":"2018-09-09T11:25:26.002372592-04:00","Action":"output","Test":"TestXXX/sub2","Output":"1 runs completed, 1 failures, over 3s\n"}
+{"Time":"2018-09-09T11:25:26.008471884-04:00","Action":"output","Test":"TestXXX/sub2","Output":"context canceled\n"}
+{"Time":"2018-09-09T11:25:26.008536391-04:00","Action":"output","Output":"FAIL\n"}
+{"Time":"2018-09-09T11:25:26.009395145-04:00","Action":"output","Output":"FAIL\tgithub.com/cockroachdb/cockroach/pkg/kv\t3.117s\n"}
+{"Time":"2018-09-09T11:25:26.02229801-04:00","Action":"output","Output":"make: *** [stress] Error 1\n"}
+{"Time":"2018-09-09T11:25:26.022719071-04:00","Action":"fail","Elapsed":16.342}

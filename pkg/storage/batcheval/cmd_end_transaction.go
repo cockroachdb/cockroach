@@ -196,7 +196,7 @@ func evalEndTransaction(
 	// not suffered regression.
 	switch reply.Txn.Status {
 	case roachpb.COMMITTED:
-		return result.Result{}, roachpb.NewTransactionStatusError("already committed")
+		return result.Result{}, roachpb.NewTransactionCommittedStatusError()
 
 	case roachpb.ABORTED:
 		if !args.Commit {

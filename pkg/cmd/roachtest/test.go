@@ -680,8 +680,11 @@ func (r *registry) run(
 						if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 							branch = b
 						}
-						if err := issues.Post(context.Background(), " on "+branch, "roachtest",
-							t.Name(), string(output), authorEmail); err != nil {
+						if err := issues.Post(
+							context.Background(),
+							fmt.Sprintf("roachtest: %s failed on %s", t.Name(), branch),
+							"roachtest", t.Name(), string(output), authorEmail,
+						); err != nil {
 							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
 						}
 					}
