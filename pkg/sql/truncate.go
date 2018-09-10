@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,6 +43,12 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
+
+	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
+	// MutationJob related to the created job of the TRUNCATE statement.
+	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
+
 	for _, name := range n.Tables {
 		tn, err := name.Normalize()
 		if err != nil {
@@ -59,6 +66,31 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
+
+		stmtTableDescs = append(stmtTableDescs, tableDesc)
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: tn.FQString(),
+			ID:   tableDesc.ID,
+		})
+	}
+
+	job, err := p.createDropTablesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
+		tree.FmtAlwaysQualifyTableNames))
+	if err != nil {
+		return nil, err
+	}
+
+	// Save the table descriptor with the created drop job ID before it is re-read again in `truncateTable`.
+	for _, tableDesc := range stmtTableDescs {
+		if err := p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := job.WithTxn(p.txn).Started(ctx); err != nil {
+		if log.V(2) {
+			log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+		}
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE

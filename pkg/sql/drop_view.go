@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -83,6 +84,20 @@ func (n *dropViewNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		job, err := params.p.createDropTablesJob(ctx, sqlbase.TableDescriptors{droppedDesc}, []jobspb.DroppedTableDetails{droppedDetails}, tree.AsStringWithFlags(n.n,
+			tree.FmtAlwaysQualifyTableNames))
+		if err != nil {
+			return err
+		}
+
+		if err := job.WithTxn(params.p.txn).Started(ctx); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "Failed to mark job %d as started: %v", *job.ID(), err)
+			}
+		}
+
 		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
