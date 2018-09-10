@@ -140,6 +140,17 @@ project
  └── projections [outer=(2)]
       └── COALESCE(i, NULL, NULL) [type=int, outer=(2)]
 
+opt expect=SimplifyCoalesce
+SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a
+----
+project
+ ├── columns: coalesce:7(tuple{int, int, int})
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── (1, 2, 3) [type=tuple{int, int, int}]
+
+
 # --------------------------------------------------
 # EliminateCast
 # --------------------------------------------------
