@@ -1563,3 +1563,18 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return p.nestUnder(d, p.Doc(node.Statement))
 }
+
+func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
+	return p.nestUnder(
+		pretty.Text("NOT"),
+		p.exprDocWithParen(node.Expr),
+	)
+}
+
+func (node *CoalesceExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.Bracket(
+		node.Name+"(",
+		p.Doc(&node.Exprs),
+		")",
+	)
+}
