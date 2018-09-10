@@ -19,7 +19,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that a broken stderr prints a message to the log files."
-send "$argv start -s=path=logs/db --insecure --logtostderr --verbosity=1 2>&1 | cat\r"
+send "$argv start -s=path=logs/db --insecure --logtostderr --vmodule=*=1 2>&1 | cat\r"
 eexpect "CockroachDB node starting"
 system "killall cat"
 eexpect ":/# "
