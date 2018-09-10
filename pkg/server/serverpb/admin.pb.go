@@ -93,7 +93,10 @@
 		LogFilesListResponse
 		LogFileRequest
 		StacksRequest
+		ProfileListRequest
+		ProfileListResponse
 		ProfileRequest
+		ProfileResponse
 		MetricsRequest
 		RaftRangeNode
 		RaftRangeError

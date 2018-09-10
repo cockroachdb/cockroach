@@ -23,7 +23,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -590,6 +593,88 @@ func (s *statusServer) Details(
 	return resp, nil
 }
 
+// ProfileList returns a list of stored profiles of type defined in the request
+func (s *statusServer) ProfileList(
+	ctx context.Context, req *serverpb.ProfileListRequest,
+) (*serverpb.ProfileListResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.ProfileList(ctx, req)
+	}
+
+	switch req.Type {
+	case serverpb.ProfileType_HEAP:
+		dir := s.admin.server.cfg.HeapProfileDirName
+		dir = filepath.Join(dir, "heap_profiler")
+		var profileList []string
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			// Safely return if no profiles have been written
+			return &serverpb.ProfileListResponse{Filenames: profileList}, nil
+		}
+
+		files, err := ioutil.ReadDir(dir)
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		}
+		for _, file := range files {
+			profileList = append(profileList, file.Name())
+		}
+		return &serverpb.ProfileListResponse{Filenames: profileList}, err
+	default:
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+	}
+}
+
+// ReadProfile returns the requested heap file.
+func (s *statusServer) ReadProfile(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.ProfileResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, remoteDebuggingErr
+	}
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.ReadProfile(ctx, req)
+	}
+
+	switch req.Type {
+	case serverpb.ProfileType_HEAP:
+		path := s.admin.server.cfg.HeapProfileDirName
+		path = filepath.Join(path, "heap_profiler", req.Filename)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		}
+
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+		}
+
+		return &serverpb.ProfileResponse{Data: data}, nil
+
+	default:
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
+	}
+}
+
 // LogFilesList returns a list of available log files.
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
@@ -810,7 +895,7 @@ func (s *statusServer) Profile(
 	}
 
 	switch req.Type {
-	case serverpb.ProfileRequest_HEAP:
+	case serverpb.ProfileType_HEAP:
 		p := pprof.Lookup("heap")
 		if p == nil {
 			return nil, grpcstatus.Errorf(codes.InvalidArgument, "unable to find profile: heap")

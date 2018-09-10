@@ -265,13 +265,46 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					defer cancel()
 					if heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
 						NodeId: id,
-						Type:   serverpb.ProfileRequest_HEAP,
+						Type:   serverpb.ProfileType_HEAP,
 					}); err != nil {
 						if err := z.createError(prefix+"/heap", err); err != nil {
 							return err
 						}
 					} else if err := z.createRaw(prefix+"/heap", heap.Data); err != nil {
 						return err
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if profiles, err := status.ProfileList(ctx, &serverpb.ProfileListRequest{
+						NodeId: id,
+						Type:   serverpb.ProfileType_HEAP,
+					}); err != nil {
+						if err := z.createError(prefix+"/heapfiles", err); err != nil {
+							return err
+						}
+					} else {
+						for _, filename := range profiles.Filenames {
+							name := prefix + "/heapprof/" + filename
+							ctx, cancel := timeoutCtx(baseCtx)
+							defer cancel()
+							resp, err := status.ReadProfile(ctx, &serverpb.ProfileRequest{
+								NodeId:   id,
+								Filename: filename,
+								Type:     serverpb.ProfileType_HEAP,
+							})
+							if err != nil {
+								if err := z.createError(name, err); err != nil {
+									return err
+								}
+								continue
+							}
+							if err := z.createRaw(name, resp.Data); err != nil {
+								return err
+							}
+						}
 					}
 				}
 
