@@ -294,6 +294,27 @@ message LogFileRequest {
   string file = 2;
 }
 
+message HeapFileResponse {
+  bytes data = 1;
+}
+
+message HeapFilesListRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message HeapFilesListResponse {
+  repeated string files = 1;
+}
+
+message HeapFileRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  string file = 2;
+}
+
 message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -741,6 +762,16 @@ service Status {
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/metrics/{node_id}"
+    };
+  }
+  rpc HeapFilesList(HeapFilesListRequest) returns (HeapFilesListResponse) {
+    option (google.api.http) = {
+      get : "/_status/heapfiles/{node_id}"
+    };
+  }
+  rpc HeapFile(HeapFileRequest) returns (HeapFileResponse) {
+    option (google.api.http) = {
+      get : "/_status/heapfiles/{node_id}/{file}"
     };
   }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {

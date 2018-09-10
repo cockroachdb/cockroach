@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -588,6 +589,61 @@ func (s *statusServer) Details(
 	}
 
 	return resp, nil
+}
+
+// HeapFilesList returns a list of sored profiles that have high memory usage
+func (s *statusServer) HeapFilesList(
+	ctx context.Context, req *serverpb.HeapFilesListRequest,
+) (*serverpb.HeapFilesListResponse, error) {
+	var dir string
+	dir = s.admin.server.cfg.HeapProfileDirName
+	dir = filepath.Join(dir, "heap_profiler")
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.HeapFilesList(ctx, req)
+	}
+
+	// Find all the filenames in the directory and return []string{} if empty
+	return &serverpb.HeapFilesListResponse{Files: []string{}}, err
+}
+
+// HeapFile returns the requested heap file.
+func (s *statusServer) HeapFile(
+	ctx context.Context, req *serverpb.HeapFileRequest,
+) (*serverpb.HeapFileResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, remoteDebuggingErr
+	}
+	var dir string
+	dir = s.admin.server.cfg.HeapProfileDirName
+	dir = filepath.Join(dir, "heap_profiler")
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.HeapFile(ctx, req)
+	}
+
+	// var resp serverpb.HeapFileResponse{Data: dir}
+	// Populate the response with the Heap file data using the filename from the request
+	// return &resp, nil
+	return &serverpb.HeapFileResponse{Data: []byte(dir)}, nil
 }
 
 // LogFilesList returns a list of available log files.

@@ -92,6 +92,10 @@
 		LogFilesListRequest
 		LogFilesListResponse
 		LogFileRequest
+		HeapFileResponse
+		HeapFilesListRequest
+		HeapFilesListResponse
+		HeapFileRequest
 		StacksRequest
 		ProfileRequest
 		MetricsRequest
