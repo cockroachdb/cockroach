@@ -182,8 +182,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
-				tableDef: table,
-				desc:     &tableDesc,
+				tableDef:                   table,
+				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)

@@ -188,9 +188,9 @@ func (m *roachmart) Tables() []workload.Table {
 				user := users.InitialRows.Batch(rowIdx % m.users)[0]
 				zone, email := user[0], user[1]
 				return []interface{}{
-					zone,   // user_zone
-					email,  // user_email
-					rowIdx, // id
+					zone,                         // user_zone
+					email,                        // user_email
+					rowIdx,                       // id
 					[]string{`f`, `t`}[rowIdx%2], // fulfilled
 				}
 			},
