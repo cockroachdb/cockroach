@@ -455,6 +455,12 @@ var specs = []stmtSpec{
 		inline: []string{"opt_transaction"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
+	{
+		name:    "cancel_job",
+		stmt:    "cancel_jobs_stmt",
+		replace: map[string]string{"a_expr": "job_id"},
+		unlink:  []string{"job_id"},
+	},
 	{name: "cancel_query", stmt: "cancel_queries_stmt", replace: map[string]string{"a_expr": "query_id"}, unlink: []string{"query_id"}},
 	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
@@ -761,6 +767,12 @@ var specs = []stmtSpec{
 		name: "opt_interleave",
 	},
 	{
+		name:    "pause_job",
+		stmt:    "pause_stmt",
+		replace: map[string]string{"a_expr": "job_id"},
+		unlink:  []string{"job_id"},
+	},
+	{
 		name:    "primary_key_column_level",
 		stmt:    "stmt_block",
 		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' column_name column_type 'PRIMARY KEY' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
@@ -818,6 +830,12 @@ var specs = []stmtSpec{
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
 		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
+	},
+	{
+		name:    "resume_job",
+		stmt:    "resume_stmt",
+		replace: map[string]string{"a_expr": "job_id"},
+		unlink:  []string{"job_id"},
 	},
 	{
 		name:   "revoke_privileges",
