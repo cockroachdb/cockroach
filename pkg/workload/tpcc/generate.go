@@ -59,8 +59,8 @@ func (w *tpcc) tpccItemInitialRow(rowIdx int) []interface{} {
 
 	return []interface{}{
 		iID,
-		randInt(rng, 1, 10000),                           // im_id: "Image ID associated to Item"
-		randAString(rng, 14, 24),                         // name
+		randInt(rng, 1, 10000),   // im_id: "Image ID associated to Item"
+		randAString(rng, 14, 24), // name
 		float64(randInt(rng, 100, 10000)) / float64(100), // price
 		randOriginalString(rng),
 	}
@@ -105,10 +105,10 @@ func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
 		randAString(rng, 24, 24), // dist_08
 		randAString(rng, 24, 24), // dist_09
 		randAString(rng, 24, 24), // dist_10
-		0, // ytd
-		0, // order_cnt
-		0, // remote_cnt
-		randOriginalString(rng), // data
+		0,                        // ytd
+		0,                        // order_cnt
+		0,                        // remote_cnt
+		randOriginalString(rng),  // data
 	}
 }
 
@@ -275,7 +275,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(orderRowIdx int) [][]interface{} {
 		rows = append(rows, []interface{}{
 			oID, dID, wID, olNumber,
 			randInt(rng, 1, 100000), // ol_i_id
-			wID, // supply_w_id
+			wID,                     // supply_w_id
 			deliveryD,
 			5, // quantity
 			amount,

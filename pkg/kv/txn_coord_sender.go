@@ -410,7 +410,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 ) client.TxnSender {
 	meta.Txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
-		typ: typ,
+		typ:                   typ,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending

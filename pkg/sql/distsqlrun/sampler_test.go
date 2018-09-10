@@ -138,12 +138,12 @@ func TestSamplerSketch(t *testing.T) {
 	rows := genEncDatumRowsInt(inputRows)
 	in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
 	outTypes := []sqlbase.ColumnType{
-		intType, // original column
-		intType, // original column
-		intType, // rank
-		intType, // sketch index
-		intType, // num rows
-		intType, // null vals
+		intType,                                  // original column
+		intType,                                  // original column
+		intType,                                  // rank
+		intType,                                  // sketch index
+		intType,                                  // num rows
+		intType,                                  // null vals
 		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
 	}
 
