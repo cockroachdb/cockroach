@@ -35,3 +35,17 @@ $result
 )
 =>
 $result
+
+# FoldComparison is similar to FoldBinary, but it involves a comparison
+# operation. As with FoldBinary, FoldComparison applies as long as the
+# evaluation would not cause an error.
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldComparison, Normalize, LowPriority]
+(Comparison
+  $left:* & (IsConst $left)
+  $right:* & (IsConst $right) & (FoldSucceeded $result:(FoldComparison (OpName) $left $right))
+)
+=>
+$result
