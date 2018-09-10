@@ -134,7 +134,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.CmpOp)
+			v := untyped.(*tree.CmpOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
