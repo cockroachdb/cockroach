@@ -956,10 +956,14 @@ func (*ConditionalPutRequest) flags() int {
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
 // It also may return the actual data read on ConditionFailedErrors,
-// so must update the timestamp cache on errors. Unlike CPut, InitPuts
-// require a refresh because they may execute successfully without
-// leaving an intent (i.e., when the existing value is equal to the
-// proposed value).
+// so must update the timestamp cache on errors.
+//
+// Unlike CPut, InitPuts require a refresh because they may execute
+// successfully without leaving an intent (i.e., when the existing
+// value is equal to the proposed value).
+// TODO(nvanbenschoten): As of #27302, this is no longer true. We
+// can remove needsRefresh in v2.2, at which point no node in a
+// cluster can be running a binary without the referenced change.
 func (*InitPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | needsRefresh | consultsTSCache
 }
