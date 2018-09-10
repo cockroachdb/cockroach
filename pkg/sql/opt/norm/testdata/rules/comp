@@ -319,6 +319,21 @@ project
  └── projections
       └── false [type=bool]
 
+opt expect=FoldNonNullIsNull
+SELECT (1, 2, 3) IS NULL AS r
+----
+project
+ ├── columns: r:1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── false [type=bool]
+
 # --------------------------------------------------
 # FoldIsNotNull
 # --------------------------------------------------
@@ -358,6 +373,21 @@ project
       ├── true [type=bool]
       ├── k IS NOT NULL [type=bool, outer=(1)]
       └── i IS NOT NULL [type=bool, outer=(2)]
+
+opt expect=FoldNonNullIsNotNull
+SELECT (1, 2, 3) IS NOT NULL AS r
+----
+project
+ ├── columns: r:1(bool!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── true [type=bool]
 
 # --------------------------------------------------
 # CommuteNullIs
