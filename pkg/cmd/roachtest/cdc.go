@@ -28,14 +28,15 @@ import (
 )
 
 func installKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `curl https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xzv`)
-	c.Run(ctx, kafkaNode, `sudo apt-get update`)
-	c.Run(ctx, kafkaNode, `yes | sudo apt-get install default-jre`)
+	c.Run(ctx, kafkaNode, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz`)
+	c.Run(ctx, kafkaNode, `sudo apt-get -q update`)
+	c.Run(ctx, kafkaNode, `yes | sudo apt-get -q install default-jre`)
 	c.Run(ctx, kafkaNode, `mkdir -p /mnt/data1/confluent`)
-
 }
 
 func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
+	// This isn't necessary for the nightly tests, but it's nice for iteration.
+	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy | true`)
 	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
 }
 
@@ -67,11 +68,10 @@ func (tr *tpccWorkload) install(ctx context.Context, c *cluster) {
 	))
 }
 
-func (tr *tpccWorkload) run(ctx context.Context, c *cluster) {
+func (tr *tpccWorkload) run(ctx context.Context, c *cluster, duration string) {
 	c.Run(ctx, tr.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=30m`,
-		tr.warehouseCount,
-		tr.sqlNodes,
+		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s`,
+		tr.warehouseCount, tr.sqlNodes, duration,
 	))
 }
 
@@ -82,12 +82,13 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
-	maxInitialScanAllowed, maxLatencyAllowed := 3*time.Minute, time.Minute
+	maxInitialScanAllowed, maxLatencyAllowed, duration := 3*time.Minute, time.Minute, `30m`
 	if args.initialScan {
 		maxInitialScanAllowed = 30 * time.Minute
 	}
 	if args.warehouseCount >= 1000 {
 		maxLatencyAllowed = 10 * time.Minute
+		duration = `120m`
 	}
 
 	crdbNodes := c.Range(1, c.nodes-1)
@@ -96,7 +97,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=poller=2`))
+	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
 
 	tpcc := tpccWorkload{
 		sqlNodes:       crdbNodes,
@@ -123,7 +124,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		defer func() { close(tpccComplete) }()
-		tpcc.run(ctx, c)
+		tpcc.run(ctx, c, duration)
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {

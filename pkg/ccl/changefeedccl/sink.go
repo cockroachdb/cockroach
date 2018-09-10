@@ -53,12 +53,29 @@ func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 	if err != nil {
 		return nil, err
 	}
+	q := u.Query()
+
+	var s Sink
 	switch u.Scheme {
 	case sinkSchemeBuffer:
-		return &bufferSink{}, nil
+		s = &bufferSink{}
 	case sinkSchemeKafka:
-		kafkaTopicPrefix := u.Query().Get(sinkParamTopicPrefix)
-		return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+		kafkaTopicPrefix := q.Get(sinkParamTopicPrefix)
+		q.Del(sinkParamTopicPrefix)
+		schemaTopic := q.Get(sinkParamSchemaTopic)
+		q.Del(sinkParamSchemaTopic)
+		if schemaTopic != `` {
+			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
+		}
+		confluentSchemaRegistry := q.Get(sinkParamConfluentSchemaRegistry)
+		q.Del(sinkParamConfluentSchemaRegistry)
+		if confluentSchemaRegistry != `` {
+			return nil, errors.Errorf(`%s is not yet supported`, sinkParamConfluentSchemaRegistry)
+		}
+		s, err = getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+		if err != nil {
+			return nil, err
+		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
 		// expects.
@@ -66,10 +83,19 @@ func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 		// TODO(dan): Make tableName configurable or based on the job ID or
 		// something.
 		tableName := `sqlsink`
-		return makeSQLSink(u.String(), tableName, targets)
+		s, err = makeSQLSink(u.String(), tableName, targets)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
+
+	for k := range q {
+		return nil, errors.Errorf(`unknown sink query parameter: %s`, k)
+	}
+
+	return s, nil
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
