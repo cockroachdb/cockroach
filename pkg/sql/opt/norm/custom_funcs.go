@@ -1125,7 +1125,7 @@ func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructDatum(result)
+	return c.f.ConstructConstVal(result)
 }
 
 // FoldUnary evaluates a unary expression with a constant input. It returns
@@ -1148,5 +1148,32 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupI
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructDatum(result)
+	return c.f.ConstructConstVal(result)
+}
+
+// FoldComparison evaluates a comparison expression with constant inputs. It
+// returns a constant expression as long as it finds an appropriate overload
+// function for the given operator and input types, and the evaluation causes
+// no error.
+func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	lEv, rEv := memo.MakeNormExprView(c.mem, left), memo.MakeNormExprView(c.mem, right)
+	lDatum, rDatum := memo.ExtractConstDatum(lEv), memo.ExtractConstDatum(rEv)
+	lType, rType := lDatum.ResolvedType(), rDatum.ResolvedType()
+
+	if lType == types.Unknown {
+		lType = lEv.Private().(types.T)
+	}
+	if rType == types.Unknown {
+		rType = rEv.Private().(types.T)
+	}
+	o, ok := memo.FindComparisonOverload(op, lType, rType)
+	if !ok {
+		return 0
+	}
+
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConstVal(result)
 }
