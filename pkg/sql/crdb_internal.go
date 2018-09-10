@@ -1036,14 +1036,14 @@ CREATE TABLE crdb_internal.create_statements (
 				var err error
 				if table.IsView() {
 					descType = typeView
-					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
 				} else if table.IsSequence() {
 					descType = typeSequence
-					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
 					if err != nil {
 						return err
 					}
@@ -1057,7 +1057,7 @@ CREATE TABLE crdb_internal.create_statements (
 							f.WriteString(" ADD CONSTRAINT ")
 							f.FormatNameP(&fk.Name)
 							f.WriteByte(' ')
-							if err := p.printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
+							if err := printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
 								return err
 							}
 							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -1075,7 +1075,7 @@ CREATE TABLE crdb_internal.create_statements (
 							}
 						}
 					}
-					stmt, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
+					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
 				}
 				if err != nil {
 					return err
