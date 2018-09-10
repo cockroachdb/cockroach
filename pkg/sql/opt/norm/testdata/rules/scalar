@@ -536,3 +536,178 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters [type=bool, outer=(5)]
       └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
+
+# --------------------------------------------------
+# SimplifyCaseWhenConstValue
+# --------------------------------------------------
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN 1 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE false WHEN 0 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+# Verify that a true condition does not remove non-constant expressions
+# proceeding it.
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN k THEN 'one'
+    WHEN 1 THEN 'two'
+    WHEN 1 THEN 'three'
+    ELSE 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'one' ELSE 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE WHEN k = 1 THEN 'one' WHEN true THEN 'two' END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE WHEN k = 1 THEN 'one' ELSE 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN k THEN 'two'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'two' ELSE 'three' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    ELSE 'five'
+    END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'four' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'two' [type=string]
