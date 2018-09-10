@@ -22,92 +22,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-// SortedDiskMapIterator is a simple iterator used to iterate over keys and/or
-// values.
-// Example use of iterating over all keys:
-// 	var i SortedDiskMapIterator
-// 	for i.Rewind(); ; i.Next() {
-// 		if ok, err := i.Valid(); err != nil {
-//			// Handle error.
-// 		} else if !ok {
-//			break
-// 		}
-// 		key := i.Key()
-//		// Do something.
-// 	}
-type SortedDiskMapIterator interface {
-	// Seek sets the iterator's position to the first key greater than or equal
-	// to the provided key.
-	Seek(key []byte)
-	// Rewind seeks to the start key.
-	Rewind()
-	// Valid must be called after any call to Seek(), Rewind(), or Next(). It
-	// returns (true, nil) if the iterator points to a valid key and
-	// (false, nil) if the iterator has moved past the end of the valid range.
-	// If an error has occurred, the returned bool is invalid.
-	Valid() (bool, error)
-	// Next advances the iterator to the next key in the iteration.
-	Next()
-	// Key returns the current key. The resulting byte slice is still valid
-	// after the next call to Seek(), Rewind(), or Next().
-	Key() []byte
-	// Value returns the current value. The resulting byte slice is still valid
-	// after the next call to Seek(), Rewind(), or Next().
-	Value() []byte
-
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,Rewind,Seek,Close}.
-	UnsafeKey() []byte
-	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,Rewind,Seek,Close}.
-	UnsafeValue() []byte
-
-	// Close frees up resources held by the iterator.
-	Close()
-}
-
-// SortedDiskMapBatchWriter batches writes to a SortedDiskMap.
-type SortedDiskMapBatchWriter interface {
-	// Put writes the given key/value pair to the batch. The write to the
-	// underlying store happens on Flush(), Close(), or when the batch writer
-	// reaches its capacity.
-	Put(k []byte, v []byte) error
-	// Flush flushes all writes to the underlying store. The batch can be reused
-	// after a call to Flush().
-	Flush() error
-
-	// Close flushes all writes to the underlying store and frees up resources
-	// held by the batch writer.
-	Close(context.Context) error
-}
-
-// SortedDiskMap is an on-disk map. Keys are iterated over in sorted order.
-type SortedDiskMap interface {
-	// Put writes the given key/value pair.
-	Put(k []byte, v []byte) error
-	// Get reads the value for the given key.
-	Get(k []byte) ([]byte, error)
-
-	// NewIterator returns a SortedDiskMapIterator that can be used to iterate
-	// over key/value pairs in sorted order.
-	NewIterator() SortedDiskMapIterator
-	// NewBatchWriter returns a SortedDiskMapBatchWriter that can be used to
-	// batch writes to this map for performance improvements.
-	NewBatchWriter() SortedDiskMapBatchWriter
-	// NewBatchWriterCapacity is identical to NewBatchWriter, but overrides the
-	// SortedDiskMapBatchWriter's default capacity with capacityBytes.
-	NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatchWriter
-
-	// Clear clears the map's data for reuse.
-	Clear() error
-
-	// Close frees up resources held by the map.
-	Close(context.Context)
-}
 
 // defaultBatchCapacityBytes is the default capacity for a
 // SortedDiskMapBatchWriter.
@@ -145,9 +63,9 @@ type RocksDBMap struct {
 	keyID           int64
 }
 
-var _ SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
-var _ SortedDiskMapIterator = &RocksDBMapIterator{}
-var _ SortedDiskMap = &RocksDBMap{}
+var _ diskmap.SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
+var _ diskmap.SortedDiskMapIterator = &RocksDBMapIterator{}
+var _ diskmap.SortedDiskMap = &RocksDBMap{}
 
 // tempStorageID is the temp ID generator for a node. It generates unique
 // prefixes for NewRocksDBMap. It is a global because NewRocksDBMap needs to
@@ -224,7 +142,7 @@ func (r *RocksDBMap) Get(k []byte) ([]byte, error) {
 }
 
 // NewIterator implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewIterator() SortedDiskMapIterator {
+func (r *RocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
 	// NOTE: prefix is only false because we can't use the normal prefix
 	// extractor. This iterator still only does prefix iteration. See
 	// RocksDBMapIterator.Valid().
@@ -238,12 +156,12 @@ func (r *RocksDBMap) NewIterator() SortedDiskMapIterator {
 }
 
 // NewBatchWriter implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewBatchWriter() SortedDiskMapBatchWriter {
+func (r *RocksDBMap) NewBatchWriter() diskmap.SortedDiskMapBatchWriter {
 	return r.NewBatchWriterCapacity(defaultBatchCapacityBytes)
 }
 
 // NewBatchWriterCapacity implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatchWriter {
+func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDiskMapBatchWriter {
 	makeKey := r.makeKey
 	if r.allowDuplicates {
 		makeKey = r.makeKeyWithTimestamp
