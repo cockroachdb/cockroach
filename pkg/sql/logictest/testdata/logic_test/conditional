@@ -62,3 +62,50 @@ SELECT a, NULLIF(a, 2), IF(a = 2, NULL, a) FROM t ORDER BY a
 1  1     1
 2  NULL  NULL
 3  3     3
+
+query TTTT
+SELECT
+    CASE
+    WHEN false THEN 'one'
+    WHEN true THEN 'two'
+    ELSE 'three'
+    END,
+    CASE 1
+    WHEN 2 THEN 'two'
+    WHEN 1 THEN 'one'
+    ELSE 'three'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    ELSE 'three'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    END
+----
+two  one  three  NULL
+
+query TTTTT
+SELECT
+    CASE
+    WHEN 1 = 1 THEN 'one'
+    END,
+    CASE false
+    WHEN 0 = 1 THEN 'one'
+    END,
+    CASE 1
+    WHEN 2 THEN 'one'
+    ELSE 'three'
+    END,
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END,
+    CASE
+    WHEN false THEN 'one'
+    WHEN true THEN 'two'
+    END
+----
+one  one  three  four  two
