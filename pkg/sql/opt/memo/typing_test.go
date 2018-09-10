@@ -137,6 +137,32 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 	}
 }
 
+// TestTypingComparisonAssumptions ensures that comparison overloads conform to
+// certain assumptions we're making in the type inference code:
+//   1. The overload can be inferred from the operator type and the data
+//      types of its operands.
+func TestTypingComparisonAssumptions(t *testing.T) {
+	for name, overloads := range tree.CmpOps {
+		for i, overload := range overloads {
+			op := overload.(*tree.CmpOp)
+
+			// Check for basic ambiguity where two different comparison op overloads
+			// both allow equivalent operand types.
+			for i2, overload2 := range overloads {
+				if i == i2 {
+					continue
+				}
+
+				op2 := overload2.(*tree.CmpOp)
+				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
+					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
+					t.Errorf(format, name, op, op2)
+				}
+			}
+		}
+	}
+}
+
 // TestTypingAggregateAssumptions ensures that aggregate overloads conform to
 // certain assumptions we're making in the type inference code:
 //   1. The return type can be inferred from the operator type and the data

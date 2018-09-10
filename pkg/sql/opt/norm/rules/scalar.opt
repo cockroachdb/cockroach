@@ -48,7 +48,7 @@
 # operand is a constant, replaces with that constant. Note that ConstValue
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
-(Coalesce $args:[ (ConstValue) ... ]) => (SimplifyCoalesce $args)
+(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ]) => (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.

@@ -353,3 +353,34 @@ func FindUnaryOverload(op opt.Operator, typ types.T) (_ *tree.UnaryOp, ok bool) 
 	}
 	return nil, false
 }
+
+// FindComparisonOverload finds the correct type signature overload for the
+// specified comparison operator, given the types of its inputs. If an overload
+// is found, FindComparisonOverload returns true, plus a pointer to the
+// overload. If an overload is not found, FindComparisonOverload returns false.
+func FindComparisonOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.CmpOp, ok bool) {
+	compOp := opt.ComparisonOpReverseMap[op]
+
+	// Find the comparison op that matches the type of the expression's left and
+	// right children. No more than one match should ever be found. The
+	// TestTypingComparisonAssumptions test ensures this will be the case even if
+	// new operators or overloads are added.
+	for _, cmpOverloads := range tree.CmpOps[compOp] {
+		o := cmpOverloads.(*tree.CmpOp)
+
+		if leftType == types.Unknown {
+			if rightType.Equivalent(o.RightType) {
+				return o, true
+			}
+		} else if rightType == types.Unknown {
+			if leftType.Equivalent(o.LeftType) {
+				return o, true
+			}
+		} else {
+			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
+				return o, true
+			}
+		}
+	}
+	return nil, false
+}
