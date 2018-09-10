@@ -633,6 +633,54 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
+// createDropTablesJob creates a schema change job in the system.jobs table.
+// The identifiers of the newly-created job are written in the table descriptor.
+//
+// The job creation is done within the planner's txn. This is important - if the`
+// txn ends up rolling back, the job needs to go away.
+func (p *planner) createDropTablesJob(
+	ctx context.Context,
+	tableDescs []*sqlbase.TableDescriptor,
+	droppedDetails []jobspb.DroppedTableDetails,
+	stmt string,
+) (int64, error) {
+
+	if len(tableDescs) == 0 {
+		return 0, nil
+	}
+
+	descriptorIDs := make([]sqlbase.ID, 0, len(tableDescs))
+
+	for _, tableDesc := range tableDescs {
+		descriptorIDs = append(descriptorIDs, tableDesc.ID)
+	}
+
+	for _, droppedDetail := range droppedDetails {
+		droppedDetail.Status = jobspb.DroppedTableDetails_DRAINING_NAMES
+	}
+
+	jobRecord := jobs.Record{
+		Description:   stmt,
+		Username:      p.User(),
+		DescriptorIDs: descriptorIDs,
+		Details:       jobspb.SchemaChangeDetails{DroppedTables: droppedDetails},
+		Progress:      jobspb.SchemaChangeProgress{},
+	}
+	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
+	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
+		return 0, err
+	}
+
+	if err := job.WithTxn(p.txn).Started(ctx); err != nil {
+		return 0, err
+	}
+
+	for _, tableDesc := range tableDescs {
+		tableDesc.DropJobID = *job.ID()
+	}
+	return *job.ID(), nil
+}
+
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
 func (p *planner) queueSchemaChange(

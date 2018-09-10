@@ -448,6 +448,14 @@ CREATE TABLE crdb_internal.jobs (
 					leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 				}
 				errorStr = tree.NewDString(payload.Error)
+				if len(payload.RunningStatus) > 0 {
+					if s, ok := status.(*tree.DString); ok {
+						statusStr := string(*s)
+						if jobs.Status(statusStr) == jobs.StatusRunning {
+							status = tree.NewDString(statusStr + " (" + payload.RunningStatus + ")")
+						}
+					}
+				}
 			}
 
 			// Extract data from the progress field.

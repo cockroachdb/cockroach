@@ -226,6 +226,7 @@ func (r *Registry) NewJob(record Record) *Job {
 		Username:      record.Username,
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
+		RunningStatus: string(RunningStatusGeneral),
 	}
 	job.mu.progress = jobspb.Progress{
 		Details: jobspb.WrapProgressDetails(record.Progress),
