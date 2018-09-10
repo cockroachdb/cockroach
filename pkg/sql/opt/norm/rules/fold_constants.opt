@@ -12,10 +12,13 @@
 #
 # In this query, the ELSE clause is not executed, so the divide-by-zero error
 # should not be triggered.
-[FoldBinary, Normalize]
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldBinary, Normalize, LowPriority]
 (Binary
-  $left:(Const)
-  $right:(Const) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
+  $left:* & (IsConst $left)
+  $right:* & (IsConst $right) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
 )
 =>
 $result
@@ -23,9 +26,12 @@ $result
 # FoldUnary is similar to FoldBinary, but it involves a unary operation over a
 # single constant input. As with FoldBinary, FoldUnary applies as long as the
 # evaluation would not cause an error.
-[FoldUnary, Normalize]
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldUnary, Normalize, LowPriority]
 (Unary
-  $input:(Const) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
+  $input:* & (IsConst $input) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
 )
 =>
 $result

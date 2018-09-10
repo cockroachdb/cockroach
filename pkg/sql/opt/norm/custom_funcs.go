@@ -1067,12 +1067,20 @@ func (c *CustomFuncs) FoldSucceeded(result memo.GroupID) bool {
 	return result != 0
 }
 
+// IsConst returns true if the input is a constant or a tuple/array of
+// constants.
+func (c *CustomFuncs) IsConst(input memo.GroupID) bool {
+	ev := memo.MakeNormExprView(c.mem, input)
+	return ev.IsConstValue() ||
+		((ev.Operator() == opt.TupleOp || ev.Operator() == opt.ArrayOp) && memo.HasOnlyConstChildren(ev))
+}
+
 // FoldBinary evaluates a binary expression with constant inputs. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.
 func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
-	leftDatum := c.ExtractConstValue(left).(tree.Datum)
-	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+	leftDatum := memo.ExtractConstDatum(memo.MakeNormExprView(c.mem, left))
+	rightDatum := memo.ExtractConstDatum(memo.MakeNormExprView(c.mem, right))
 
 	o, ok := memo.FindBinaryOverload(op, leftDatum.ResolvedType(), rightDatum.ResolvedType())
 	if !ok {
@@ -1083,14 +1091,14 @@ func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructConst(c.f.InternDatum(result))
+	return c.f.ConstructDatum(result)
 }
 
 // FoldUnary evaluates a unary expression with a constant input. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input type, and the evaluation causes no error.
 func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
-	datum := c.ExtractConstValue(input).(tree.Datum)
+	datum := memo.ExtractConstDatum(memo.MakeNormExprView(c.mem, input))
 
 	o, ok := memo.FindUnaryOverload(op, datum.ResolvedType())
 	if !ok {
@@ -1101,5 +1109,5 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupI
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructConst(c.f.InternDatum(result))
+	return c.f.ConstructDatum(result)
 }

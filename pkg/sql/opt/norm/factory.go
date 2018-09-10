@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -179,6 +180,29 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 		f.checkExpr(memo.MakeNormExprView(&f.mem, group))
 	}
 	return group
+}
+
+// ----------------------------------------------------------------------
+//
+// Constant construction functions
+//   General helper functions to construct constants.
+//
+// ----------------------------------------------------------------------
+
+// ConstructDatum maps certain datums to separate operators, for easier
+// matching.
+func (f *Factory) ConstructDatum(d tree.Datum) memo.GroupID {
+	if d == tree.DNull {
+		return f.ConstructNull(f.InternType(types.Unknown))
+	}
+	if boolVal, ok := d.(*tree.DBool); ok {
+		// Map True/False datums to True/False operator.
+		if *boolVal {
+			return f.ConstructTrue()
+		}
+		return f.ConstructFalse()
+	}
+	return f.ConstructConst(f.InternDatum(d))
 }
 
 // ----------------------------------------------------------------------
