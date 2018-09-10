@@ -146,7 +146,7 @@
 # FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
 [FoldNonNullIsNull, Normalize]
 (Is
-  (ConstValue) & ^(Null)
+  $left:^(Null) & (IsConstValueOrTuple $left)
   (Null)
 )
 =>
@@ -159,7 +159,7 @@
 # FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
 [FoldNonNullIsNotNull, Normalize]
 (IsNot
-  (ConstValue) & ^(Null)
+  $left:^(Null) & (IsConstValueOrTuple $left)
   (Null)
 )
 =>
