@@ -23,7 +23,6 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#30001")
 
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/sql/sqlbase", true, []string{"c-deps"}, nil,
