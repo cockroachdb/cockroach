@@ -11,9 +11,6 @@ package changefeedccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -88,27 +85,31 @@ func distChangefeedFlow(
 		return err
 	}
 
+	// Changefeed flows handle transactional consistency themselves.
+	var noTxn *client.Txn
 	gatewayNodeID := execCfg.NodeID.Get()
 	dsp := phs.DistSQLPlanner()
+	evalCtx := phs.ExtendedEvalContext()
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn)
 
-	var spansByNodeID map[roachpb.NodeID][]roachpb.Span
+	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
 		// Sinkless feeds get one ChangeAggregator on the gateway.
-		spansByNodeID = map[roachpb.NodeID][]roachpb.Span{gatewayNodeID: trackedSpans}
+		spanPartitions = []sql.SpanPartition{{Node: gatewayNodeID, Spans: trackedSpans}}
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
-		spansByNodeID, err = spansByLeaseholder(ctx, dsp.SpanResolver(), trackedSpans)
+		spanPartitions, err = dsp.PartitionSpans(&planCtx, trackedSpans)
 		if err != nil {
 			return err
 		}
 	}
 
-	changeAggregatorProcs := make([]distsqlplan.Processor, 0, len(spansByNodeID))
-	for nodeID, nodeSpans := range spansByNodeID {
+	changeAggregatorProcs := make([]distsqlplan.Processor, 0, len(spanPartitions))
+	for _, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
-		watches := make([]distsqlrun.ChangeAggregatorSpec_Watch, len(nodeSpans))
-		for i, nodeSpan := range nodeSpans {
+		watches := make([]distsqlrun.ChangeAggregatorSpec_Watch, len(sp.Spans))
+		for i, nodeSpan := range sp.Spans {
 			watches[i] = distsqlrun.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
 				InitialResolved: initialHighWater,
@@ -116,7 +117,7 @@ func distChangefeedFlow(
 		}
 
 		changeAggregatorProcs = append(changeAggregatorProcs, distsqlplan.Processor{
-			Node: nodeID,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core: distsqlrun.ProcessorCoreUnion{
 					ChangeAggregator: &distsqlrun.ChangeAggregatorSpec{
@@ -157,12 +158,6 @@ func distChangefeedFlow(
 
 	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
-
-	// Changefeed flows handle transactional consistency themselves.
-	var noTxn *client.Txn
-
-	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn)
 	dsp.FinalizePlan(&planCtx, &p)
 
 	resultRows := makeChangefeedResultWriter(resultsCh)
@@ -191,38 +186,6 @@ func distChangefeedFlow(
 
 	dsp.Run(&planCtx, noTxn, &p, recv, evalCtx, finishedSetupFn)
 	return resultRows.Err()
-}
-
-func spansByLeaseholder(
-	ctx context.Context, spanResolver distsqlplan.SpanResolver, inputSpans []roachpb.Span,
-) (map[roachpb.NodeID][]roachpb.Span, error) {
-	ret := make(map[roachpb.NodeID][]roachpb.Span, len(inputSpans))
-
-	it := spanResolver.NewSpanResolverIterator(nil /* txn */)
-	for _, inputSpan := range inputSpans {
-		for it.Seek(ctx, inputSpan, kv.Ascending); ; it.Next(ctx) {
-			if !it.Valid() {
-				return nil, it.Error()
-			}
-			rangeDesc := it.Desc()
-			rangeSpan := roachpb.Span{
-				Key:    rangeDesc.StartKey.AsRawKey(),
-				EndKey: rangeDesc.EndKey.AsRawKey(),
-			}
-			repl, err := it.ReplicaInfo(ctx)
-			if err != nil {
-				return nil, err
-			}
-			// TODO(dan): Collapsing this span into the previous one, when
-			// possible, would save a bit of space in the serialized spec we
-			// send to the processor when starting the flow.
-			ret[repl.NodeID] = append(ret[repl.NodeID], rangeSpan)
-			if !it.NeedAnother() {
-				break
-			}
-		}
-	}
-	return ret, nil
 }
 
 // changefeedResultWriter implements the `distsqlrun.resultWriter` that sends
