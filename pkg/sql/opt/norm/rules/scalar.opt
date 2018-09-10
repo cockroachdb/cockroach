@@ -205,3 +205,51 @@
   $val
   (MakeSingleKeyJSONObject $key $right)
 )
+
+# SimplifyCaseWhenEqual simplifes a CASE where the first branch is known
+# to match its expr.
+# This transforms
+#
+#   CASE 1 WHEN 1 THEN a ... END
+#
+# to
+#
+#   a
+#
+[SimplifyCaseWhenEqual, Normalize]
+(Case
+  $condition:(ConstValue)
+  [
+    (When
+      $condition2:(ConstValue) & (IsConstValueEqual $condition $condition2)
+      $val:*
+    )
+    ...
+  ]
+)
+=>
+$val
+
+# SimplifyCaseWhenUnreachable removes branches known to not match. If all
+# WHEN conditions have been removed, the ELSE expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a END
+#
+# to
+#
+#   CASE WHEN v THEN 1 END
+#
+[SimplifyCaseWhenUnreachable, Normalize]
+(Case
+  $condition:(ConstValue)
+  $whens:[
+    ...
+    (When
+      $condition2:(ConstValue) & ^(IsConstValueEqual $condition $condition2)
+    )
+    ...
+  ]
+)
+=>
+(SimplifyWhens $condition $whens)

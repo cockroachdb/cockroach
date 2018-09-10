@@ -525,3 +525,150 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters [type=bool, outer=(5)]
       └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
+
+# --------------------------------------------------
+# SimplifyCaseWhenEqual
+# --------------------------------------------------
+
+opt expect=SimplifyCaseWhenEqual
+SELECT CASE 1 WHEN 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect-not=SimplifyCaseWhenEqual
+SELECT CASE 1 WHEN k THEN 'one' WHEN 1 THEN 'two' END FROM a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'one' WHEN 1 THEN 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenEqual
+SELECT CASE WHEN 1 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect-not=SimplifyCaseWhenEqual
+SELECT
+    CASE WHEN k = 1 THEN 'one' WHEN true THEN 'two' END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE WHEN k = 1 THEN 'one' WHEN true THEN 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenEqual
+SELECT CASE false WHEN 0 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+# --------------------------------------------------
+# SimplifyCaseWhenUnreachable
+# --------------------------------------------------
+
+opt expect=SimplifyCaseWhenUnreachable
+SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt expect=SimplifyCaseWhenUnreachable
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN k THEN 'two'
+    WHEN 1 THEN 'three'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'two' WHEN 1 THEN 'three' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenUnreachable
+SELECT
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'four' [type=string]
+
+opt expect=SimplifyCaseWhenUnreachable
+SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'two' [type=string]
