@@ -212,7 +212,7 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
-	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */, sqlbase.InvalidMutationID); err != nil {
 		return cascadeDroppedViews, err
 	}
 

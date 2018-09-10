@@ -436,35 +436,65 @@ func (sc *SchemaChanger) maybeAddDrop(
 			return false, nil
 		}
 
-		// This can happen if a change other than the drop originally
-		// scheduled the changer for this table. If that's the case,
-		// we still need to wait for the deadline to expire.
-		if table.DropTime != 0 {
-			var timeRemaining time.Duration
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				timeRemaining = 0
-				_, zoneCfg, _, err := GetZoneConfigInTxn(
-					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
-				)
-				if err != nil {
-					return err
+		// Find our job.
+		foundJobID := false
+		if sc.mutationID != sqlbase.InvalidMutationID {
+			for _, g := range table.MutationJobs {
+				if g.MutationID == sc.mutationID {
+					job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
+					if err != nil {
+						return false, err
+					}
+					sc.job = job
+					foundJobID = true
+					break
 				}
-				deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
-				timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
-				return nil
-			}); err != nil {
+			}
+
+			if foundJobID {
+				if err := sc.job.Started(ctx); err != nil {
+					if log.V(2) {
+						log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.job.ID(), err)
+					}
+				}
+			}
+
+			// This can happen if a change other than the drop originally
+			// scheduled the changer for this table. If that's the case,
+			// we still need to wait for the deadline to expire.
+			if table.DropTime != 0 {
+				var timeRemaining time.Duration
+				if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+					timeRemaining = 0
+					_, zoneCfg, _, err := GetZoneConfigInTxn(
+						ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
+					)
+					if err != nil {
+						return err
+					}
+					deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+					timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
+					return nil
+				}); err != nil {
+					return false, err
+				}
+				if timeRemaining < 0 {
+					return false, errNotHitGCTTLDeadline
+				}
+			}
+			// Do all the hard work of deleting the table data and the table ID.
+			if err := sc.truncateTable(ctx, lease, table, evalCtx); err != nil {
 				return false, err
 			}
-			if timeRemaining < 0 {
-				return false, errNotHitGCTTLDeadline
+
+			if err := DropTableDesc(ctx, table, sc.db, false /* traceKV */); err != nil {
+				return true, err
+			} else if !foundJobID {
+				return true, nil
+			} else {
+				return true, sc.job.Succeeded(ctx, jobs.NoopFn)
 			}
 		}
-		// Do all the hard work of deleting the table data and the table ID.
-		if err := sc.truncateTable(ctx, lease, table, evalCtx); err != nil {
-			return false, err
-		}
-
-		return true, DropTableDesc(ctx, table, sc.db, false /* traceKV */)
 	}
 
 	if table.Adding() {

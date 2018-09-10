@@ -107,7 +107,15 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
-		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
+
+		mutationID := sqlbase.InvalidMutationID
+		mutationID, err := params.p.createSchemaChangeJob(ctx, droppedDesc,
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
+		if err != nil {
+			return err
+		}
+
+		droppedViews, err := params.p.dropTableImpl(params, droppedDesc, mutationID)
 		if err != nil {
 			return err
 		}
@@ -124,9 +132,10 @@ func (n *dropTableNode) startExec(params runParams) error {
 				TableName           string
 				Statement           string
 				User                string
+				MutationID          uint32
 				CascadeDroppedViews []string
 			}{toDel.tn.FQString(), n.n.String(),
-				params.SessionData().User, droppedViews},
+				params.SessionData().User, uint32(mutationID), droppedViews},
 		); err != nil {
 			return err
 		}
@@ -246,7 +255,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	params runParams, tableDesc *sqlbase.TableDescriptor,
+	params runParams, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) ([]string, error) {
 	ctx := params.ctx
 
@@ -305,7 +314,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	err := p.initiateDropTable(ctx, tableDesc, true /* drain name */)
+	err := p.initiateDropTable(ctx, tableDesc, true /* drain name */, mutationID)
 	return droppedViews, err
 }
 
@@ -314,7 +323,7 @@ func (p *planner) dropTableImpl(
 // TRUNCATE which directly deletes the old name to id map and doesn't need
 // drain the old map.
 func (p *planner) initiateDropTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool, mutationID sqlbase.MutationID,
 ) error {
 	if tableDesc.Dropped() {
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
@@ -377,7 +386,7 @@ func (p *planner) initiateDropTable(
 	// change manager, which is notified via a system config gossip.
 	// The schema change manager will properly schedule deletion of
 	// the underlying data when the GC deadline expires.
-	return p.writeDropTable(ctx, tableDesc)
+	return p.writeTableDesc(ctx, tableDesc, mutationID)
 }
 
 func (p *planner) removeFKBackReference(
