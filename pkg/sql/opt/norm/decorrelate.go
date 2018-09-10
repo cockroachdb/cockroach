@@ -43,8 +43,17 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 
 	ev := memo.MakeNormExprView(c.mem, group)
 	switch ev.Operator() {
-	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+	case opt.SubqueryOp, opt.ExistsOp:
 		scalar.Rule.HasHoistableSubquery = !scalar.OuterCols.Empty()
+		return scalar.Rule.HasHoistableSubquery
+
+	case opt.AnyOp:
+		// Don't hoist Any when only its Scalar operand is correlated, because it
+		// executes much slower. It's better to cache the results of the constant
+		// subquery in this case. Note that if an Any is at the top-level of a
+		// WHERE clause, it will be transformed to an Exists operator, so this case
+		// only occurs when the Any is nested, in a projection, etc.
+		scalar.Rule.HasHoistableSubquery = !ev.Child(0).Logical().OuterCols().Empty()
 		return scalar.Rule.HasHoistableSubquery
 	}
 
