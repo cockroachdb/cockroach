@@ -1022,6 +1022,64 @@ func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
 	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
 }
 
+// IsConstValueEqual returns whether const1 and const2 are equal.
+func (c *CustomFuncs) IsConstValueEqual(const1, const2 memo.GroupID) bool {
+	op1 := c.mem.NormOp(const1)
+	op2 := c.mem.NormOp(const2)
+	if op1 != op2 || op1 == opt.NullOp {
+		return false
+	}
+	switch op1 {
+	case opt.TrueOp, opt.FalseOp:
+		return true
+	case opt.ConstOp:
+		datum1 := c.ExtractConstValue(const1).(tree.Datum)
+		datum2 := c.ExtractConstValue(const2).(tree.Datum)
+		return datum1.Compare(c.f.evalCtx, datum2) == 0
+	default:
+		panic(fmt.Errorf("unexpected Op type: %v", op1))
+	}
+}
+
+// SimplifyWhens removes known unreachable WHEN cases and constructs a new CASE
+// statement. Any known true condition is converted to the ELSE. If only the
+// ELSE remains, its expression is returned. condition must be a ConstValue.
+func (c *CustomFuncs) SimplifyWhens(condition memo.GroupID, whens memo.ListID) memo.GroupID {
+	lb := MakeListBuilder(c)
+	whenList := c.mem.LookupList(whens)
+	for _, item := range whenList {
+		itemExpr := c.mem.NormExpr(item)
+
+		switch itemExpr.Operator() {
+		case opt.WhenOp:
+			when := itemExpr.AsWhen()
+			nwc := c.mem.NormExpr(when.Condition())
+			if nwc.IsConstValue() {
+				if !c.IsConstValueEqual(condition, when.Condition()) {
+					// Ignore known unmatching conditions.
+					continue
+				}
+				// If this is true, we won't ever match anything else, so convert this to
+				// the ELSE (or just return it if there are no earlier items).
+				if lb.Empty() {
+					return when.Value()
+				}
+				lb.AddItem(when.Value())
+				return c.f.ConstructCase(condition, lb.BuildList())
+			}
+
+		// The ELSE value.
+		default:
+			if lb.Empty() {
+				// ELSE is the only clause (there are no WHENs), remove the CASE.
+				return item
+			}
+		}
+		lb.AddItem(item)
+	}
+	return c.f.ConstructCase(condition, lb.BuildList())
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
