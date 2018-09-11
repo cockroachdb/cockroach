@@ -1000,13 +1000,13 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 	if err != nil {
 		return nil, err
 	}
-	address := &nd.Address
-	for _, locality := range nd.LocalityAddress {
+	for i := range nd.LocalityAddress {
+		locality := &nd.LocalityAddress[i]
 		if _, ok := g.localityTierMap[locality.LocalityTier.String()]; ok {
 			return &locality.Address, nil
 		}
 	}
-	return address, nil
+	return &nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
