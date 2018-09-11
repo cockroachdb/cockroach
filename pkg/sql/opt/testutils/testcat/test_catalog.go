@@ -312,6 +312,11 @@ func (tt *Table) CheckPrivilege(ctx context.Context, priv privilege.Kind) error 
 	return nil
 }
 
+// InternalID is part of the opt.Table interface.
+func (tt *Table) InternalID() uint64 {
+	return uint64(tt.tableID)
+}
+
 // IsVirtualTable is part of the opt.Table interface.
 func (tt *Table) IsVirtualTable() bool {
 	return tt.IsVirtual
@@ -377,6 +382,9 @@ type Index struct {
 	Ordinal int
 	Columns []opt.IndexColumn
 
+	// Table is a back reference to the table this index is on.
+	table *Table
+
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the opt.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -388,6 +396,12 @@ type Index struct {
 
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
+
+	// foreignKey is a struct representing an outgoing foreign key
+	// reference. If fkSet is true, then foreignKey is a valid
+	// index reference.
+	foreignKey opt.ForeignKeyReference
+	fkSet      bool
 }
 
 // IdxName is part of the opt.Index interface.
@@ -398,6 +412,11 @@ func (ti *Index) IdxName() string {
 // InternalID is part of the opt.Index interface.
 func (ti *Index) InternalID() uint64 {
 	return 1 + uint64(ti.Ordinal)
+}
+
+// Table is part of the opt.Index interface.
+func (ti *Index) Table() opt.Table {
+	return ti.table
 }
 
 // IsInverted is part of the opt.Index interface.
@@ -423,6 +442,11 @@ func (ti *Index) LaxKeyColumnCount() int {
 // Column is part of the opt.Index interface.
 func (ti *Index) Column(i int) opt.IndexColumn {
 	return ti.Columns[i]
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (ti *Index) ForeignKey() (opt.ForeignKeyReference, bool) {
+	return ti.foreignKey, ti.fkSet
 }
 
 // Column implements the opt.Column interface for testing purposes.

@@ -75,12 +75,13 @@ where phoneregis0_.phone_id=1;
 ----
 project
  ├── columns: phone_id1_2_0_:1(int!null) person_i2_2_0_:2(int!null) formula159_0_:11(timestamp) id1_1_1_:3(int!null) number2_1_1_:4(string) since3_1_1_:5(timestamp) type4_1_1_:6(int)
- ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
- ├── left-join (lookup phone)
- │    ├── columns: phone_id:1(int!null) person_id:2(int!null) phone.id:3(int!null) phone.number:4(string) phone.since:5(timestamp) phone.type:6(int) phone.id:7(int) phone.since:9(timestamp)
+ ├── key: (3)
+ ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (2)-->(11)
+ ├── inner-join (lookup phone)
+ │    ├── columns: phone_id:1(int!null) person_id:2(int!null) phone.id:3(int!null) phone.number:4(string) phone.since:5(timestamp) phone.type:6(int) phone.id:7(int!null) phone.since:9(timestamp)
  │    ├── key columns: [2] = [7]
- │    ├── key: (3,7)
- │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(9)
+ │    ├── key: (7)
+ │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3,7), (3)==(2,7), (7)-->(9), (7)==(2,3)
  │    ├── inner-join (lookup phone)
  │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null) phone.id:3(int!null) phone.number:4(string) phone.since:5(timestamp) phone.type:6(int)
  │    │    ├── key columns: [2] = [3]

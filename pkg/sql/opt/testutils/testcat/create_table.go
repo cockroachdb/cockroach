@@ -181,14 +181,14 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	// 1. Verify that the target table has a unique index.
-	found := false
+	var targetIndex *Index
 	for _, idx := range targetTable.Indexes {
 		if matches(idx, toCols, true /* strict */) {
-			found = true
+			targetIndex = idx
 			break
 		}
 	}
-	if !found {
+	if targetIndex == nil {
 		panic(fmt.Errorf(
 			"there is no unique constraint matching given keys for referenced table %s",
 			targetTable.Name(),
@@ -196,10 +196,14 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	// 2. Search for an existing index in the source table; add it if necessary.
-	found = false
+	found := false
 	for _, idx := range tab.Indexes {
 		if matches(idx, fromCols, false /* strict */) {
 			found = true
+			idx.foreignKey.TableID = targetTable.InternalID()
+			idx.foreignKey.IndexID = targetIndex.InternalID()
+			idx.foreignKey.PrefixLen = int32(len(fromCols))
+			idx.fkSet = true
 			break
 		}
 	}
@@ -219,7 +223,11 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			idx.Columns[i].Column = tab.Columns[c].ColName()
 			idx.Columns[i].Direction = tree.Ascending
 		}
-		tab.addIndex(&idx, nonUniqueIndex)
+		index := tab.addIndex(&idx, nonUniqueIndex)
+		index.foreignKey.TableID = targetTable.InternalID()
+		index.foreignKey.IndexID = targetIndex.InternalID()
+		index.foreignKey.PrefixLen = int32(len(fromCols))
+		index.fkSet = true
 	}
 }
 
@@ -230,10 +238,11 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	tt.Columns = append(tt.Columns, col)
 }
 
-func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
+func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
 		Name:     tt.makeIndexName(def.Name, typ),
 		Inverted: def.Inverted,
+		table:    tt,
 	}
 
 	// Add explicit columns and mark primary key columns as not null.
@@ -266,7 +275,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 		}
 		idx.Ordinal = len(tt.Indexes)
 		tt.Indexes = append(tt.Indexes, idx)
-		return
+		return idx
 	}
 
 	// Add implicit key columns from primary index.
@@ -319,6 +328,8 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
 
 	idx.Ordinal = len(tt.Indexes)
 	tt.Indexes = append(tt.Indexes, idx)
+
+	return idx
 }
 
 func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {

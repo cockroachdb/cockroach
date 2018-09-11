@@ -20,6 +20,36 @@ TABLE b
       └── x int not null
 
 exec-ddl
+CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, UNIQUE (x,z))
+----
+TABLE c
+ ├── x int not null
+ ├── y int not null
+ ├── z int not null
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX secondary
+ │    ├── x int not null
+ │    └── z int not null
+ └── INDEX c_auto_index_fk_y_ref_a
+      ├── y int not null
+      └── x int not null
+
+exec-ddl
+CREATE TABLE d (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FOREIGN KEY (y,z) REFERENCES c(x,z))
+----
+TABLE d
+ ├── x int not null
+ ├── y int not null
+ ├── z int not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX d_auto_index_fk_y_ref_c
+      ├── y int not null
+      ├── z int not null
+      └── x int not null
+
+exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 TABLE xy
@@ -1398,6 +1428,125 @@ inner-join
  └── filters [type=bool, outer=(1,6,11), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(6,11), (6)==(1,11), (11)==(1,6)]
       ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       └── a.k = a.k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+
+# Left joins on a foreign key turn into inner joins.
+opt
+SELECT *
+FROM c
+LEFT OUTER JOIN a
+ON c.y = a.k
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (4)-->(5-8), (2)==(4), (4)==(2)
+ ├── scan c
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan a
+ │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+      └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+
+# Left joins on a multiple-column foreign key turn into inner joins.
+opt
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON d.z = c.z
+AND d.y = c.x
+----
+inner-join (merge)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3), (2)==(4), (4)==(2)
+ ├── scan d@d_auto_index_fk_y_ref_c
+ │    ├── columns: d.x:1(int!null) d.y:2(int!null) d.z:3(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +2,+3
+ ├── scan c
+ │    ├── columns: c.x:4(int!null) c.y:5(int!null) c.z:6(int!null)
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5,6)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +2,+3
+      ├── right ordering: +4,+6
+      └── true [type=bool]
+
+# Left join on a part of a foreign key turns into an inner join.
+opt
+SELECT *
+FROM d
+LEFT OUTER JOIN c
+ON d.z = c.z
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3)
+ ├── scan d
+ │    ├── columns: d.x:1(int!null) d.y:2(int!null) d.z:3(int!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: c.x:4(int!null) c.y:5(int!null) c.z:6(int!null)
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5,6)
+ └── filters [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+      └── d.z = c.z [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+
+# Can't simplify: joins on non-foreign keys.
+opt
+SELECT *
+FROM c
+LEFT OUTER JOIN a
+ON c.z = a.k
+----
+left-join
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── scan c
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan a
+ │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+      └── z = k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+
+# Can't simplify: joins on non-foreign keys still in foreign key index.
+opt
+SELECT *
+FROM c
+LEFT OUTER JOIN a
+ON c.x = a.k
+----
+left-join (merge)
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── scan c
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan a
+ │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5-8)
+ │    └── ordering: +4
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +4
+      └── true [type=bool]
 
 # Can't simplify: non-equality condition.
 opt
