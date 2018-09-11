@@ -40,8 +40,12 @@ export class CustomMetricState {
 }
 
 export class CustomChartState {
-  metrics: CustomMetricState[] = [];
+  metrics: CustomMetricState[];
   axisUnits: AxisUnits = AxisUnits.Count;
+
+  constructor() {
+    this.metrics = [new CustomMetricState()];
+  }
 }
 
 interface CustomMetricRowProps {
@@ -235,7 +239,9 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
 
   render() {
     const metrics = this.currentMetrics();
-    let table: JSX.Element = null;
+    let table: JSX.Element = (
+      <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
+    );
 
     if (!_.isEmpty(metrics)) {
       table = (
