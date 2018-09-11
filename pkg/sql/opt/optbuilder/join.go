@@ -39,6 +39,10 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
 
+	// Iterate through tables and populate foreign keys.
+	b.populateForeignKeyRefs(leftScope)
+	b.populateForeignKeyRefs(rightScope)
+
 	joinType := sqlbase.JoinTypeFromAstString(join.Join)
 
 	switch cond := join.Cond.(type) {
@@ -112,6 +116,34 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 				"source name %q specified more than once (missing AS clause)",
 				tree.ErrString(&leftName.TableName),
 			)})
+		}
+	}
+}
+
+// populateForeignKeyRefs iterates through all tables in the specified scope,
+// and initiates a lazy load of foreign key references on their indices. Since
+// the foreign key reference only lives on the index descriptor, and index
+// loops and table descriptor resolution can be expensive, we only do this
+// when opt needs foreign key references - such as with joins.
+func (b *Builder) populateForeignKeyRefs(scope *scope) {
+	for _, col := range scope.cols {
+		if col.table.TableName == "" {
+			continue
+		}
+
+		ds, err := b.catalog.ResolveDataSource(b.ctx, &col.table)
+
+		if err != nil {
+			return
+		}
+
+		table, ok := ds.(opt.Table)
+		if !ok {
+			continue
+		}
+
+		for i := 0; i < table.IndexCount(); i++ {
+			table.Index(i).PopulateForeignKey(b.ctx)
 		}
 	}
 }

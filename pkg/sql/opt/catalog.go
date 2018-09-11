@@ -183,6 +183,9 @@ type Index interface {
 	// when the query contains a numeric index reference.
 	InternalID() uint64
 
+	// Table returns a reference to the table this index is based on.
+	Table() Table
+
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
 
@@ -249,6 +252,15 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// ForeignKey returns a ForeignKeyReference if this index is part
+	// of an outbound foreign key relation. Returns nil if this reference
+	// has not been populated yet (using a call to PopulateForeignKey).
+	ForeignKey() ForeignKeyReference
+
+	// PopulateForeignKey does a lazy evaluation of the foreign key reference
+	// on this index (if any).
+	PopulateForeignKey(ctx context.Context)
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is
@@ -278,6 +290,21 @@ type TableStatistic interface {
 	NullCount() uint64
 
 	// TODO(radu): add Histogram().
+}
+
+// ForeignKeyReference is an interface to an outbound foreign key reference. It
+// has accessors for table and index references, as well as the prefix length.
+type ForeignKeyReference interface {
+	// Table returns the referenced table.
+	Table() Table
+
+	// Index returns the referenced index that represents the
+	// destination table's side of the foreign key relation.
+	Index() Index
+
+	// PrefixLen returns the length of columns that form the foreign key
+	// relation in the current and destination indexes.
+	PrefixLen() int32
 }
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for

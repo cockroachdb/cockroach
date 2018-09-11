@@ -68,20 +68,17 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID int64,
 ) (opt.DataSource, error) {
-	// ResolveDataSourceByID skips the descriptor cache. This is unlike the
-	// heuristic planner which attempts to get the table from a cache unless
-	// forced to skip the cache. See sql/data_source.go:getTableDescByID() for
-	// original implementation.
-	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(dataSourceID))
+
+	lookupFlags := ObjectLookupFlags{
+		CommonLookupFlags: oc.resolver.CommonLookupFlags(ctx, true /*required*/),
+	}
+
+	desc, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID), lookupFlags)
 
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: dataSourceID})
 		}
-		return nil, err
-	}
-
-	if err := filterTableState(desc); err != nil {
 		return nil, err
 	}
 
@@ -396,6 +393,11 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey stores a reference to another table and one of its indexes,
+	// if this index is part of an outbound foreign key relation. Populated
+	// in PopulateForeignKey.
+	foreignKey *optForeignKeyRef
 }
 
 var _ opt.Index = &optIndex{}
@@ -511,6 +513,85 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() opt.ForeignKeyReference {
+	if !oi.desc.ForeignKey.IsSet() || oi.foreignKey == nil {
+		return nil
+	}
+
+	return oi.foreignKey
+}
+
+// PopulateForeignKey is part of the opt.Index interface.
+func (oi *optIndex) PopulateForeignKey(ctx context.Context) {
+	if !oi.desc.ForeignKey.IsSet() || oi.foreignKey != nil {
+		return
+	}
+
+	fk := oi.desc.ForeignKey
+
+	cat := oi.tab.cat
+	fkTable, err := cat.ResolveDataSourceByID(ctx, int64(fk.Table))
+
+	if err != nil {
+		return
+	}
+
+	table, ok := fkTable.(opt.Table)
+	if !ok {
+		panic("foreign key reference to a non-table data source")
+	}
+
+	found := false
+	var targetIndex opt.Index
+	for i, cnt := 0, table.IndexCount(); i < cnt; i++ {
+		index := table.Index(i)
+		if sqlbase.IndexID(index.InternalID()) == fk.Index {
+			targetIndex = index
+			found = true
+		}
+	}
+	if !found {
+		panic("foreign key index not found in referenced table")
+	}
+
+	oi.foreignKey = &optForeignKeyRef{
+		table:     table,
+		index:     targetIndex,
+		prefixLen: fk.SharedPrefixLen,
+	}
+}
+
+// Table is part of the opt.Index interface.
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
+}
+
+// optForeignKeyRef copies just the fields of a sqlbase.ForeignKeyReference that
+// the optimizer needs.
+type optForeignKeyRef struct {
+	table     opt.Table
+	index     opt.Index
+	prefixLen int32
+}
+
+var _ opt.ForeignKeyReference = &optForeignKeyRef{}
+
+// Table is part of the opt.ForeignKeyReference interface.
+func (of *optForeignKeyRef) Table() opt.Table {
+	return of.table
+}
+
+// Index is part of the opt.ForeignKeyReference interface.
+func (of *optForeignKeyRef) Index() opt.Index {
+	return of.index
+}
+
+// PrefixLen is part of the opt.ForeignKeyReference interface.
+func (of *optForeignKeyRef) PrefixLen() int32 {
+	return of.prefixLen
 }
 
 type optTableStat struct {

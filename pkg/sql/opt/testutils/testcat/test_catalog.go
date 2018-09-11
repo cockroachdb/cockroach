@@ -377,6 +377,9 @@ type Index struct {
 	Ordinal int
 	Columns []opt.IndexColumn
 
+	// Table is a back reference to the table this index is on.
+	table *Table
+
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the opt.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -388,6 +391,13 @@ type Index struct {
 
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
+
+	// foreignKey is a non-nil reference to a ForeignKeyRef struct
+	// if this index forms part of an outgoing foreign key reference.
+	foreignKey *ForeignKeyRef
+
+	// fkPopulated stores whether PopulateForeignKey() has been called.
+	fkPopulated bool
 }
 
 // IdxName is part of the opt.Index interface.
@@ -398,6 +408,11 @@ func (ti *Index) IdxName() string {
 // InternalID is part of the opt.Index interface.
 func (ti *Index) InternalID() uint64 {
 	return 1 + uint64(ti.Ordinal)
+}
+
+// Table is part of the opt.Index interface.
+func (ti *Index) Table() opt.Table {
+	return ti.table
 }
 
 // IsInverted is part of the opt.Index interface.
@@ -423,6 +438,42 @@ func (ti *Index) LaxKeyColumnCount() int {
 // Column is part of the opt.Index interface.
 func (ti *Index) Column(i int) opt.IndexColumn {
 	return ti.Columns[i]
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (ti *Index) ForeignKey() opt.ForeignKeyReference {
+	if ti.foreignKey != nil && ti.fkPopulated {
+		return ti.foreignKey
+	}
+	return nil
+}
+
+// PopulateForeignKey is part of the opt.Index interface.
+func (ti *Index) PopulateForeignKey(ctx context.Context) {
+	ti.fkPopulated = true
+}
+
+// ForeignKeyRef implements the opt.ForeignKeyReference interface for
+// testing purposes.
+type ForeignKeyRef struct {
+	table     opt.Table
+	index     opt.Index
+	prefixLen int32
+}
+
+// Table is part of the opt.ForeignKeyReference interface.
+func (tf *ForeignKeyRef) Table() opt.Table {
+	return tf.table
+}
+
+// Index is part of the opt.ForeignKeyReference interface.
+func (tf *ForeignKeyRef) Index() opt.Index {
+	return tf.index
+}
+
+// PrefixLen is part of the opt.ForeignKeyReference interface.
+func (tf *ForeignKeyRef) PrefixLen() int32 {
+	return tf.prefixLen
 }
 
 // Column implements the opt.Column interface for testing purposes.
