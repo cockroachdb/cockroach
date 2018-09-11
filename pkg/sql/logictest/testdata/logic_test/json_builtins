@@ -783,10 +783,8 @@ SELECT jsonb_set('{"a":1}', ARRAY[null, 'foo']::STRING[], '2')
 statement error path element at position 1 is null
 SELECT jsonb_set('{"a":1}', '{null,foo}'::STRING[], '2', true)
 
-query T
+statement error path element at position 2 is null
 SELECT jsonb_set('{"a":1}', '{foo,null}'::STRING[], '2', true)
-----
-{"a": 1}
 
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', true)
@@ -807,6 +805,63 @@ query T
 SELECT jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}'::STRING[], '[2,3,4]')
 ----
 [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"');
+----
+{"a": [0, "new_value", 1, 2]}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, {"a": ["a", "b", "d"]}, 4]', '{3, a, 2}'::STRING[], '"c"')
+----
+[0, 1, 2, {"a": ["a", "b", "c", "d"]}, 4]
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{b}'::STRING[], '"bar"')
+----
+{"a": "foo", "b": "bar"}
+
+query T
+SELECT jsonb_insert(NULL, '{a}', NULL, false)
+----
+NULL
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, 1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, "new_value", 2]}
+
+query T
+SELECT jsonb_insert('{"a": [0, 1, 2]}', '{a, -1}'::STRING[], '"new_value"', true)
+----
+{"a": [0, 1, 2, "new_value"]}
+
+query error pq: jsonb_insert\(\): cannot replace existing key
+SELECT jsonb_insert('{"a": "foo"}', '{a}'::STRING[], '"new_value"', false)
+
+query T
+SELECT jsonb_insert('{"a": "foo"}', '{a, 0}'::STRING[], '"new_value"', false)
+----
+{"a": "foo"}
+
+query T
+SELECT jsonb_insert('[0, 1, 2, 3]', '{3}'::STRING[], '10', true)
+----
+[0, 1, 2, 3, 10]
+
+statement error cannot set path in scalar
+SELECT jsonb_insert('1', '{a}'::STRING[], '10', true)
+
+query T
+SELECT jsonb_insert('1', NULL, '10')
+----
+NULL
+
+statement error path element at position 1 is null
+SELECT jsonb_insert('{"a": [0, 1, 2], "b": "hello", "c": "world"}', '{NULL, a, 0}'::STRING[], '"new_val"')
+
+statement error path element at position 2 is null
+SELECT jsonb_insert('{"a": [0, 1, 2], "b": "hello", "c": "world"}', '{a, NULL, 0}'::STRING[], '"new_val"')
 
 query T
 SELECT jsonb_strip_nulls(NULL)
