@@ -42,7 +42,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
@@ -67,7 +67,7 @@ SELECT operation, regexp_replace(message, 'wall_time:\d+', 'wall_time:...') as m
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"test"/3/1
@@ -107,7 +107,7 @@ SELECT operation,
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
@@ -231,7 +231,7 @@ SELECT operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 'wall_
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"test"/3/1
@@ -272,7 +272,7 @@ SELECT operation, regexp_replace(message, '(\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.)
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/53/"kv2"/3/1
@@ -316,7 +316,7 @@ SELECT operation,
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
@@ -375,7 +375,7 @@ SELECT operation,
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1
@@ -415,7 +415,7 @@ SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'mutatio
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec=%'
+  AND tag NOT LIKE '%scExec%'
   AND tag NOT LIKE '%IndexBackfiller%'
 ----
 dist sender send  querying next range at /Table/2/1/0/"t"/3/1

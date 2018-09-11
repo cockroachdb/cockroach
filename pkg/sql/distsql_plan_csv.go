@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -179,7 +180,7 @@ func LoadCSV(
 	oversample int64,
 	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
-	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
