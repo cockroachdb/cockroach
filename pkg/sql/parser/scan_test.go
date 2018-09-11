@@ -211,11 +211,11 @@ func TestScanNumber(t *testing.T) {
 func TestScanPlaceholder(t *testing.T) {
 	testData := []struct {
 		sql      string
-		expected int64
+		expected string
 	}{
-		{`$1`, 1},
-		{`$1a`, 1},
-		{`$123`, 123},
+		{`$1`, "1"},
+		{`$1a`, "1"},
+		{`$123`, "123"},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)
@@ -224,10 +224,8 @@ func TestScanPlaceholder(t *testing.T) {
 		if id != PLACEHOLDER {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, id)
 		}
-		if i, err := lval.union.numVal().AsInt64(); err != nil {
-			t.Errorf("%s: expected success, but found %v", d.sql, err)
-		} else if d.expected != i {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, i)
+		if d.expected != lval.str {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
 		}
 	}
 }
