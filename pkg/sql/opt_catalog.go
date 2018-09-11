@@ -148,11 +148,6 @@ func newOptView(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Table
 	return ov
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (ov *optView) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(ov.desc.ID)<<32 | opt.Fingerprint(ov.desc.Version)
-}
-
 // Name is part of the opt.View interface.
 func (ov *optView) Name() *tree.TableName {
 	return &ov.name
@@ -205,19 +200,14 @@ func newOptSequence(
 	return ot
 }
 
-// Fingerprint is part of the opt.DataSource interface.
-func (os *optSequence) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(os.desc.ID)<<32 | opt.Fingerprint(os.desc.Version)
-}
-
 // Name is part of the opt.DataSource interface.
-func (os *optSequence) Name() *tree.TableName {
-	return &os.name
+func (ot *optSequence) Name() *tree.TableName {
+	return &ot.name
 }
 
 // CheckPrivilege is part of the opt.DataSource interface.
-func (os *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return os.cat.resolver.CheckPrivilege(ctx, os.desc, priv)
+func (ot *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
 }
 
 // optTable is a wrapper around sqlbase.TableDescriptor that caches index
@@ -258,11 +248,6 @@ func newOptTable(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Tabl
 	ot.primary.init(ot, &desc.PrimaryIndex)
 
 	return ot
-}
-
-// Fingerprint is part of the opt.DataSource interface.
-func (ot *optTable) Fingerprint() opt.Fingerprint {
-	return opt.Fingerprint(ot.desc.ID)<<32 | opt.Fingerprint(ot.desc.Version)
 }
 
 // Name is part of the opt.DataSource interface.
@@ -511,6 +496,35 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() opt.Index {
+	if !oi.desc.ForeignKey.IsSet() {
+		return nil
+	}
+
+	indexID := oi.desc.ForeignKey.Index
+	index, err := oi.tab.cat.ResolveDataSourceByID(context.TODO(), int64(indexID))
+
+	if err != nil {
+		return nil
+	}
+
+	return index.(opt.Index)
+}
+
+// ForeignKeyPrefix is part of the opt.Index interface.
+func (oi *optIndex) ForeignKeyPrefix() int32 {
+	if !oi.desc.ForeignKey.IsSet() {
+		return 0
+	}
+
+	return oi.desc.ForeignKey.SharedPrefixLen
+}
+
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
 }
 
 type optTableStat struct {

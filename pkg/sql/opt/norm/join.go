@@ -279,6 +279,9 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 	md := c.f.Metadata()
 
 	var leftTab, rightTab opt.Table
+	var leftTabID, rightTabID opt.TableID
+	var remainingLeftCols opt.ColSet
+	leftRightColMap := make(map[opt.ColumnID]opt.ColumnID)
 	for _, condition := range c.mem.LookupList(filtersExpr.Conditions()) {
 		eqExpr := c.mem.NormExpr(condition).AsEq()
 		if eqExpr == nil {
@@ -312,8 +315,8 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 		}
 
 		if leftTab == nil {
-			leftTabID := md.ColumnTableID(leftCol)
-			rightTabID := md.ColumnTableID(rightCol)
+			leftTabID = md.ColumnTableID(leftCol)
+			rightTabID = md.ColumnTableID(rightCol)
 			if leftTabID == 0 || rightTabID == 0 {
 				// Condition #2: Columns don't come from base tables.
 				return false
@@ -335,12 +338,51 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 				return false
 			}
 		} else {
-			// TODO(andyk): Check foreign key case.
-			return false
+			// Column could be a potential foreign key match so save it
+			remainingLeftCols.Add(int(leftCol))
+			leftRightColMap[leftCol] = rightCol
 		}
 	}
 
-	return true
+	if remainingLeftCols.Empty() {
+		return true
+	}
+
+	// Condition #5: All remaining left columns correspond to a foreign key relation.
+	for i := 0; i < leftTab.IndexCount(); i++ {
+		index := leftTab.Index(i)
+		fk := index.ForeignKey()
+		fkPrefix := int(index.ForeignKeyPrefix())
+
+		// Check if this is a valid foreign key, and all remainingLeftCols are in
+		// the ForeignKeyReference.
+		if fk != nil && rightTab != nil && fkPrefix > 0 && fk.Table() == rightTab {
+			leftIndexCols := md.IndexColumns(leftTabID, index, fkPrefix)
+			if !remainingLeftCols.Difference(leftIndexCols).Empty() {
+				continue
+			}
+
+			// Loop through the first fkPrefix columns in both indices, and
+			// check if every leftCol is mapped to the corresponding foreign key rightCol
+			// in the filter conditions.
+			fkMatch := true
+			for j := 0; j < fkPrefix; j++ {
+				indexLeftCol := leftTabID.ColumnID(index.Column(j).Ordinal)
+				indexRightCol := rightTabID.ColumnID(fk.Column(j).Ordinal)
+
+				if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
+					fkMatch = false
+				}
+			}
+
+			// Condition #5 satisfied.
+			if fkMatch {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // deriveUnfilteredCols returns the subset of the given group's output columns
