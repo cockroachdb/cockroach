@@ -618,9 +618,6 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 //
 // Args:
 // queryDone: A cleanup function to be called when the execution is done.
-//
-// TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
-// queries, so this method can only be used with local SQL.
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context,
 	stmt Statement,
@@ -647,6 +644,15 @@ func (ex *connExecutor) execStmtInParallel(
 		cols = planColumns(planner.curPlan.plan)
 	}
 
+	distributePlan := false
+	// If we use the optimizer and we are in "local" mode, don't try to
+	// distribute.
+	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
+		planner.prepareForDistSQLSupportCheck()
+		distributePlan = shouldDistributePlan(
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
+	}
+
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
 	if !ok {
@@ -654,7 +660,7 @@ func (ex *connExecutor) execStmtInParallel(
 		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
 	}
 	queryMeta.phase = executing
-	queryMeta.isDistributed = false
+	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
@@ -676,7 +682,7 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
-		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+		err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 

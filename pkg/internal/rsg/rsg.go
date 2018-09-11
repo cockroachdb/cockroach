@@ -232,8 +232,13 @@ func (r *RSG) Float64() float64 {
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
 func (r *RSG) GenerateRandomArg(typ types.T) string {
-	if r.Intn(10) == 0 {
+	switch r.Intn(10) {
+	case 0:
 		return "NULL"
+	case 1:
+		return fmt.Sprintf("NULL::%s", typ)
+	case 2:
+		return fmt.Sprintf("(SELECT NULL)::%s", typ)
 	}
 	var v interface{}
 	switch types.UnwrapType(typ) {
