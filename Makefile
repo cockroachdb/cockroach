@@ -283,10 +283,12 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 # change.
 bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
-		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/client9/misspell/cmd/misspell \
 		./vendor/github.com/cockroachdb/crlfmt \
+		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
+		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
 		./vendor/github.com/cockroachdb/stress \
+		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/golang/lint/golint \
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
 		./vendor/github.com/jteeuwen/go-bindata/go-bindata \
@@ -295,7 +297,6 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/mibk/dupl \
 		./vendor/github.com/wadey/gocovmerge \
 		./vendor/golang.org/x/perf/cmd/benchstat \
-		./vendor/golang.org/x/tools/cmd/goimports \
 		./vendor/golang.org/x/tools/cmd/goyacc \
 		./vendor/golang.org/x/tools/cmd/stringer
 	touch $@

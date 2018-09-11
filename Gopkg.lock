@@ -310,6 +310,21 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:8e61a301e4c18b3fc0f3612b78fc0f3aed960bfa8d211e459e87062f9d1f6ce0"
+  name = "github.com/cockroachdb/gostdlib"
+  packages = [
+    "cmd/gofmt",
+    "go/format",
+    "go/printer",
+    "x/tools/cmd/goimports",
+    "x/tools/imports",
+    "x/tools/internal/fastwalk",
+  ]
+  pruneopts = "UT"
+  revision = "2ba3d6f3048c93f59bfdb444b285875a8753d567"
+
+[[projects]]
+  branch = "master"
   digest = "1:7fd6f030a3e71e62c6a04a74b7d1777995b39730cd5cc905aab2b726f3455863"
   name = "github.com/cockroachdb/returncheck"
   packages = ["."]
@@ -1460,10 +1475,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f220e3515f6c728e636a70daf8a063f9665edcc995a36d1a6de001977274a2b0"
+  digest = "1:38ab68af034d87c7ce7327e1a8e47c0f674ed2e8e7d72d17dd596f58a7ea6faa"
   name = "golang.org/x/tools"
   packages = [
-    "cmd/goimports",
     "cmd/goyacc",
     "cmd/stringer",
     "container/intsets",
@@ -1641,6 +1655,8 @@
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
+    "github.com/cockroachdb/gostdlib/cmd/gofmt",
+    "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
@@ -1752,7 +1768,6 @@
     "golang.org/x/text/language",
     "golang.org/x/text/unicode/norm",
     "golang.org/x/time/rate",
-    "golang.org/x/tools/cmd/goimports",
     "golang.org/x/tools/cmd/goyacc",
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",
