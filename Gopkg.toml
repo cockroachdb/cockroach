@@ -1,6 +1,8 @@
 required = [
  "github.com/client9/misspell/cmd/misspell",
  "github.com/cockroachdb/crlfmt",
+ "github.com/cockroachdb/gostdlib/cmd/gofmt",
+ "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
  "github.com/cockroachdb/stress",
  "github.com/golang/dep/cmd/dep",
  "github.com/golang/lint/golint",
@@ -11,7 +13,6 @@ required = [
  "github.com/mibk/dupl",
  "github.com/wadey/gocovmerge",
  "golang.org/x/perf/cmd/benchstat",
- "golang.org/x/tools/cmd/goimports",
  "golang.org/x/tools/cmd/goyacc",
  "golang.org/x/tools/cmd/stringer",
 ]
