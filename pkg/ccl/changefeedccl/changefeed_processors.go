@@ -100,7 +100,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	var err error
-	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts); err != nil {
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.SinkURI); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +112,7 @@ func newChangeAggregatorProcessor(
 	// CHANGEFEED statement. Therefore, we create a "canary" sink, which will be
 	// immediately closed, only to check for errors.
 	{
-		canarySink, err := getSink(ca.spec.Feed.SinkURI, ca.spec.Feed.Targets)
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +136,9 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
 	var err error
-	if ca.sink, err = getSink(ca.spec.Feed.SinkURI, ca.spec.Feed.Targets); err != nil {
+	if ca.sink, err = getSink(
+		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+	); err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -384,14 +386,14 @@ func newChangeFrontierProcessor(
 	}
 
 	var err error
-	if cf.encoder, err = getEncoder(spec.Feed.Opts); err != nil {
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.SinkURI); err != nil {
 		return nil, err
 	}
 
 	// See comment in newChangeAggregatorProcessor for details on the use of canary
 	// sinks.
 	{
-		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Targets)
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -416,7 +418,9 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
 	var err error
-	if cf.sink, err = getSink(cf.spec.Feed.SinkURI, cf.spec.Feed.Targets); err != nil {
+	if cf.sink, err = getSink(
+		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
+	); err != nil {
 		cf.MoveToDraining(err)
 		return ctx
 	}

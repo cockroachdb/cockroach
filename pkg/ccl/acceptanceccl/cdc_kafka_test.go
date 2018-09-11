@@ -218,12 +218,6 @@ func testErrors(ctx context.Context, t *testing.T, k *dockerKafka) {
 	); !testutils.IsError(err, `schema_topic is not yet supported`) {
 		t.Errorf(`expected "schema_topic is not yet supported" error got: %v`, err)
 	}
-	into = `kafka://localhost:` + k.kafkaPort + `?confluent_schema_registry=foo`
-	if _, err := sqlDBRaw.Exec(
-		`CREATE CHANGEFEED FOR foo INTO $1`, into,
-	); !testutils.IsError(err, `confluent_schema_registry is not yet supported`) {
-		t.Errorf(`expected "confluent_schema_registry is not yet supported" error got: %v`, err)
-	}
 }
 
 const (
