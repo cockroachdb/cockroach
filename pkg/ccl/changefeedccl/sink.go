@@ -48,7 +48,9 @@ type Sink interface {
 	Close() error
 }
 
-func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
+func getSink(
+	sinkURI string, opts map[string]string, targets jobspb.ChangefeedTargets,
+) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
@@ -96,7 +98,16 @@ func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
 
+	// Skip sink params used only by other parts of the system.
+	switch formatType(opts[optFormat]) {
+	case optFormatAvro:
+		q.Del(sinkParamConfluentSchemaRegistry)
+	default:
+		// No-op.
+	}
+
 	for k := range q {
+		s.Close()
 		return nil, errors.Errorf(`unknown sink query parameter: %s`, k)
 	}
 
