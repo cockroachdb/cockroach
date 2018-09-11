@@ -40,7 +40,7 @@ TABLE cd
 # --------------------------------------------------
 # DecorrelateJoin
 # --------------------------------------------------
-opt
+opt expect=DecorrelateJoin
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 semi-join (merge)
@@ -63,7 +63,7 @@ semi-join (merge)
       └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
-opt
+opt expect=DecorrelateJoin
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 anti-join (merge)
@@ -89,7 +89,7 @@ anti-join (merge)
 # --------------------------------------------------
 # TryDecorrelateSelect
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateSelect
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 ----
 semi-join-apply
@@ -109,7 +109,7 @@ semi-join-apply
  └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── column1 = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
-opt
+opt expect=TryDecorrelateSelect
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 ----
 anti-join-apply
@@ -132,7 +132,7 @@ anti-join-apply
 # Attempt to decorrelate query by pulling up outer select. But since limit query
 # cannot be decorrelated, push the outer select back down again (and make sure
 # potential rule cycle is detected and handled).
-opt
+opt expect=TryDecorrelateSelect
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT * FROM xy WHERE y=k LIMIT 1) WHERE y=10)
 ----
 semi-join-apply
@@ -172,7 +172,7 @@ semi-join-apply
  └── true [type=bool]
 
 # Same as previous, but using anti-join.
-opt
+opt expect=TryDecorrelateSelect
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (SELECT * FROM xy WHERE y=k LIMIT 1) WHERE y=10)
 ----
 anti-join-apply
@@ -212,36 +212,36 @@ anti-join-apply
  └── true [type=bool]
 
 # Decorrelate Select with reference to outer column and no limit.
-opt
-SELECT * FROM a WHERE (SELECT y FROM xy WHERE x=i) > 100
+opt expect=TryDecorrelateSelect
+SELECT * FROM a WHERE (SELECT x FROM xy WHERE x=i) > 100
 ----
 project
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── inner-join
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2-5), (6)-->(7), (2)==(6), (6)==(2)
-      ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-5)
+      ├── fd: (1)-->(2-5), (2)==(6), (6)==(2)
       ├── select
-      │    ├── columns: x:6(int!null) y:7(int!null)
-      │    ├── key: (6)
-      │    ├── fd: (6)-->(7)
-      │    ├── scan xy
-      │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    ├── key: (6)
-      │    │    └── fd: (6)-->(7)
-      │    └── filters [type=bool, outer=(7), constraints=(/7: [/101 - ]; tight)]
-      │         └── y > 100 [type=bool, outer=(7), constraints=(/7: [/101 - ]; tight)]
+      │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    └── filters [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+      │         └── i > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+      ├── scan xy
+      │    ├── columns: x:6(int!null)
+      │    ├── constraint: /6: [/101 - ]
+      │    └── key: (6)
       └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
            └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 # Decorrelate Select with LeftJoinApply.
-opt
+opt expect=TryDecorrelateSelect
 SELECT * FROM a WHERE (SELECT x FROM (SELECT * FROM xy LIMIT 1) WHERE k=x) > 100
 ----
 project
@@ -272,7 +272,7 @@ project
            └── k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
-opt
+opt expect=TryDecorrelateSelect
 SELECT *
 FROM a
 WHERE EXISTS(SELECT * FROM xy WHERE x=k AND EXISTS(SELECT * FROM uv WHERE u=10 AND s='foo'))
@@ -315,7 +315,7 @@ semi-join-apply
 # --------------------------------------------------
 
 # Left join caused by correlated ANY clause.
-opt
+opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -364,7 +364,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Left join caused by zero or one cardinality subquery.
-opt
+opt expect=TryDecorrelateProjectSelect
 SELECT * FROM a WHERE (SELECT y+1 AS r FROM (SELECT * FROM xy LIMIT 1) WHERE x=k) > 10
 ----
 project
@@ -394,7 +394,7 @@ project
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Any clause with constant.
-opt
+opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -443,7 +443,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Any clause with variable.
-opt
+opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT i=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -489,7 +489,7 @@ project
       └── CASE WHEN bool_or AND (i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,10)]
 
 # Any clause with more complex expression that must be cached.
-opt
+opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -548,7 +548,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProject
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateProject
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -735,7 +735,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProjectInnerJoin
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateProjectInnerJoin
 SELECT (SELECT sum(y + v) FROM xy, uv WHERE x=u AND x=k) FROM a
 ----
 project
@@ -795,7 +795,7 @@ project
 # TryDecorrelateInnerJoin
 # --------------------------------------------------
 # Semi-join as outer.
-opt
+opt expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -836,7 +836,7 @@ semi-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Anti-join as outer.
-opt
+opt expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE NOT EXISTS
 (
@@ -877,7 +877,7 @@ anti-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Right-join as outer.
-opt
+opt expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE
 (
@@ -1022,7 +1022,7 @@ semi-join-apply
 # --------------------------------------------------
 # TryDecorrelateInnerLeftJoin
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateInnerLeftJoin
 SELECT *
 FROM (VALUES (1), (2)) AS v(v1)
 WHERE EXISTS(
@@ -1077,7 +1077,7 @@ semi-join-apply
  │         └── x = v1 [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ])]
  └── true [type=bool]
 
-opt
+opt expect=TryDecorrelateInnerLeftJoin
 SELECT *
 FROM xy, uv
 WHERE (SELECT i FROM a WHERE k=x) IS DISTINCT FROM u
@@ -1115,7 +1115,7 @@ project
       └── filters [type=bool, outer=(3,6)]
            └── u IS DISTINCT FROM i [type=bool, outer=(3,6)]
 
-opt
+opt expect=TryDecorrelateInnerLeftJoin
 SELECT generate_series(1, (SELECT u FROM uv WHERE u=x))
 FROM xy
 ----
@@ -1151,7 +1151,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateGroupBy
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1217,7 +1217,7 @@ group-by
       └── const-agg [type=jsonb, outer=(5)]
            └── variable: j [type=jsonb, outer=(5)]
 
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1286,7 +1286,7 @@ group-by
            └── variable: j [type=jsonb, outer=(5)]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
@@ -1348,7 +1348,7 @@ project
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
 # IS DISTINCT FROM to retain left join.
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
@@ -1403,7 +1403,7 @@ project
            └── u IS DISTINCT FROM max [type=bool, outer=(3,10)]
 
 # Synthesize key when one is not present.
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM
 (
@@ -1451,7 +1451,7 @@ project
       └── const: 'foo' [type=string]
 
 # Decorrelate DistinctOn.
-opt
+opt expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1528,7 +1528,7 @@ group-by
 # --------------------------------------------------
 # TryDecorrelateScalarGroupBy
 # --------------------------------------------------
-opt
+opt expect=TryDecorrelateScalarGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1597,7 +1597,7 @@ group-by
            └── variable: j [type=jsonb, outer=(5)]
 
 # Synthesize key when one is not present.
-opt
+opt expect=TryDecorrelateScalarGroupBy
 SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT max(y) FROM xy WHERE x=i)
 ----
 project
@@ -1646,7 +1646,7 @@ project
 
 # With an aggregate that can't ignore nulls. xy.y = a.k rejects nulls, so
 # there's no canary column to be synthesized.
-norm
+opt expect=TryDecorrelateScalarGroupBy
 SELECT k, (SELECT array_agg(xy.y) FROM xy WHERE xy.y = a.k) FROM a
 ----
 project
@@ -1676,7 +1676,7 @@ project
       └── CASE WHEN y IS NOT NULL THEN array_agg END [type=int[], outer=(7,10)]
 
 # With multiple columns. Without LATERAL these tests are a bit verbose.
-norm
+norm expect=TryDecorrelateScalarGroupBy
 SELECT k, (SELECT (r, q) FROM (SELECT array_agg(xy.y) r, max(xy.y) q FROM xy WHERE xy.y = a.k)) FROM a
 ----
 project
@@ -1709,7 +1709,7 @@ project
 
 
 # With an aggregate that can't ignore nulls and when a non-nullable column must be synthesized.
-norm
+norm expect=TryDecorrelateScalarGroupBy
 SELECT k, ARRAY(SELECT y FROM xy WHERE xy.y = a.i OR xy.y IS NULL) FROM a
 ----
 project
@@ -1746,7 +1746,7 @@ project
       └── COALESCE(CASE WHEN canary IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(10,11)]
 
 # With an ordering.
-norm
+norm expect=TryDecorrelateScalarGroupBy
 SELECT i, ARRAY(SELECT y FROM xy WHERE xy.y = a.k OR xy.y = NULL ORDER BY y) FROM a
 ----
 project
@@ -1789,7 +1789,7 @@ project
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.
-opt
+opt expect=TryDecorrelateScalarGroupBy
 SELECT *
 FROM a
 WHERE
@@ -1872,7 +1872,7 @@ project
            └── max IS NULL [type=bool, outer=(11), constraints=(/11: [/NULL - /NULL]; tight)]
 
 # ScalarGroupBy with non-null ignoring and a non-nullable column.
-norm
+norm expect=TryDecorrelateScalarGroupBy
 SELECT *
 FROM cd
 WHERE
@@ -1925,7 +1925,7 @@ project
       └── filters [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
            └── array_agg = ARRAY[] [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
 
-norm
+norm expect=TryDecorrelateScalarGroupBy
 SELECT * FROM a WHERE 'foo'=(SELECT concat_agg(y::string) FROM xy WHERE x=k)
 ----
 project
@@ -1984,64 +1984,12 @@ project
       └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
            └── concat_agg = 'foo' [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
 
-# Don't decorrelate when the group by input is ordered.
-opt
-SELECT * FROM a WHERE 'foo'=(SELECT max(y::string) FROM (SELECT * FROM xy ORDER BY x+y) WHERE y=k)
-----
-project
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:10(string!null)
-      ├── key: (1)
-      ├── fd: ()-->(10), (1)-->(2-5)
-      ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) max:10(string)
-      │    ├── grouping columns: k:1(int!null)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,10)
-      │    ├── inner-join
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int!null) column9:9(string!null)
-      │    │    ├── fd: (1)-->(2-5), (7)-->(9), (1)==(7), (7)==(1)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-5)
-      │    │    ├── select
-      │    │    │    ├── columns: y:7(int) column9:9(string!null)
-      │    │    │    ├── fd: (7)-->(9)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(string) y:7(int)
-      │    │    │    │    ├── fd: (7)-->(9)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    └── columns: y:7(int)
-      │    │    │    │    └── projections [outer=(7)]
-      │    │    │    │         └── y::STRING [type=string, outer=(7)]
-      │    │    │    └── filters [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
-      │    │    │         └── column9 IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
-      │    │    └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
-      │    └── aggregations [outer=(2-5,9)]
-      │         ├── max [type=string, outer=(9)]
-      │         │    └── variable: column9 [type=string, outer=(9)]
-      │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int, outer=(2)]
-      │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float, outer=(3)]
-      │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: s [type=string, outer=(4)]
-      │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: j [type=jsonb, outer=(5)]
-      └── filters [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight), fd=()-->(10)]
-           └── max = 'foo' [type=bool, outer=(10), constraints=(/10: [/'foo' - /'foo']; tight)]
-
 # --------------------------------------------------
 # TryDecorrelateSemiJoin
 # --------------------------------------------------
 
 # Right input of SemiJoin is GroupBy.
-opt
+opt expect=TryDecorrelateSemiJoin
 SELECT *
 FROM xy
 WHERE EXISTS
@@ -2100,7 +2048,7 @@ group-by
            └── variable: y [type=int, outer=(2)]
 
 # Right input of SemiJoin is DistinctOn.
-opt
+opt expect=TryDecorrelateSemiJoin
 SELECT *
 FROM xy
 WHERE EXISTS
@@ -2145,7 +2093,7 @@ group-by
            └── variable: y [type=int, outer=(2)]
 
 # Right input of SemiJoin is Project.
-opt
+opt expect=TryDecorrelateSemiJoin
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -2193,7 +2141,7 @@ project
 # --------------------------------------------------
 
 # With inner join.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT *
 FROM a
 WHERE EXISTS
@@ -2234,7 +2182,7 @@ semi-join
       └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
 
 # With left join.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT (SELECT x FROM xy WHERE y=i LIMIT 1) FROM a
 ----
 project
@@ -2267,7 +2215,7 @@ project
       └── variable: xy.x [type=int, outer=(6)]
 
 # With multiple limited queries.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT * FROM a WHERE (SELECT x FROM xy WHERE y=i LIMIT 1)=k AND (SELECT u FROM uv WHERE v=i LIMIT 1)=k
 ----
 project
@@ -2344,7 +2292,7 @@ project
            └── k = u [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 
 # With nested limited queries.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT *
 FROM a
 WHERE
@@ -2426,7 +2374,7 @@ project
            └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # With inner join + ORDER BY.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT
 (
     SELECT v
@@ -2479,7 +2427,7 @@ project
       └── variable: uv.v [type=int, outer=(4)]
 
 # With left join + ORDER BY.
-opt
+opt expect=TryDecorrelateLimitOne
 SELECT * FROM xy WHERE (SELECT k FROM a WHERE i=y ORDER BY f,s LIMIT 1)=x
 ----
 project
@@ -2526,7 +2474,7 @@ project
 # --------------------------------------------------
 # HoistSelectExists
 # --------------------------------------------------
-opt
+opt expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 semi-join (merge)
@@ -2550,7 +2498,7 @@ semi-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that EXISTS is hoisted even when it is one of several conjuncts.
-opt
+opt expect=HoistSelectExists
 SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
 semi-join (merge)
@@ -2582,7 +2530,7 @@ semi-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Exists operators in same Select list.
-opt
+opt expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND EXISTS(SELECT * FROM xy WHERE x=i)
 ----
 semi-join
@@ -2611,7 +2559,7 @@ semi-join
       └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
-opt
+opt expect-not=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy)
 ----
 select
@@ -2630,7 +2578,7 @@ select
                 └── fd: (6)-->(7)
 
 # Hoist nested EXISTS.
-opt
+opt expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE EXISTS (SELECT * FROM uv WHERE x=u) AND x=k)
 ----
 semi-join (merge)
@@ -2671,7 +2619,7 @@ semi-join (merge)
 # --------------------------------------------------
 # HoistSelectNotExists
 # --------------------------------------------------
-opt
+opt expect=HoistSelectNotExists
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 anti-join (merge)
@@ -2695,7 +2643,7 @@ anti-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
-opt
+opt expect=HoistSelectNotExists
 SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
 anti-join (merge)
@@ -2727,7 +2675,7 @@ anti-join (merge)
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Multiple Not Exists operators in same Select list.
-opt
+opt expect=HoistSelectNotExists
 SELECT *
 FROM a
 WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
@@ -2758,7 +2706,7 @@ anti-join
       └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Don't hoist uncorrelated subqueries.
-opt
+opt expect-not=HoistSelectNotExists
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy)
 ----
 select
@@ -2780,7 +2728,7 @@ select
 # --------------------------------------------------
 # HoistSelectExists + HoistSelectNotExists
 # --------------------------------------------------
-opt
+opt expect=(HoistSelectExists,HoistSelectNotExists)
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
 semi-join
@@ -2811,7 +2759,7 @@ semi-join
 # --------------------------------------------------
 # HoistSelectSubquery
 # --------------------------------------------------
-opt
+opt expect=HoistSelectSubquery
 SELECT * FROM a WHERE (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
 project
@@ -2853,7 +2801,7 @@ project
            └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
-opt
+opt expect=HoistSelectSubquery
 SELECT *
 FROM a
 WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LIMIT 1) = 100
@@ -2933,7 +2881,7 @@ project
            └── i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple correlated subqueries.
-opt
+opt expect=HoistSelectSubquery
 SELECT * FROM a
 WHERE (SELECT count(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
@@ -3006,7 +2954,7 @@ project
 
 # Subquery nested below interesting scalar operators like cast, function, tuple,
 # or, etc).
-opt
+opt expect=HoistSelectSubquery
 SELECT * FROM a WHERE (0, length((SELECT count(*) FROM uv WHERE k=u)::string)) > (0, 1) OR i=1
 ----
 project
@@ -3055,7 +3003,7 @@ project
            └── ((0, length(count_rows::STRING)) > (0, 1)) OR (i = 1) [type=bool, outer=(2,8)]
 
 # Exists within a disjunction.
-opt
+opt expect=HoistSelectSubquery
 SELECT * FROM a WHERE i=1 OR EXISTS(SELECT * FROM xy WHERE y=i)
 ----
 project
@@ -3102,7 +3050,7 @@ project
            └── (i = 1) OR (true_agg IS NOT NULL) [type=bool, outer=(2,9)]
 
 # Any with IS NULL.
-opt
+opt expect=HoistSelectSubquery
 SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy WHERE x=k)) IS NULL
 ----
 project
@@ -3247,7 +3195,7 @@ project
 # --------------------------------------------------
 # HoistProjectSubquery
 # --------------------------------------------------
-opt
+opt expect=HoistProjectSubquery
 SELECT (SELECT x FROM xy WHERE x=k) FROM a
 ----
 project
@@ -3272,7 +3220,7 @@ project
       └── variable: xy.x [type=int, outer=(6)]
 
 # Mixed correlated and uncorrelated subqueries.
-opt
+opt expect=HoistProjectSubquery
 SELECT
     5 AS a,
     (SELECT x FROM xy WHERE x=k),
@@ -3336,7 +3284,7 @@ project
       └── variable: count_rows [type=int, outer=(16)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
-opt
+opt expect=HoistProjectSubquery
 SELECT max((SELECT y FROM xy WHERE y=i)) FROM a
 ----
 scalar-group-by
@@ -3372,7 +3320,7 @@ scalar-group-by
            └── variable: column8 [type=int, outer=(8)]
 
 # Exists in projection list.
-opt
+opt expect=HoistProjectSubquery
 SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 ----
 project
@@ -3407,7 +3355,7 @@ project
       └── true_agg IS NOT NULL [type=bool, outer=(10)]
 
 # Any in projection list.
-opt
+opt expect=HoistProjectSubquery
 SELECT 5 < ANY(SELECT y FROM xy WHERE y=i) AS r FROM a
 ----
 project
@@ -3446,7 +3394,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Correlated subquery nested in uncorrelated subquery.
-opt
+opt expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
 project
@@ -3496,30 +3444,28 @@ project
 # --------------------------------------------------
 # HoistJoinSubquery
 # --------------------------------------------------
-opt
-SELECT i, y FROM a INNER JOIN xy ON (SELECT k+1) = 0
+opt expect=HoistJoinSubquery
+SELECT i, y FROM a INNER JOIN xy ON (SELECT k+1) = x
 ----
 project
  ├── columns: i:2(int) y:7(int)
  └── inner-join
-      ├── columns: k:1(int!null) i:2(int) y:7(int)
-      ├── fd: (1)-->(2)
-      ├── scan xy
-      │    └── columns: y:7(int)
-      ├── select
+      ├── columns: k:1(int!null) i:2(int) x:6(int!null) y:7(int)
+      ├── key: (1,6)
+      ├── fd: (1)-->(2), (6)-->(7)
+      ├── scan a
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
-      │    └── filters [type=bool, outer=(1)]
-      │         └── (k + 1) = 0 [type=bool, outer=(1)]
-      └── true [type=bool]
+      │    └── fd: (1)-->(2)
+      ├── scan xy
+      │    ├── columns: x:6(int!null) y:7(int)
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7)
+      └── filters [type=bool, outer=(1,6), constraints=(/6: (/NULL - ])]
+           └── x = (k + 1) [type=bool, outer=(1,6), constraints=(/6: (/NULL - ])]
 
 # Right join + multiple subqueries.
-opt
+opt expect=HoistJoinSubquery
 SELECT y FROM a RIGHT JOIN xy ON (SELECT k+1) = (SELECT x+1)
 ----
 project
@@ -3544,7 +3490,7 @@ project
            └── ?column? = ?column? [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ])]
 
 # Hoist Exists in join filter disjunction.
-opt
+opt expect=HoistJoinSubquery
 SELECT s, x FROM a FULL JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 ----
 project
@@ -3594,65 +3540,70 @@ project
            └── exists OR (k = x) [type=bool, outer=(1,6,12)]
 
 # Any in Join filter disjunction.
-opt
-SELECT j, y FROM a INNER JOIN xy ON x IN (SELECT v FROM uv WHERE u=y) OR x IS NULL
+opt expect=HoistJoinSubquery
+SELECT j, y FROM a INNER JOIN xy ON x IN (SELECT v FROM uv WHERE u=y AND v=i) OR x IS NULL
 ----
 project
  ├── columns: j:5(jsonb) y:7(int)
- └── inner-join
+ └── select
       ├── columns: j:5(jsonb) x:6(int!null) y:7(int) case:12(bool)
-      ├── fd: (6)-->(7,12)
-      ├── scan a
-      │    └── columns: j:5(jsonb)
-      ├── select
-      │    ├── columns: x:6(int!null) y:7(int) case:12(bool)
-      │    ├── key: (6)
-      │    ├── fd: (6)-->(7,12)
-      │    ├── project
-      │    │    ├── columns: case:12(bool) x:6(int!null) y:7(int)
-      │    │    ├── key: (6)
-      │    │    ├── fd: (6)-->(7,12)
-      │    │    ├── group-by
-      │    │    │    ├── columns: x:6(int!null) y:7(int) bool_or:11(bool)
-      │    │    │    ├── grouping columns: x:6(int!null)
-      │    │    │    ├── key: (6)
-      │    │    │    ├── fd: (6)-->(7,11)
-      │    │    │    ├── left-join
-      │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int) notnull:10(bool)
-      │    │    │    │    ├── key: (6,8)
-      │    │    │    │    ├── fd: (6)-->(7), (8)-->(9), (9)~~>(10), (6,8)-->(10)
+      ├── fd: (6)-->(7)
+      ├── project
+      │    ├── columns: case:12(bool) j:5(jsonb) x:6(int!null) y:7(int)
+      │    ├── fd: (6)-->(7)
+      │    ├── group-by
+      │    │    ├── columns: k:1(int!null) j:5(jsonb) x:6(int!null) y:7(int) bool_or:11(bool)
+      │    │    ├── grouping columns: k:1(int!null) x:6(int!null)
+      │    │    ├── key: (1,6)
+      │    │    ├── fd: (1)-->(5), (6)-->(7), (1,6)-->(5,7,11)
+      │    │    ├── left-join
+      │    │    │    ├── columns: k:1(int!null) i:2(int) j:5(jsonb) x:6(int!null) y:7(int) u:8(int) v:9(int) notnull:10(bool)
+      │    │    │    ├── key: (1,6,8)
+      │    │    │    ├── fd: (1)-->(2,5), (6)-->(7), (8)-->(9), (9)~~>(10), (1,6,8)-->(10)
+      │    │    │    ├── inner-join
+      │    │    │    │    ├── columns: k:1(int!null) i:2(int) j:5(jsonb) x:6(int!null) y:7(int)
+      │    │    │    │    ├── key: (1,6)
+      │    │    │    │    ├── fd: (1)-->(2,5), (6)-->(7)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) j:5(jsonb)
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    └── fd: (1)-->(2,5)
       │    │    │    │    ├── scan xy
       │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    │    │    ├── key: (6)
       │    │    │    │    │    └── fd: (6)-->(7)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: notnull:10(bool) u:8(int!null) v:9(int)
+      │    │    │    │    └── true [type=bool]
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: notnull:10(bool) u:8(int!null) v:9(int)
+      │    │    │    │    ├── key: (8)
+      │    │    │    │    ├── fd: (8)-->(9), (9)-->(10)
+      │    │    │    │    ├── scan uv
+      │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
       │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    ├── fd: (8)-->(9), (9)-->(10)
-      │    │    │    │    │    ├── scan uv
-      │    │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
-      │    │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    │    └── projections [outer=(8,9)]
-      │    │    │    │    │         └── v IS NOT NULL [type=bool, outer=(9)]
-      │    │    │    │    └── filters [type=bool, outer=(6-9), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
-      │    │    │    │         ├── u = y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
-      │    │    │    │         └── (x = v) IS NOT false [type=bool, outer=(6,9)]
-      │    │    │    └── aggregations [outer=(7,10)]
-      │    │    │         ├── bool-or [type=bool, outer=(10)]
-      │    │    │         │    └── variable: notnull [type=bool, outer=(10)]
-      │    │    │         └── const-agg [type=int, outer=(7)]
-      │    │    │              └── variable: y [type=int, outer=(7)]
-      │    │    └── projections [outer=(6,7,11)]
-      │    │         └── CASE WHEN bool_or AND (x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(6,11)]
-      │    └── filters [type=bool, outer=(6,12)]
-      │         └── case OR (x IS NULL) [type=bool, outer=(6,12)]
-      └── true [type=bool]
+      │    │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    │    └── projections [outer=(8,9)]
+      │    │    │    │         └── v IS NOT NULL [type=bool, outer=(9)]
+      │    │    │    └── filters [type=bool, outer=(2,6-9), constraints=(/2: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(8), (8)==(7), (2)==(9), (9)==(2)]
+      │    │    │         ├── u = y [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │         ├── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
+      │    │    │         └── (x = v) IS NOT false [type=bool, outer=(6,9)]
+      │    │    └── aggregations [outer=(5,7,10)]
+      │    │         ├── bool-or [type=bool, outer=(10)]
+      │    │         │    └── variable: notnull [type=bool, outer=(10)]
+      │    │         ├── const-agg [type=int, outer=(7)]
+      │    │         │    └── variable: y [type=int, outer=(7)]
+      │    │         └── const-agg [type=jsonb, outer=(5)]
+      │    │              └── variable: j [type=jsonb, outer=(5)]
+      │    └── projections [outer=(5-7,11)]
+      │         └── CASE WHEN bool_or AND (x IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(6,11)]
+      └── filters [type=bool, outer=(6,12)]
+           └── case OR (x IS NULL) [type=bool, outer=(6,12)]
+
 
 # --------------------------------------------------
 # HoistValuesSubquery
 # --------------------------------------------------
-opt
+opt expect=HoistValuesSubquery
 SELECT (VALUES ((SELECT i+1 AS r)), (10), ((SELECT k+1 AS s))) FROM a
 ----
 project
@@ -3706,7 +3657,7 @@ project
       └── variable: column1 [type=int, outer=(8)]
 
 # Exists in values row.
-opt
+opt expect=HoistValuesSubquery
 SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
@@ -3775,7 +3726,7 @@ project
       └── variable: column1 [type=bool, outer=(8)]
 
 # Any in values row.
-opt
+opt expect=HoistValuesSubquery
 SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
@@ -3853,7 +3804,7 @@ project
 # --------------------------------------------------
 # HoistZipSubquery and TryDecorrelateZip
 # --------------------------------------------------
-opt
+opt expect=(HoistZipSubquery,TryDecorrelateZip)
 SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
 ----
 project
@@ -3890,7 +3841,7 @@ project
       └── true [type=bool]
 
 # Zip correlation within EXISTS.
-opt
+opt expect=HoistZipSubquery
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
 ----
 semi-join-apply
@@ -3935,7 +3886,7 @@ semi-join-apply
  └── true [type=bool]
 
 # Function contains multiple subqueries in arguments.
-opt
+opt expect=HoistZipSubquery
 SELECT generate_series((select y FROM xy WHERE x=k), (SELECT v FROM uv WHERE u=k)) FROM a
 ----
 project
@@ -3989,7 +3940,7 @@ project
       └── true [type=bool]
 
 # Multiple functions.
-opt
+opt expect=HoistZipSubquery
 SELECT
     generate_series(1, (SELECT v FROM uv WHERE u=k)),
     information_schema._pg_expandarray(ARRAY[(SELECT x FROM xy WHERE x=k)])
@@ -4047,7 +3998,7 @@ project
 # --------------------------------------------------
 # NormalizeAnyFilter
 # --------------------------------------------------
-opt
+opt expect=NormalizeAnyFilter
 SELECT * FROM a WHERE i IN (SELECT y FROM xy)
 ----
 semi-join
@@ -4064,7 +4015,7 @@ semi-join
       └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Any is one of several conjuncts.
-opt
+opt expect=NormalizeAnyFilter
 SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
 semi-join
@@ -4091,7 +4042,7 @@ semi-join
       └── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple ANY conjuncts.
-opt
+opt expect=NormalizeAnyFilter
 SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FROM xy)
 ----
 semi-join
@@ -4120,7 +4071,7 @@ semi-join
       └── i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
-opt
+opt expect=NormalizeAnyFilter
 SELECT * FROM a WHERE 5 IN (SELECT y FROM xy)
 ----
 select
@@ -4142,7 +4093,7 @@ select
                      └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
 
 # ANY in Join On condition.
-opt
+opt expect=NormalizeAnyFilter
 SELECT * FROM a INNER JOIN xy ON i IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
@@ -4171,7 +4122,7 @@ inner-join
 # --------------------------------------------------
 # NormalizeNotAnyFilter
 # --------------------------------------------------
-opt
+opt expect=NormalizeNotAnyFilter
 SELECT * FROM a WHERE i NOT IN (SELECT y FROM xy)
 ----
 anti-join
@@ -4189,7 +4140,7 @@ anti-join
 
 # NOT ANY is one of several conjuncts. Note that i > ALL(...) gets mapped to
 # NOT i <= ANY(...) by optbuilder.
-opt
+opt expect=NormalizeNotAnyFilter
 SELECT * FROM a WHERE k > 1 AND k < 5 AND i > ALL(SELECT y FROM xy)
 ----
 anti-join
@@ -4207,7 +4158,7 @@ anti-join
       └── (i <= y) IS NOT false [type=bool, outer=(2,7)]
 
 # Multiple NOT ANY conjuncts.
-opt
+opt expect=NormalizeNotAnyFilter
 SELECT * FROM a WHERE i < ALL(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
 anti-join
@@ -4236,7 +4187,7 @@ anti-join
       └── (i >= xy.y) IS NOT false [type=bool, outer=(2,7)]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
-opt
+opt expect=NormalizeNotAnyFilter
 SELECT * FROM a WHERE 5 NOT IN (SELECT y FROM xy)
 ----
 select
@@ -4258,7 +4209,7 @@ select
                           └── (y = 5) IS NOT false [type=bool, outer=(7)]
 
 # NOT ANY in Join On condition.
-opt
+opt expect=NormalizeNotAnyFilter
 SELECT * FROM a INNER JOIN xy ON i NOT IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
@@ -4287,7 +4238,7 @@ inner-join
 # --------------------------------------------------
 # NormalizeAnyFilter + NormalizeNotAnyFilter
 # --------------------------------------------------
-opt
+opt expect=(NormalizeAnyFilter,NormalizeNotAnyFilter)
 SELECT * FROM a WHERE i = ANY(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
 semi-join
