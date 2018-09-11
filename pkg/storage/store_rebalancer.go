@@ -138,7 +138,6 @@ func NewStoreRebalancer(
 	rq *replicateQueue,
 	replRankings *replicaRankings,
 ) *StoreRebalancer {
-	ambientCtx.AddLogTag("store-rebalancer", nil)
 	sr := &StoreRebalancer{
 		AmbientContext: ambientCtx,
 		metrics:        makeStoreRebalancerMetrics(),
@@ -146,6 +145,7 @@ func NewStoreRebalancer(
 		rq:             rq,
 		replRankings:   replRankings,
 	}
+	sr.AddLogTag("store-rebalancer", nil)
 	sr.rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
 	return sr
 }
