@@ -1040,10 +1040,12 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	origTimestamp := tc.mu.txn.OrigTimestamp
 	origTimestamp.Forward(tc.mu.txn.RefreshedTimestamp)
 	isTxnPushed := tc.mu.txn.Timestamp != origTimestamp
+	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
+		tc.mu.txn.OrigTimestampWasObserved
 	// We check OrigTimestampWasObserved here because, if that's set, refreshing
 	// of reads is not performed.
 	return tc.mu.txn.Isolation == enginepb.SERIALIZABLE &&
-		isTxnPushed && tc.mu.txn.OrigTimestampWasObserved
+		isTxnPushed && refreshAttemptNotPossible
 }
 
 // Epoch is part of the client.TxnSender interface.
