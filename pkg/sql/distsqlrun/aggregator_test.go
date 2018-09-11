@@ -17,8 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"math"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,6 +25,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+type aggTestSpec struct {
+	// The name of the aggregate function.
+	fname string
+	// The column indices of the arguments to the function.
+	colIdx   []uint32
+	distinct bool
+}
+
+func aggregations(aggTestSpecs []aggTestSpec) []AggregatorSpec_Aggregation {
+	agg := make([]AggregatorSpec_Aggregation, len(aggTestSpecs))
+	for i, spec := range aggTestSpecs {
+		agg[i].Func = AggregatorSpec_Func(AggregatorSpec_Func_value[spec.fname])
+		agg[i].ColIdx = spec.colIdx
+		agg[i].Distinct = spec.distinct
+	}
+	return agg
+}
 
 // TODO(irfansharif): Add tests to verify the following aggregation functions:
 //      AVG
@@ -40,7 +56,7 @@ import (
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [15]sqlbase.EncDatum{}
+	/*v := [15]sqlbase.EncDatum{}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i)))
@@ -50,9 +66,213 @@ func TestAggregator(t *testing.T) {
 	boolFalse := sqlbase.DatumToEncDatum(boolType, tree.DBoolFalse)
 	boolNULL := sqlbase.DatumToEncDatum(boolType, tree.DNull)
 
-	colPtr := func(idx uint32) *uint32 { return &idx }
+	colPtr := func(idx uint32) *uint32 { return &idx }*/
 
-	testCases := []struct {
+	testCases := []ProcessorTestCase{
+		{
+			// SELECT min(@0), max(@0), count(@0), avg(@0), sum(@0), stddev(@0),
+			// variance(@0) GROUP BY [] (no rows).
+			Name: "MinMaxCountAvgSumStddevGroupByNoneNoRows",
+			Input: ProcessorTestCaseRows{
+				Rows:  [][]interface{}{},
+				Types: makeIntCols(1),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{nil, nil, 0, nil, nil, nil, nil},
+				},
+				Types: []sqlbase.ColumnType{intType, intType, intType, decType, decType, decType, decType},
+			},
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				col0 := []uint32{0}
+				spec := AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "MIN", colIdx: col0},
+						{fname: "MAX", colIdx: col0},
+						{fname: "COUNT", colIdx: col0},
+						{fname: "AVG", colIdx: col0},
+						{fname: "SUM", colIdx: col0},
+						{fname: "STDDEV", colIdx: col0},
+						{fname: "VARIANCE", colIdx: col0},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+		{
+			// SELECT @2, count(@1), GROUP BY @2.
+			Name: "CountGroupByWithNull",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, nil},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{nil, 1},
+					{4, 1},
+					{2, 3},
+				},
+				Types: makeIntCols(2),
+			},
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				spec := AggregatorSpec{
+					GroupCols: []uint32{1},
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: []uint32{1}},
+						{fname: "COUNT", colIdx: []uint32{0}},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+		{
+			// SELECT @2, count(@1), GROUP BY @2.
+			Name: "CountGroupBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, 4},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{4, 2},
+					{2, 3},
+				},
+				Types: makeIntCols(2),
+			},
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				spec := AggregatorSpec{
+					GroupCols: []uint32{1},
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: []uint32{1}},
+						{fname: "COUNT", colIdx: []uint32{0}},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+		{
+			// SELECT @2, count(@1), GROUP BY @2 (ordering: @2+).
+			Name: "CountGroupByOrderBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{6, 2},
+					{7, 2},
+					{3, 4},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 3},
+					{4, 2},
+				},
+				Types: makeIntCols(2),
+			},
+			DisableSort: true,
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				spec := AggregatorSpec{
+					OrderedGroupCols: []uint32{1},
+					GroupCols:        []uint32{1},
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: []uint32{1}},
+						{fname: "COUNT", colIdx: []uint32{0}},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+		{
+			// SELECT @2, sum(@1), GROUP BY @2.
+			Name: "SumGroupBy",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{1, 2},
+					{3, 4},
+					{6, 2},
+					{7, 2},
+					{8, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 14},
+					{4, 11},
+				},
+				Types: []sqlbase.ColumnType{intType, decType},
+			},
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				spec := AggregatorSpec{
+					GroupCols: []uint32{1},
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "ANY_NOT_NULL", colIdx: []uint32{1}},
+						{fname: "SUM", colIdx: []uint32{0}},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+		{
+			Name: "MaxMinCountCountdistinctGroupByNone",
+			Input: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{2, 2},
+					{1, 4},
+					{3, 2},
+					{4, 2},
+					{5, 4},
+				},
+				Types: makeIntCols(2),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{5, 2, 5, 2},
+				},
+				Types: makeIntCols(4),
+			},
+			NewProcessor: func(
+				ctx *FlowCtx, id int32, inputs []RowSource, output RowReceiver,
+			) (Processor, error) {
+				spec := AggregatorSpec{
+					Aggregations: aggregations([]aggTestSpec{
+						{fname: "MAX", colIdx: []uint32{0}},
+						{fname: "MIN", colIdx: []uint32{1}},
+						{fname: "COUNT", colIdx: []uint32{1}},
+						{fname: "COUNT", colIdx: []uint32{1}, distinct: true},
+					}),
+				}
+				return newAggregator(ctx, id, &spec, inputs[0], &PostProcessSpec{}, output)
+			},
+		},
+	}
+
+	test := MakeProcessorTest(ProcessorTestConfig{})
+	test.RunTestCases(context.Background(), t, testCases)
+	/*testCases := []struct {
 		spec        AggregatorSpec
 		inputTypes  []sqlbase.ColumnType
 		input       sqlbase.EncDatumRows
@@ -408,52 +628,55 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 	}
+	*/
 
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			ags := c.spec
+	/*
+		for _, c := range testCases {
+			t.Run("", func(t *testing.T) {
+				ags := c.spec
 
-			in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
-			out := NewRowBuffer(c.outputTypes, nil /* rows */, RowBufferArgs{})
-			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
-			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{
-				Settings: st,
-				EvalCtx:  &evalCtx,
-			}
-
-			ag, err := newAggregator(&flowCtx, 0 /* processorID */, &ags, in, &PostProcessSpec{}, out)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			ag.Run(context.Background(), nil /* wg */)
-
-			var expected []string
-			for _, row := range c.expected {
-				expected = append(expected, row.String(c.outputTypes))
-			}
-			sort.Strings(expected)
-			expStr := strings.Join(expected, "")
-
-			var rets []string
-			for {
-				row := out.NextNoMeta(t)
-				if row == nil {
-					break
+				in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
+				out := NewRowBuffer(c.outputTypes, nil, RowBufferArgs{})
+				st := cluster.MakeTestingClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
+				defer evalCtx.Stop(context.Background())
+				flowCtx := FlowCtx{
+					Settings: st,
+					EvalCtx:  &evalCtx,
 				}
-				rets = append(rets, row.String(c.outputTypes))
-			}
-			sort.Strings(rets)
-			retStr := strings.Join(rets, "")
 
-			if expStr != retStr {
-				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-					expStr, retStr)
-			}
-		})
-	}
+				ag, err := newAggregator(&flowCtx, 0, &ags, in, &PostProcessSpec{}, out)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				ag.Run(context.Background(), nil)
+
+				var expected []string
+				for _, row := range c.expected {
+					expected = append(expected, row.String(c.outputTypes))
+				}
+				sort.Strings(expected)
+				expStr := strings.Join(expected, "")
+
+				var rets []string
+				for {
+					row := out.NextNoMeta(t)
+					if row == nil {
+						break
+					}
+					rets = append(rets, row.String(c.outputTypes))
+				}
+				sort.Strings(rets)
+				retStr := strings.Join(rets, "")
+
+				if expStr != retStr {
+					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+						expStr, retStr)
+				}
+			})
+		}
+	*/
 }
 
 func BenchmarkAggregation(b *testing.B) {
