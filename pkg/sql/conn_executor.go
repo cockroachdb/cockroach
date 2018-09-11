@@ -1816,7 +1816,7 @@ func (ex *connExecutor) resetPlanner(
 		p.statsCollector.Reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	}
 
-	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)
+	p.semaCtx.Reset(ex.sessionData.User == security.RootUser)
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil

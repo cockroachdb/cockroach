@@ -67,15 +67,8 @@ type PlaceholderInfo struct {
 	permitUnassigned bool
 }
 
-// MakePlaceholderInfo constructs an empty PlaceholderInfo.
-func MakePlaceholderInfo() PlaceholderInfo {
-	res := PlaceholderInfo{}
-	res.Clear()
-	return res
-}
-
-// Clear resets the placeholder info map.
-func (p *PlaceholderInfo) Clear() {
+// Init initializes the placeholder info map.
+func (p *PlaceholderInfo) Init() {
 	p.TypeHints = PlaceholderTypes{}
 	p.Types = PlaceholderTypes{}
 	p.Values = QueryArguments{}
@@ -88,7 +81,22 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo) {
 	if src != nil {
 		*p = *src
 	} else {
-		p.Clear()
+		p.Init()
+	}
+}
+
+// SetTypeHints resets the type and values in the map and replaces the
+// type hints map by an alias to src. If src is nil, the map is cleared.
+// The type hints map is aliased because the invoking code from
+// pgwire/v3.go for sql.Prepare needs to receive the updated type
+// assignments after Prepare completes.
+func (p *PlaceholderInfo) SetTypeHints(src PlaceholderTypes) {
+	if src != nil {
+		p.TypeHints = src
+		p.Types = PlaceholderTypes{}
+		p.Values = QueryArguments{}
+	} else {
+		p.Init()
 	}
 }
 
@@ -160,21 +168,6 @@ func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
 		p.TypeHints[name] = typ
 	}
 	return nil
-}
-
-// SetTypeHints resets the type and values in the map and replaces the
-// type hints map by an alias to src. If src is nil, the map is cleared.
-// The type hints map is aliased because the invoking code from
-// pgwire/v3.go for sql.Prepare needs to receive the updated type
-// assignments after Prepare completes.
-func (p *PlaceholderInfo) SetTypeHints(src PlaceholderTypes) {
-	if src != nil {
-		p.TypeHints = src
-		p.Types = PlaceholderTypes{}
-		p.Values = QueryArguments{}
-	} else {
-		p.Clear()
-	}
 }
 
 // IsUnresolvedPlaceholder returns whether expr is an unresolved placeholder. In

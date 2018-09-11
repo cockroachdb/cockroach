@@ -182,10 +182,16 @@ func (sp *ScalarProperties) Clear() {
 // for "lightweight" type checking such as the one performed for default
 // expressions.
 func MakeSemaContext(privileged bool) SemaContext {
-	return SemaContext{
-		Placeholders: MakePlaceholderInfo(),
-		privileged:   privileged,
-	}
+	var sc SemaContext
+	sc.Reset(privileged)
+	sc.Placeholders.Init()
+	return sc
+}
+
+// Reset resets the SemaContext. PlaceholdersInfo will not be initialized
+// after Reset is called.
+func (sc *SemaContext) Reset(privileged bool) {
+	*sc = SemaContext{privileged: privileged}
 }
 
 // isUnresolvedPlaceholder provides a nil-safe method to determine whether expr is an
