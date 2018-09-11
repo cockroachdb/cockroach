@@ -21,12 +21,15 @@ import (
 
 	gosql "database/sql"
 
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func setDb(t *testing.T, db *gosql.DB, name string) {
@@ -48,8 +51,9 @@ func TestCreateRandomSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	for i := 0; i < 100; i++ {
-		tab := sqlbase.RandCreateTable(i)
+		tab := sqlbase.RandCreateTable(rng, i)
 		setDb(t, db, "test")
 		_, err := db.Exec(tab.String())
 		if err != nil {
