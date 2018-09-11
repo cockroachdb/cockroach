@@ -89,7 +89,18 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
     : ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
-      title: "Node",
+      title: (
+        <React.Fragment>
+          Node
+          <div className="numeric-stats-table__tooltip">
+            <ToolTipWrapper text="Statement statistics grouped by which node received the request for the statement.">
+              <div className="numeric-stats-table__tooltip-hover-area">
+                <div className="numeric-stats-table__info-icon">i</div>
+              </div>
+            </ToolTipWrapper>
+          </div>
+        </React.Fragment>
+      ),
       cell: (stmt) => <NodeLink nodeId={ stmt.label } nodeNames={ nodeNames } />,
       sort: (stmt) => stmt.label,
     },
