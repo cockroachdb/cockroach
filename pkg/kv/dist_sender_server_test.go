@@ -2067,14 +2067,83 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				// Scan sufficient times to exceed the limit on refresh spans. This
 				// will propagate a failure because our timestamp has been pushed.
 				keybase := strings.Repeat("a", 1024)
-				for i := 0; ; i++ {
+				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				scanToExceed := int(maxRefreshBytes) / len(keybase)
+				for i := 0; i < scanToExceed; i++ {
 					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
 					if _, err := txn.Scan(ctx, key, key.Next(), 0); err != nil {
 						return err
 					}
 				}
+				return nil
 			},
 			expFailure: "transaction is too large to complete; try splitting into pieces",
+		},
+		{
+			// Even if accounting for the refresh spans would have exhausted the
+			// limit for tracking refresh spans and our transaction's timestamp
+			// has been pushed, if we successfully commit then we won't hit an
+			// error.
+			name: "forwarded timestamp with too many refreshes in batch commit",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// Advance timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				// Make the final batch large enough such that if we accounted
+				// for all of its spans then we would exceed the limit on
+				// refresh spans. This is not an issue because we never need to
+				// account for them. The txn has no refresh spans, so it can
+				// forward its timestamp while committing.
+				keybase := strings.Repeat("a", 1024)
+				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				scanToExceed := int(maxRefreshBytes) / len(keybase)
+				b := txn.NewBatch()
+				for i := 0; i < scanToExceed; i++ {
+					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
+					b.Scan(key, key.Next())
+				}
+				return txn.CommitInBatch(ctx, b)
+			},
+			txnCoordRetry: false,
+		},
+		{
+			// Even if accounting for the refresh spans would have exhausted the
+			// limit for tracking refresh spans and our transaction's timestamp
+			// has been pushed, if we successfully commit then we won't hit an
+			// error. This is the case even if the final batch itself causes a
+			// refresh.
+			name: "forwarded timestamp with too many refreshes in batch commit triggering refresh",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// Advance timestamp. This also creates a refresh span which
+				// will prevent the txn from committing without a refresh.
+				if err := txn.InitPut(ctx, "a", "put", false); err != nil {
+					return err
+				}
+				// Make the final batch large enough such that if we accounted
+				// for all of its spans then we would exceed the limit on
+				// refresh spans. This is not an issue because we never need to
+				// account for them until the final batch, at which time we
+				// perform a span refresh and successfully commit.
+				keybase := strings.Repeat("a", 1024)
+				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				scanToExceed := int(maxRefreshBytes) / len(keybase)
+				b := txn.NewBatch()
+				for i := 0; i < scanToExceed; i++ {
+					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
+					b.Scan(key, key.Next())
+				}
+				return txn.CommitInBatch(ctx, b)
+			},
+			txnCoordRetry: true,
 		},
 		{
 			name: "write too old with put",
