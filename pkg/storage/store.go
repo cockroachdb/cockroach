@@ -942,7 +942,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.intentResolver = newIntentResolver(s, cfg.IntentResolverTaskLimit)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
-	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(s.metrics, s, storeSchedulerConcurrency)
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
@@ -1024,9 +1024,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
-
-		s.storeRebalancer = NewStoreRebalancer(
-			s.cfg.AmbientCtx, cfg.Settings, s.replicateQueue, s.replRankings)
 	}
 
 	if cfg.TestingKnobs.DisableGCQueue {
@@ -1389,6 +1386,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
+	// Add the store ID to the scanner's AmbientContext before starting it, since
+	// the AmbientContext provided during construction did not include it.
+	// Note that this is just a hacky way of getting around that without
+	// refactoring the scanner/queue construction/start logic more broadly, and
+	// depends on the scanner not having added its own log tag.
+	if s.scanner != nil {
+		s.scanner.AmbientContext.AddLogTag("s", s.StoreID())
+	}
+
 	// If the nodeID is 0, it has not be assigned yet.
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
 		return errors.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
@@ -1557,7 +1563,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)
 
-	if s.storeRebalancer != nil {
+	if s.replicateQueue != nil {
+		s.storeRebalancer = NewStoreRebalancer(
+			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
