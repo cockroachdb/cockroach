@@ -215,6 +215,9 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
+			if meta.Err != nil {
+				d.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -282,6 +285,9 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
+			if meta.Err != nil {
+				d.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
