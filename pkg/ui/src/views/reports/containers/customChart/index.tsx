@@ -162,7 +162,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
                     if (m.perNode) {
                       return _.map(nodesSummary.nodeIDs, (nodeID) => (
                         <Metric
-                          key={"${i}${nodeID}"}
+                          key={`${index}${i}${nodeID}`}
                           title={`${nodeID}: ${m.metric} (${i})`}
                           name={m.metric}
                           aggregator={m.aggregator}
