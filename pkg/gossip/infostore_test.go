@@ -187,6 +187,60 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 }
 
+func TestCombineInfosRatchetMonotonic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, local := range []bool{true, false} {
+		t.Run(fmt.Sprintf("local=%t", local), func(t *testing.T) {
+			is, stopper := newTestInfoStore()
+			defer stopper.Stop(context.Background())
+
+			// Generate an info with a timestamp in the future.
+			info := &Info{
+				NodeID:    is.nodeID.Get(),
+				TTLStamp:  math.MaxInt64,
+				OrigStamp: monotonicUnixNano() + int64(time.Hour),
+			}
+			if !local {
+				info.NodeID++
+			}
+
+			// Reset the monotonic clock.
+			monoTime.Lock()
+			monoTime.last = 0
+			monoTime.Unlock()
+
+			fresh, err := is.combine(map[string]*Info{"hello": info}, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fresh != 1 {
+				t.Fatalf("expected no infos to be added, but found %d", fresh)
+			}
+
+			// Verify the monotonic clock was ratcheted if the info was generated
+			// locally.
+			monoTime.Lock()
+			last := monoTime.last
+			monoTime.Unlock()
+			var expectedLast int64
+			if local {
+				expectedLast = info.OrigStamp
+				if now := monotonicUnixNano(); now <= last {
+					t.Fatalf("expected mono-time to increase: %d <= %d", now, last)
+				}
+			}
+			if expectedLast != last {
+				t.Fatalf("expected mono-time %d, but found %d", expectedLast, last)
+			}
+
+			if i := is.getInfo("hello"); i == nil {
+				t.Fatalf("expected to find info\n%v", is.Infos)
+			}
+		})
+	}
+}
+
 // Helper method creates an infostore with 10 infos.
 func createTestInfoStore(t *testing.T) *infoStore {
 	is, stopper := newTestInfoStore()
@@ -278,6 +332,8 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	}
 
 	// Add info from each address, with hop count equal to index+1.
+	var expectedNodeID roachpb.NodeID
+	var expectedHops uint32
 	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(nil, time.Second)
 		inf.Hops = uint32(i + 1)
@@ -285,12 +341,16 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		if err := is.addInfo(MakeNodeIDKey(inf.NodeID), inf); err != nil {
 			t.Fatal(err)
 		}
-		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
-		if nodeID != inf.NodeID {
-			t.Errorf("%d: expected node %d; got %d", i, inf.NodeID, nodeID)
+		if inf.NodeID != 1 {
+			expectedNodeID = inf.NodeID
+			expectedHops = inf.Hops
 		}
-		if hops != inf.Hops {
-			t.Errorf("%d: expected node %d; got %d", i, inf.Hops, hops)
+		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
+		if expectedNodeID != nodeID {
+			t.Errorf("%d: expected node %d; got %d", i, expectedNodeID, nodeID)
+		}
+		if expectedHops != hops {
+			t.Errorf("%d: expected hops %d; got %d", i, expectedHops, hops)
 		}
 	}
 
@@ -299,15 +359,15 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	// it's the furthest node away.
 	filteredNode := nodes[len(nodes)-1]
 	expectedNode := nodes[len(nodes)-2]
-	expectedHops := expectedNode
+	expectedHops = uint32(expectedNode)
 	nodeID, hops := is.mostDistant(func(nodeID roachpb.NodeID) bool {
 		return nodeID == filteredNode
 	})
 	if nodeID != expectedNode {
 		t.Errorf("expected node %d; got %d", expectedNode, nodeID)
 	}
-	if hops != uint32(expectedHops) {
-		t.Errorf("expected node %d; got %d", expectedHops, hops)
+	if hops != expectedHops {
+		t.Errorf("expected hops %d; got %d", expectedHops, hops)
 	}
 }
 
