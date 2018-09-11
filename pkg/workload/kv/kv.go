@@ -50,6 +50,7 @@ type kv struct {
 	writeSeq, seed                       int64
 	sequential                           bool
 	splits                               int
+	useOpt                               bool
 }
 
 func init() {
@@ -76,6 +77,7 @@ var kvMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -136,6 +138,13 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
+
+	if !w.useOpt {
+		_, err := db.Exec("SET optimizer=off")
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+	}
 
 	var buf bytes.Buffer
 	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
