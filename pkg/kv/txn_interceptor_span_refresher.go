@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -131,23 +130,6 @@ func (sr *txnSpanRefresher) SendLocked(
 		sr.refreshWrites = nil
 		sr.refreshInvalid = true
 		sr.refreshSpansBytes = 0
-	}
-	// If the transaction will retry and the refresh spans are
-	// exhausted, return a non-retryable error indicating that the
-	// transaction is too large and should potentially be split.
-	// We do this to avoid endlessly retrying a txn likely refail.
-	//
-	// TODO(nvanbenschoten): this is duplicating some of the logic
-	// in IsSerializablePushAndRefreshNotPossible. We plan to remove
-	// this all shortly (#30074), but if that changes, we should clean
-	// this overlap up.
-	ts := br.Txn.OrigTimestamp
-	ts.Forward(br.Txn.RefreshedTimestamp)
-	pushed := ts != br.Txn.Timestamp
-	if pushed && sr.refreshInvalid {
-		return nil, roachpb.NewErrorWithTxn(
-			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
-		)
 	}
 	return br, nil
 }
