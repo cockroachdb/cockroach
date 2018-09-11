@@ -145,57 +145,53 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
 
     if (_.isEmpty(metrics)) {
       return (
-        <div>
-          <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
-        </div>
+        <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
       );
     }
 
     return (
-      <React.Fragment key={ index }>
-        <MetricsDataProvider id={`debug-custom-chart.${index}`}>
-          <LineGraph>
-            <Axis units={units}>
-              {
-                metrics.map((m, i) => {
-                  if (m.metric !== "") {
-                    if (m.perNode) {
-                      return _.map(nodesSummary.nodeIDs, (nodeID) => (
-                        <Metric
-                          key={`${index}${i}${nodeID}`}
-                          title={`${nodeID}: ${m.metric} (${i})`}
-                          name={m.metric}
-                          aggregator={m.aggregator}
-                          downsampler={m.downsampler}
-                          derivative={m.derivative}
-                          sources={
-                            isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                            ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n => n.toString())
-                            : [nodeID]
-                          }
-                        />
-                      ));
-                    } else {
-                      return (
-                        <Metric
-                          key={i}
-                          title={`${m.metric} (${i}) `}
-                          name={m.metric}
-                          aggregator={m.aggregator}
-                          downsampler={m.downsampler}
-                          derivative={m.derivative}
-                          sources={m.source === "" ? [] : [m.source]}
-                        />
-                      );
-                    }
+      <MetricsDataProvider id={`debug-custom-chart.${index}`} key={ index }>
+        <LineGraph>
+          <Axis units={units}>
+            {
+              metrics.map((m, i) => {
+                if (m.metric !== "") {
+                  if (m.perNode) {
+                    return _.map(nodesSummary.nodeIDs, (nodeID) => (
+                      <Metric
+                        key={`${index}${i}${nodeID}`}
+                        title={`${nodeID}: ${m.metric} (${i})`}
+                        name={m.metric}
+                        aggregator={m.aggregator}
+                        downsampler={m.downsampler}
+                        derivative={m.derivative}
+                        sources={
+                          isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
+                          ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n => n.toString())
+                          : [nodeID]
+                        }
+                      />
+                    ));
+                  } else {
+                    return (
+                      <Metric
+                        key={i}
+                        title={`${m.metric} (${i}) `}
+                        name={m.metric}
+                        aggregator={m.aggregator}
+                        downsampler={m.downsampler}
+                        derivative={m.derivative}
+                        sources={m.source === "" ? [] : [m.source]}
+                      />
+                    );
                   }
-                  return "";
-                })
-              }
-            </Axis>
-          </LineGraph>
-        </MetricsDataProvider>
-      </React.Fragment>
+                }
+                return "";
+              })
+            }
+          </Axis>
+        </LineGraph>
+      </MetricsDataProvider>
     );
   }
 
@@ -221,7 +217,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const charts = this.currentCharts();
 
     return (
-      <div>
+      <React.Fragment>
         {
           charts.map((chart, i) => (
             <CustomChartTable
@@ -234,14 +230,13 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
             />
           ))
         }
-        <button className="chart-edit-button chart-edit-button--add" onClick={this.addChart}>Add Chart</button>
-      </div>
+      </React.Fragment>
     );
   }
 
   render() {
     return (
-      <div>
+      <React.Fragment>
         <Helmet>
           <title>Custom Chart | Debug</title>
         </Helmet>
@@ -250,6 +245,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
           <PageConfigItem>
             <TimeScaleDropdown />
           </PageConfigItem>
+          <button className="chart-edit-button chart-edit-button--add" onClick={this.addChart}>Add Chart</button>
         </PageConfig>
         <section className="section">
           <div className="l-columns">
@@ -263,7 +259,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
         <section className="section">
           { this.renderChartTables() }
         </section>
-      </div>
+      </React.Fragment>
     );
   }
 }

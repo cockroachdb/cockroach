@@ -172,7 +172,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
         <td className="metric-table__cell">
           <input type="checkbox" checked={perNode} onChange={this.changePerNode} />
         </td>
-        <td>
+        <td className="metric-table__cell">
           <button className="metric-edit-button" onClick={this.deleteOption}>Remove Metric</button>
         </td>
       </tr>
