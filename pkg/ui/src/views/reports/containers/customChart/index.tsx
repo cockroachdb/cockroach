@@ -150,14 +150,14 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const { nodesSummary } = this.props;
     if (_.isEmpty(metrics)) {
       return (
-        <section className="section">
+        <div>
           <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
-        </section>
+        </div>
       );
     }
 
     return (
-      <section className="section">
+      <div>
         <MetricsDataProvider id="debug-custom-chart">
           <LineGraph>
             <Axis units={units}>
@@ -200,7 +200,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
             </Axis>
           </LineGraph>
         </MetricsDataProvider>
-      </section>
+      </div>
     );
   }
 
@@ -242,10 +242,10 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     }
 
     return (
-      <section className="section">
+      <div>
         { table }
         <button className="metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
-      </section>
+      </div>
     );
   }
 
@@ -270,8 +270,18 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
             />
           </PageConfigItem>
         </PageConfig>
-        { this.renderChart() }
-        { this.renderMetricsTable() }
+        <section className="section">
+          <div className="l-columns">
+            <div className="chart-group l-columns__left">
+              { this.renderChart() }
+            </div>
+            <div className="l-columns__right">
+            </div>
+          </div>
+        </section>
+        <section className="section">
+          { this.renderMetricsTable() }
+        </section>
       </div>
     );
   }
