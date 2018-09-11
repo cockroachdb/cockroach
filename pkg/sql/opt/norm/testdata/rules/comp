@@ -16,7 +16,7 @@ TABLE a
 
 # Put variables on both sides of comparison operator to avoid matching constant
 # patterns.
-opt
+opt expect=CommuteVarInequality
 SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
@@ -37,7 +37,7 @@ select
 # --------------------------------------------------
 # CommuteConstInequality
 # --------------------------------------------------
-opt
+opt expect=CommuteConstInequality
 SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
@@ -55,7 +55,7 @@ select
       └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
 # Impure function should not be considered constant.
-opt
+opt expect-not=CommuteConstInequality
 SELECT * FROM a WHERE random()::int>a.i+a.i
 ----
 select
@@ -73,7 +73,7 @@ select
 # --------------------------------------------------
 # NormalizeCmpPlusConst
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpPlusConst
 SELECT *
 FROM a
 WHERE
@@ -101,7 +101,7 @@ select
       └── i::INTERVAL >= '1h' [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
-opt
+opt expect-not=NormalizeCmpPlusConst
 SELECT * FROM a WHERE s::date + '02:00:00'::time = '2000-01-01T02:00:00'::timestamp
 ----
 select
@@ -118,7 +118,7 @@ select
 # --------------------------------------------------
 # NormalizeCmpMinusConst
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpMinusConst
 SELECT *
 FROM a
 WHERE
@@ -146,7 +146,7 @@ select
       └── (f + i::FLOAT8) >= 110.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Plus overload is not defined.
-opt
+opt expect-not=NormalizeCmpMinusConst
 SELECT * FROM a WHERE s::json - 1 = '[1]'::json
 ----
 select
@@ -163,7 +163,7 @@ select
 # --------------------------------------------------
 # NormalizeCmpConstMinus
 # --------------------------------------------------
-opt
+opt expect=NormalizeCmpConstMinus
 SELECT *
 FROM a
 WHERE
@@ -191,7 +191,7 @@ select
       └── (f + i::FLOAT8) <= -90.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
-opt
+opt expect-not=NormalizeCmpConstMinus
 SELECT * FROM a WHERE '[1, 2]'::json - i = '[1]'
 ----
 select
@@ -208,7 +208,7 @@ select
 # --------------------------------------------------
 # NormalizeTupleEquality
 # --------------------------------------------------
-opt
+opt expect=NormalizeTupleEquality
 SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 ----
 select
@@ -225,11 +225,11 @@ select
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
-# NormalizeTupleEquality, FlattenAnd
+# NormalizeTupleEquality, SimplifyAnd
 # --------------------------------------------------
 
 # Nested tuples.
-opt
+opt expect=(NormalizeTupleEquality,SimplifyAnd)
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
@@ -252,7 +252,7 @@ select
 # --------------------------------------------------
 
 # Use null::type to circumvent type checker constant folding.
-opt
+opt expect=(FoldNullComparisonLeft,FoldNullComparisonRight)
 SELECT *
 FROM a
 WHERE
@@ -286,7 +286,7 @@ values
 # --------------------------------------------------
 # FoldIsNull
 # --------------------------------------------------
-opt
+opt expect=FoldIsNull
 SELECT NULL IS NULL AS r
 ----
 project
@@ -304,7 +304,7 @@ project
 # --------------------------------------------------
 # FoldNonNullIsNull
 # --------------------------------------------------
-opt
+opt expect=FoldNonNullIsNull
 SELECT 1 IS NULL AS r
 ----
 project
@@ -322,7 +322,7 @@ project
 # --------------------------------------------------
 # FoldIsNotNull
 # --------------------------------------------------
-opt
+opt expect=FoldIsNotNull
 SELECT NULL IS NOT NULL AS r, NULL IS NOT TRUE AS s
 ----
 project
@@ -344,7 +344,7 @@ project
 
 # We could (but do not currently) infer that k IS NOT NULL is always True given
 # that k is declared NOT NULL.
-opt
+opt expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
@@ -362,7 +362,7 @@ project
 # --------------------------------------------------
 # CommuteNullIs
 # --------------------------------------------------
-opt
+opt expect=CommuteNullIs
 SELECT NULL IS NOT TRUE AS r, NULL IS TRUE AS s
 ----
 project

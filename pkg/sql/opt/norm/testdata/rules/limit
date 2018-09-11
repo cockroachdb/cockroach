@@ -22,7 +22,7 @@ TABLE b
 # --------------------------------------------------
 # EliminateLimit
 # --------------------------------------------------
-opt
+opt expect=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 99) LIMIT 100
 ----
 scan a
@@ -31,7 +31,7 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
-opt
+opt expect=EliminateLimit
 SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
 ----
 scan a
@@ -95,7 +95,7 @@ limit
 # --------------------------------------------------
 # PushLimitIntoProject
 # --------------------------------------------------
-opt
+opt expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a LIMIT 5
 ----
 project
@@ -111,7 +111,7 @@ project
  └── projections [outer=(1,3)]
       └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k LIMIT 5
 ----
 project
@@ -131,7 +131,7 @@ project
 
 # Don't push the limit through project when the ordering is on a
 # synthesized column.
-opt
+opt expect-not=PushLimitIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY r LIMIT 5 
 ----
 limit
@@ -220,7 +220,7 @@ limit
 # --------------------------------------------------
 # PushOffsetIntoProject
 # --------------------------------------------------
-opt
+opt expect=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a OFFSET 5
 ----
 project
@@ -239,7 +239,7 @@ project
  └── projections [outer=(1,3)]
       └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY k OFFSET 5
 ----
 project
@@ -264,7 +264,7 @@ project
 
 # Don't push the offset through project when the ordering is on a
 # synthesized column.
-opt
+opt expect-not=PushOffsetIntoProject
 SELECT k, f*2.0 AS r FROM a ORDER BY r OFFSET 5
 ----
 offset
@@ -319,7 +319,7 @@ project
 # --------------------------------------------------
 # PushLimitIntoProject + PushOffsetIntoProject
 # --------------------------------------------------
-opt
+opt expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT k, f*2.0 AS r FROM a OFFSET 5 LIMIT 10
 ----
 project
@@ -345,7 +345,7 @@ project
  └── projections [outer=(1,3)]
       └── f * 2.0 [type=float, outer=(3)]
 
-opt
+opt expect=(PushLimitIntoProject,PushOffsetIntoProject)
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
 ----
 project
