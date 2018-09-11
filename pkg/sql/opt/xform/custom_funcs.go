@@ -936,7 +936,7 @@ func (it *scanIndexIter) nextInverted() bool {
 // indexCols returns the set of columns contained in the current index.
 func (it *scanIndexIter) indexCols() opt.ColSet {
 	if it.cols.Empty() {
-		it.cols = it.mem.Metadata().IndexColumns(it.scanOpDef.Table, it.indexOrdinal)
+		it.cols = it.mem.Metadata().IndexOrdColumns(it.scanOpDef.Table, it.indexOrdinal)
 	}
 	return it.cols
 }

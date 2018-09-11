@@ -396,6 +396,10 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey is a reference to another index if this index
+	// is part of an outgoing foreign key relation
+	foreignKey opt.Index
 }
 
 var _ opt.Index = &optIndex{}
@@ -511,6 +515,35 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() opt.Index {
+	if !oi.desc.ForeignKey.IsSet() {
+		return nil
+	}
+
+	indexID := oi.desc.ForeignKey.Index
+	index, err := oi.tab.cat.ResolveDataSourceByID(context.TODO(), int64(indexID))
+
+	if err != nil {
+		return nil
+	}
+
+	return index.(opt.Index)
+}
+
+// ForeignKeyPrefix is part of the opt.Index interface.
+func (oi *optIndex) ForeignKeyPrefix() int32 {
+	if !oi.desc.ForeignKey.IsSet() {
+		return 0
+	}
+
+	return oi.desc.ForeignKey.SharedPrefixLen
+}
+
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
 }
 
 type optTableStat struct {

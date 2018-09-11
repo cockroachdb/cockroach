@@ -232,14 +232,19 @@ func (md *Metadata) NumColumns() int {
 	return len(md.cols)
 }
 
-// IndexColumns returns the set of columns in the given index.
+// IndexOrdColumns returns the set of columns in the given index ordinal.
 // TODO(justin): cache this value in the table metadata.
-func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
+func (md *Metadata) IndexOrdColumns(tableID TableID, indexOrdinal int) ColSet {
 	tab := md.Table(tableID)
 	index := tab.Index(indexOrdinal)
+	return md.IndexColumns(tableID, index, index.ColumnCount())
+}
 
+// IndexColumns returns the set of columns in the given index struct.
+// TODO(bilal): cache this value in the table metadata.
+func (md *Metadata) IndexColumns(tableID TableID, index Index, maxOrdinal int) ColSet {
 	var indexCols ColSet
-	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
+	for i, cnt := 0, maxOrdinal; i < cnt; i++ {
 		ord := index.Column(i).Ordinal
 		indexCols.Add(int(tableID.ColumnID(ord)))
 	}
