@@ -377,6 +377,9 @@ type Index struct {
 	Ordinal int
 	Columns []opt.IndexColumn
 
+	// Table is a back reference to the table this index is on.
+	table *Table
+
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the opt.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -388,6 +391,14 @@ type Index struct {
 
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
+
+	// foreignKey stores a reference to another Index if this index is part of
+	// an outbound foreign key relation.
+	foreignKey *Index
+
+	// foreignKeyPrefix stores a count of columns at the start of the index
+	// that are part of the outbound foreign key relation.
+	foreignKeyPrefix int32
 }
 
 // IdxName is part of the opt.Index interface.
@@ -398,6 +409,11 @@ func (ti *Index) IdxName() string {
 // InternalID is part of the opt.Index interface.
 func (ti *Index) InternalID() uint64 {
 	return 1 + uint64(ti.Ordinal)
+}
+
+// Table is part of the opt.Index interface.
+func (ti *Index) Table() opt.Table {
+	return ti.table
 }
 
 // IsInverted is part of the opt.Index interface.
@@ -423,6 +439,25 @@ func (ti *Index) LaxKeyColumnCount() int {
 // Column is part of the opt.Index interface.
 func (ti *Index) Column(i int) opt.IndexColumn {
 	return ti.Columns[i]
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (ti *Index) ForeignKey() opt.Index {
+	if ti.foreignKey != nil {
+		return ti.foreignKey
+	}
+	return nil
+}
+
+// ForeignKeyPrefix is part of the opt.Index interface.
+func (ti *Index) ForeignKeyPrefix() int32 {
+	return ti.foreignKeyPrefix
+}
+
+// PopulateForeignKey is part of the opt.Index interface.
+func (ti *Index) PopulateForeignKey(ctx context.Context) {
+	// Do nothing - ti.foreignKey is already populated in resolveFK
+	// in create_table.go
 }
 
 // Column implements the opt.Column interface for testing purposes.

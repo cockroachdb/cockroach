@@ -183,6 +183,9 @@ type Index interface {
 	// when the query contains a numeric index reference.
 	InternalID() uint64
 
+	// Table returns a reference to the table this index is based on.
+	Table() Table
+
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
 
@@ -249,6 +252,21 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// ForeignKey returns a non-null reference to another Index if this
+	// index represents an outgoing foreign key reference to another
+	// table.
+	ForeignKey() Index
+
+	// ForeignKeyPrefix returns an integer count of the number of rows
+	// in the start of this index that are part of the foreign key relation.
+	ForeignKeyPrefix() int32
+
+	// PopulateForeignKey is called to initiate a lazy-load of the Index'
+	// reference to the other foreign key. Until this function is called,
+	// ForeignKey() returns nil, and any calls to PopulateForeignKey
+	// after the first one are no-op.
+	PopulateForeignKey(ctx context.Context)
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is

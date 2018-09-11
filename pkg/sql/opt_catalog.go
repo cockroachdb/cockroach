@@ -396,6 +396,11 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey stores a cached reference to the other table's index,
+	// if this index is part of a foreign key relation. Populated in
+	// PopulateForeignKey.
+	foreignKey *optIndex
 }
 
 var _ opt.Index = &optIndex{}
@@ -511,6 +516,53 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() opt.Index {
+	if oi.foreignKey != nil {
+		return oi.foreignKey
+	}
+	return nil
+}
+
+// PopulateForeignKey is part of the opt.Index interface.
+func (oi *optIndex) PopulateForeignKey(ctx context.Context) {
+	if !oi.desc.ForeignKey.IsSet() || oi.foreignKey != nil {
+		return
+	} else if oi.desc.ForeignKey.Validity != sqlbase.ConstraintValidity_Validated {
+		return
+	}
+
+	tableID := oi.desc.ForeignKey.Table
+	indexID := oi.desc.ForeignKey.Index
+	ds, err := oi.tab.cat.ResolveDataSourceByID(ctx, int64(tableID))
+
+	if err != nil {
+		return
+	}
+
+	table := ds.(opt.Table)
+
+	for i := 0; i < table.IndexCount(); i++ {
+		if table.Index(i).InternalID() == uint64(indexID) {
+			oi.foreignKey = table.Index(i).(*optIndex)
+			return
+		}
+	}
+}
+
+// ForeignKeyPrefix is part of the opt.Index interface.
+func (oi *optIndex) ForeignKeyPrefix() int32 {
+	if !oi.desc.ForeignKey.IsSet() {
+		return 0
+	}
+
+	return oi.desc.ForeignKey.SharedPrefixLen
+}
+
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
 }
 
 type optTableStat struct {
