@@ -2913,22 +2913,8 @@ func mvccScanSkipKeyValue(repr []byte) ([]byte, error) {
 // "batch" (this is not the RocksDB batch repr format), returning both the
 // key/value and the suffix of data remaining in the batch.
 func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	if len(repr) < 8 {
-		return key, nil, repr, errors.Errorf("unexpected batch EOF")
-	}
-	v := binary.LittleEndian.Uint64(repr)
-	keySize := v >> 32
-	valSize := v & ((1 << 32) - 1)
-	if (keySize + valSize) > uint64(len(repr)) {
-		return key, nil, nil, fmt.Errorf("expected %d bytes, but only %d remaining",
-			keySize+valSize, len(repr))
-	}
-	repr = repr[8:]
-	rawKey := repr[:keySize]
-	value = repr[keySize : keySize+valSize]
-	repr = repr[keySize+valSize:]
-	key, err = DecodeKey(rawKey)
-	return key, value, repr, err
+	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
+	return MVCCKey{k, ts}, value, orepr, err
 }
 
 func notFoundErrOrDefault(err error) error {
