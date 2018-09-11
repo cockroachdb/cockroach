@@ -242,6 +242,10 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		row, meta := tr.input.Next()
 
 		if meta != nil {
+			if meta.Err != nil {
+				tr.MoveToDraining(nil /* err */)
+				break
+			}
 			return nil, meta
 		}
 		if row == nil {
