@@ -363,6 +363,16 @@ func (md *Metadata) Table(tabID TableID) Table {
 	return md.tables[tabID.index()].tab
 }
 
+// TableByDescID looks up the catalog table associated with the given descriptor id.
+func (md *Metadata) TableByDescID(tabID uint64) Table {
+	for _, mdTab := range md.tables {
+		if mdTab.tab.InternalID() == tabID {
+			return mdTab.tab
+		}
+	}
+	return nil
+}
+
 // TableAnnotation returns the given annotation that is associated with the
 // given table. If the table has no such annotation, TableAnnotation returns
 // nil.

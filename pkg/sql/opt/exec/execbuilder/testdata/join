@@ -360,6 +360,24 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 11  filter       ·          ·
 11  ·            filter     pkic.relkind = 'i'
 
+# Ensure that left joins on non-null foreign keys turn into inner joins
+statement ok
+CREATE TABLE cards(id INT PRIMARY KEY, cust INT NOT NULL REFERENCES customers(id))
+
+query TTT
+EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust 
+----
+join       ·               ·
+ │         type            inner
+ │         equality        (cust) = (id)
+ │         mergeJoinOrder  +"(cust=id)"
+ ├── scan  ·               ·
+ │         table           cards@cards_auto_index_fk_cust_ref_customers
+ │         spans           ALL
+ └── scan  ·               ·
+·          table           customers@primary
+·          spans           ALL
+
 # Tests for filter propagation through joins.
 
 statement ok
