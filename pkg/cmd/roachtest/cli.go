@@ -36,7 +36,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 		for _, line := range strings.Split(s, "\n") {
 			words := strings.Fields(line)
 			if n := len(words); n > 0 {
-				result = append(result, words[n-1])
+				result = append(result, words[n-2]+" "+words[n-1])
 			}
 		}
 		return result
@@ -52,21 +52,19 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 	}
 
 	{
-		expected := []string{"is_live", "true", "true", "true"}
+		expected := []string{
+			"is_available is_live",
+			"true true",
+			"true true",
+			"true true",
+		}
 		actual := nodeStatus()
 		if !reflect.DeepEqual(expected, actual) {
 			t.Fatalf("expected %s, but found %s:\n", expected, actual)
 		}
 	}
 
-	{
-		// Kill nodes 2 and 3 and wait for all of the nodes to be marked as
-		// !is_live. Node 1 is not live because the liveness check can no longer
-		// write to the liveness range due to lack of quorum. This test is
-		// verifying that "node status" still returns info in this situation sa it
-		// only accesses gossip info.
-		c.Stop(ctx, c.Range(2, 3))
-		expected := []string{"is_live", "false", "false", "false"}
+	waitUntil := func(expected []string) {
 		var actual []string
 		// Node liveness takes ~9s to time out. Give the test double that time.
 		for i := 0; i < 20; i++ {
@@ -81,4 +79,26 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 			t.Fatalf("expected %s, but found %s:\n", expected, actual)
 		}
 	}
+
+	// Kill node 2 and wait for it to be marked as !is_available and !is_live.
+	c.Stop(ctx, c.Node(2))
+	waitUntil([]string{
+		"is_available is_live",
+		"true true",
+		"false false",
+		"true true",
+	})
+
+	// Kill node 3 and wait for all of the nodes to be marked as
+	// !is_available. Node 1 is not available because the liveness check can no
+	// longer write to the liveness range due to lack of quorum. This test is
+	// verifying that "node status" still returns info in this situation since
+	// it only accesses gossip info.
+	c.Stop(ctx, c.Node(3))
+	waitUntil([]string{
+		"is_available is_live",
+		"false true",
+		"false false",
+		"false false",
+	})
 }
