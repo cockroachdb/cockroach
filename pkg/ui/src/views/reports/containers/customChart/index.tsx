@@ -96,14 +96,14 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
           axisUnits: AxisUnits.Count,
         }];
       } catch (e) {
-        return [];
+        return [new CustomChartState()];
       }
     }
 
     try {
       return JSON.parse(this.props.location.query.charts);
     } catch (e) {
-      return [];
+      return [new CustomChartState()];
     }
   }
 
@@ -142,12 +142,6 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const metrics = chart.metrics;
     const units = chart.axisUnits;
     const { nodesSummary } = this.props;
-
-    if (_.isEmpty(metrics)) {
-      return (
-        <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
-      );
-    }
 
     return (
       <MetricsDataProvider id={`debug-custom-chart.${index}`} key={ index }>
