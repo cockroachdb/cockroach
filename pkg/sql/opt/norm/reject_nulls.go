@@ -139,7 +139,7 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 		}
 
 		// Get column ID of aggregate's Variable operator input.
-		inColID := extractAggInputColumn(agg)
+		inColID := memo.ExtractAggSingleInputColumn(agg)
 
 		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {
