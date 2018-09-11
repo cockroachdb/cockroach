@@ -346,7 +346,7 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 			if err != nil {
 				return err
 			}
-			k, err := engine.DecodeKey(b)
+			k, err := engine.DecodeMVCCKey(b)
 			if err != nil {
 				return err
 			}
@@ -376,7 +376,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			bs = append(bs, b)
 		}
 
-		k, err := engine.DecodeKey(bs[0])
+		k, err := engine.DecodeMVCCKey(bs[0])
 		if err != nil {
 			// Older versions of the consistency checker give you diffs with a raw_key that
 			// is already a roachpb.Key, so make a half-assed attempt to support both.
