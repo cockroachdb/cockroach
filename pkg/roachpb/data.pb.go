@@ -455,7 +455,8 @@ type Transaction struct {
 	Writing bool `protobuf:"varint,9,opt,name=writing,proto3" json:"writing,omitempty"`
 	// If this is true, the transaction must retry. Relevant only for
 	// SNAPSHOT transactions: a SERIALIZABLE transaction would have to
-	// retry anyway due to its commit timestamp having moved forward.
+	// retry anyway due to its commit timestamp having moved forward (whenever
+	// write_too_old is set, meta.Timestamp has been pushed above orig_timestamp).
 	// This bool is set instead of immediately returning a txn retry
 	// error so that intents can continue to be laid down, minimizing
 	// work required on txn restart.

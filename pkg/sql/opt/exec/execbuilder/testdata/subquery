@@ -126,35 +126,21 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-render                              ·            ·                                                                                                 (col0)                                              ·
- │                                  render 0     col0                                                                                              ·                                                   ·
- └── filter                         ·            ·                                                                                                 ("case", col0, col3, col4)                          ·
-      │                             filter       ((col0 <= 0) AND (col4 <= 5.38)) OR ((("case" AND (col3 <= 5)) AND (col3 >= 7)) AND (col3 <= 9))  ·                                                   ·
-      └── render                    ·            ·                                                                                                 ("case", col0, col3, col4)                          ·
-           │                        render 0     CASE WHEN agg0 AND (agg3 IS NOT NULL) THEN true WHEN agg0 IS NULL THEN false END                  ·                                                   ·
-           │                        render 1     agg1                                                                                              ·                                                   ·
-           │                        render 2     agg2                                                                                              ·                                                   ·
-           │                        render 3     agg3                                                                                              ·                                                   ·
-           └── group                ·            ·                                                                                                 (rowid[hidden], agg0, agg1, agg2, agg3)             ·
-                │                   aggregate 0  rowid                                                                                             ·                                                   ·
-                │                   aggregate 1  bool_or(notnull)                                                                                  ·                                                   ·
-                │                   aggregate 2  any_not_null(col0)                                                                                ·                                                   ·
-                │                   aggregate 3  any_not_null(col3)                                                                                ·                                                   ·
-                │                   aggregate 4  any_not_null(col4)                                                                                ·                                                   ·
-                │                   group by     @4                                                                                                ·                                                   ·
-                └── join            ·            ·                                                                                                 (col0, col3, col4, rowid[hidden], "notnull", col1)  ·
-                     │              type         left outer                                                                                        ·                                                   ·
-                     │              pred         (col4 = col1) IS NOT false                                                                        ·                                                   ·
-                     ├── scan       ·            ·                                                                                                 (col0, col3, col4, rowid[hidden])                   ·
-                     │              table        tab4@primary                                                                                      ·                                                   ·
-                     │              spans        ALL                                                                                               ·                                                   ·
-                     └── render     ·            ·                                                                                                 ("notnull", col1)                                   ·
-                          │         render 0     col1 IS NOT NULL                                                                                  ·                                                   ·
-                          │         render 1     col1                                                                                              ·                                                   ·
-                          └── scan  ·            ·                                                                                                 (col1)                                              ·
-·                                   table        tab4@primary                                                                                      ·                                                   ·
-·                                   spans        ALL                                                                                               ·                                                   ·
-·                                   filter       col1 > 8.27                                                                                       ·                                                   ·
+root            ·             ·                                                                                                           (col0)              ·
+ ├── render     ·             ·                                                                                                           (col0)              ·
+ │    │         render 0      col0                                                                                                        ·                   ·
+ │    └── scan  ·             ·                                                                                                           (col0, col3, col4)  ·
+ │              table         tab4@primary                                                                                                ·                   ·
+ │              spans         ALL                                                                                                         ·                   ·
+ │              filter        ((col0 <= 0) AND (col4 <= 5.38)) OR ((((col4 = ANY @S1) AND (col3 <= 5)) AND (col3 >= 7)) AND (col3 <= 9))  ·                   ·
+ └── subquery   ·             ·                                                                                                           (col0)              ·
+      │         id            @S1                                                                                                         ·                   ·
+      │         original sql  (SELECT col1 FROM tab4 WHERE col1 > 8.27)                                                                   ·                   ·
+      │         exec mode     all rows normalized                                                                                         ·                   ·
+      └── scan  ·             ·                                                                                                           (col1)              ·
+·               table         tab4@primary                                                                                                ·                   ·
+·               spans         ALL                                                                                                         ·                   ·
+·               filter        col1 > 8.27                                                                                                 ·                   ·
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.

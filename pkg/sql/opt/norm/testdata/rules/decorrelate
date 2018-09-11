@@ -3103,7 +3103,7 @@ project
 
 # Any with IS NULL.
 opt
-SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
+SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy WHERE x=k)) IS NULL
 ----
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -3122,22 +3122,33 @@ project
       │    │    ├── grouping columns: k:1(int!null)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-5,9)
-      │    │    ├── left-join
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int) notnull:8(bool)
-      │    │    │    ├── fd: (1)-->(2-5), (7)~~>(8)
+      │    │    ├── left-join (merge)
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) notnull:8(bool)
+      │    │    │    ├── key: (1,6)
+      │    │    │    ├── fd: (1)-->(2-5), (6)-->(7), (7)~~>(8), (1,6)-->(8)
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2-5)
+      │    │    │    │    ├── fd: (1)-->(2-5)
+      │    │    │    │    └── ordering: +1
       │    │    │    ├── project
-      │    │    │    │    ├── columns: notnull:8(bool) y:7(int)
-      │    │    │    │    ├── fd: (7)-->(8)
+      │    │    │    │    ├── columns: notnull:8(bool) x:6(int!null) y:7(int)
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    ├── fd: (6)-->(7), (7)-->(8)
+      │    │    │    │    ├── ordering: +6
       │    │    │    │    ├── scan xy
-      │    │    │    │    │    └── columns: y:7(int)
-      │    │    │    │    └── projections [outer=(7)]
+      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    │    ├── key: (6)
+      │    │    │    │    │    ├── fd: (6)-->(7)
+      │    │    │    │    │    └── ordering: +6
+      │    │    │    │    └── projections [outer=(6,7)]
       │    │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
-      │    │    │    └── filters [type=bool, outer=(2,7)]
-      │    │    │         └── (i = y) IS NOT false [type=bool, outer=(2,7)]
+      │    │    │    └── merge-on
+      │    │    │         ├── left ordering: +1
+      │    │    │         ├── right ordering: +6
+      │    │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │              └── (i = y) IS NOT false [type=bool, outer=(2,7)]
       │    │    └── aggregations [outer=(2-5,8)]
       │    │         ├── bool-or [type=bool, outer=(8)]
       │    │         │    └── variable: notnull [type=bool, outer=(8)]
@@ -3154,44 +3165,75 @@ project
       └── filters [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
            └── case IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
 
+# Any with uncorrelated subquery (should not be hoisted).
+opt
+SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(2)]
+      └── is [type=bool, outer=(2)]
+           ├── any: eq [type=bool, outer=(2)]
+           │    ├── scan xy
+           │    │    └── columns: y:7(int)
+           │    └── variable: i [type=int, outer=(2)]
+           └── null [type=unknown]
+
 # ALL with non-trivial expression on left.
 opt
-SELECT i*i/100 < ALL(SELECT y FROM xy) AS r, s FROM a
+SELECT i*i/100 < ALL(SELECT y FROM xy WHERE x=k) AS r, s FROM a
 ----
 project
  ├── columns: r:8(bool) s:4(string)
  ├── side-effects
  ├── group-by
- │    ├── columns: s:4(string) scalar:9(decimal) bool_or:11(bool) rownum:13(int!null)
- │    ├── grouping columns: rownum:13(int!null)
+ │    ├── columns: k:1(int!null) s:4(string) scalar:9(decimal) bool_or:11(bool)
+ │    ├── grouping columns: k:1(int!null)
  │    ├── side-effects
- │    ├── key: (13)
- │    ├── fd: (13)-->(4,9,11)
- │    ├── left-join
- │    │    ├── columns: s:4(string) y:7(int) scalar:9(decimal) notnull:10(bool) rownum:13(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4,9,11)
+ │    ├── left-join (merge)
+ │    │    ├── columns: k:1(int!null) s:4(string) x:6(int) y:7(int) scalar:9(decimal) notnull:10(bool)
  │    │    ├── side-effects
- │    │    ├── fd: (13)-->(4,9), (7)~~>(10)
- │    │    ├── row-number
- │    │    │    ├── columns: s:4(string) scalar:9(decimal) rownum:13(int!null)
- │    │    │    ├── side-effects
- │    │    │    ├── key: (13)
- │    │    │    ├── fd: (13)-->(4,9)
- │    │    │    └── project
- │    │    │         ├── columns: scalar:9(decimal) s:4(string)
- │    │    │         ├── side-effects
- │    │    │         ├── scan a
- │    │    │         │    └── columns: i:2(int) s:4(string)
- │    │    │         └── projections [outer=(2,4), side-effects]
- │    │    │              └── (i * i) / 100 [type=decimal, outer=(2), side-effects]
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (1)-->(4,9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
  │    │    ├── project
- │    │    │    ├── columns: notnull:10(bool) y:7(int)
- │    │    │    ├── fd: (7)-->(10)
+ │    │    │    ├── columns: scalar:9(decimal) k:1(int!null) s:4(string)
+ │    │    │    ├── side-effects
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(4,9)
+ │    │    │    ├── ordering: +1
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2,4)
+ │    │    │    │    └── ordering: +1
+ │    │    │    └── projections [outer=(1,2,4), side-effects]
+ │    │    │         └── (i * i) / 100 [type=decimal, outer=(2), side-effects]
+ │    │    ├── project
+ │    │    │    ├── columns: notnull:10(bool) x:6(int!null) y:7(int)
+ │    │    │    ├── key: (6)
+ │    │    │    ├── fd: (6)-->(7), (7)-->(10)
+ │    │    │    ├── ordering: +6
  │    │    │    ├── scan xy
- │    │    │    │    └── columns: y:7(int)
- │    │    │    └── projections [outer=(7)]
+ │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    ├── fd: (6)-->(7)
+ │    │    │    │    └── ordering: +6
+ │    │    │    └── projections [outer=(6,7)]
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
- │    │    └── filters [type=bool, outer=(7,9)]
- │    │         └── (scalar >= y) IS NOT false [type=bool, outer=(7,9)]
+ │    │    └── merge-on
+ │    │         ├── left ordering: +1
+ │    │         ├── right ordering: +6
+ │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │              └── (scalar >= y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(4,9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
  │         │    └── variable: notnull [type=bool, outer=(10)]
@@ -3436,6 +3478,20 @@ project
                 │         └── true [type=bool]
                 └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
                      └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+
+# Don't hoist uncorrelated subquery.
+opt
+SELECT i < ANY(SELECT y FROM xy) AS r FROM a
+----
+project
+ ├── columns: r:8(bool)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections [outer=(2)]
+      └── any: lt [type=bool, outer=(2)]
+           ├── scan xy
+           │    └── columns: y:7(int)
+           └── variable: i [type=int, outer=(2)]
 
 # --------------------------------------------------
 # HoistJoinSubquery

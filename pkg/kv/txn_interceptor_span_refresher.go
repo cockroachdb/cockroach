@@ -141,7 +141,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// exhausted, return a non-retryable error indicating that the
 	// transaction is too large and should potentially be split.
 	// We do this to avoid endlessly retrying a txn likely refail.
-	if sr.refreshInvalid && (br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+	if sr.refreshInvalid && (br.Txn.OrigTimestamp != br.Txn.Timestamp) {
 		return nil, roachpb.NewErrorWithTxn(
 			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
 		)
