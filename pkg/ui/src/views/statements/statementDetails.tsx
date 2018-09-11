@@ -25,12 +25,17 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
 
+interface Fraction {
+  numerator: number;
+  denominator: number;
+}
+
 interface SingleStatementStatistics {
   statement: string;
   app: string[];
-  distSQL: boolean[];
-  opt: boolean[];
-  failed: boolean[];
+  distSQL: Fraction;
+  opt: Fraction;
+  failed: Fraction;
   node_id: number[];
   stats: StatementStatistics;
   byNode: AggregateStatistics[];
@@ -339,14 +344,17 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   }
 }
 
-function renderBools(bools: boolean[]) {
-  if (bools.length === 0) {
+function renderBools(fraction: Fraction) {
+  if (Number.isNaN(fraction.numerator)) {
     return "(unknown)";
   }
-  if (bools.length === 1) {
-    return bools[0] ? "Yes" : "No";
+  if (fraction.numerator === 0) {
+    return "No";
   }
-  return "(both included)";
+  if (fraction.numerator === fraction.denominator) {
+    return "Yes";
+  }
+  return approximify(fraction.numerator) + " of " + approximify(fraction.denominator);
 }
 
 type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
@@ -363,6 +371,21 @@ function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] 
       label: nodeId,
       stats: combineStatementStats(byNode[nodeId]),
   }));
+}
+
+function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: ExecutionStatistics) => boolean): Fraction {
+  let numerator = 0;
+  let denominator = 0;
+
+  stats.forEach(stmt => {
+    const count = FixLong(stmt.stats.first_attempt_count).toInt();
+    denominator += count;
+    if (predicate(stmt)) {
+      numerator += count;
+    }
+  });
+
+  return { numerator, denominator };
 }
 
 export const selectStatement = createSelector(
@@ -392,9 +415,9 @@ export const selectStatement = createSelector(
       stats: combineStatementStats(results.map(s => s.stats)),
       byNode: coalesceNodeStats(results),
       app: _.uniq(results.map(s => s.app)),
-      distSQL: _.uniq(results.map(s => s.distSQL)),
-      opt: _.uniq(results.map(s => s.opt)),
-      failed: _.uniq(results.map(s => s.failed)),
+      distSQL: fractionMatching(results, s => s.distSQL),
+      opt: fractionMatching(results, s => s.opt),
+      failed: fractionMatching(results, s => s.failed),
       node_id: _.uniq(results.map(s => s.node_id)),
     };
   },
