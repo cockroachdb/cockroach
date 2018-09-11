@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -4937,7 +4938,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			defer stopper.Stop(context.TODO())
 			tc.Start(t, stopper)
 
-			ctx := log.WithLogTag(context.Background(), "testcase", i)
+			ctx := logtags.AddTag(context.Background(), "testcase", i)
 
 			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate AbortSpan entry */)
 

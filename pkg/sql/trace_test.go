@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTrace(t *testing.T) {
@@ -376,7 +377,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 					if strings.Contains(stmt, query) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
-						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
+						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
 						// We use log.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.

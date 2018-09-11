@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTableSet(t *testing.T) {
@@ -643,7 +643,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		ctx := log.WithLogTag(context.Background(), "test: Lease", nil)
+		ctx := logtags.AddTag(context.Background(), "test: Lease", nil)
 
 		t.Run(test.name, func(t *testing.T) {
 			// blockChan and freshestBlockChan is used to set up the race condition.

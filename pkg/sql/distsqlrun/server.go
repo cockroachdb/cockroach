@@ -439,7 +439,7 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	if !f.isLocal() {
-		flowCtx.AddLogTagStr("f", f.id.Short())
+		flowCtx.AddLogTag("f", f.id.Short())
 		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
