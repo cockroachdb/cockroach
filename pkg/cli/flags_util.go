@@ -172,7 +172,7 @@ func (k *mvccKey) Set(value string) error {
 		if err != nil {
 			return err
 		}
-		newK, err := engine.DecodeKey(b)
+		newK, err := engine.DecodeMVCCKey(b)
 		if err != nil {
 			encoded := gohex.EncodeToString(engine.EncodeKey(engine.MakeMVCCMetadataKey(roachpb.Key(b))))
 			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
