@@ -1488,10 +1488,3 @@ func TestDecodeTableValue(t *testing.T) {
 		})
 	}
 }
-
-func TestRandCreateTable(t *testing.T) {
-	for i := 0; i < 10; i++ {
-		tab := RandCreateTable(i)
-		fmt.Println(tab.String() + ";")
-	}
-}
