@@ -150,9 +150,9 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const { nodesSummary } = this.props;
     if (_.isEmpty(metrics)) {
       return (
-        <section className="section">
+        <div>
           <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
-        </section>
+        </div>
       );
     }
 
