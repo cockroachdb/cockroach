@@ -146,7 +146,7 @@ func TestIndexColumns(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		actual := md.IndexColumns(a, tc.index)
+		actual := md.IndexOrdColumns(a, tc.index)
 		if !tc.expectedCols.Equals(actual) {
 			t.Errorf("expected %v, got %v", tc.expectedCols, actual)
 		}
