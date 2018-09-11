@@ -404,7 +404,7 @@ func IsEndTransactionTriggeringRetryError(
 // be safely committed with a forwarded timestamp. This requires that
 // the transaction's timestamp has not leaked and that the transaction
 // has encountered no spans which require refreshing at the forwarded
-// timestamp. If either of those conditions are true, a cient-side
+// timestamp. If either of those conditions are true, a client-side
 // retry is required.
 func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
 	return !txn.OrigTimestampWasObserved && noRefreshSpans
