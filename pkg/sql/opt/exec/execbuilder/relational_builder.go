@@ -510,10 +510,11 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 }
 
 func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
-	input, err := b.buildRelational(ev.Child(0))
+	input, err := b.buildGroupByInput(ev)
 	if err != nil {
 		return execPlan{}, err
 	}
+
 	var ep execPlan
 	groupingCols := ev.Private().(*memo.GroupByDef).GroupingCols
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
@@ -572,7 +573,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
-	input, err := b.buildRelational(ev.Child(0))
+	input, err := b.buildGroupByInput(ev)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -607,9 +608,52 @@ func (b *Builder) buildDistinct(ev memo.ExprView) (execPlan, error) {
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
-// aggOrderedCols returns the set of columns in the input of an aggregation
-// (as ordinals
-// operator on which there is an ordering
+func (b *Builder) buildGroupByInput(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(radu): this is a one-off fix for an otherwise bigger gap: we should
+	// have a more general mechanism (through physical properties or otherwise) to
+	// figure out unneeded columns and project them away as necessary. The
+	// optimizer doesn't guarantee that it adds ProjectOps everywhere.
+	//
+	// We address just the GroupBy case for now because there is a particularly
+	// important case with COUNT(*) where we can remove all input columns, which
+	// leads to significant speedup.
+	def := ev.Private().(*memo.GroupByDef)
+	neededCols := def.GroupingCols.Copy()
+	aggs := ev.Child(1)
+	for i, n := 0, aggs.ChildCount(); i < n; i++ {
+		neededCols.UnionWith(memo.ExtractAggInputColumns(aggs.Child(i)))
+	}
+
+	if neededCols.Equals(ev.Child(0).Logical().Relational.OutputCols) {
+		// All columns produced by the input are used.
+		return input, nil
+	}
+
+	// The input is producing columns that are not useful; set up a projection.
+	cols := make([]exec.ColumnOrdinal, 0, input.outputCols.Len())
+	var newOutputCols opt.ColMap
+	input.outputCols.ForEach(func(colID, ordinal int) {
+		if neededCols.Contains(colID) {
+			newOutputCols.Set(colID, len(cols))
+			cols = append(cols, exec.ColumnOrdinal(ordinal))
+		}
+	})
+
+	input.root, err = b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
+	if err != nil {
+		return execPlan{}, err
+	}
+	input.outputCols = newOutputCols
+	return input, nil
+}
+
+// aggOrderedCols returns (as ordinals) the set of columns in the input of an
+// aggregation operator on which there is an ordering.
 func aggOrderedCols(inputExpr memo.ExprView, groupingCols opt.ColSet) opt.ColSet {
 	// Use the ordering that we require on the child (this is the more restrictive
 	// between GroupByDef.Ordering and the ordering required on the aggregation

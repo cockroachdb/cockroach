@@ -760,15 +760,16 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-sort            ·            ·
- │              order        -total
- └── group      ·            ·
-      │         aggregate 0  resource_key
-      │         aggregate 1  count(resource_key)
-      │         group by     @2
-      └── scan  ·            ·
-·               table        favorites@favorites_glob_fav_idx
-·               spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+sort                 ·            ·
+ │                   order        -total
+ └── group           ·            ·
+      │              aggregate 0  resource_key
+      │              aggregate 1  count(resource_key)
+      │              group by     @1
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        favorites@favorites_glob_fav_idx
+·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
