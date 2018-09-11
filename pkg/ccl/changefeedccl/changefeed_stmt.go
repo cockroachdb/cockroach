@@ -51,8 +51,9 @@ const (
 	optEnvelopeRow     envelopeType = `row`
 	optEnvelopeDiff    envelopeType = `diff`
 
-	optFormatJSON formatType = `json`
-	optFormatAvro formatType = `avro`
+	optFormatJSON     formatType = `json`
+	optFormatAvro     formatType = `experimental-avro`
+	optFormatAvroJSON formatType = `experimental-avro-json`
 
 	sinkParamConfluentSchemaRegistry = `confluent_schema_registry`
 	sinkParamTopicPrefix             = `topic_prefix`
@@ -290,9 +291,8 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	switch formatType(details.Opts[optFormat]) {
 	case ``, optFormatJSON:
 		details.Opts[optFormat] = string(optFormatJSON)
-	case optFormatAvro:
-		return jobspb.ChangefeedDetails{}, errors.Errorf(
-			`%s=%s is not yet supported`, optFormat, optFormatAvro)
+	case optFormatAvro, optFormatAvroJSON:
+		// No-op.
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`unknown %s: %s`, optFormat, details.Opts[optFormat])

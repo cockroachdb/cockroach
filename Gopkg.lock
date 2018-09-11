@@ -943,6 +943,14 @@
   version = "v0.15.0"
 
 [[projects]]
+  digest = "1:b22c26daf3e7af2e1bf09da50ab9bc6d7744d7b8c0cba6502e40d2e6163283bc"
+  name = "github.com/linkedin/goavro"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9e3ffbc22b459192a7090bfd06433b24be086370"
+  version = "v2.6.0"
+
+[[projects]]
   branch = "master"
   digest = "1:9e23318fb92c60935e4de2ce13710979f1dffd5c7a4ec4b29a740c27da9b735c"
   name = "github.com/lufia/iostat"
@@ -1713,6 +1721,7 @@
     "github.com/lib/pq",
     "github.com/lib/pq/oid",
     "github.com/lightstep/lightstep-tracer-go",
+    "github.com/linkedin/goavro",
     "github.com/lufia/iostat",
     "github.com/marusama/semaphore",
     "github.com/mattn/go-isatty",
