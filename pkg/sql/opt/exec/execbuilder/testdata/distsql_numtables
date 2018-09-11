@@ -126,7 +126,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslE2LszAQx-_Pp3iYUxcCNW
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%']
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzElF2LnDAUhu_7K4YDy24hsBN1ZmdzNaW0RdpqcVx6UWSx5lQEx0gSS8vify_qxarMRMGCl368eV6eE84LFIKjF59RAfsBFAhYQMAGAg4Q2EFEoJQiQaWEbH7pAi7_A2xLICvKSjevIwKJkAjsBXSmcwQGYfwzxwBjjvJ-CwQ46jjLW0wps3Ms_x6L6qyF0hIIfMxyjZJtjtbmi_v5w-b25lf2G29uGWOnMHC9T0DAr3TzA0Q1AVHpV7TScYrAaE3m13uXphLTWAt5vxu2e-8_eeFz4H8_3b29yrKusl4RVSEkR4l8cH5Um9vQkazT09dn1wvvjvR6G3vQhs4fDF1hMBP1eir2iwdjzVdhraBiol5PxcNiFfZ8FfYKKibq9VQcFqtw5qtwVlAxUa-n4vG_bq4LrABVKQqFow12-eRts9mQp9itQSUqmeA3KZIW0z36ba59wVHp7ivtHtyi-9QU7IepMWwNwnQctszkCbRtTDvmsLOk984Y3pvJ-yXkB2P4YCYflpAfzbPaTlwT8yUbs6P6zb8AAAD__x4t7Hs=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElF2LnDAUhu_7K4YDy24hsBN1ZmdzNaW0RdpqcVx6UWSx5lQEx0gSS8vify_qxarMRMGCl368eV6eE84LFIKjF59RAfsBFAhYQMAGAg4Q2EFEoJQiQaWEbH7pAi7_A2xLICvKSjevIwKJkAjsBXSmcwQGYfwzxwBjjvJ-CwQ46jjLW0wps3Ms_x6L6qyF0hIIfMxyjZJtjtbmi_v5w-b25lf2G29uGWOnMHC9T0DArzTbeKJAiGoCotKvcKXjFIHRmswv-C5NJaaxFvJ-N-z33n_ywufA_366e3uVZV1lvSKqQkiOEvng_Kg2t6EjXaenr8-uF94d6fU29qANnT8auspoJgr2ZOwXj8aaL8NaRcZEwZ6Mh8Uy7Pky7FVkTBTsyTgsluHMl-GsImOiYE_G43_dYBdYAapSFApHm-zyydtmwyFPsVuHSlQywW9SJC2me_TbXPuCo9LdV9o9uEX3qSnYD1Nj2BqE6ThsmckTaNuYdsxhZ0nvnTG8N5P3S8gPxvDBTD4sIT-aZ7WduCbmSzZmR_WbfwEAAP__sAnyEQ==
 
 #
 # -- Limit tests --
@@ -202,4 +202,4 @@ render                    ·         ·                  (y, str, res)  ·
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkcFKxDAQhu8-hcxJMbBN99bTiqcF2Up3xYMUic1QAm2nTiagLH13aXPQCi3ucf7J93-BOUNHFg-mRQ_ZK2goFfRMFXpPPEbxwd5-QpYocF0fZIxLBRUxQnYGcdIgZHAy7w0WaCzyJgEFFsW4Zqrt2bWGv3ZdaIX8RzCMUA4KKMhPnxdTI2R6UP93HokFeaPnul16BwoeXevkWieLpvQS031dM9ZGiDfp3PaQPx9Ob0X-cry5XXRtL3EV6HvqPM48S83JUCpAW2O8lqfAFT4xVZMmjvnETYFFL3Gr47Dv4mr84G9Yr8LpOpyuwts_cDlcfQcAAP__-WfWZA==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkTFr8zAQhvfvV4SbvlJBLGfTlNIpUOKSpHQopqjWYQSxzj2doCX4v5dYQ5uCTTPee3reR3AnCORwazuMYF5AQ62gZ2owRuJzlB9s3AeYQoEPfZJzXCtoiBHMCcTLEcHAwb4dcYfWIS8LUOBQrD-OtT37zvLnOqROKL4nywj1oICSfPdFsS2C0YP6u3NPLMhLfalbl7egoEpiFlsKCAoefOdloYtJa3mN9a5tGVsrxMvy0nxfPW0Pr7vqef__ZtK1usa1w9hTiHjhmWouhloBuhbz5SIlbvCRqRk1eaxGbgwcRslbnYdNyKvzB3_CehYu5-FyFl79guvh31cAAAD__3GW2fY=

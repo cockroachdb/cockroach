@@ -65,3 +65,30 @@ func ExtractConstDatum(ev ExprView) tree.Datum {
 	}
 	return ev.Private().(tree.Datum)
 }
+
+// ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
+// operator that has a single input.
+func ExtractAggSingleInputColumn(ev ExprView) opt.ColumnID {
+	if !ev.IsAggregate() {
+		panic("not an Aggregate")
+	}
+	arg := ev.Child(0)
+	if arg.Operator() == opt.AggDistinctOp {
+		arg = arg.Child(0)
+	}
+	return arg.Private().(opt.ColumnID)
+}
+
+// ExtractAggInputColumns returns the input columns of an aggregate (which can
+// be empty).
+func ExtractAggInputColumns(ev ExprView) opt.ColSet {
+	var res opt.ColSet
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
+		arg := ev.Child(0)
+		if arg.Operator() == opt.AggDistinctOp {
+			arg = arg.Child(0)
+		}
+		res.Add(int(arg.Private().(opt.ColumnID)))
+	}
+	return res
+}
