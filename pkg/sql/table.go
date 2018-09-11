@@ -420,6 +420,10 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 	}
 }
 
+func (tc *TableCollection) hasUncommittedTables() bool {
+	return len(tc.uncommittedTables) > 0
+}
+
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 	for i, table := range tc.uncommittedTables {
 		if table.ID == desc.ID {

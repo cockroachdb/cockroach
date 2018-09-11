@@ -45,6 +45,10 @@ import (
 // Go key value) or contain a non-interned pointer (because pointers to
 // equivalent values in different memory locations do not map to the same key
 // value).
+//
+// Private values must be immutable; that is, once set, they can never be
+// modified again. Without this property, they could not be be hashed nor copied
+// for independent concurrent use by multiple Memos.
 type privateStorage struct {
 	// privatesMap maps from the interning key to the index of the private
 	// value in the privates slice. Note that PrivateID 0 is invalid in order
@@ -91,6 +95,20 @@ func (ps *privateStorage) init() {
 		}
 		ps.privates = ps.privates[:1]
 	}
+}
+
+// initFrom initializes the private storage with a copy of all private values
+// from another private storage. This private storage can then be modified
+// independent of the other.
+func (ps *privateStorage) initFrom(from *privateStorage) {
+	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = from.memEstimate
+	ps.privatesMap = make(map[privateKey]PrivateID, len(from.privatesMap))
+	for k, v := range from.privatesMap {
+		ps.privatesMap[k] = v
+	}
+	ps.privates = make([]interface{}, len(from.privates))
+	copy(ps.privates, from.privates)
 }
 
 // memoryEstimate returns a rough estimate of the private storage memory usage,

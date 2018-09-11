@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,7 +66,7 @@ func (b *Builder) buildDataSource(
 			panic(builderError{err})
 		}
 
-		ds := b.resolveDataSource(tn, privilege.SELECT)
+		ds := b.resolveDataSource(tn)
 		switch t := ds.(type) {
 		case opt.Table:
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
@@ -99,7 +98,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds := b.resolveDataSourceRef(source, privilege.SELECT)
+		ds := b.resolveDataSourceRef(source)
 		switch t := ds.(type) {
 		case opt.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)

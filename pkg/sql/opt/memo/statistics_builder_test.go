@@ -92,7 +92,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	}
 
 	var mem Memo
-	mem.Init()
+	mem.Init(&evalCtx)
 	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
 	tabID := mem.Metadata().AddTable(tab)
 
@@ -112,11 +112,11 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		// Make the scan.
 		def := &ScanOpDef{Table: tabID, Cols: cols}
 		scan := MakeScanExpr(mem.InternScanOpDef(def))
-		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan))
+		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan)).Group()
 
 		// Make the filter.
 		filter := MakeTrueExpr()
-		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter))
+		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter)).Group()
 
 		// Make the select.
 		sel := MakeSelectExpr(scanGroup, filterGroup)

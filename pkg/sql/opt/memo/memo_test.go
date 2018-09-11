@@ -15,11 +15,19 @@
 package memo_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -38,6 +46,142 @@ func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars
 	runDataDrivenTest(t, "testdata/stats/", flags)
+}
+
+// Ensure that an independent copy of the memo is created by InitFrom.
+func TestMemoInitFrom(t *testing.T) {
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tester := testutils.NewOptTester(catalog, "SELECT a, b+1 FROM abc WHERE c='foo'")
+	ev, err := tester.Optimize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem1 := ev.Memo()
+
+	// Copy the memo and ensure that the copy is the same.
+	var mem2 memo.Memo
+	mem2.InitFrom(mem1)
+	mem2Str := mem2.String()
+	if mem2Str != mem1.String() {
+		t.Errorf("expected: %s, actual: %s", mem1.String(), mem2Str)
+	}
+	if mem2.MemoryEstimate() != mem1.MemoryEstimate() {
+		t.Errorf("expected: %d, actual: %d", mem1.MemoryEstimate(), mem2.MemoryEstimate())
+	}
+
+	// Update the original memo with a new query, and make sure the first copy is
+	// unaffected.
+	tester = testutils.NewOptTester(catalog, "SELECT column1 FROM (VALUES (1), (2))")
+	ev, err = tester.Optimize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mem3 := ev.Memo()
+	mem1.InitFrom(mem3)
+	if mem1.String() != mem3.String() {
+		t.Errorf("expected: %s, actual: %s", mem3.String(), mem1.String())
+	}
+	if mem2.String() != mem2Str {
+		t.Errorf("expected: %s, actual: %s", mem2Str, mem2.String())
+	}
+}
+
+func TestMemoIsStale(t *testing.T) {
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Revoke access to the underlying table. The user should retain indirect
+	// access via the view.
+	catalog.Table(tree.NewTableName("t", "abc")).Revoked = true
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	// Initialize context with starting values.
+	searchPath := []string{"path1", "path2"}
+	evalCtx.SessionData.Database = "t"
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
+
+	stmt, err := parser.ParseOne("SELECT a, b+1 FROM abcview WHERE c='foo'")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var o xform.Optimizer
+	o.Init(&evalCtx)
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("memo should not be stale")
+	}
+
+	// Stale current database.
+	evalCtx.SessionData.Database = "newdb"
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale current database")
+	}
+	evalCtx.SessionData.Database = "t"
+
+	// Stale search path.
+	evalCtx.SessionData.SearchPath = sessiondata.SearchPath{}
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale search path")
+	}
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath([]string{"path1", "path2"})
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale search path")
+	}
+	evalCtx.SessionData.SearchPath = sessiondata.MakeSearchPath(searchPath)
+
+	// Stale location.
+	evalCtx.SessionData.DataConversion.Location = time.FixedZone("PST", -8*60*60)
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale location")
+	}
+	evalCtx.SessionData.DataConversion.Location = time.UTC
+
+	// Stale schema.
+	_, err = catalog.ExecuteDDL("DROP TABLE abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected stale schema")
+	}
+	catalog = testcat.New()
+	_, _ = catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	_, _ = catalog.ExecuteDDL("CREATE VIEW abcview AS SELECT a, b, c FROM abc")
+
+	// User no longer has access to view.
+	catalog.View(tree.NewTableName("t", "abcview")).Revoked = true
+	if !o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("expected user not to have SELECT privilege on view")
+	}
+	catalog.View(tree.NewTableName("t", "abcview")).Revoked = false
+
+	// Ensure that memo is not stale after restoring to original state.
+	if o.Memo().IsStale(ctx, &evalCtx, catalog) {
+		t.Errorf("memo should not be stale")
+	}
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
