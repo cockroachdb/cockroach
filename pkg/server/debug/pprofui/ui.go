@@ -20,10 +20,11 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func pprofCtx(ctx context.Context) context.Context {
-	return log.WithLogTag(ctx, "pprof", nil)
+	return logtags.AddTag(ctx, "pprof", nil)
 }
 
 // fakeUI implements pprof's driver.UI.

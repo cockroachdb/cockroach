@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -82,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -1618,7 +1620,7 @@ func (s *Server) Start(ctx context.Context) error {
 			return
 		}
 		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
-			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
 			// Unless this is a simple disconnect or context timeout, report the error on
@@ -1654,7 +1656,7 @@ func (s *Server) Start(ctx context.Context) error {
 				return
 			}
 			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
 					// Report the error on this connection's context, so that we
@@ -1977,4 +1979,8 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 			return
 		}
 	})
+}
+
+func init() {
+	tracing.RegisterTagRemapping("n", "node")
 }

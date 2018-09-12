@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1094,7 +1095,7 @@ func (s *Store) SetDraining(drain bool) {
 
 	var wg sync.WaitGroup
 
-	ctx := log.WithLogTag(context.Background(), "drain", nil)
+	ctx := logtags.AddTag(context.Background(), "drain", nil)
 	transferAllAway := func() int {
 		// Limit the number of concurrent lease transfers.
 		sem := make(chan struct{}, 100)
@@ -1382,7 +1383,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.Ident = &ident
 
 	// Set the store ID for logging.
-	s.cfg.AmbientCtx.AddLogTagInt("s", int(s.StoreID()))
+	s.cfg.AmbientCtx.AddLogTag("s", s.StoreID())
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
@@ -4655,4 +4656,8 @@ func (s *Store) setConsistencyQueueActive(active bool) {
 }
 func (s *Store) setScannerActive(active bool) {
 	s.scanner.SetDisabled(!active)
+}
+
+func init() {
+	tracing.RegisterTagRemapping("s", "store")
 }
