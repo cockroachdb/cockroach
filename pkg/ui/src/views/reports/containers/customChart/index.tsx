@@ -10,21 +10,15 @@ import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
-import { CustomMetricState, CustomMetricRow } from "./customMetric";
+import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 
 import { INodeStatus } from "src/util/proto";
-
-const axisUnitsOptions: DropdownOption[] = [
-  AxisUnits.Count,
-  AxisUnits.Bytes,
-  AxisUnits.Duration,
-].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -33,8 +27,7 @@ export interface CustomChartProps {
 }
 
 interface UrlState {
-  metrics: string;
-  units: string;
+  charts: string;
 }
 
 class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
@@ -95,11 +88,22 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     this.refresh(props);
   }
 
-  currentMetrics(): CustomMetricState[] {
+  currentCharts(): CustomChartState[] {
+    if ("metrics" in this.props.location.query) {
+      try {
+        return [{
+          metrics: JSON.parse(this.props.location.query.metrics),
+          axisUnits: AxisUnits.Count,
+        }];
+      } catch (e) {
+        return [new CustomChartState()];
+      }
+    }
+
     try {
-      return JSON.parse(this.props.location.query.metrics);
+      return JSON.parse(this.props.location.query.charts);
     } catch (e) {
-      return [];
+      return [new CustomChartState()];
     }
   }
 
@@ -111,148 +115,122 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     });
   }
 
-  updateUrlMetrics(newState: CustomMetricState[]) {
-    const metrics = JSON.stringify(newState);
+  updateUrlCharts(newState: CustomChartState[]) {
+    const charts = JSON.stringify(newState);
     this.updateUrl({
-      metrics,
+      charts,
     });
   }
 
-  updateMetricRow = (index: number, newState: CustomMetricState) => {
-    const arr = this.currentMetrics().slice();
+  updateChartRow = (index: number, newState: CustomChartState) => {
+    const arr = this.currentCharts().slice();
     arr[index] = newState;
-    this.updateUrlMetrics(arr);
+    this.updateUrlCharts(arr);
   }
 
-  addMetric = () => {
-    this.updateUrlMetrics([...this.currentMetrics(), new CustomMetricState()]);
+  addChart = () => {
+    this.updateUrlCharts([...this.currentCharts(), new CustomChartState()]);
   }
 
-  removeMetric = (index: number) => {
-    const metrics = this.currentMetrics();
-    this.updateUrlMetrics(metrics.slice(0, index).concat(metrics.slice(index + 1)));
-  }
-
-  currentAxisUnits(): AxisUnits {
-    return +this.props.location.query.units || AxisUnits.Count;
-  }
-
-  changeAxisUnits = (selected: DropdownOption) => {
-    this.updateUrl({
-      units: selected.value,
-    });
+  removeChart = (index: number) => {
+    const charts = this.currentCharts();
+    this.updateUrlCharts(charts.slice(0, index).concat(charts.slice(index + 1)));
   }
 
   // Render a chart of the currently selected metrics.
-  renderChart() {
-    const metrics = this.currentMetrics();
-    const units = this.currentAxisUnits();
+  renderChart = (chart: CustomChartState, index: number) => {
+    const metrics = chart.metrics;
+    const units = chart.axisUnits;
     const { nodesSummary } = this.props;
-    if (_.isEmpty(metrics)) {
+
+    return (
+      <MetricsDataProvider id={`debug-custom-chart.${index}`} key={ index }>
+        <LineGraph>
+          <Axis units={units}>
+            {
+              metrics.map((m, i) => {
+                if (m.metric !== "") {
+                  if (m.perNode) {
+                    return _.map(nodesSummary.nodeIDs, (nodeID) => (
+                      <Metric
+                        key={`${index}${i}${nodeID}`}
+                        title={`${nodeID}: ${m.metric} (${i})`}
+                        name={m.metric}
+                        aggregator={m.aggregator}
+                        downsampler={m.downsampler}
+                        derivative={m.derivative}
+                        sources={
+                          isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
+                          ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n => n.toString())
+                          : [nodeID]
+                        }
+                      />
+                    ));
+                  } else {
+                    return (
+                      <Metric
+                        key={i}
+                        title={`${m.metric} (${i}) `}
+                        name={m.metric}
+                        aggregator={m.aggregator}
+                        downsampler={m.downsampler}
+                        derivative={m.derivative}
+                        sources={m.source === "" ? [] : [m.source]}
+                      />
+                    );
+                  }
+                }
+                return "";
+              })
+            }
+          </Axis>
+        </LineGraph>
+      </MetricsDataProvider>
+    );
+  }
+
+  renderCharts() {
+    const charts = this.currentCharts();
+
+    if (_.isEmpty(charts)) {
       return (
-        <div>
-          <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
-        </div>
+        <h3>Click "Add Chart" to add a chart to the custom dashboard.</h3>
       );
     }
 
     return (
-      <div>
-        <MetricsDataProvider id="debug-custom-chart">
-          <LineGraph>
-            <Axis units={units}>
-              {
-                metrics.map((m, i) => {
-                  if (m.metric !== "") {
-                    if (m.perNode) {
-                      return _.map(nodesSummary.nodeIDs, (nodeID) => (
-                        <Metric
-                          key={"${i}${nodeID}"}
-                          title={`${nodeID}: ${m.metric} (${i})`}
-                          name={m.metric}
-                          aggregator={m.aggregator}
-                          downsampler={m.downsampler}
-                          derivative={m.derivative}
-                          sources={
-                            isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
-                            ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n => n.toString())
-                            : [nodeID]
-                          }
-                        />
-                      ));
-                    } else {
-                      return (
-                        <Metric
-                          key={i}
-                          title={`${m.metric} (${i}) `}
-                          name={m.metric}
-                          aggregator={m.aggregator}
-                          downsampler={m.downsampler}
-                          derivative={m.derivative}
-                          sources={m.source === "" ? [] : [m.source]}
-                        />
-                      );
-                    }
-                  }
-                  return "";
-                })
-              }
-            </Axis>
-          </LineGraph>
-        </MetricsDataProvider>
-      </div>
+      <React.Fragment>
+        { charts.map(this.renderChart) }
+      </React.Fragment>
     );
   }
 
   // Render a table containing all of the currently added metrics, with editing
   // inputs for each metric.
-  renderMetricsTable() {
-    const metrics = this.currentMetrics();
-    let table: JSX.Element = null;
-
-    if (!_.isEmpty(metrics)) {
-      table = (
-        <table className="metric-table">
-          <thead>
-            <tr>
-              <td className="metric-table__header">Metric Name</td>
-              <td className="metric-table__header">Downsampler</td>
-              <td className="metric-table__header">Aggregator</td>
-              <td className="metric-table__header">Rate</td>
-              <td className="metric-table__header">Source</td>
-              <td className="metric-table__header">Per Node</td>
-              <td className="metric-table__header metric-table__header--no-title"></td>
-            </tr>
-          </thead>
-          <tbody>
-            { metrics.map((row, i) =>
-              <CustomMetricRow
-                key={i}
-                metricOptions={this.metricOptions(this.props.nodesSummary)}
-                nodeOptions={this.nodeOptions(this.props.nodesSummary)}
-                index={i}
-                rowState={row}
-                onChange={this.updateMetricRow}
-                onDelete={this.removeMetric}
-              />,
-            )}
-          </tbody>
-        </table>
-      );
-    }
+  renderChartTables() {
+    const charts = this.currentCharts();
 
     return (
-      <div>
-        { table }
-        <button className="metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
-      </div>
+      <React.Fragment>
+        {
+          charts.map((chart, i) => (
+            <CustomChartTable
+              metricOptions={ this.metricOptions(this.props.nodesSummary) }
+              nodeOptions={ this.nodeOptions(this.props.nodesSummary) }
+              index={ i }
+              chartState={ chart }
+              onChange={ this.updateChartRow }
+              onDelete={ this.removeChart }
+            />
+          ))
+        }
+      </React.Fragment>
     );
   }
 
   render() {
-    const units = this.currentAxisUnits();
     return (
-      <div>
+      <React.Fragment>
         <Helmet>
           <title>Custom Chart | Debug</title>
         </Helmet>
@@ -261,28 +239,21 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
           <PageConfigItem>
             <TimeScaleDropdown />
           </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              title="Units"
-              selected={units.toString()}
-              options={axisUnitsOptions}
-              onChange={this.changeAxisUnits}
-            />
-          </PageConfigItem>
+          <button className="chart-edit-button chart-edit-button--add" onClick={this.addChart}>Add Chart</button>
         </PageConfig>
         <section className="section">
           <div className="l-columns">
             <div className="chart-group l-columns__left">
-              { this.renderChart() }
+              { this.renderCharts() }
             </div>
             <div className="l-columns__right">
             </div>
           </div>
         </section>
         <section className="section">
-          { this.renderMetricsTable() }
+          { this.renderChartTables() }
         </section>
-      </div>
+      </React.Fragment>
     );
   }
 }
