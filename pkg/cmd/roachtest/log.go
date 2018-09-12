@@ -61,14 +61,14 @@ var quietStderr quietStderrOption
 // TeamCity build log, if running in CI), while creating a non-interleaved
 // record in the build artifacts.
 type logger struct {
-	name           string
+	path           string
 	file           *os.File
 	stdout, stderr io.Writer
 }
 
 // newLogger constructs a new logger object. Not intended for direct
 // use. Please use logger.ChildLogger instead.
-func (cfg *loggerConfig) newLogger(name, filename string) (*logger, error) {
+func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 	if artifacts == "" {
 		// Log to stdout/stderr if there is no artifacts directory.
 		return &logger{
@@ -77,12 +77,11 @@ func (cfg *loggerConfig) newLogger(name, filename string) (*logger, error) {
 		}, nil
 	}
 
-	path := filepath.Join(artifacts, teamCityNameEscape(name), filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}
 
-	f, err := os.Create(path + ".log")
+	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
@@ -98,14 +97,14 @@ func (cfg *loggerConfig) newLogger(name, filename string) (*logger, error) {
 	}
 
 	return &logger{
-		name:   name,
+		path:   path,
 		file:   f,
 		stdout: newWriter(cfg.stdout),
 		stderr: newWriter(cfg.stderr),
 	}, nil
 }
 
-func rootLogger(name string) (*logger, error) {
+func rootLogger(path string) (*logger, error) {
 	var stdout, stderr io.Writer
 	// Log to stdout/stderr if we're not running tests in parallel.
 	if parallelism == 1 {
@@ -113,7 +112,7 @@ func rootLogger(name string) (*logger, error) {
 		stderr = os.Stderr
 	}
 	cfg := &loggerConfig{stdout: stdout, stderr: stderr}
-	return cfg.newLogger(name, "test")
+	return cfg.newLogger(path)
 }
 
 func (l *logger) close() {
@@ -122,21 +121,20 @@ func (l *logger) close() {
 	}
 }
 
-// ChildLogger constructs a new logger which logs to the specified
-// file. Control of the prefix and teeing of stdout/stdout can be controlled by
-// logger options.
-func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error) {
+// ChildLogger constructs a new logger which logs to the specified file. The
+// prefix and teeing of stdout/stdout can be controlled by logger options.
+func (l *logger) ChildLogger(prefix string, opts ...loggerOption) (*logger, error) {
 	if l.file == nil {
-		p := []byte(name + ": ")
+		p := []byte(prefix + ": ")
 		return &logger{
-			name:   name,
+			path:   l.path,
 			stdout: &prefixWriter{out: l.stdout, prefix: p},
 			stderr: &prefixWriter{out: l.stderr, prefix: p},
 		}, nil
 	}
 
 	cfg := &loggerConfig{
-		prefix: name + ": ",
+		prefix: prefix + ": ",
 		stdout: l.stdout,
 		stderr: l.stderr,
 	}
@@ -144,7 +142,7 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 		opt.apply(cfg)
 	}
 
-	return cfg.newLogger(l.name, name)
+	return cfg.newLogger(l.path)
 }
 
 func (l *logger) Printf(f string, args ...interface{}) {
