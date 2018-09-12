@@ -7008,3 +7008,7 @@ func (r *Replica) EmitMLAI() {
 	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	untrack(ctx, r.RangeID, ctpb.LAI(lai))
 }
+
+func init() {
+	tracing.RegisterTagRemapping("r", "range")
+}

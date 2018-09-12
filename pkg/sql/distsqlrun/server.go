@@ -297,10 +297,14 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp opentracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName)
+		sp = ds.Tracer.StartSpan(opName, tracing.LogTagsFromCtx(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(parentSpan.Context()))
+		sp = ds.Tracer.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSpan.Context()),
+			tracing.LogTagsFromCtx(ctx),
+		)
 	}
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 

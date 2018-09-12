@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var leaseStatusLogLimiter = log.Every(5 * time.Second)
@@ -242,9 +243,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		// We use FollowsFrom because the lease request's span can outlive the
 		// parent request. This is possible if parentCtx is canceled after others
 		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
-		sp = tr.StartSpan(opName, opentracing.FollowsFrom(parentSp.Context()))
+		sp = tr.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSp.Context()),
+			tracing.LogTagsFromCtx(parentCtx),
+		)
 	} else {
-		sp = tr.StartSpan(opName)
+		sp = tr.StartSpan(opName, tracing.LogTagsFromCtx(parentCtx))
 	}
 
 	// Create a new context *without* a timeout. Instead, we multiplex the
