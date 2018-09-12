@@ -796,6 +796,13 @@ func (r *registry) run(
 					var wg sync.WaitGroup
 					wg.Add(1)
 					r.run(ctx, &t.spec.SubTests[i], filter, c, func(failed bool) {
+						if failed {
+							// Mark the parent test as failed since one of the subtests
+							// failed.
+							t.mu.Lock()
+							t.mu.failed = true
+							t.mu.Unlock()
+						}
 						if failed && debugEnabled {
 							// The test failed and debugging is enabled. Don't try to stumble
 							// forward running another test or subtest, just exit
