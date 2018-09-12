@@ -2456,8 +2456,6 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
-	// TODO(knz): We need to disable distributed execution because KV
-	// tracing does not (yet) distribute.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;
 CREATE TABLE d.t (
@@ -2467,7 +2465,6 @@ CREATE TABLE d.t (
   INDEX i (a) STORING (b),
   UNIQUE INDEX u (a) STORING (b)
 );
-SET distsql = off;
 `); err != nil {
 		t.Fatal(err)
 	}
