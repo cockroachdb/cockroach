@@ -796,9 +796,6 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 		return
 	}
 
-	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
-	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &tree.NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PLACEHOLDER
 }
 
