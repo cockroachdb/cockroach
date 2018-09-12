@@ -161,10 +161,13 @@ func (ts *txnState) resetForNewSQLTxn(
 	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span for this SQL txn.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable)
+		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable, tracing.LogTagsFromCtx(connCtx))
 	}
 
 	if txnType == implicitTxn {

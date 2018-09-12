@@ -899,12 +899,7 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 // processorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
-	parentSp := opentracing.SpanFromContext(ctx)
-	if parentSp == nil || tracing.IsBlackHoleSpan(parentSp) {
-		return ctx, nil
-	}
-	newSpan := tracing.StartChildSpan(name, parentSp, true /* separateRecording */)
-	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+	return tracing.ChildSpanSeparateRecording(ctx, name)
 }
 
 func newProcessor(
