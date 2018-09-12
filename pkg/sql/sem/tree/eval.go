@@ -1580,43 +1580,43 @@ type CmpOp struct {
 	NullableArgs bool
 
 	// Datum return type is a union between *DBool and dNull.
-	fn func(*EvalContext, Datum, Datum) (Datum, error)
+	Fn func(*EvalContext, Datum, Datum) (Datum, error)
 
 	types       TypeList
 	isPreferred bool
 }
 
-func (op CmpOp) params() TypeList {
+func (op *CmpOp) params() TypeList {
 	return op.types
 }
 
-func (op CmpOp) matchParams(l, r types.T) bool {
+func (op *CmpOp) matchParams(l, r types.T) bool {
 	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
 var cmpOpReturnType = FixedReturnType(types.Bool)
 
-func (op CmpOp) returnType() ReturnTyper {
+func (op *CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
-func (op CmpOp) preferred() bool {
+func (op *CmpOp) preferred() bool {
 	return op.isPreferred
 }
 
 func init() {
 	// Array equality comparisons.
 	for _, t := range types.AnyNonArray {
-		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
+		CmpOps[EQ] = append(CmpOps[EQ], &CmpOp{
 			LeftType:  types.TArray{Typ: t},
 			RightType: types.TArray{Typ: t},
-			fn:        cmpOpScalarEQFn,
+			Fn:        cmpOpScalarEQFn,
 		})
 
-		CmpOps[IsNotDistinctFrom] = append(CmpOps[IsNotDistinctFrom], CmpOp{
+		CmpOps[IsNotDistinctFrom] = append(CmpOps[IsNotDistinctFrom], &CmpOp{
 			LeftType:     types.TArray{Typ: t},
 			RightType:    types.TArray{Typ: t},
-			fn:           cmpOpScalarIsFn,
+			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
 		})
 	}
@@ -1625,7 +1625,7 @@ func init() {
 func init() {
 	for op, overload := range CmpOps {
 		for i, impl := range overload {
-			casted := impl.(CmpOp)
+			casted := impl.(*CmpOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
 			CmpOps[op][i] = casted
 		}
@@ -1635,37 +1635,37 @@ func init() {
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []overloadImpl
 
-func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
+func (o cmpOpOverload) lookupImpl(left, right types.T) (*CmpOp, bool) {
 	for _, fn := range o {
-		casted := fn.(CmpOp)
+		casted := fn.(*CmpOp)
 		if casted.matchParams(left, right) {
 			return casted, true
 		}
 	}
-	return CmpOp{}, false
+	return nil, false
 }
 
 func makeCmpOpOverload(
 	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b types.T, nullableArgs bool,
-) CmpOp {
-	return CmpOp{
+) *CmpOp {
+	return &CmpOp{
 		LeftType:     a,
 		RightType:    b,
-		fn:           fn,
+		Fn:           fn,
 		NullableArgs: nullableArgs,
 	}
 }
 
-func makeEqFn(a, b types.T) CmpOp {
+func makeEqFn(a, b types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */)
 }
-func makeLtFn(a, b types.T) CmpOp {
+func makeLtFn(a, b types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */)
 }
-func makeLeFn(a, b types.T) CmpOp {
+func makeLeFn(a, b types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */)
 }
-func makeIsFn(a, b types.T) CmpOp {
+func makeIsFn(a, b types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
 }
 
@@ -1706,10 +1706,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.TimestampTZ, types.Timestamp),
 
 		// Tuple comparison.
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
 		},
@@ -1749,10 +1749,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.TimestampTZ, types.Timestamp),
 
 		// Tuple comparison.
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
 		},
@@ -1792,20 +1792,20 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.TimestampTZ, types.Timestamp),
 
 		// Tuple comparison.
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
 		},
 	},
 
 	IsNotDistinctFrom: {
-		CmpOp{
+		&CmpOp{
 			LeftType:     types.Unknown,
 			RightType:    types.Unknown,
-			fn:           cmpOpScalarIsFn,
+			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
 			isPreferred: true,
@@ -1844,10 +1844,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.TimestampTZ, types.Timestamp),
 
 		// Tuple comparison.
-		CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+		&CmpOp{
+			LeftType:     types.FamTuple,
+			RightType:    types.FamTuple,
+			NullableArgs: true,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if left == DNull || right == DNull {
 					return MakeDBool(left == DNull && right == DNull), nil
 				}
@@ -1878,30 +1879,30 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	Like: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, false)
 			},
 		},
 	},
 
 	ILike: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, true)
 			},
 		},
 	},
 
 	SimilarTo: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := similarToKey{s: string(MustBeDString(right)), escape: '\\'}
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1909,10 +1910,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	RegMatch: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1920,10 +1921,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	RegIMatch: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
 			},
@@ -1931,10 +1932,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	JSONExists: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.String,
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
@@ -1948,10 +1949,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	JSONSomeExists: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
 					if k == DNull {
@@ -1971,10 +1972,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	JSONAllExists: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
-			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
 					if k == DNull {
@@ -1994,10 +1995,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	Contains: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
 				if err != nil {
 					return nil, err
@@ -2008,10 +2009,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	ContainedBy: {
-		CmpOp{
+		&CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
-			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
 				if err != nil {
 					return nil, err
@@ -2130,11 +2131,11 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 	return b
 }
 
-func makeEvalTupleIn(typ types.T) CmpOp {
-	return CmpOp{
+func makeEvalTupleIn(typ types.T) *CmpOp {
+	return &CmpOp{
 		LeftType:  typ,
 		RightType: types.FamTuple,
-		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
+		Fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			vtuple := values.(*DTuple)
 			// If the tuple was sorted during normalization, we can perform an
 			// efficient binary search to find if the arg is in the tuple (as
@@ -2204,7 +2205,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 // evalArrayCmp would be called with:
 //   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
-	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
+	ctx *EvalContext, op, subOp ComparisonOperator, fn *CmpOp, left Datum, right Datums,
 ) (Datum, error) {
 	all := op == All
 	any := !all
@@ -2216,7 +2217,7 @@ func evalDatumsCmp(
 		}
 
 		_, newLeft, newRight, _, not := foldComparisonExpr(subOp, left, elem)
-		d, err := fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
+		d, err := fn.Fn(ctx, newLeft.(Datum), newRight.(Datum))
 		if err != nil {
 			return nil, err
 		}
@@ -3490,7 +3491,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if !expr.fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
 		return DNull, nil
 	}
-	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
+	d, err := expr.fn.Fn(ctx, newLeft.(Datum), newRight.(Datum))
 	if err != nil {
 		return nil, err
 	}
@@ -3979,7 +3980,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
 	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
-		return fn.fn(ctx, left, right)
+		return fn.Fn(ctx, left, right)
 	}
 	return nil, pgerror.NewErrorf(
 		pgerror.CodeUndefinedFunctionError, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
@@ -4663,7 +4664,7 @@ func FindEqualComparisonFunction(
 ) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
 	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
 	if found {
-		return fn.fn, true
+		return fn.Fn, true
 	}
 	return nil, false
 }
