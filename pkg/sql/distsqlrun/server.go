@@ -617,6 +617,9 @@ type TestingKnobs struct {
 	// DeterministicStats overrides stats which don't have reliable values, like
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
+
+	// Changefeed contains testing knobs specific to the changefeed system.
+	Changefeed base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
