@@ -4440,7 +4440,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if !allCommitted {
 			// Update raft log entry cache. We clear any older, uncommitted log entries
 			// and cache the latest ones.
-			r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
+			r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
 
 			if len(rd.CommittedEntries) > 0 {
 				// Clear the entries that we just applied out of the Raft log entry
@@ -4450,7 +4450,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				// case.
 				lo := rd.CommittedEntries[0].Index
 				hi := rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
-				r.store.raftEntryCache.delEntries(r.RangeID, lo, hi+1)
+				r.store.raftEntryCache.Clear(r.RangeID, lo, hi+1)
 			}
 		}
 	}

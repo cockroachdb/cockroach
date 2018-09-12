@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -176,7 +177,7 @@ func maybeInlineSideloadedRaftCommand(
 	rangeID roachpb.RangeID,
 	ent raftpb.Entry,
 	sideloaded sideloadStorage,
-	entryCache *raftEntryCache,
+	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
 	if !sniffSideloadedRaftCommand(ent.Data) {
 		return nil, nil
@@ -185,7 +186,7 @@ func maybeInlineSideloadedRaftCommand(
 	// We could unmarshal this yet again, but if it's committed we
 	// are very likely to have appended it recently, in which case
 	// we can save work.
-	cachedSingleton, _, _, _ := entryCache.getEntries(
+	cachedSingleton, _, _, _ := entryCache.Scan(
 		nil, rangeID, ent.Index, ent.Index+1, 1<<20,
 	)
 

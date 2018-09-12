@@ -548,12 +548,13 @@ func (r *Replica) handleReplicatedEvalResult(
 			rResult.State.TruncatedState = nil // for assertion
 
 			r.mu.Lock()
+			oldTruncatedState := r.mu.state.TruncatedState
 			r.mu.state.TruncatedState = newTruncState
 			r.mu.Unlock()
 
 			// Clear any entries in the Raft log entry cache for this range up
 			// to and including the most recently truncated index.
-			r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
+			r.store.raftEntryCache.Clear(r.RangeID, oldTruncatedState.Index+1, newTruncState.Index+1)
 
 			// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
 			// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
