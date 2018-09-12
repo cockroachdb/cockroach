@@ -86,7 +86,7 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		maxBytes: uint64(defaultTreeImplSize),
-		metrics:  MakeMetrics(),
+		metrics:  makeMetrics(),
 	}
 	tc.clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict

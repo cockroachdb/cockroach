@@ -53,7 +53,7 @@ func newSklImpl(clock *hlc.Clock, pageSize uint32) *sklImpl {
 	if pageSize == 0 {
 		pageSize = defaultSklPageSize
 	}
-	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: MakeMetrics()}
+	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: makeMetrics()}
 	tc.clear(clock.Now())
 	return &tc
 }
