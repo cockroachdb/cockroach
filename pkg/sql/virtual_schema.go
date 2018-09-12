@@ -54,6 +54,11 @@ type virtualSchema struct {
 type virtualSchemaTable struct {
 	schema   string
 	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+
+	/* The virtualSchemaTable.generator is used to create a virtualTableNode. This
+	/* function returns a virtualTableGenerator function which generates the next
+	/* row of the table when called. */
+	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -99,6 +104,10 @@ var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
 	"cannot access virtual schema in anonymous database",
 ).SetHintf("verify that the current database is set")
 
+var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeObjectNotInPrerequisiteStateError,
+	"virtualSchema cannot have both the populate and generator functions defined",
+).SetHintf("remove the populate function definition")
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
@@ -127,6 +136,17 @@ func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableCon
 			}
 		}
 
+		if e.tableDef.generator != nil && e.tableDef.populate != nil {
+			return nil, errInvalidVirtualSchema
+		}
+
+		if e.tableDef.generator != nil {
+			next, err := e.tableDef.generator(ctx, p, dbDesc)
+			if err != nil {
+				return nil, err
+			}
+			return p.newContainerVirtualTableValuesNode(columns, 0, next), nil
+		}
 		v := p.newContainerValuesNode(columns, 0)
 
 		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
@@ -182,8 +202,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
-				tableDef: table,
-				desc:     &tableDesc,
+				tableDef:                   table,
+				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
