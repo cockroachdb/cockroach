@@ -681,13 +681,20 @@ func (ex *connExecutor) execStmtInParallel(
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
-		ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
-		err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+
+		shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+		if shouldUseDistSQL {
+			ex.sessionTracing.TraceExecStart(ctx, "distributed-parallel")
+			err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+		} else {
+			ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
+			err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+		}
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 		ex.recordStatementSummary(
-			planner, stmt, false /* distSQLUsed*/, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, distributePlan, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -811,7 +818,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	if ex.sessionData.DistSQLMode != sessiondata.DistSQLOff {
+	shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+
+	if shouldUseDistSQL {
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
