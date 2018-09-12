@@ -52,8 +52,9 @@ type virtualSchema struct {
 
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
-	schema   string
-	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+	schema    string
+	populate  func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (func() (tree.Datums, bool, error), error)
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -127,6 +128,13 @@ func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableCon
 			}
 		}
 
+		if e.tableDef.generator != nil {
+			next, err := e.tableDef.generator(ctx, p, dbDesc)
+			if err != nil {
+				return nil, err
+			}
+			return p.newContainerVirtualTableValuesNode(columns, 0, next), nil
+		}
 		v := p.newContainerValuesNode(columns, 0)
 
 		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
@@ -182,8 +190,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
-				tableDef: table,
-				desc:     &tableDesc,
+				tableDef:                   table,
+				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
