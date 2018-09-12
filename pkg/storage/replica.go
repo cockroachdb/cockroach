@@ -4305,10 +4305,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
-
 	r.sendRaftMessages(ctx, otherMsgs)
 
 	for _, e := range rd.CommittedEntries {
@@ -4428,6 +4424,35 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.Lock()
 		r.refreshProposalsLocked(0, refreshReason)
 		r.mu.Unlock()
+	}
+
+	// Update the raft entry cache.
+	if len(rd.Entries) > 0 || len(rd.CommittedEntries) > 0 {
+		allCommitted := false
+		if len(rd.Entries) == len(rd.CommittedEntries) {
+			// If all newly proposed entries are also being committed in the
+			// same Raft Ready processing iteration, then we can skip adding
+			// them to the cache because we'd just immediately remove them. This
+			// effectively means that we never use the raftEntryCache in
+			// single-node clusters.
+			allCommitted = rd.Entries[0].Index == rd.CommittedEntries[0].Index
+		}
+		if !allCommitted {
+			// Update raft log entry cache. We clear any older, uncommitted log entries
+			// and cache the latest ones.
+			r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
+
+			if len(rd.CommittedEntries) > 0 {
+				// Clear the entries that we just applied out of the Raft log entry
+				// cache. We may pull these entries back into the cache if we need
+				// to catch up a slow follower which doesn't need a snapshot, but
+				// this should be rare and we don't mind hitting RocksDB in that
+				// case.
+				lo := rd.CommittedEntries[0].Index
+				hi := rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
+				r.store.raftEntryCache.delEntries(r.RangeID, lo, hi+1)
+			}
+		}
 	}
 
 	// TODO(bdarnell): need to check replica id and not Advance if it
