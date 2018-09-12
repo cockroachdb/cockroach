@@ -21,8 +21,53 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+var (
+	metaEntryCacheBytes = metric.Metadata{
+		Name:        "raft.entrycache.bytes",
+		Help:        "Aggregate size of all Raft entries in the Raft entry cache",
+		Measurement: "Entry Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaEntryCacheSize = metric.Metadata{
+		Name:        "raft.entrycache.size",
+		Help:        "Number of Raft entries in the Raft entry cache",
+		Measurement: "Entry Count",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaEntryCacheAccesses = metric.Metadata{
+		Name:        "raft.entrycache.accesses",
+		Help:        "Number of cache lookups in the Raft entry cache",
+		Measurement: "Accesses",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaEntryCacheHits = metric.Metadata{
+		Name:        "raft.entrycache.hits",
+		Help:        "Number of successful cache lookups in the Raft entry cache",
+		Measurement: "Hits",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+// RaftEntryCacheMetrics is the set of metrics for the raft entry cache.
+type RaftEntryCacheMetrics struct {
+	Bytes    *metric.Gauge
+	Size     *metric.Gauge
+	Accesses *metric.Counter
+	Hits     *metric.Counter
+}
+
+func makeRaftEntryCacheMetrics() RaftEntryCacheMetrics {
+	return RaftEntryCacheMetrics{
+		Bytes:    metric.NewGauge(metaEntryCacheBytes),
+		Size:     metric.NewGauge(metaEntryCacheSize),
+		Accesses: metric.NewCounter(metaEntryCacheAccesses),
+		Hits:     metric.NewCounter(metaEntryCacheHits),
+	}
+}
 
 type entryCacheKey struct {
 	RangeID roachpb.RangeID
@@ -106,6 +151,7 @@ type raftEntryCache struct {
 	bytes            uint64              // total size of the cache in bytes
 	cache            *cache.OrderedCache // LRU cache of log entries, keyed by rangeID / log index
 	freeList         entryCacheFreeList  // used to avoid allocations on insertion
+	metrics          RaftEntryCacheMetrics
 }
 
 // newRaftEntryCache returns a new RaftEntryCache with the given
@@ -114,6 +160,7 @@ func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	rec := &raftEntryCache{
 		cache:    cache.NewOrderedCache(cache.Config{Policy: cache.CacheLRU}),
 		freeList: makeEntryCacheFreeList(defaultEntryCacheFreeListSize),
+		metrics:  makeRaftEntryCacheMetrics(),
 	}
 	// The raft entry cache mutex will be held when the ShouldEvict
 	// and OnEvictedEntry callbacks are invoked.
@@ -134,6 +181,11 @@ func newRaftEntryCache(maxBytes uint64) *raftEntryCache {
 	return rec
 }
 
+// Metrics returns a struct which contains metrics for the raft entry cache.
+func (rec *raftEntryCache) Metrics() RaftEntryCacheMetrics {
+	return rec.metrics
+}
+
 // addEntries adds the slice of raft entries, using the range ID and the
 // entry indexes as each cached entry's key.
 func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Entry) {
@@ -149,6 +201,7 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 		rec.cache.AddEntry(entry)
 		rec.bytes += uint64(e.Size())
 	}
+	rec.updateGauges()
 }
 
 // getTerm returns the term for the specified index and true for the second
@@ -205,6 +258,13 @@ func (rec *raftEntryCache) getEntries(
 		return exceededMaxBytes
 	}, &fromKey, &toKey)
 
+	rec.metrics.Accesses.Inc(1)
+	if nextIndex == hi || exceededMaxBytes {
+		// We only consider an access a "hit" if it returns all requested
+		// entries or stops short because of a maximum bytes limit.
+		rec.metrics.Hits.Inc(1)
+	}
+
 	return ents, bytes, nextIndex, exceededMaxBytes
 }
 
@@ -226,10 +286,16 @@ func (rec *raftEntryCache) delEntries(rangeID roachpb.RangeID, lo, hi uint64) {
 	for _, e := range cacheEnts {
 		rec.cache.DelEntry(e)
 	}
+	rec.updateGauges()
 }
 
 // clearTo clears the entries in the cache for specified range up to,
 // but not including the specified index.
 func (rec *raftEntryCache) clearTo(rangeID roachpb.RangeID, index uint64) {
 	rec.delEntries(rangeID, 0, index)
+}
+
+func (rec *raftEntryCache) updateGauges() {
+	rec.metrics.Bytes.Update(int64(rec.bytes))
+	rec.metrics.Size.Update(int64(rec.cache.Len()))
 }
