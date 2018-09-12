@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"context"
 	gohex "encoding/hex"
 	"fmt"
 	"math"
@@ -387,7 +386,7 @@ type percentResolverFunc func(percent int) (int64, error)
 // memoryPercentResolver turns a percent into the respective fraction of the
 // system's internal memory.
 func memoryPercentResolver(percent int) (int64, error) {
-	sizeBytes, err := status.GetTotalMemory(context.TODO())
+	sizeBytes, _, err := status.GetTotalMemoryWithoutLogging()
 	if err != nil {
 		return 0, err
 	}
