@@ -1349,3 +1349,122 @@ ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t (a, b)
 
 statement ok
 DROP TABLE t
+
+subtest 26748
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (y, x)
+);
+
+statement ok
+CREATE TABLE b (
+ a_y STRING NULL
+ ,a_x STRING NULL
+ ,CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
+);
+
+statement ok
+INSERT INTO a (x, y) VALUES ('x1', 'y1')
+
+statement error pq: missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement error pq: missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement error pq: foreign key violation: value \['y1' NULL\] not found in a@primary \[y x\]
+INSERT INTO b (a_y, a_x) VALUES ('y1', NULL)
+
+statement error pq: foreign key violation: value \[NULL 'x1'\] not found in a@primary \[y x\]
+INSERT INTO b (a_y, a_x) VALUES (NULL, 'x1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES (NULL, NULL)
+
+statement ok
+DROP TABLE b, a
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+ ,CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+);
+
+statement ok
+INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
+
+statement error missing values for columns \["a_y" "a_z"\] in multi-part foreign key
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement error missing values for columns \["a_x" "a_z"\] in multi-part foreign key
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement error missing values for columns \["a_x" "a_y"\] in multi-part foreign key
+INSERT INTO b (a_z) VALUES ('z1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES (NULL, 'y1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES ('x1', NULL)
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES ('x1', 'z1')
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES (NULL, 'z1')
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES ('x1', NULL)
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES ('y1', 'z1')
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES (NULL, 'z1')
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES ('y1', NULL)
+
+statement error foreign key violation: value \[NULL NULL 'x1'\] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
+
+statement error foreign key violation: value \[NULL 'y1' NULL] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
+
+statement error foreign key violation: value \['z1' NULL NULL] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
+
+statement error foreign key violation: value \[NULL 'y1' 'x1'\] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
+
+statement error foreign key violation: value \['z1' NULL 'x1'\] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
+
+statement error foreign key violation: value \['z1' 'y1' NULL\] not found in a@primary \[z y x\]
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
+
+statement ok
+DROP TABLE b, a
