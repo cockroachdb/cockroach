@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -313,6 +314,13 @@ type Engine interface {
 	// the engine implementation. For RocksDB, this means using the Env responsible for the file
 	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
 	LinkFile(oldname, newname string) error
+}
+
+// MapProvidingEngine is an Engine that also provides facilities for making a
+// sorted map that's persisted by the Engine.
+type MapProvidingEngine interface {
+	Engine
+	diskmap.Factory
 }
 
 // WithSSTables extends the Engine interface with a method to get info
