@@ -10,7 +10,7 @@ import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/com
  */
 export interface ColumnDescriptor<T> {
   // Title string that should appear in the header column.
-  title: string;
+  title: React.ReactNode;
   // Function which generates the contents of an individual cell in this table.
   cell: (obj: T) => React.ReactNode;
   // Function which returns a value that can be used to sort the collection of
