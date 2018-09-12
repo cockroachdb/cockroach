@@ -121,9 +121,10 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "off",
-		int64(sessiondata.DistSQLAuto): "auto",
-		int64(sessiondata.DistSQLOn):   "on",
+		int64(sessiondata.DistSQLOff):   "off",
+		int64(sessiondata.DistSQLAuto):  "auto",
+		int64(sessiondata.DistSQLOn):    "on",
+		int64(sessiondata.DistSQL2Dot0): "2.0",
 	},
 )
 
@@ -478,13 +479,22 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
+func shouldUseDistSQL(distributePlan bool, mode sessiondata.DistSQLExecMode) bool {
+	if mode == sessiondata.DistSQLOff {
+		return false
+	} else if mode == sessiondata.DistSQL2Dot0 {
+		return distributePlan
+	}
+	return true
+}
+
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
 ) bool {
 	switch mode {
 	case sessiondata.DistSQLOff:
 		return false
-	case sessiondata.DistSQLAuto:
+	case sessiondata.DistSQLAuto, sessiondata.DistSQL2Dot0:
 		return rec == shouldDistribute
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute

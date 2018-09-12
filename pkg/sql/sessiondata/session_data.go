@@ -183,12 +183,15 @@ const (
 	// DistSQLOff means that we never use distSQL.
 	DistSQLOff DistSQLExecMode = iota
 	// DistSQLAuto means that we automatically decide on a case-by-case basis if
-	// we use distSQL.
+	// we distribute queries.
 	DistSQLAuto
-	// DistSQLOn means that we use distSQL for queries that are supported.
+	// DistSQLOn means that we distribute queries that are supported.
 	DistSQLOn
-	// DistSQLAlways means that we only use distSQL; unsupported queries fail.
+	// DistSQLAlways means that we only distribute; unsupported queries fail.
 	DistSQLAlways
+	// DistSQL2Dot0 means that we use the "auto" setting from 2.0 - fall back to
+	// local unless distribution is recommended.
+	DistSQL2Dot0
 )
 
 func (m DistSQLExecMode) String() string {
@@ -201,6 +204,8 @@ func (m DistSQLExecMode) String() string {
 		return "on"
 	case DistSQLAlways:
 		return "always"
+	case DistSQL2Dot0:
+		return "2.0"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -217,6 +222,8 @@ func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 		return DistSQLOn, true
 	case "ALWAYS":
 		return DistSQLAlways, true
+	case "2.0":
+		return DistSQL2Dot0, true
 	default:
 		return 0, false
 	}
