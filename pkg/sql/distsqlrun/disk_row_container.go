@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -31,11 +31,11 @@ import (
 // is a SortedDiskMap so the sorting itself is delegated. Use an iterator
 // created through NewIterator() to read the rows in sorted order.
 type diskRowContainer struct {
-	diskMap engine.SortedDiskMap
+	diskMap diskmap.SortedDiskMap
 	// diskAcc keeps track of disk usage.
 	diskAcc mon.BoundAccount
 	// bufferedRows buffers writes to the diskMap.
-	bufferedRows  engine.SortedDiskMapBatchWriter
+	bufferedRows  diskmap.SortedDiskMapBatchWriter
 	scratchKey    []byte
 	scratchVal    []byte
 	scratchEncRow sqlbase.EncDatumRow
@@ -80,9 +80,9 @@ func makeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
-	e engine.Engine,
+	e diskmap.Factory,
 ) diskRowContainer {
-	diskMap := engine.NewRocksDBMap(e)
+	diskMap := e.NewSortedDiskMap()
 	d := diskRowContainer{
 		diskMap:       diskMap,
 		diskAcc:       diskMonitor.MakeBoundAccount(),
@@ -234,7 +234,7 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 // diskRowIterator iterates over the rows in a diskRowContainer.
 type diskRowIterator struct {
 	rowContainer *diskRowContainer
-	engine.SortedDiskMapIterator
+	diskmap.SortedDiskMapIterator
 }
 
 var _ rowIterator = diskRowIterator{}

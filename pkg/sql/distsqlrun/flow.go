@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -108,7 +108,7 @@ type FlowCtx struct {
 	// working set is larger than can be stored in memory.
 	// This is not supposed to be used as a general engine.Engine and thus
 	// one should sparingly use the set of features offered by it.
-	TempStorage engine.Engine
+	TempStorage diskmap.Factory
 	// diskMonitor is used to monitor temporary storage disk usage.
 	diskMonitor *mon.BytesMonitor
 

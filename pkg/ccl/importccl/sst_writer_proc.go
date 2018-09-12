@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,7 +74,7 @@ type sstWriter struct {
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
-	tempStorage engine.Engine
+	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
 	progress    distsqlrun.JobProgress
@@ -108,7 +109,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
-		store := engine.NewRocksDBMultiMap(sp.tempStorage)
+		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
 		batch := store.NewBatchWriter()
 		var key, val []byte
@@ -321,7 +322,7 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 // if not nil, will stop processing at the specified key.
 func makeSSTs(
 	ctx context.Context,
-	it engine.SortedDiskMapIterator,
+	it diskmap.SortedDiskMapIterator,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
 	walltime int64,
