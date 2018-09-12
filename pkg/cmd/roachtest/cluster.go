@@ -50,7 +50,9 @@ import (
 )
 
 var (
-	local                 bool
+	local bool
+	// Path to a local dir where the test logs and artifacts collected from
+	// cluster will be placed.
 	artifacts             string
 	cockroach             string
 	encrypt               bool
@@ -336,6 +338,9 @@ type testI interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Failed() bool
+	// Path to a directory where the test is supposed to store its log and other
+	// artifacts.
+	ArtifactsDir() string
 }
 
 // TODO(tschottdorf): Consider using a more idiomatic approach in which options
@@ -551,7 +556,8 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
-	l, err := rootLogger(t.Name())
+	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	l, err := rootLogger(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -640,7 +646,8 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 // clone creates a new cluster object that refers to the same cluster as the
 // receiver, but is associated with the specified test.
 func (c *cluster) clone(t *test) *cluster {
-	l, err := rootLogger(t.Name())
+	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	l, err := rootLogger(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -676,18 +683,27 @@ func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
 
-func (c *cluster) FetchLogs(ctx context.Context) {
+// FetchLogs downloads the logs from the cluster using `roachprod get`.
+// The logs will be placed in the test's artifacts dir.
+func (c *cluster) FetchLogs(ctx context.Context) error {
+	if c.nodes == 0 {
+		// For tests.
+		return nil
+	}
+
+	c.l.Printf("fetching logs\n")
+	c.status("fetching logs")
+
 	// Don't hang forever if we can't fetch the logs.
 	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	if c.nodes == 0 {
-		// For tests.
-		return
+	path := filepath.Join(c.t.ArtifactsDir(), "logs")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
 	}
-	c.status("retrieving logs")
-	_ = execCmd(execCtx, c.l, roachprod, "get", c.name, "logs",
-		filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "logs"))
+
+	return execCmd(execCtx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
