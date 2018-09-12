@@ -121,8 +121,9 @@ func newChangeAggregatorProcessor(
 
 	buf := makeBuffer()
 	ca.poller = makePoller(
-		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip, spans,
-		spec.Feed, initialHighWater, buf)
+		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip,
+		spans, spec.Feed, initialHighWater, buf,
+	)
 
 	leaseMgr := flowCtx.LeaseManager.(*sql.LeaseManager)
 	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
