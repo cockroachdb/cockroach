@@ -16,11 +16,22 @@
   text-decoration none
   color $link-color
 
-.last-cleared-tooltip
+.statement-count-title, .last-cleared-title
+  padding 12px 24px
+  color $body-color
+
+.last-cleared-tooltip, .numeric-stats-table
   &__tooltip
     width 36px  // Reserve space for 10px padding around centered 16px icon
     height 16px
     display inline-block
+
+    // Overrides to let the tooltip sit inside a table header.
+    text-transform none
+    font-weight normal
+    white-space normal
+    letter-spacing normal
+    font-size 14px
 
   &__tooltip-hover-area
     width 100%
@@ -40,24 +51,45 @@
     border-color $body-color
     color $body-color
 
-.bar-tooltip
-  &__tooptip-hover-area
-    width 100%
-    height 100%
-
 .app-name
+  white-space nowrap
+
   &__unset
     color $tooltip-color
     font-style italic
 
+.statements-table__col-time
+  text-align right
+  white-space nowrap
+
+.statements-table__col-count
+  .bar-chart
+    width 100px
+
+.statements-table__col-retries
+  .bar-chart
+    width 80px
+
+.numeric-stats-table
+  .bar-chart
+    width 200px
+
+.statements-table__col-rows, .statements-table__col-latency
+  .bar-chart
+    width 140px
+
+.statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
+  .bar-chart
+    margin-left 3em
+
+    .label
+      left -3em
+      width 2.5em
+
 .bar-chart
-  width 10em
-  height 1em
+  height 14px
   margin-left 5em
   position relative
-
-  &--breakdown
-    margin-left 0
 
   .label
     position absolute
@@ -68,72 +100,57 @@
 
   &__bar
     display inline-block
-    height 1em
-    margin-left -1px
+    height 14px
 
     &--dev
       position absolute
-      height 0.6em
-      top 0.2em
+      height 3px
+      top 6px
 
-  .count-first-try
+  .count-first-try, .count-total
     background-color $link-color
-    border-left 1px solid $link-color
 
-  .count-retry
+  .count-retry, .count-max-retries
     background-color $alert-color
-    border-left 1px solid $alert-color
 
-  .rows
+  .rows, .latency-parse, .latency-plan, .latency-run, .latency-overhead, .latency-overall
     background-color $link-color
-    border-left 1px solid $link-color
 
-  .rows-dev
-    background-color lighten($link-color, 50%)
-    border-left 1px solid lighten($link-color, 50%)
-
-  .latency-parse
-    background-color $alert-color
-    border-left 1px solid $alert-color
-
-  .latency-parse-dev
-    background-color lighten($alert-color, 50%)
-    border-left 1px solid lighten($alert-color, 50%)
-
-  .latency-plan
+  .rows-dev, .latency-parse-dev, .latency-plan-dev, .latency-run-dev, .latency-overhead-dev, .latency-overall-dev
     background-color $warning-color
-    border-left 1px solid $warning-color
-
-  .latency-plan-dev
-    background-color lighten($warning-color, 50%)
-    border-left 1px solid lighten($warning-color, 50%)
-
-  .latency-run
-    background-color $link-color
-    border-left 1px solid $link-color
-
-  .latency-run-dev
-    background-color lighten($link-color, 50%)
-    border-left 1px solid lighten($link-color, 50%)
-
-  .latency-overhead
-    background-color $alert-color
-    border-left 1px solid $alert-color
-
-  .latency-overhead-dev
-    background-color lighten($alert-color, 50%)
-    border-left 1px solid lighten($alert-color, 50%)
-
-  .latency-overall
-    background-color $body-color
-    border-left 1px solid $body-color
-
-  .latency-overall-dev
-    background-color lighten($body-color, 50%)
-    border-left 1px solid lighten($body-color, 50%)
 
 .numeric-stats-table
   @extend $table-base
 
+  &__row--summary
+    color black
+    font-weight bold
+
 .details-bar
   margin 12px 0
+
+.numeric-stat-legend
+  white-space nowrap
+
+  th
+    position relative
+    padding-left 24px
+    padding-right 5px
+
+  td
+    text-align right
+
+  &__bar
+    position absolute
+    width 21px
+    left 0
+
+    &--mean
+      height 14px
+      top 2px
+      background-color $link-color
+
+    &--dev
+      height 3px
+      top 8px
+      background-color $warning-color

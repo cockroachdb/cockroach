@@ -229,9 +229,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [stmtA.key.key_data.distSQL]);
-    assert.deepEqual(result.opt, [stmtA.key.key_data.opt]);
-    assert.deepEqual(result.failed, [stmtA.key.key_data.failed]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
@@ -248,9 +248,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.key_data.app, stmtB.key.key_data.app, stmtC.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [stmtA.key.key_data.distSQL]);
-    assert.deepEqual(result.opt, [stmtA.key.key_data.opt]);
-    assert.deepEqual(result.failed, [stmtA.key.key_data.failed]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 3 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
@@ -270,9 +270,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [stmtA.key.key_data.distSQL]);
-    assert.deepEqual(result.opt, [stmtA.key.key_data.opt]);
-    assert.deepEqual(result.failed, [stmtA.key.key_data.failed]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 3 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 3 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 3 });
     assert.deepEqual(result.node_id, [1, 2, 3]);
   });
 
@@ -302,9 +302,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), sumCount);
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [false, true]);
-    assert.deepEqual(result.opt, [false, true]);
-    assert.deepEqual(result.failed, [false, true]);
+    assert.deepEqual(result.distSQL, { numerator: 4, denominator: 8 });
+    assert.deepEqual(result.opt, { numerator: 4, denominator: 8 });
+    assert.deepEqual(result.failed, { numerator: 4, denominator: 8 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
@@ -322,9 +322,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [stmtA.key.key_data.distSQL]);
-    assert.deepEqual(result.opt, [stmtA.key.key_data.opt]);
-    assert.deepEqual(result.failed, [stmtA.key.key_data.failed]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 
@@ -342,9 +342,9 @@ describe("selectStatement", () => {
     assert.equal(result.statement, stmtA.key.key_data.query);
     assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
     assert.deepEqual(result.app, [stmtA.key.key_data.app]);
-    assert.deepEqual(result.distSQL, [stmtA.key.key_data.distSQL]);
-    assert.deepEqual(result.opt, [stmtA.key.key_data.opt]);
-    assert.deepEqual(result.failed, [stmtA.key.key_data.failed]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
     assert.deepEqual(result.node_id, [stmtA.key.node_id]);
   });
 });
