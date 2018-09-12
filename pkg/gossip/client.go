@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // client is a client-side RPC connection to a gossip peer node.
@@ -43,7 +44,8 @@ type client struct {
 	addr                  net.Addr                 // Peer node network address
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
-	closer                chan struct{}            // Client shutdown channel
+	sentHighWaterStamps   map[roachpb.NodeID]int64
+	closer                chan struct{} // Client shutdown channel
 	clientMetrics         Metrics
 	nodeMetrics           Metrics
 }
@@ -64,6 +66,7 @@ func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *
 		createdAt:      timeutil.Now(),
 		addr:           addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
+		sentHighWaterStamps:   map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 		clientMetrics:         makeMetrics(),
 		nodeMetrics:           nodeMetrics,
@@ -157,10 +160,11 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.RLock()
 	args := &Request{
 		NodeID:          g.NodeID.Get(),
-		Addr:            g.mu.is.NodeAddr,
-		HighWaterStamps: g.mu.is.getHighWaterStamps(),
-		ClusterID:       g.clusterID.Get(),
+		Addr:            &g.mu.is.NodeAddr,
+		HighWaterStamps: g.mu.is.getHighWaterStamps(c.sentHighWaterStamps),
+		ClusterID:       new(uuid.UUID),
 	}
+	*args.ClusterID = g.clusterID.Get()
 	g.mu.RUnlock()
 
 	bytesSent := int64(args.Size())
@@ -182,17 +186,24 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 		// Ensure that the high water stamps for the remote server are kept up to
 		// date so that we avoid resending the same gossip infos as infos are
 		// updated locally.
+		// var infoSize int
 		for _, i := range delta {
+			// TODO(peter): remove
+			// infoSize += i.Size()
+			// log.Infof(c.AnnotateCtx(stream.Context()), "sending(n%d): %s %d", c.peerID, k, i.Size())
 			ratchetHighWaterStamp(c.remoteHighWaterStamps, i.NodeID, i.OrigStamp)
 		}
 
-		args := Request{
+		// Note that we intentionally only send Addr and ClusterID on the initial
+		// connection request (see requestGossip), not on the subsequent streaming
+		// messages.
+		args := &Request{
 			NodeID:          g.NodeID.Get(),
-			Addr:            g.mu.is.NodeAddr,
 			Delta:           delta,
-			HighWaterStamps: g.mu.is.getHighWaterStamps(),
-			ClusterID:       g.clusterID.Get(),
+			HighWaterStamps: g.mu.is.getHighWaterStamps(c.sentHighWaterStamps),
 		}
+		// TODO(peter): remove
+		// log.Infof(c.AnnotateCtx(stream.Context()), "request: %d %d", args.Size()-infoSize, infoSize)
 
 		bytesSent := int64(args.Size())
 		infosSent := int64(len(delta))
@@ -211,7 +222,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 		}
 
 		g.mu.Unlock()
-		return stream.Send(&args)
+		return stream.Send(args)
 	}
 	g.mu.Unlock()
 	return nil

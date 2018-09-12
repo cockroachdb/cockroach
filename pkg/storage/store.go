@@ -1421,6 +1421,16 @@ func (s *Store) startGossip() {
 			interval:    s.cfg.SentinelGossipTTL() / 2,
 		},
 		{
+			key: roachpb.KeyMin,
+			fn: func(ctx context.Context, repl *Replica) error {
+				// The cluster ID is gossiped by all replicas, not just the lease
+				// holder, so wakeReplica is not used here.
+				return repl.maybeGossipClusterID(ctx).GoError()
+			},
+			description: "cluster ID",
+			interval:    systemDataGossipInterval,
+		},
+		{
 			key:         keys.SystemConfigSpan.Key,
 			fn:          wakeReplica,
 			description: "system config",

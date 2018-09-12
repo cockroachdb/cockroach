@@ -74,8 +74,6 @@ import (
 )
 
 const (
-	// configGossipTTL is the time-to-live for configuration maps.
-	configGossipTTL = 0 // does not expire
 	// optimizePutThreshold is the minimum length of a contiguous run
 	// of batched puts or conditional puts, after which the constituent
 	// put operations will possibly be optimized by determining whether
@@ -6691,32 +6689,6 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
-
-	// When multiple nodes are initialized with overlapping Gossip addresses, they all
-	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
-	// so we error out below.
-	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
-		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if gossipClusterID != r.store.ClusterID() {
-				log.Fatalf(
-					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
-					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
-			}
-		}
-	}
-
-	// Gossip the cluster ID from all replicas of the first range; there
-	// is no expiration on the cluster ID.
-	if log.V(1) {
-		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
-			r.store.StoreID(), r.RangeID)
-	}
-	if err := r.store.Gossip().AddInfo(
-		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
-	); err != nil {
-		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
-	}
-
 	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
 		return nil
 	}
@@ -6752,7 +6724,8 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
 	}
 	if err := r.store.Gossip().AddInfoProto(
-		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {
+		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, 0, /* no expiration */
+	); err != nil {
 		log.Errorf(ctx, "failed to gossip first range metadata: %s", err)
 	}
 }
@@ -6762,6 +6735,45 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip() bool {
 	return r.OwnsValidLease(r.store.Clock().Now())
+}
+
+// maybeGossipClusterID gossips the cluster from every replica of the first
+// range.
+//
+// TODO(peter): why are we gossiping this from every replica of the first
+// range? Seems like gossiping it from the first range leaseholder is
+// sufficient. What are we trying to protect against?
+func (r *Replica) maybeGossipClusterID(ctx context.Context) *roachpb.Error {
+	if !r.IsFirstRange() {
+		return nil
+	}
+
+	// When multiple nodes are initialized with overlapping Gossip addresses, they all
+	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
+	// so we error out below.
+	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
+		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
+			if gossipClusterID != r.store.ClusterID() {
+				log.Fatalf(
+					ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
+			}
+		}
+	}
+
+	// Gossip the cluster ID from all replicas of the first range; there is no
+	// expiration on the cluster ID.
+	if log.V(1) {
+		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
+			r.store.StoreID(), r.RangeID)
+	}
+	if err := r.store.Gossip().AddInfo(
+		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0, /* no expiration */
+	); err != nil {
+		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+	}
+
+	return nil
 }
 
 // MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.

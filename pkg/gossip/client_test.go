@@ -549,7 +549,6 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	reply := &Response{
 		NodeID:          nodeID,
-		Addr:            *addr,
 		AlternateNodeID: nodeID + 1,
 		AlternateAddr:   &newAddr,
 	}
