@@ -7242,7 +7242,7 @@ func TestEntries(t *testing.T) {
 		// Case 19: lo and hi are available, but entry cache evicted.
 		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
 			// Manually evict cache for the first 10 log entries.
-			repl.store.raftEntryCache.delEntries(rangeID, indexes[0], indexes[9]+1)
+			repl.store.raftEntryCache.Clear(rangeID, indexes[0], indexes[9]+1)
 			indexes = append(indexes, populateLogs(10, 40)...)
 		}},
 		// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
@@ -7258,7 +7258,7 @@ func TestEntries(t *testing.T) {
 		if tc.maxBytes == 0 {
 			tc.maxBytes = math.MaxUint64
 		}
-		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
+		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.Scan(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
@@ -7293,7 +7293,7 @@ func TestEntries(t *testing.T) {
 	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.Timestamp{}, nil); err != nil {
 		t.Fatal(err)
 	}
-	repl.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
+	repl.store.raftEntryCache.Clear(rangeID, indexes[6], indexes[6]+1)
 
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
@@ -7313,7 +7313,7 @@ func TestEntries(t *testing.T) {
 	}
 	// Case 25b: don't hit the gap due to maxBytes, cache cleared.
 	{
-		repl.store.raftEntryCache.delEntries(rangeID, indexes[5], indexes[5]+1)
+		repl.store.raftEntryCache.Clear(rangeID, indexes[5], indexes[5]+1)
 		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
 		if err != nil {
 			t.Errorf("25: expected no error, got %s", err)

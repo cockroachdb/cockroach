@@ -4377,15 +4377,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.Unlock()
 	}
 
-	// Clear any entries in the Raft log entry cache for this range up to and
-	// including the most recently applied index. We may pull these entries back
-	// into the cache if we need to catch up a slow follower which doesn't need
-	// a snapshot, but this should be rare.
-	r.store.raftEntryCache.clearTo(r.RangeID, r.mu.state.RaftAppliedIndex+1)
+	// Update the raft entry cache.
+	{
+		// Clear any entries in the Raft log entry cache for this range up to and
+		// including the most recently applied index. We may pull these entries back
+		// into the cache if we need to catch up a slow follower which doesn't need
+		// a snapshot, but this should be rare.
+		lo := rd.CommittedEntries[0].Index
+		hi := rd.CommittedEntries[len(rd.CommittedEntries)-1].Index
+		r.store.raftEntryCache.Clear(r.RangeID, lo, hi)
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
+		// Update raft log entry cache. We clear any older, uncommitted log entries
+		// and cache the latest ones.
+		r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
+	}
 
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
