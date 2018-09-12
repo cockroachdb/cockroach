@@ -143,6 +143,29 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 }
 
+func BenchmarkEntryCache(b *testing.B) {
+	rangeID := roachpb.RangeID(1)
+	ents := make([]raftpb.Entry, 1000)
+	for i := range ents {
+		ents[i] = newEntry(uint64(i+1), 8)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rec := newRaftEntryCache(8 * uint64(len(ents)*len(ents[0].Data)))
+		for i := roachpb.RangeID(0); i < 10; i++ {
+			if i != rangeID {
+				rec.addEntries(i, ents)
+			}
+		}
+		b.StartTimer()
+		rec.addEntries(rangeID, ents)
+		_, _, _, _ = rec.getEntries(nil, rangeID, 0, uint64(len(ents)-10), noLimit)
+		rec.clearTo(rangeID, uint64(len(ents)-10))
+	}
+}
+
 func BenchmarkEntryCacheClearTo(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
 	ents := make([]raftpb.Entry, 1000)
