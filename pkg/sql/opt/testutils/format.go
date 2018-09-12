@@ -47,7 +47,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) b
 	}
 
 	// Build the scalar expression and format it as a single tree node.
-	bld := execbuilder.New(nil /* factory */, ev)
+	bld := execbuilder.New(nil /* factory */, ev, nil /* evalCtx */)
 	md := ev.Metadata()
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, md.NumColumns())
 	expr, err := bld.BuildScalar(&ivh)

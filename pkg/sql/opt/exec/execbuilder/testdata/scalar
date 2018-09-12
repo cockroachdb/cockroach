@@ -519,17 +519,34 @@ render     ·         ·                           ("?column?")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
 ----
-render     ·         ·                  ("?column?")  ·
- │         render 0  1 = ANY (1, 2, 3)  ·             ·
- └── scan  ·         ·                  ()            ·
-·          table     t@primary          ·             ·
-·          spans     ALL                ·             ·
+render     ·         ·          ("?column?")  ·
+ │         render 0  true       ·             ·
+ └── scan  ·         ·          ()            ·
+·          table     t@primary  ·             ·
+·          spans     ALL        ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
 ----
-render     ·         ·           ("?column?")  ·
- │         render 0  1 = ANY ()  ·             ·
- └── scan  ·         ·           ()            ·
-·          table     t@primary   ·             ·
-·          spans     ALL         ·             ·
+render     ·         ·          ("?column?")  ·
+ │         render 0  false      ·             ·
+ └── scan  ·         ·          ()            ·
+·          table     t@primary  ·             ·
+·          spans     ALL        ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT least(NULL, greatest(NULL, least(1, NULL), 2, 3), greatest(5, 6), a) FROM t
+----
+render     ·         ·                     ("least")  ·
+ │         render 0  least(NULL, 3, 6, a)  ·          ·
+ └── scan  ·         ·                     (a)        ·
+·          table     t@primary             ·          ·
+·          spans     ALL                   ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='foo'::regclass
+----
+filter              ·       ·                           (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
+ │                  filter  attrelid = 'foo'::REGCLASS  ·                                                                                                                                                                                                                                              ·
+ └── virtual table  ·       ·                           (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
+·                   source  ·                           ·                                                                                                                                                                                                                                              ·
