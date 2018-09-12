@@ -49,11 +49,11 @@ type sklImpl struct {
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock, pageSize uint32, metrics Metrics) *sklImpl {
+func newSklImpl(clock *hlc.Clock, pageSize uint32) *sklImpl {
 	if pageSize == 0 {
 		pageSize = defaultSklPageSize
 	}
-	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: metrics}
+	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: makeMetrics()}
 	tc.clear(clock.Now())
 	return &tc
 }
@@ -145,6 +145,11 @@ func (tc *sklImpl) boundKeyLengths(start, end roachpb.Key) (roachpb.Key, roachpb
 			"losing precision in timestamp cache", l, maxKeySize)
 	}
 	return start, end
+}
+
+// Metrics implements the Cache interface.
+func (tc *sklImpl) Metrics() Metrics {
+	return tc.metrics
 }
 
 // intervalSkl doesn't handle nil keys the same way as empty keys. Cockroach's

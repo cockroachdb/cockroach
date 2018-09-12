@@ -888,3 +888,8 @@ SELECT (t).a FROM t
 
 statement ok
 DROP TABLE t
+
+query B
+SELECT (1, 2, 3) IS NULL AS r
+----
+false

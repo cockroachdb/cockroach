@@ -960,11 +960,11 @@ func (c *CustomFuncs) SimplifyCoalesce(args memo.ListID) memo.GroupID {
 	for i := 0; i < int(args.Length-1); i++ {
 		// If item is not a constant value, then its value may turn out to be
 		// null, so no more folding. Return operands from then on.
-		item := c.mem.NormExpr(argList[i])
-		if !item.IsConstValue() {
+		if !c.IsConstValueOrTuple(argList[i]) {
 			return c.f.ConstructCoalesce(c.f.InternList(argList[i:]))
 		}
 
+		item := c.mem.NormExpr(argList[i])
 		if item.Operator() != opt.NullOp {
 			return argList[i]
 		}
@@ -1061,38 +1061,76 @@ func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
 //
 // ----------------------------------------------------------------------
 
+// IsListOfConstants returns true if elems is a list of constant values or
+// tuples.
+func (c *CustomFuncs) IsListOfConstants(elems memo.ListID) bool {
+	for _, elem := range c.mem.LookupList(elems) {
+		if !c.IsConstValueOrTuple(elem) {
+			return false
+		}
+	}
+	return true
+}
+
+// FoldArray evaluates an Array expression with constant inputs. It returns the
+// array as a Const datum with type TArray.
+func (c *CustomFuncs) FoldArray(elems memo.ListID, typ memo.PrivateID) memo.GroupID {
+	elements := c.mem.LookupList(elems)
+	elementType := c.ExtractType(typ).(types.TArray).Typ
+	a := tree.NewDArray(elementType)
+	a.Array = make(tree.Datums, len(elements))
+	for i := range a.Array {
+		elem := memo.MakeNormExprView(c.mem, elements[i])
+		a.Array[i] = memo.ExtractConstDatum(elem)
+		if a.Array[i] == tree.DNull {
+			a.HasNulls = true
+		}
+	}
+	return c.f.ConstructConst(c.f.InternDatum(a))
+}
+
 // FoldSucceeded returns true if the result of a constant-folding operation
 // is a valid memo group.
 func (c *CustomFuncs) FoldSucceeded(result memo.GroupID) bool {
 	return result != 0
 }
 
+// IsConstValueOrTuple returns true if the input is a constant or a tuple of
+// constants.
+func (c *CustomFuncs) IsConstValueOrTuple(input memo.GroupID) bool {
+	ev := memo.MakeNormExprView(c.mem, input)
+	return ev.IsConstValue() || memo.MatchesTupleOfConstants(ev)
+}
+
 // FoldBinary evaluates a binary expression with constant inputs. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.
 func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
-	leftDatum := c.ExtractConstValue(left).(tree.Datum)
-	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+	lEv, rEv := memo.MakeNormExprView(c.mem, left), memo.MakeNormExprView(c.mem, right)
+	lDatum, rDatum := memo.ExtractConstDatum(lEv), memo.ExtractConstDatum(rEv)
+	lType, rType := lEv.Logical().Scalar.Type, rEv.Logical().Scalar.Type
 
-	o, ok := memo.FindBinaryOverload(op, leftDatum.ResolvedType(), rightDatum.ResolvedType())
+	o, ok := memo.FindBinaryOverload(op, lType, rType)
 	if !ok {
 		return 0
 	}
 
-	result, err := o.Fn(c.f.evalCtx, leftDatum, rightDatum)
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructConst(c.f.InternDatum(result))
+	return c.f.ConstructConstVal(result)
 }
 
 // FoldUnary evaluates a unary expression with a constant input. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input type, and the evaluation causes no error.
 func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
-	datum := c.ExtractConstValue(input).(tree.Datum)
+	ev := memo.MakeNormExprView(c.mem, input)
+	datum := memo.ExtractConstDatum(ev)
+	typ := ev.Logical().Scalar.Type
 
-	o, ok := memo.FindUnaryOverload(op, datum.ResolvedType())
+	o, ok := memo.FindUnaryOverload(op, typ)
 	if !ok {
 		return 0
 	}
@@ -1101,5 +1139,26 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupI
 	if err != nil {
 		return 0
 	}
-	return c.f.ConstructConst(c.f.InternDatum(result))
+	return c.f.ConstructConstVal(result)
+}
+
+// FoldComparison evaluates a comparison expression with constant inputs. It
+// returns a constant expression as long as it finds an appropriate overload
+// function for the given operator and input types, and the evaluation causes
+// no error.
+func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	lEv, rEv := memo.MakeNormExprView(c.mem, left), memo.MakeNormExprView(c.mem, right)
+	lDatum, rDatum := memo.ExtractConstDatum(lEv), memo.ExtractConstDatum(rEv)
+	lType, rType := lEv.Logical().Scalar.Type, rEv.Logical().Scalar.Type
+
+	o, ok := memo.FindComparisonOverload(op, lType, rType)
+	if !ok {
+		return 0
+	}
+
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConstVal(result)
 }

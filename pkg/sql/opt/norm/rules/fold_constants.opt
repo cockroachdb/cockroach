@@ -2,6 +2,16 @@
 # fold_constants.opt contains normalization rules for folding constants.
 # =============================================================================
 
+# FoldArray evaluates an Array expression with constant inputs. It replaces the
+# Array with a Const datum with type TArray.
+[FoldArray, Normalize]
+(Array
+  $elems:* & (IsListOfConstants $elems)
+  $typ:*
+)
+=>
+(FoldArray $elems $typ)
+
 # FoldBinary evaluates a binary operation over constant inputs, replacing the
 # entire expression with a constant. The rule applies as long as the evaluation
 # would not cause an error. Any errors should be saved for execution time,
@@ -12,10 +22,13 @@
 #
 # In this query, the ELSE clause is not executed, so the divide-by-zero error
 # should not be triggered.
-[FoldBinary, Normalize]
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldBinary, Normalize, LowPriority]
 (Binary
-  $left:(Const)
-  $right:(Const) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
+  $left:* & (IsConstValueOrTuple $left)
+  $right:* & (IsConstValueOrTuple $right) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
 )
 =>
 $result
@@ -23,9 +36,26 @@ $result
 # FoldUnary is similar to FoldBinary, but it involves a unary operation over a
 # single constant input. As with FoldBinary, FoldUnary applies as long as the
 # evaluation would not cause an error.
-[FoldUnary, Normalize]
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldUnary, Normalize, LowPriority]
 (Unary
-  $input:(Const) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
+  $input:* & (IsConstValueOrTuple $input) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
+)
+=>
+$result
+
+# FoldComparison is similar to FoldBinary, but it involves a comparison
+# operation. As with FoldBinary, FoldComparison applies as long as the
+# evaluation would not cause an error.
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldComparison, Normalize, LowPriority]
+(Comparison
+  $left:* & (IsConstValueOrTuple $left)
+  $right:* & (IsConstValueOrTuple $right) & (FoldSucceeded $result:(FoldComparison (OpName) $left $right))
 )
 =>
 $result
