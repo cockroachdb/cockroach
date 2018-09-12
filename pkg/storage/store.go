@@ -963,9 +963,8 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
 	s.rangefeedReplicas.Unlock()
 
-	tsCacheMetrics := tscache.MakeMetrics()
-	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
-	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
+	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize)
+	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
 
 	s.compactor = compactor.NewCompactor(
 		s.cfg.Settings,
