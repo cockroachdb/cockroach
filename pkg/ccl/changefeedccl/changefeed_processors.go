@@ -39,6 +39,11 @@ type changeAggregator struct {
 	// poller runs in the background and puts kv changes and resolved spans into
 	// a buffer, which is used by `Next()`.
 	poller *poller
+	// pollerFirstNextHighwater represents the first new highwater timestamp the
+	// poller should test for. This is used to ensure that changes to watch tables
+	// that occur after the CREATE CHANGEFEED command returns to the user are
+	// always captured.
+	pollerFirstNextHighwater hlc.Timestamp
 	// pollerDoneCh is closed when the poller exits.
 	pollerDoneCh chan struct{}
 	// tableHistUpdater runs in the background and continually advances the
@@ -97,6 +102,8 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
+	ca.pollerFirstNextHighwater = flowCtx.ClientDB.Clock().Now()
+
 	initialHighWater := hlc.Timestamp{WallTime: -1}
 	var spans []roachpb.Span
 	for _, watch := range spec.Watches {
@@ -121,8 +128,9 @@ func newChangeAggregatorProcessor(
 
 	buf := makeBuffer()
 	ca.poller = makePoller(
-		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip, spans,
-		spec.Feed, initialHighWater, buf)
+		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip,
+		spans, spec.Feed, initialHighWater, ca.pollerFirstNextHighwater, buf,
+	)
 
 	leaseMgr := flowCtx.LeaseManager.(*sql.LeaseManager)
 	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {

@@ -40,13 +40,14 @@ import (
 // Each poll (ie set of ExportRequests) are rate limited to be no more often
 // than the `changefeed.experimental_poll_interval` setting.
 type poller struct {
-	settings *cluster.Settings
-	db       *client.DB
-	clock    *hlc.Clock
-	gossip   *gossip.Gossip
-	spans    []roachpb.Span
-	details  jobspb.ChangefeedDetails
-	buf      *buffer
+	settings           *cluster.Settings
+	db                 *client.DB
+	clock              *hlc.Clock
+	gossip             *gossip.Gossip
+	spans              []roachpb.Span
+	details            jobspb.ChangefeedDetails
+	firstNextHighwater hlc.Timestamp
+	buf                *buffer
 
 	highWater hlc.Timestamp
 }
@@ -59,17 +60,19 @@ func makePoller(
 	spans []roachpb.Span,
 	details jobspb.ChangefeedDetails,
 	highWater hlc.Timestamp,
+	firstNextHighwater hlc.Timestamp,
 	buf *buffer,
 ) *poller {
 	return &poller{
-		settings:  settings,
-		db:        db,
-		clock:     clock,
-		gossip:    gossip,
-		highWater: highWater,
-		spans:     spans,
-		details:   details,
-		buf:       buf,
+		settings:           settings,
+		db:                 db,
+		clock:              clock,
+		gossip:             gossip,
+		highWater:          highWater,
+		firstNextHighwater: firstNextHighwater,
+		spans:              spans,
+		details:            details,
+		buf:                buf,
 	}
 }
 
@@ -108,6 +111,7 @@ func (p *poller) Run(ctx context.Context) error {
 	}
 
 	sender := p.db.NonTransactionalSender()
+	firstRunComplete := false
 	for {
 		pollDuration := changefeedPollInterval.Get(&p.settings.SV)
 		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, p.highWater.WallTime))
@@ -121,6 +125,13 @@ func (p *poller) Run(ctx context.Context) error {
 		}
 
 		nextHighWater := p.clock.Now()
+		if !firstRunComplete {
+			firstRunComplete = true
+			if p.firstNextHighwater != (hlc.Timestamp{}) {
+				nextHighWater = p.firstNextHighwater
+			}
+		}
+
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 

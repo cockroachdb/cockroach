@@ -106,7 +106,7 @@ func createBenchmarkChangefeed(
 
 	buf := makeBuffer()
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf)
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, hlc.Timestamp{}, buf)
 
 	th := makeTableHistory(func(*sqlbase.TableDescriptor) error { return nil }, initialHighWater)
 	thUpdater := &tableHistoryUpdater{
