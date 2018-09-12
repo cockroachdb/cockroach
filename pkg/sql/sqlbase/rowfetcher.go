@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -468,17 +468,17 @@ func (rf *RowFetcher) nextKV(
 	}
 	if rf.batchNumKvs > 0 {
 		rf.batchNumKvs--
-		var key engine.MVCCKey
+		var key []byte
 		var rawBytes []byte
 		var err error
 		newSpan = rf.maybeNewSpan
 		rf.maybeNewSpan = false
-		key, rawBytes, rf.batchResponse, err = engine.MVCCScanDecodeKeyValue(rf.batchResponse)
+		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
 		if err != nil {
 			return false, kv, false, err
 		}
 		return true, roachpb.KeyValue{
-			Key: key.Key,
+			Key: key,
 			Value: roachpb.Value{
 				RawBytes: rawBytes,
 			},
