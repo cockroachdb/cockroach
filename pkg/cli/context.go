@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	isatty "github.com/mattn/go-isatty"
 )
@@ -94,8 +94,8 @@ func initCLIDefaults() {
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
 
-	debugCtx.startKey = engine.NilKey
-	debugCtx.endKey = engine.MVCCKeyMax
+	debugCtx.startKey = mvcc.NilKey
+	debugCtx.endKey = mvcc.KeyMax
 	debugCtx.values = false
 	debugCtx.sizes = false
 	debugCtx.replicated = false
@@ -229,7 +229,7 @@ var dumpCtx struct {
 // debugCtx captures the command-line parameters of the `debug` command.
 // Defaults set by InitCLIDefaults() above.
 var debugCtx struct {
-	startKey, endKey  engine.MVCCKey
+	startKey, endKey  mvcc.Key
 	values            bool
 	sizes             bool
 	replicated        bool

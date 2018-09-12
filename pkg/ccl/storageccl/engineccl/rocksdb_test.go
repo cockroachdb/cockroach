@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -21,14 +22,14 @@ import (
 func TestVerifyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyA := engine.MVCCKey{Key: []byte("a")}
-	keyB := engine.MVCCKey{Key: []byte("b")}
-	keyC := engine.MVCCKey{Key: []byte("c")}
-	keyD := engine.MVCCKey{Key: []byte("d")}
-	keyE := engine.MVCCKey{Key: []byte("e")}
+	keyA := mvcc.Key{Key: []byte("a")}
+	keyB := mvcc.Key{Key: []byte("b")}
+	keyC := mvcc.Key{Key: []byte("c")}
+	keyD := mvcc.Key{Key: []byte("d")}
+	keyE := mvcc.Key{Key: []byte("e")}
 
 	var batch engine.RocksDBBatchBuilder
-	key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 	data := batch.Finish()
 
@@ -52,7 +53,7 @@ func TestVerifyBatchRepr(t *testing.T) {
 	// Invalid key/value entry checksum.
 	{
 		var batch engine.RocksDBBatchBuilder
-		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		batch.Put(key, value.RawBytes)

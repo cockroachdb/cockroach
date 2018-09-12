@@ -27,6 +27,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
 
@@ -452,7 +453,7 @@ func (r *Replica) HasBogusSideloadedData() bool {
 	return true
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
+func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, mvcc.KeyValue) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		panic(err)
@@ -462,8 +463,8 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyVal
 	v := roachpb.MakeValueFromBytes([]byte(value))
 	v.InitChecksum([]byte(key))
 
-	kv := engine.MVCCKeyValue{
-		Key: engine.MVCCKey{
+	kv := mvcc.KeyValue{
+		Key: mvcc.Key{
 			Key:       []byte(key),
 			Timestamp: ts,
 		},

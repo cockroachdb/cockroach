@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -725,7 +726,7 @@ func RunGC(
 	var batchGCKeys []roachpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
-	var keys []engine.MVCCKey
+	var keys []mvcc.Key
 	var vals [][]byte
 	var keyBytes int64
 	var valBytes int64
@@ -841,12 +842,12 @@ func RunGC(
 			processKeysAndValues()
 			expBaseKey = iterKey.Key
 			if !iterKey.IsValue() {
-				keys = []engine.MVCCKey{iter.Key()}
+				keys = []mvcc.Key{iter.Key()}
 				vals = [][]byte{iter.Value()}
 				continue
 			}
 			// An implicit metadata.
-			keys = []engine.MVCCKey{engine.MakeMVCCMetadataKey(iterKey.Key)}
+			keys = []mvcc.Key{engine.MakeMVCCMetadataKey(iterKey.Key)}
 			// A nil value for the encoded MVCCMetadata. This will unmarshal to an
 			// empty MVCCMetadata which is sufficient for processKeysAndValues to
 			// determine that there is no intent.

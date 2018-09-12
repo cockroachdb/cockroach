@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -35,12 +36,12 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) Clear(key engine.MVCCKey) error {
+func (wb *wrappedBatch) Clear(key mvcc.Key) error {
 	wb.clearCount++
 	return wb.Batch.Clear(key)
 }
 
-func (wb *wrappedBatch) ClearRange(start, end engine.MVCCKey) error {
+func (wb *wrappedBatch) ClearRange(start, end mvcc.Key) error {
 	wb.clearRangeCount++
 	return wb.Batch.ClearRange(start, end)
 }
@@ -144,8 +145,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := eng.Iterate(
-				engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey},
-				func(kv engine.MVCCKeyValue) (bool, error) {
+				mvcc.Key{Key: startKey}, mvcc.Key{Key: endKey},
+				func(kv mvcc.KeyValue) (bool, error) {
 					return true, errors.New("expected no data in underlying engine")
 				},
 			); err != nil {

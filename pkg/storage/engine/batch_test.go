@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,13 +39,13 @@ import (
 func mvccKey(k interface{}) MVCCKey {
 	switch k := k.(type) {
 	case string:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	case []byte:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	case roachpb.Key:
-		return MakeMVCCMetadataKey(k)
+		return mvcc.MakeMVCCMetadataKey(k)
 	case roachpb.RKey:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", k))
 	}
@@ -745,7 +746,7 @@ func TestBatchBuilder(t *testing.T) {
 		{"c", hlc.Timestamp{WallTime: 1, Logical: 1}},
 	}
 	for _, data := range testData {
-		key := MVCCKey{roachpb.Key(data.key), data.ts}
+		key := MVCCKey{Key: roachpb.Key(data.key), Timestamp: data.ts}
 		if err := dbPut(batch.batch, key, []byte("value")); err != nil {
 			t.Fatal(err)
 		}
@@ -1003,9 +1004,9 @@ func TestBatchIteration(t *testing.T) {
 	b := e.NewBatch()
 	defer b.Close()
 
-	k1 := MakeMVCCMetadataKey(roachpb.Key("c"))
-	k2 := MakeMVCCMetadataKey(roachpb.Key("d"))
-	k3 := MakeMVCCMetadataKey(roachpb.Key("e"))
+	k1 := mvcc.MakeMVCCMetadataKey(roachpb.Key("c"))
+	k2 := mvcc.MakeMVCCMetadataKey(roachpb.Key("d"))
+	k3 := mvcc.MakeMVCCMetadataKey(roachpb.Key("e"))
 	v1 := []byte("value1")
 	v2 := []byte("value2")
 

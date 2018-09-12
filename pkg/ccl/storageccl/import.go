@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,7 +80,7 @@ type sstBatcher struct {
 	batchEndKey   []byte
 }
 
-func (b *sstBatcher) add(key engine.MVCCKey, value []byte) error {
+func (b *sstBatcher) add(key mvcc.Key, value []byte) error {
 	// Update the range currently represented in this batch, as
 	// necessary.
 	if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
@@ -91,7 +92,7 @@ func (b *sstBatcher) add(key engine.MVCCKey, value []byte) error {
 	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
-	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
+	return b.sstWriter.Add(mvcc.KeyValue{Key: key, Value: value})
 }
 
 func (b *sstBatcher) reset() error {
@@ -179,7 +180,7 @@ func addSplitSSTable(
 	split := false
 	var first, last roachpb.Key
 
-	iter.Seek(engine.MVCCKey{Key: start})
+	iter.Seek(mvcc.Key{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return err
@@ -213,7 +214,7 @@ func addSplitSSTable(
 		}
 		last = append(last[:0], key.Key...)
 
-		if err := w.Add(engine.MVCCKeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
+		if err := w.Add(mvcc.KeyValue{Key: key, Value: iter.UnsafeValue()}); err != nil {
 			return err
 		}
 
@@ -296,7 +297,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer batcher.Close()
 
-	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.Key{Key: args.DataSpan.Key}, mvcc.Key{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
@@ -330,7 +331,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 
 		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		key := mvcc.Key{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 

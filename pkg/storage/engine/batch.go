@@ -332,7 +332,7 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	return key, ts, true
 }
 
-// DecodeKey decodes an engine.MVCCKey from its serialized representation. This
+// DecodeKey decodes an mvcc.Key from its serialized representation. This
 // decoding must match engine/db.cc:DecodeKey().
 func DecodeKey(encodedKey []byte) (MVCCKey, error) {
 	key, ts, ok := SplitMVCCKey(encodedKey)

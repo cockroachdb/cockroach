@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -106,7 +107,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	b := db.NewBatch()
 	defer b.Close()
 
-	k := MakeMVCCMetadataKey(testKey1)
+	k := mvcc.MakeMVCCMetadataKey(testKey1)
 
 	before := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer before.Close()
@@ -293,7 +294,7 @@ func TestIterUpperBound(t *testing.T) {
 }
 
 func makeKey(i int) MVCCKey {
-	return MakeMVCCMetadataKey(roachpb.Key(strconv.Itoa(i)))
+	return mvcc.MakeMVCCMetadataKey(roachpb.Key(strconv.Itoa(i)))
 }
 
 func benchmarkIterOnBatch(b *testing.B, writes int) {
@@ -626,7 +627,7 @@ func TestConcurrentBatch(t *testing.T) {
 		for j := 0; true; j++ {
 			key := encoding.EncodeUvarintAscending([]byte("bar"), uint64(i))
 			key = encoding.EncodeUvarintAscending(key, uint64(j))
-			if err := batch.Put(MakeMVCCMetadataKey(key), nil); err != nil {
+			if err := batch.Put(mvcc.MakeMVCCMetadataKey(key), nil); err != nil {
 				t.Fatal(err)
 			}
 			const targetSize = 4 << 20
@@ -667,7 +668,7 @@ func TestConcurrentBatch(t *testing.T) {
 		// or the L0 stop writes threshold.
 		start := timeutil.Now()
 		key := encoding.EncodeUvarintAscending([]byte("foo"), uint64(i))
-		if err := db.Put(MakeMVCCMetadataKey(key), nil); err != nil {
+		if err := db.Put(mvcc.MakeMVCCMetadataKey(key), nil); err != nil {
 			t.Fatal(err)
 		}
 		if elapsed := timeutil.Since(start); elapsed >= 10*time.Second {
@@ -853,7 +854,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	check := func(t *testing.T, tbi Iterator, keys, ssts int) {
 		defer tbi.Close()
-		tbi.Seek(NilKey)
+		tbi.Seek(mvcc.NilKey)
 
 		var count int
 		for ; ; tbi.Next() {
@@ -960,7 +961,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 	// time bounded iterator instead.
 	iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	iter.Seek(NilKey)
+	iter.Seek(mvcc.NilKey)
 
 	var count int
 	for ; ; iter.Next() {
@@ -981,7 +982,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 }
 
 func key(s string) MVCCKey {
-	return MakeMVCCMetadataKey([]byte(s))
+	return mvcc.MakeMVCCMetadataKey([]byte(s))
 }
 
 // Regression test for https://github.com/facebook/rocksdb/issues/2752. Range
@@ -1361,11 +1362,11 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	// Generate a batch which writes to the very first key, and then deletes the
 	// range of keys covered by the last sstable.
 	batch := db.NewBatch()
-	if err := batch.Put(MakeMVCCMetadataKey(makeKey("a", 0)), []byte("hello")); err != nil {
+	if err := batch.Put(mvcc.MakeMVCCMetadataKey(makeKey("a", 0)), []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
-	if err := batch.ClearRange(MakeMVCCMetadataKey(makeKey("c", 0)),
-		MakeMVCCMetadataKey(makeKey("c", numEntries))); err != nil {
+	if err := batch.ClearRange(mvcc.MakeMVCCMetadataKey(makeKey("c", 0)),
+		mvcc.MakeMVCCMetadataKey(makeKey("c", numEntries))); err != nil {
 		t.Fatal(err)
 	}
 	if err := batch.Commit(true); err != nil {
@@ -1448,14 +1449,14 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 					// Create a range tombstone that deletes most (or all) of those entries.
 					from := makeKey(0)
 					to := makeKey(deleted)
-					if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
+					if err := db.ClearRange(mvcc.MakeMVCCMetadataKey(from), mvcc.MakeMVCCMetadataKey(to)); err != nil {
 						b.Fatal(err)
 					}
 
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
-						iter.Seek(MakeMVCCMetadataKey(from))
+						iter.Seek(mvcc.MakeMVCCMetadataKey(from))
 						ok, err := iter.Valid()
 						if err != nil {
 							b.Fatal(err)

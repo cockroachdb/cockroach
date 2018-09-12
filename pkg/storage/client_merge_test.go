@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -121,7 +122,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 func getEngineKeySet(t *testing.T, e engine.Engine) map[string]struct{} {
 	t.Helper()
-	kvs, err := engine.Scan(e, engine.NilKey, engine.MVCCKeyMax, 0 /* max */)
+	kvs, err := engine.Scan(e, mvcc.NilKey, mvcc.KeyMax, 0 /* max */)
 	if err != nil {
 		t.Fatal(err)
 	}

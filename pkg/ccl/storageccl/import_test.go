@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,8 +64,8 @@ func TestMaxImportBatchSize(t *testing.T) {
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, kr prefixRewriter,
-) []engine.MVCCKeyValue {
-	start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
+) []mvcc.KeyValue {
+	start, end := mvcc.Key{Key: keys.MinKey}, mvcc.Key{Key: keys.MaxKey}
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
@@ -82,7 +83,7 @@ func slurpSSTablesLatestKey(
 		if err := sst.IngestExternalFile(fileContents); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+		if err := sst.Iterate(start, end, func(kv mvcc.KeyValue) (bool, error) {
 			var ok bool
 			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
@@ -100,7 +101,7 @@ func slurpSSTablesLatestKey(
 		}
 	}
 
-	var kvs []engine.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 	it := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 	for it.Seek(start); ; it.NextKey() {
@@ -109,22 +110,22 @@ func slurpSSTablesLatestKey(
 		} else if !ok || !it.UnsafeKey().Less(end) {
 			break
 		}
-		kvs = append(kvs, engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()})
+		kvs = append(kvs, mvcc.KeyValue{Key: it.Key(), Value: it.Value()})
 	}
 	return kvs
 }
 
-func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
-	var ret []engine.MVCCKeyValue
+func clientKVsToEngineKVs(kvs []client.KeyValue) []mvcc.KeyValue {
+	var ret []mvcc.KeyValue
 	for _, kv := range kvs {
 		if kv.Value == nil {
 			continue
 		}
-		k := engine.MVCCKey{
+		k := mvcc.Key{
 			Key:       kv.Key,
 			Timestamp: kv.Value.Timestamp,
 		}
-		ret = append(ret, engine.MVCCKeyValue{Key: k, Value: kv.Value.RawBytes})
+		ret = append(ret, mvcc.KeyValue{Key: k, Value: kv.Value.RawBytes})
 	}
 	return ret
 }
@@ -181,7 +182,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			key := keys[idx]
 			value.ClearChecksum()
 			value.InitChecksum(key)
-			kv := engine.MVCCKeyValue{Key: engine.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
+			kv := mvcc.KeyValue{Key: mvcc.Key{Key: key, Timestamp: ts}, Value: value.RawBytes}
 			if err := sst.Add(kv); err != nil {
 				t.Fatalf("%+v", err)
 			}

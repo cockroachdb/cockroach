@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -69,7 +70,7 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
 			prefix, prettyTime,
 			prefix, d.Value,
-			prefix, engine.EncodeKey(engine.MVCCKey{Key: d.Key, Timestamp: ts}), d.Value)
+			prefix, engine.EncodeKey(mvcc.Key{Key: d.Key, Timestamp: ts}), d.Value)
 		if err != nil {
 			return 0, err
 		}

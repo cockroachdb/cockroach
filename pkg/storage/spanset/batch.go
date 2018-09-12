@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -63,7 +64,7 @@ func (s *Iterator) Iterator() engine.Iterator {
 }
 
 // Seek is part of the engine.Iterator interface.
-func (s *Iterator) Seek(key engine.MVCCKey) {
+func (s *Iterator) Seek(key mvcc.Key) {
 	s.err = s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	if s.err == nil {
 		s.invalid = false
@@ -72,7 +73,7 @@ func (s *Iterator) Seek(key engine.MVCCKey) {
 }
 
 // SeekReverse is part of the engine.Iterator interface.
-func (s *Iterator) SeekReverse(key engine.MVCCKey) {
+func (s *Iterator) SeekReverse(key mvcc.Key) {
 	s.err = s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	if s.err == nil {
 		s.invalid = false
@@ -125,7 +126,7 @@ func (s *Iterator) PrevKey() {
 }
 
 // Key is part of the engine.Iterator interface.
-func (s *Iterator) Key() engine.MVCCKey {
+func (s *Iterator) Key() mvcc.Key {
 	return s.i.Key()
 }
 
@@ -140,7 +141,7 @@ func (s *Iterator) ValueProto(msg protoutil.Message) error {
 }
 
 // UnsafeKey is part of the engine.Iterator interface.
-func (s *Iterator) UnsafeKey() engine.MVCCKey {
+func (s *Iterator) UnsafeKey() mvcc.Key {
 	return s.i.UnsafeKey()
 }
 
@@ -150,9 +151,7 @@ func (s *Iterator) UnsafeValue() []byte {
 }
 
 // ComputeStats is part of the engine.Iterator interface.
-func (s *Iterator) ComputeStats(
-	start, end engine.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
+func (s *Iterator) ComputeStats(start, end mvcc.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -161,10 +160,10 @@ func (s *Iterator) ComputeStats(
 
 // FindSplitKey is part of the engine.Iterator interface.
 func (s *Iterator) FindSplitKey(
-	start, end, minSplitKey engine.MVCCKey, targetSize int64,
-) (engine.MVCCKey, error) {
+	start, end, minSplitKey mvcc.Key, targetSize int64,
+) (mvcc.Key, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
-		return engine.MVCCKey{}, err
+		return mvcc.Key{}, err
 	}
 	return s.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
@@ -213,7 +212,7 @@ func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
 }
 
-func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {
+func (s spanSetReader) Get(key mvcc.Key) ([]byte, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return nil, err
 	}
@@ -221,9 +220,7 @@ func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {
 	return s.r.Get(key)
 }
 
-func (s spanSetReader) GetProto(
-	key engine.MVCCKey, msg protoutil.Message,
-) (bool, int64, int64, error) {
+func (s spanSetReader) GetProto(key mvcc.Key, msg protoutil.Message) (bool, int64, int64, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, 0, 0, err
 	}
@@ -231,9 +228,7 @@ func (s spanSetReader) GetProto(
 	return s.r.GetProto(key, msg)
 }
 
-func (s spanSetReader) Iterate(
-	start, end engine.MVCCKey, f func(engine.MVCCKeyValue) (bool, error),
-) error {
+func (s spanSetReader) Iterate(start, end mvcc.Key, f func(mvcc.KeyValue) (bool, error)) error {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return err
 	}
@@ -256,35 +251,35 @@ func (s spanSetWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 	return s.w.ApplyBatchRepr(repr, sync)
 }
 
-func (s spanSetWriter) Clear(key engine.MVCCKey) error {
+func (s spanSetWriter) Clear(key mvcc.Key) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.Clear(key)
 }
 
-func (s spanSetWriter) ClearRange(start, end engine.MVCCKey) error {
+func (s spanSetWriter) ClearRange(start, end mvcc.Key) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return err
 	}
 	return s.w.ClearRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end engine.MVCCKey) error {
+func (s spanSetWriter) ClearIterRange(iter engine.Iterator, start, end mvcc.Key) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)
 }
 
-func (s spanSetWriter) Merge(key engine.MVCCKey, value []byte) error {
+func (s spanSetWriter) Merge(key mvcc.Key, value []byte) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) Put(key engine.MVCCKey, value []byte) error {
+func (s spanSetWriter) Put(key mvcc.Key, value []byte) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}

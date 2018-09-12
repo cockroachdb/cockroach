@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 )
 
 var readerOpts = &db.Options{
@@ -31,7 +32,7 @@ type sstIterator struct {
 
 	valid   bool
 	err     error
-	mvccKey engine.MVCCKey
+	mvccKey mvcc.Key
 
 	// For allocation avoidance in NextKey.
 	nextKeyStart []byte
@@ -95,7 +96,7 @@ func (r *sstIterator) Close() {
 }
 
 // Seek implements the engine.SimpleIterator interface.
-func (r *sstIterator) Seek(key engine.MVCCKey) {
+func (r *sstIterator) Seek(key mvcc.Key) {
 	if r.iter != nil {
 		if r.err = errors.Wrap(r.iter.Close(), "resetting sstable iterator"); r.err != nil {
 			return
@@ -152,7 +153,7 @@ func (r *sstIterator) NextKey() {
 }
 
 // UnsafeKey implements the engine.SimpleIterator interface.
-func (r *sstIterator) UnsafeKey() engine.MVCCKey {
+func (r *sstIterator) UnsafeKey() mvcc.Key {
 	return r.mvccKey
 }
 

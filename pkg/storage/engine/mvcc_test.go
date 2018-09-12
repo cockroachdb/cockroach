@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -122,7 +123,7 @@ func mvccGetGo(
 	buf := newGetBuffer()
 	defer buf.release()
 
-	metaKey := MakeMVCCMetadataKey(key)
+	metaKey := mvcc.MakeMVCCMetadataKey(key)
 	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if !ok || err != nil {
 		return nil, nil, err
@@ -1316,7 +1317,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 			{
 				// Seek the iter to a valid position.
 				iter := batch.NewIterator(iterOptions)
-				iter.Seek(MakeMVCCMetadataKey(key))
+				iter.Seek(mvcc.MakeMVCCMetadataKey(key))
 				iter.Close()
 			}
 
@@ -1330,7 +1331,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 			case "computeStats":
 				iter := batch.NewIterator(iterOptions)
-				_, err = iter.ComputeStats(NilKey, MVCCKeyMax, 0)
+				_, err = iter.ComputeStats(mvcc.NilKey, mvcc.KeyMax, 0)
 				iter.Close()
 			}
 			if err != nil {

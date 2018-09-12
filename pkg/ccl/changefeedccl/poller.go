@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -256,7 +256,7 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
 		return err
 	}
 	defer it.Close()
-	for it.Seek(engine.NilKey); ; it.Next() {
+	for it.Seek(mvcc.NilKey); ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
 			return err
 		} else if !ok {

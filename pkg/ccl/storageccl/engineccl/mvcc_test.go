@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,7 +59,7 @@ func assertEqualKVs(
 	iterFn func(*MVCCIncrementalIterator),
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
-	expected []engine.MVCCKeyValue,
+	expected []mvcc.KeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		iter := NewMVCCIncrementalIterator(e, IterOptions{
@@ -67,14 +68,14 @@ func assertEqualKVs(
 			UpperBound: endKey,
 		})
 		defer iter.Close()
-		var kvs []engine.MVCCKeyValue
+		var kvs []mvcc.KeyValue
 		for iter.Seek(engine.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatalf("unexpected error: %+v", err)
 			} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 				break
 			}
-			kvs = append(kvs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+			kvs = append(kvs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 		}
 
 		if len(kvs) != len(expected) {
@@ -114,8 +115,8 @@ func TestMVCCIterateIncremental(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) engine.MVCCKeyValue {
-		return engine.MVCCKeyValue{Key: engine.MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) mvcc.KeyValue {
+		return mvcc.KeyValue{Key: mvcc.Key{Key: key, Timestamp: ts}, Value: value}
 	}
 
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
@@ -123,7 +124,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...engine.MVCCKeyValue) []engine.MVCCKeyValue { return kvs }
+	kvs := func(kvs ...mvcc.KeyValue) []mvcc.KeyValue { return kvs }
 
 	t.Run("iterFn=NextKey", func(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
@@ -314,10 +315,10 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
-			var expectedKVs []engine.MVCCKeyValue
+			var expectedKVs []mvcc.KeyValue
 			iter := eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.Seek(engine.MVCCKey{})
+			iter.Seek(mvcc.Key{})
 			for {
 				ok, err := iter.Valid()
 				if err != nil {
@@ -327,7 +328,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 				}
 				ts := iter.Key().Timestamp
 				if (ts.Less(testCase.end) || testCase.end == ts) && testCase.start.Less(ts) {
-					expectedKVs = append(expectedKVs, engine.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+					expectedKVs = append(expectedKVs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 				}
 				iter.Next()
 			}

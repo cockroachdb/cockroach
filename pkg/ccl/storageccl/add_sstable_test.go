@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,13 +38,13 @@ import (
 	"github.com/kr/pretty"
 )
 
-func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
+func singleKVSSTable(key mvcc.Key, value []byte) ([]byte, error) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return nil, err
 	}
 	defer sst.Close()
-	kv := engine.MVCCKeyValue{Key: key, Value: value}
+	kv := mvcc.KeyValue{Key: key, Value: value}
 	if err := sst.Add(kv); err != nil {
 		return nil, err
 	}
@@ -82,7 +83,7 @@ func TestDBAddSSTable(t *testing.T) {
 // if store != nil, assume it is on-disk and check ingestion semantics.
 func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *storage.Store) {
 	{
-		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -139,7 +140,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("2").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -164,7 +165,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		key := engine.MVCCKey{Key: []byte("bc"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bc"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("3").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -218,7 +219,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 	// Invalid key/value entry checksum.
 	{
-		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		data, err := singleKVSSTable(key, value.RawBytes)
@@ -232,11 +233,11 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 	}
 }
 
-func randomMVCCKeyValues(rng *rand.Rand, numKVs int) []engine.MVCCKeyValue {
-	kvs := make([]engine.MVCCKeyValue, numKVs)
+func randomMVCCKeyValues(rng *rand.Rand, numKVs int) []mvcc.KeyValue {
+	kvs := make([]mvcc.KeyValue, numKVs)
 	for i := range kvs {
-		kvs[i] = engine.MVCCKeyValue{
-			Key: engine.MVCCKey{
+		kvs[i] = mvcc.KeyValue{
+			Key: mvcc.Key{
 				Key:       randutil.RandBytes(rng, 1),
 				Timestamp: hlc.Timestamp{WallTime: 1 + rand.Int63n(10)},
 			},
@@ -250,7 +251,7 @@ func randomMVCCKeyValues(rng *rand.Rand, numKVs int) []engine.MVCCKeyValue {
 	return kvs
 }
 
-type mvccKeyValues []engine.MVCCKeyValue
+type mvccKeyValues []mvcc.KeyValue
 
 func (kvs mvccKeyValues) Len() int           { return len(kvs) }
 func (kvs mvccKeyValues) Less(i, j int) bool { return kvs[i].Key.Less(kvs[j].Key) }
@@ -315,7 +316,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			defer sst.Close()
 			sstKVs := mvccKeyValues(randomMVCCKeyValues(rng, 1+rand.Intn(maxKVs)))
 			sort.Sort(sstKVs)
-			var prevKey engine.MVCCKey
+			var prevKey mvcc.Key
 			for _, kv := range sstKVs {
 				if kv.Key.Equal(prevKey) {
 					// RocksDB doesn't let us add the same key twice.
@@ -356,7 +357,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		beforeStats := func() enginepb.MVCCStats {
 			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			beforeStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
+			beforeStats, err := engine.ComputeStatsGo(iter, mvcc.NilKey, mvcc.KeyMax, nowNanos)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -375,7 +376,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		afterStats := func() enginepb.MVCCStats {
 			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			afterStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
+			afterStats, err := engine.ComputeStatsGo(iter, mvcc.NilKey, mvcc.KeyMax, nowNanos)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}

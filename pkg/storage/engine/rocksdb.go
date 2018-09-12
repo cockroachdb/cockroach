@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1990,7 +1991,7 @@ func (r *rocksDBIterator) setOptions(opts IterOptions) {
 	if !opts.Prefix && len(opts.UpperBound) == 0 {
 		panic("iterator must set prefix or upper bound")
 	}
-	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(opts.UpperBound)))
+	C.DBIterSetUpperBound(r.iter, goToCKey(mvcc.MakeMVCCMetadataKey(opts.UpperBound)))
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
@@ -2212,7 +2213,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 	// Extract the value from the batch data.
 	repr := copyFromSliceVector(state.data.bufs, state.data.len)
-	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(repr)
+	mvccKey, rawValue, _, err := mvcc.ScanDecodeKeyValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2255,7 +2256,7 @@ func (r *rocksDBIterator) MVCCScan(
 }
 
 func (r *rocksDBIterator) SetUpperBound(key roachpb.Key) {
-	C.DBIterSetUpperBound(r.iter, goToCKey(MakeMVCCMetadataKey(key)))
+	C.DBIterSetUpperBound(r.iter, goToCKey(mvcc.MakeMVCCMetadataKey(key)))
 }
 
 func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
@@ -2406,7 +2407,7 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 func goToCIterOptions(opts IterOptions) C.DBIterOptions {
 	return C.DBIterOptions{
 		prefix:             C.bool(opts.Prefix),
-		upper_bound:        goToCKey(MakeMVCCMetadataKey(opts.UpperBound)),
+		upper_bound:        goToCKey(mvcc.MakeMVCCMetadataKey(opts.UpperBound)),
 		min_timestamp_hint: goToCTimestamp(opts.MinTimestampHint),
 		max_timestamp_hint: goToCTimestamp(opts.MaxTimestampHint),
 		with_stats:         C.bool(opts.WithStats),
@@ -2562,7 +2563,7 @@ func dbClearRange(rdb *C.DBEngine, start, end MVCCKey) error {
 		prev = prev[:n]
 	}
 	if start.Key.Compare(prev) < 0 {
-		if err := dbClear(rdb, MakeMVCCMetadataKey(prev)); err != nil {
+		if err := dbClear(rdb, mvcc.MakeMVCCMetadataKey(prev)); err != nil {
 			return err
 		}
 	}

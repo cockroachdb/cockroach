@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 )
 
 const invalidIdxSentinel = -1
@@ -58,7 +59,7 @@ func (f *multiIterator) Close() {
 
 // Seek advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (f *multiIterator) Seek(key engine.MVCCKey) {
+func (f *multiIterator) Seek(key mvcc.Key) {
 	for _, iter := range f.iters {
 		iter.Seek(key)
 	}
@@ -81,7 +82,7 @@ func (f *multiIterator) Valid() (bool, error) {
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
 // call to {NextKey,Seek}.
-func (f *multiIterator) UnsafeKey() engine.MVCCKey {
+func (f *multiIterator) UnsafeKey() mvcc.Key {
 	return f.iters[f.currentIdx].UnsafeKey()
 }
 
@@ -135,7 +136,7 @@ func (f *multiIterator) advance() {
 		// Fill proposedMVCCKey with the mvcc key of the current best for the
 		// next value for currentIdx (or a sentinel that sorts after everything
 		// if this is the first non-exhausted iterator).
-		proposedMVCCKey := engine.MVCCKey{Key: keys.MaxKey}
+		proposedMVCCKey := mvcc.Key{Key: keys.MaxKey}
 		if proposedNextIdx != invalidIdxSentinel {
 			proposedMVCCKey = f.iters[proposedNextIdx].UnsafeKey()
 		}

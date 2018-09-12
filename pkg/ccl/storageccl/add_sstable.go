@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +35,7 @@ func evalAddSSTable(
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	mvccStartKey, mvccEndKey := engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey}
+	mvccStartKey, mvccEndKey := mvcc.Key{Key: args.Key}, mvcc.Key{Key: args.EndKey}
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
@@ -82,7 +83,7 @@ func evalAddSSTable(
 }
 
 func verifySSTable(
-	existingIter engine.SimpleIterator, data []byte, start, end engine.MVCCKey, nowNanos int64,
+	existingIter engine.SimpleIterator, data []byte, start, end mvcc.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
 	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
@@ -95,7 +96,7 @@ func verifySSTable(
 	defer dataIter.Close()
 
 	// Check that the first key is in the expected range.
-	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
+	dataIter.Seek(mvcc.Key{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
 	if err != nil {
 		return enginepb.MVCCStats{}, err

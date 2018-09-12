@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,7 +94,7 @@ func (b *Backup) ResetKeyValueIteration() {
 // remainer.
 func (b *Backup) NextKeyValues(
 	count int, newTableID sqlbase.ID,
-) ([]engine.MVCCKeyValue, roachpb.Span, error) {
+) ([]mvcc.KeyValue, roachpb.Span, error) {
 	var userTables []*sqlbase.TableDescriptor
 	for _, d := range b.Desc.Descriptors {
 		if t := d.GetTable(); t != nil && t.ParentID != keys.SystemDatabaseID {
@@ -113,7 +114,7 @@ func (b *Backup) NextKeyValues(
 		return nil, roachpb.Span{}, err
 	}
 
-	var kvs []engine.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 	span := roachpb.Span{Key: keys.MaxKey}
 	for ; b.fileIdx < len(b.Desc.Files); b.fileIdx++ {
 		file := b.Desc.Files[b.fileIdx]
@@ -130,7 +131,7 @@ func (b *Backup) NextKeyValues(
 
 		it := sst.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer it.Close()
-		it.Seek(engine.MVCCKey{Key: file.Span.Key})
+		it.Seek(mvcc.Key{Key: file.Span.Key})
 
 		iterIdx := 0
 		for ; ; it.Next() {
@@ -166,7 +167,7 @@ func (b *Backup) NextKeyValues(
 			v := roachpb.Value{RawBytes: it.Value()}
 			v.ClearChecksum()
 			v.InitChecksum(key.Key)
-			kvs = append(kvs, engine.MVCCKeyValue{Key: key, Value: v.RawBytes})
+			kvs = append(kvs, mvcc.KeyValue{Key: key, Value: v.RawBytes})
 
 			if key.Key.Compare(span.Key) < 0 {
 				span.Key = append(span.Key[:0], key.Key...)

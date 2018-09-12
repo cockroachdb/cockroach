@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -199,7 +200,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 			func() {
 				i := tempEngine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 				defer i.Close()
-				for i.Seek(NilKey); ; i.Next() {
+				for i.Seek(mvcc.NilKey); ; i.Next() {
 					if ok, err := i.Valid(); err != nil {
 						t.Fatal(err)
 					} else if !ok {

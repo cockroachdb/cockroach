@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -40,7 +41,7 @@ func TestExportCmd(t *testing.T) {
 
 	exportAndSlurpOne := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
-	) ([]string, []engine.MVCCKeyValue) {
+	) ([]string, []mvcc.KeyValue) {
 		req := &roachpb.ExportRequest{
 			RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 			StartTime:     start,
@@ -57,8 +58,8 @@ func TestExportCmd(t *testing.T) {
 		}
 
 		var paths []string
-		var kvs []engine.MVCCKeyValue
-		ingestFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+		var kvs []mvcc.KeyValue
+		ingestFunc := func(kv mvcc.KeyValue) (bool, error) {
 			kvs = append(kvs, kv)
 			return false, nil
 		}
@@ -78,7 +79,7 @@ func TestExportCmd(t *testing.T) {
 			if err := sst.IngestExternalFile(file.SST); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}
+			start, end := mvcc.Key{Key: keys.MinKey}, mvcc.Key{Key: keys.MaxKey}
 			if err := sst.Iterate(start, end, ingestFunc); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -89,9 +90,9 @@ func TestExportCmd(t *testing.T) {
 	type ExportAndSlurpResult struct {
 		end             hlc.Timestamp
 		mvccLatestFiles []string
-		mvccLatestKVs   []engine.MVCCKeyValue
+		mvccLatestKVs   []mvcc.KeyValue
 		mvccAllFiles    []string
-		mvccAllKVs      []engine.MVCCKeyValue
+		mvccAllKVs      []mvcc.KeyValue
 	}
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
