@@ -158,11 +158,17 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// select below.
 		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
+		if args.HighWaterStamps == nil {
+			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
+		}
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof(ctx, "returning %d info(s) to node %d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
+			}
+			for _, i := range delta {
+				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
 			*reply = Response{
@@ -331,6 +337,7 @@ func (s *server) gossipReceiver(
 		// receive a new non-nil request. We avoid assigning to *argsPtr directly
 		// because the gossip sender above has closed over *argsPtr and will NPE if
 		// *argsPtr were set to nil.
+		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
 		*argsPtr = recvArgs
 	}
 }
@@ -364,7 +371,7 @@ func (s *server) start(addr net.Addr) {
 	// We require redundant callbacks here as the broadcast callback is
 	// propagating gossip infos to other nodes and needs to propagate the new
 	// expiration info.
-	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
+	unregister := s.mu.is.registerCallback(".*", func(key string, _ roachpb.Value) {
 		broadcast()
 	}, Redundant)
 
