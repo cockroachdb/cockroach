@@ -39,6 +39,11 @@ type serverInfo struct {
 	peerID    roachpb.NodeID
 }
 
+type serverConn struct {
+	args                *Request
+	sentHighWaterStamps map[roachpb.NodeID]int64
+}
+
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
@@ -107,12 +112,21 @@ func (s *server) GetNodeMetrics() *Metrics {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(stream Gossip_GossipServer) error {
-	args, err := stream.Recv()
-	if err != nil {
-		return err
-	}
-	if (args.ClusterID != uuid.UUID{}) && args.ClusterID != s.clusterID.Get() {
-		return errors.Errorf("gossip connection refused from different cluster %s", args.ClusterID)
+	var conn *serverConn
+	{
+		args, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if args.ClusterID != nil &&
+			(*args.ClusterID != uuid.UUID{}) &&
+			*args.ClusterID != s.clusterID.Get() {
+			return errors.Errorf("gossip connection refused from different cluster %s", args.ClusterID)
+		}
+		conn = &serverConn{
+			args:                args,
+			sentHighWaterStamps: make(map[roachpb.NodeID]int64),
+		}
 	}
 
 	ctx, cancel := context.WithCancel(s.AnnotateCtx(stream.Context()))
@@ -143,7 +157,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	// Starting workers in a task prevents data races during shutdown.
 	if err := s.stopper.RunTask(ctx, "gossip.server: receiver", func(ctx context.Context) {
 		s.stopper.RunWorker(ctx, func(ctx context.Context) {
-			errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
+			errCh <- s.gossipReceiver(ctx, conn, send, stream.Recv)
 		})
 	}); err != nil {
 		return err
@@ -157,28 +171,30 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// (once the lock is released) and is closed, we still trigger the
 		// select below.
 		ready := s.mu.ready
-		delta := s.mu.is.delta(args.HighWaterStamps)
-		if args.HighWaterStamps == nil {
-			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
+		delta := s.mu.is.delta(conn.args.HighWaterStamps)
+		if conn.args.HighWaterStamps == nil {
+			conn.args.HighWaterStamps = make(map[roachpb.NodeID]int64)
 		}
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof(ctx, "returning %d info(s) to node %d: %s",
-					infoCount, args.NodeID, extractKeys(delta))
+					infoCount, conn.args.NodeID, extractKeys(delta))
 			}
 			// Ensure that the high water stamps for the remote client are kept up to
 			// date so that we avoid resending the same gossip infos as infos are
 			// updated locally.
 			for _, i := range delta {
-				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
+				// log.Infof(ctx, "sending(n%d): %s %d", conn.args.NodeID, k, i.Size())
+				ratchetHighWaterStamp(conn.args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
 			*reply = Response{
 				NodeID:          s.NodeID.Get(),
-				HighWaterStamps: s.mu.is.getHighWaterStamps(),
+				HighWaterStamps: s.mu.is.getHighWaterStamps(conn.sentHighWaterStamps),
 				Delta:           delta,
 			}
+			// log.Infof(ctx, "response: %d %d", reply.Size(), len(reply.HighWaterStamps))
 
 			s.mu.Unlock()
 			if err := send(reply); err != nil {
@@ -201,7 +217,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 func (s *server) gossipReceiver(
 	ctx context.Context,
-	argsPtr **Request,
+	conn *serverConn,
 	senderFn func(*Response) error,
 	receiverFn func() (*Request, error),
 ) error {
@@ -218,14 +234,19 @@ func (s *server) gossipReceiver(
 	// This loop receives gossip from the client. It does not attempt to send the
 	// server's gossip to the client.
 	for {
-		args := *argsPtr
+		args := conn.args
 		if args.NodeID == 0 {
 			// Let the connection through so that the client can get a node ID. Once it
 			// has one, we'll run the logic below to decide whether to keep the
 			// connection to it or to forward it elsewhere.
-			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
+			log.Infof(ctx, "received initial cluster-verification connection from %v", args.Addr)
 		} else if !nodeIdentified {
 			nodeIdentified = true
+
+			if args.Addr == nil {
+				return errors.Errorf("missing address from node %d", args.NodeID)
+			}
+			addr := *args.Addr
 
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
@@ -235,19 +256,19 @@ func (s *server) gossipReceiver(
 				if log.V(2) {
 					log.Infof(ctx, "ignoring gossip from node %d (loopback)", args.NodeID)
 				}
-			} else if _, ok := s.mu.nodeMap[args.Addr]; ok {
+			} else if _, ok := s.mu.nodeMap[addr]; ok {
 				// This is a duplicate incoming connection from the same node as an existing
 				// connection. This can happen when bootstrap connections are initiated
 				// through a load balancer.
 				if log.V(2) {
-					log.Infof(ctx, "duplicate connection received from node %d at %s", args.NodeID, args.Addr)
+					log.Infof(ctx, "duplicate connection received from node %d at %s", args.NodeID, addr)
 				}
-				return errors.Errorf("duplicate connection from node at %s", args.Addr)
+				return errors.Errorf("duplicate connection from node at %s", addr)
 			} else if s.mu.incoming.hasSpace() {
 				log.VEventf(ctx, 2, "adding node %d to incoming set", args.NodeID)
 
 				s.mu.incoming.addNode(args.NodeID)
-				s.mu.nodeMap[args.Addr] = serverInfo{
+				s.mu.nodeMap[addr] = serverInfo{
 					peerID:    args.NodeID,
 					createdAt: timeutil.Now(),
 				}
@@ -256,7 +277,7 @@ func (s *server) gossipReceiver(
 					log.VEventf(ctx, 2, "removing node %d from incoming set", args.NodeID)
 					s.mu.incoming.removeNode(nodeID)
 					delete(s.mu.nodeMap, addr)
-				}(args.NodeID, args.Addr)
+				}(args.NodeID, addr)
 			} else {
 				// If we don't have any space left, forward the client along to a peer.
 				var alternateAddr util.UnresolvedAddr
@@ -315,8 +336,10 @@ func (s *server) gossipReceiver(
 
 		*reply = Response{
 			NodeID:          s.NodeID.Get(),
-			HighWaterStamps: s.mu.is.getHighWaterStamps(),
+			HighWaterStamps: s.mu.is.getHighWaterStamps(conn.sentHighWaterStamps),
 		}
+		// TODO(peter):
+		// log.Infof(ctx, "response: %d %d", reply.Size(), len(reply.HighWaterStamps))
 
 		s.mu.Unlock()
 		err = senderFn(reply)
@@ -336,12 +359,8 @@ func (s *server) gossipReceiver(
 			return err
 		}
 
-		// *argsPtr holds the remote peer state; we need to update it whenever we
-		// receive a new non-nil request. We avoid assigning to *argsPtr directly
-		// because the gossip sender above has closed over *argsPtr and will NPE if
-		// *argsPtr were set to nil.
-		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
-		*argsPtr = recvArgs
+		mergeHighWaterStamps(&recvArgs.HighWaterStamps, conn.args.HighWaterStamps)
+		conn.args = recvArgs
 	}
 }
 
