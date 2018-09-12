@@ -392,6 +392,7 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 		return nil, err
 	}
 	if _, err := db.Exec(fmt.Sprintf(sqlSinkCreateTableStmt, tableName)); err != nil {
+		db.Close()
 		return nil, err
 	}
 
