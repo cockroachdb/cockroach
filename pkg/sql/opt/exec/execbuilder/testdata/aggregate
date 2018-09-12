@@ -355,54 +355,64 @@ group         ·            ·                (max int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·                (min int)       ·
- │         aggregate 0  any_not_null(y)  ·               ·
- │         scalar       ·                ·               ·
- └── scan  ·            ·                (x int, y int)  ·
-·          table        xyz@xy           ·               ·
-·          spans        /1/!NULL-/2      ·               ·
+group           ·            ·                (min int)       ·
+ │              aggregate 0  any_not_null(y)  ·               ·
+ │              scalar       ·                ·               ·
+ └── render     ·            ·                (y int)         ·
+      │         render 0     (y)[int]         ·               ·
+      └── scan  ·            ·                (x int, y int)  ·
+·               table        xyz@xy           ·               ·
+·               spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·                (max int)       ·
- │         aggregate 0  any_not_null(y)  ·               ·
- │         scalar       ·                ·               ·
- └── scan  ·            ·                (x int, y int)  ·
-·          table        xyz@xy           ·               ·
-·          spans        /1/!NULL-/2      ·               ·
+group           ·            ·                (max int)       ·
+ │              aggregate 0  any_not_null(y)  ·               ·
+ │              scalar       ·                ·               ·
+ └── render     ·            ·                (y int)         ·
+      │         render 0     (y)[int]         ·               ·
+      └── scan  ·            ·                (x int, y int)  ·
+·               table        xyz@xy           ·               ·
+·               spans        /1/!NULL-/2      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7
 ----
-group      ·            ·                            (min int)         ·
- │         aggregate 0  any_not_null(y)              ·                 ·
- │         scalar       ·                            ·                 ·
- └── scan  ·            ·                            (y int, z float)  ·
-·          table        xyz@zyx                      ·                 ·
-·          spans        /7/!NULL-/7.000000000000001  ·                 ·
-·          limit        1                            ·                 ·
+group           ·            ·                            (min int)         ·
+ │              aggregate 0  any_not_null(y)              ·                 ·
+ │              scalar       ·                            ·                 ·
+ └── render     ·            ·                            (y int)           ·
+      │         render 0     (y)[int]                     ·                 ·
+      └── scan  ·            ·                            (y int, z float)  ·
+·               table        xyz@zyx                      ·                 ·
+·               spans        /7/!NULL-/7.000000000000001  ·                 ·
+·               limit        1                            ·                 ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE z = 7
 ----
-group         ·            ·                            (max int)         ·
- │            aggregate 0  any_not_null(y)              ·                 ·
- │            scalar       ·                            ·                 ·
- └── revscan  ·            ·                            (y int, z float)  ·
-·             table        xyz@zyx                      ·                 ·
-·             spans        /7/!NULL-/7.000000000000001  ·                 ·
-·             limit        1                            ·                 ·
+group              ·            ·                            (max int)         ·
+ │                 aggregate 0  any_not_null(y)              ·                 ·
+ │                 scalar       ·                            ·                 ·
+ └── render        ·            ·                            (y int)           ·
+      │            render 0     (y)[int]                     ·                 ·
+      └── revscan  ·            ·                            (y int, z float)  ·
+·                  table        xyz@zyx                      ·                 ·
+·                  spans        /7/!NULL-/7.000000000000001  ·                 ·
+·                  limit        1                            ·                 ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-group      ·            ·          (min int)                ·
- │         aggregate 0  min(x)     ·                        ·
- │         scalar       ·          ·                        ·
- └── scan  ·            ·          (x int, y int, z float)  ·
-·          table        xyz@zyx    ·                        ·
-·          spans        /3/2-/3/3  ·                        ·
+group           ·            ·          (min int)                ·
+ │              aggregate 0  min(x)     ·                        ·
+ │              scalar       ·          ·                        ·
+ └── render     ·            ·          (x int)                  ·
+      │         render 0     (x)[int]   ·                        ·
+      └── scan  ·            ·          (x int, y int, z float)  ·
+·               table        xyz@zyx    ·                        ·
+·               spans        /3/2-/3/3  ·                        ·
 
 statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
@@ -417,12 +427,14 @@ output row: [1]
 query TTTTT
 EXPLAIN (TYPES) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-group      ·            ·          (max int)                ·
- │         aggregate 0  max(x)     ·                        ·
- │         scalar       ·          ·                        ·
- └── scan  ·            ·          (x int, y int, z float)  ·
-·          table        xyz@zyx    ·                        ·
-·          spans        /3/2-/3/3  ·                        ·
+group           ·            ·          (max int)                ·
+ │              aggregate 0  max(x)     ·                        ·
+ │              scalar       ·          ·                        ·
+ └── render     ·            ·          (x int)                  ·
+      │         render 0     (x)[int]   ·                        ·
+      └── scan  ·            ·          (x int, y int, z float)  ·
+·               table        xyz@zyx    ·                        ·
+·               spans        /3/2-/3/3  ·                        ·
 
 # VARIANCE/STDDEV
 
@@ -660,12 +672,14 @@ group      ·            ·                (min int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
-group      ·            ·                 (min int)       ·
- │         aggregate 0  min(v)            ·               ·
- │         scalar       ·                 ·               ·
- └── scan  ·            ·                 (k int, v int)  ·
-·          table        opt_test@primary  ·               ·
-·          spans        -/3/# /5-         ·               ·
+group           ·            ·                 (min int)       ·
+ │              aggregate 0  min(v)            ·               ·
+ │              scalar       ·                 ·               ·
+ └── render     ·            ·                 (v int)         ·
+      │         render 0     (v)[int]          ·               ·
+      └── scan  ·            ·                 (k int, v int)  ·
+·               table        opt_test@primary  ·               ·
+·               spans        -/3/# /5-         ·               ·
 
 # Check that the optimization doesn't work when the argument is non-trivial (we
 # can't in general guarantee an ordering on a synthesized column).
@@ -921,24 +935,28 @@ render          ·         ·           (k)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-group      ·            ·              (concat_agg)  ·
- │         aggregate 0  concat_agg(s)  ·             ·
- │         scalar       ·              ·             ·
- └── scan  ·            ·              (k, s)        +k
-·          table        kv@primary     ·             ·
-·          spans        ALL            ·             ·
+group           ·            ·              (concat_agg)  ·
+ │              aggregate 0  concat_agg(s)  ·             ·
+ │              scalar       ·              ·             ·
+ └── render     ·            ·              (s)           ·
+      │         render 0     s              ·             ·
+      └── scan  ·            ·              (k, s)        +k
+·               table        kv@primary     ·             ·
+·               spans        ALL            ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
-group           ·            ·             (array_agg)  ·
- │              aggregate 0  array_agg(k)  ·            ·
- │              scalar       ·             ·            ·
- └── sort       ·            ·             (k, s)       +s
-      │         order        +s            ·            ·
-      └── scan  ·            ·             (k, s)       ·
-·               table        kv@primary    ·            ·
-·               spans        ALL           ·            ·
+group                ·            ·             (array_agg)  ·
+ │                   aggregate 0  array_agg(k)  ·            ·
+ │                   scalar       ·             ·            ·
+ └── render          ·            ·             (k)          ·
+      │              render 0     k             ·            ·
+      └── sort       ·            ·             (k, s)       +s
+           │         order        +s            ·            ·
+           └── scan  ·            ·             (k, s)       ·
+·                    table        kv@primary    ·            ·
+·                    spans        ALL           ·            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
@@ -954,3 +972,21 @@ group                ·            ·                 (string_agg)              
            └── scan  ·            ·                 (k, v[omitted], w[omitted], s)  k!=NULL; key(k); +k
 ·                    table        kv@primary        ·                               ·
 ·                    spans        ALL               ·                               ·
+
+# Verify that we project away all input columns for count(*).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
+----
+group                ·            ·             (count)  ·
+ │                   aggregate 0  count_rows()  ·        ·
+ │                   scalar       ·             ·        ·
+ └── render          ·            ·             ()       ·
+      └── join       ·            ·             (y, v)   ·
+           │         type         inner         ·        ·
+           │         equality     (y) = (v)     ·        ·
+           ├── scan  ·            ·             (y)      ·
+           │         table        xyz@xy        ·        ·
+           │         spans        ALL           ·        ·
+           └── scan  ·            ·             (v)      ·
+·                    table        kv@primary    ·        ·
+·                    spans        ALL           ·        ·
