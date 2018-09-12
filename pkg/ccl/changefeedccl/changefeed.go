@@ -156,7 +156,10 @@ func kvsToRows(
 // advance the changefeed and which returns span-level resolved timestamp
 // updates. The returned closure is not threadsafe.
 func emitEntries(
-	details jobspb.ChangefeedDetails, sink Sink, inputFn func(context.Context) ([]emitEntry, error),
+	details jobspb.ChangefeedDetails,
+	sink Sink,
+	inputFn func(context.Context) ([]emitEntry, error),
+	knobs TestingKnobs,
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
 	var key, value bytes.Buffer
@@ -234,6 +237,11 @@ func emitEntries(
 			// flushes.
 			if err := sink.Flush(ctx); err != nil {
 				return nil, err
+			}
+			if knobs.AfterSinkFlush != nil {
+				if err := knobs.AfterSinkFlush(); err != nil {
+					return nil, err
+				}
 			}
 		}
 		return resolvedSpans, nil
