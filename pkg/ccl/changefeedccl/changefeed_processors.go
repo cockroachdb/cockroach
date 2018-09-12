@@ -181,7 +181,11 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	}
 	rowsFn := kvsToRows(leaseMgr, tableHist, ca.spec.Feed, buf.Get)
 
-	ca.tickFn = emitEntries(ca.spec.Feed, ca.sink, rowsFn)
+	var knobs TestingKnobs
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		knobs = *cfKnobs
+	}
+	ca.tickFn = emitEntries(ca.spec.Feed, ca.sink, rowsFn, knobs)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
