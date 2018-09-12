@@ -120,7 +120,13 @@ func (p *poller) Run(ctx context.Context) error {
 			}
 		}
 
-		nextHighWater := p.clock.Now()
+		var nextHighWater hlc.Timestamp
+		if p.highWater == (hlc.Timestamp{}) {
+			nextHighWater = p.details.StatementTime
+		} else {
+			nextHighWater = p.clock.Now()
+		}
+
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
