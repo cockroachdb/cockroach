@@ -116,6 +116,27 @@ func ratchetMonotonic(v int64) {
 	monoTime.Unlock()
 }
 
+// ratchetHighWaterStamp sets stamps[nodeID] to max(stamps[nodeID], newStamp).
+func ratchetHighWaterStamp(stamps map[roachpb.NodeID]int64, nodeID roachpb.NodeID, newStamp int64) {
+	if nodeID != 0 && stamps[nodeID] < newStamp {
+		stamps[nodeID] = newStamp
+	}
+}
+
+// mergeHighWaterStamps merges the high water stamps in src into dest by
+// performing a ratchet operation for each stamp in src. The existing stamps in
+// dest will either remain the same (if they are smaller than the corresponding
+// stamp in src) or be bumped to the higher value in src.
+func mergeHighWaterStamps(dest *map[roachpb.NodeID]int64, src map[roachpb.NodeID]int64) {
+	if *dest == nil {
+		*dest = src
+		return
+	}
+	for nodeID, newStamp := range src {
+		ratchetHighWaterStamp(*dest, nodeID, newStamp)
+	}
+}
+
 // String returns a string representation of an infostore.
 func (is *infoStore) String() string {
 	var buf strings.Builder
@@ -242,11 +263,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	// Update info map.
 	is.Infos[key] = i
 	// Update the high water timestamp & min hops for the originating node.
-	if nID := i.NodeID; nID != 0 {
-		if hws := is.highWaterStamps[nID]; hws < i.OrigStamp {
-			is.highWaterStamps[nID] = i.OrigStamp
-		}
-	}
+	ratchetHighWaterStamp(is.highWaterStamps, i.NodeID, i.OrigStamp)
 	changed := existingInfo == nil ||
 		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
 	is.processCallbacks(key, i.Value, changed)
