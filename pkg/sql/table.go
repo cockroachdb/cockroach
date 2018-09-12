@@ -400,8 +400,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 		tc.dbCacheSubscriber.waitForCacheState(
 			func(dc *databaseCache) bool {
 				// Resolve the database name from the database cache.
-				dbID, err := dc.getDatabaseID(ctx,
-					tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
+				dbID, err := dc.getCachedDatabaseID(ctx, uc.name)
 				if err != nil || dbID == 0 {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here
