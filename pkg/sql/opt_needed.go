@@ -90,6 +90,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *valuesNode:
 		markOmitted(n.columns, needed)
 
+	case *virtualTableNode:
+		markOmitted(n.columns, needed)
+
 	case *projectSetNode:
 		// Optimization: remove the source columns that are not needed.
 		// Be careful not to remove actual SRFs: even if the SRF is not

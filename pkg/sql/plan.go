@@ -204,6 +204,7 @@ var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
 var _ planNode = &upsertNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
