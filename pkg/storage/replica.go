@@ -70,8 +70,6 @@ import (
 )
 
 const (
-	// configGossipTTL is the time-to-live for configuration maps.
-	configGossipTTL = 0 // does not expire
 	// optimizePutThreshold is the minimum length of a contiguous run
 	// of batched puts or conditional puts, after which the constituent
 	// put operations will possibly be optimized by determining whether
@@ -6470,7 +6468,9 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
 // if this is the first range and a range lease can be obtained. The Store
 // calls this periodically on first range replicas.
-func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
+func (r *Replica) maybeGossipFirstRange(
+	ctx context.Context, gossipedClusterID *bool,
+) *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
@@ -6488,16 +6488,21 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		}
 	}
 
-	// Gossip the cluster ID from all replicas of the first range; there
-	// is no expiration on the cluster ID.
-	if log.V(1) {
-		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
-			r.store.StoreID(), r.RangeID)
-	}
-	if err := r.store.Gossip().AddInfo(
-		gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second,
-	); err != nil {
-		log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+	// Gossip the cluster ID from all replicas of the first range; there is no
+	// expiration on the cluster ID. We only have to do this once because the
+	// lack of expiration means the cluster ID will keep getting passed around
+	// through gossip.
+	if !*gossipedClusterID {
+		*gossipedClusterID = true
+		if log.V(1) {
+			log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
+				r.store.StoreID(), r.RangeID)
+		}
+		if err := r.store.Gossip().AddInfo(
+			gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0, /* no expiration */
+		); err != nil {
+			log.Errorf(ctx, "failed to gossip cluster ID: %s", err)
+		}
 	}
 
 	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
@@ -6535,7 +6540,8 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
 	}
 	if err := r.store.Gossip().AddInfoProto(
-		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {
+		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, 0, /* no expiration */
+	); err != nil {
 		log.Errorf(ctx, "failed to gossip first range metadata: %s", err)
 	}
 }

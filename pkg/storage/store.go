@@ -1606,6 +1606,7 @@ func (s *Store) startGossip() {
 		}
 	}
 
+	var gossipedClusterID bool
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error
@@ -1617,7 +1618,7 @@ func (s *Store) startGossip() {
 			fn: func(ctx context.Context, repl *Replica) error {
 				// The first range is gossiped by all replicas, not just the lease
 				// holder, so wakeReplica is not used here.
-				return repl.maybeGossipFirstRange(ctx).GoError()
+				return repl.maybeGossipFirstRange(ctx, &gossipedClusterID).GoError()
 			},
 			description: "first range descriptor",
 			interval:    s.cfg.SentinelGossipTTL() / 2,

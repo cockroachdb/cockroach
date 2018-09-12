@@ -273,10 +273,15 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 // getHighWaterStamps returns a copy of the high water stamps map of
 // gossip peer info maintained by this infostore. Does not modify
 // the infoStore.
-func (is *infoStore) getHighWaterStamps() map[roachpb.NodeID]int64 {
+func (is *infoStore) getHighWaterStamps(sent map[roachpb.NodeID]int64) map[roachpb.NodeID]int64 {
 	copy := make(map[roachpb.NodeID]int64, len(is.highWaterStamps))
 	for k, hws := range is.highWaterStamps {
-		copy[k] = hws
+		if sent == nil {
+			copy[k] = hws
+		} else if existing := sent[k]; existing < hws {
+			copy[k] = hws
+			sent[k] = hws
+		}
 	}
 	return copy
 }
