@@ -1542,13 +1542,13 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
-			return err
+			return nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -1574,17 +1574,27 @@ CREATE TABLE crdb_internal.ranges (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var desc roachpb.RangeDescriptor
-		for _, r := range ranges {
+
+		i := 0
+
+		return func() (tree.Datums, error) {
+			if i >= len(ranges) {
+				return nil, nil
+			}
+
+			r := ranges[i]
+			i++
+
 			if err := r.ValueProto(&desc); err != nil {
-				return err
+				return nil, err
 			}
 			arr := tree.NewDArray(types.Int)
 			for _, replica := range desc.Replicas {
 				if err := arr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
-					return err
+					return nil, err
 				}
 			}
 			var dbName, tableName, indexName string
@@ -1611,11 +1621,11 @@ CREATE TABLE crdb_internal.ranges (
 				},
 			})
 			if err := p.txn.Run(ctx, b); err != nil {
-				return errors.Wrap(err, "error getting lease info")
+				return nil, errors.Wrap(err, "error getting lease info")
 			}
 			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
-			if err := addRow(
+			return tree.Datums{
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
@@ -1626,11 +1636,8 @@ CREATE TABLE crdb_internal.ranges (
 				tree.NewDString(indexName),
 				arr,
 				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
-			); err != nil {
-				return err
-			}
-		}
-		return nil
+			}, nil
+		}, nil
 	},
 }
 
