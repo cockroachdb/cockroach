@@ -5,6 +5,7 @@ import "./tooltip.styl";
 
 interface ToolTipWrapperProps {
   text: React.ReactNode;
+  short?: boolean;
 }
 
 interface ToolTipWrapperState {
@@ -37,11 +38,12 @@ export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTip
   }
 
   render() {
-    const { text } = this.props;
+    const { text, short } = this.props;
     const { hovered } = this.state;
     const tooltipClassNames = classNames({
       "hover-tooltip": true,
       "hover-tooltip--hovered": hovered,
+      "hover-tooltip--short": short,
     });
 
     return (

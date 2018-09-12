@@ -30,6 +30,8 @@
 
 .hover-tooltip
   position relative
+  width 100%
+  height 100%
 
   &__text
     visibility hidden
@@ -46,6 +48,10 @@
     font-family Lato-Regular
     text-align left
     color $body-color
+
+  &--short &__text
+    width unset
+    max-width 400px
 
   &--hovered &__text
     visibility visible
