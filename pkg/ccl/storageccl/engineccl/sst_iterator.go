@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
 var readerOpts = &db.Options{
@@ -131,8 +132,13 @@ func (r *sstIterator) Next() {
 	}
 
 	key := rocksdbInternalKey[:len(rocksdbInternalKey)-8]
-	if r.mvccKey, r.err = engine.DecodeKey(key); r.err != nil {
-		r.err = errors.Wrapf(r.err, "decoding key: %s", key)
+
+	if k, ts, err := enginepb.DecodeKey(key); err == nil {
+		r.mvccKey.Key = k
+		r.mvccKey.Timestamp = ts
+		r.err = nil
+	} else {
+		r.err = errors.Wrapf(err, "decoding key: %s", key)
 		return
 	}
 
@@ -167,8 +173,8 @@ var _ db.Comparer = cockroachComparer{}
 
 // Compare implements the db.Comparer interface.
 func (cockroachComparer) Compare(a, b []byte) int {
-	keyA, tsA, okA := engine.SplitMVCCKey(a)
-	keyB, tsB, okB := engine.SplitMVCCKey(b)
+	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
+	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
 	if !okA || !okB {
 		// This should never happen unless there is some sort of corruption of
 		// the keys. This is a little bizarre, but the behavior exactly matches

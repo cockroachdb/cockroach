@@ -1150,7 +1150,7 @@ func TestDecodeKey(t *testing.T) {
 			if !r.Next() {
 				t.Fatalf("could not get the first entry: %+v", r.Error())
 			}
-			decodedKey, err := DecodeKey(r.Key())
+			decodedKey, err := DecodeMVCCKey(r.Key())
 			if err != nil {
 				t.Fatalf("unexpected err: %+v", err)
 			}
