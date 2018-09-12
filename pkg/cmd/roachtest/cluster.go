@@ -826,13 +826,6 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if encrypt && !argExists(args, "--encrypt") {
 		args = append(args, "--encrypt")
 	}
-	if local {
-		// This avoids annoying firewall prompts on macos.
-		// NB: we have to use the deprecated --host flag here
-		// (and not --listen-addr) until we don't run any mixed
-		// version tests involving v2.0 any more.
-		args = append(args, "--args", "--host=127.0.0.1")
-	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
 	}
