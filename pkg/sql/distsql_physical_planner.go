@@ -286,6 +286,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *distinctNode:
 	case *unionNode:
 	case *valuesNode:
+	case *virtualTableNode:
 	case *createStatsNode:
 	case *projectSetNode:
 	case *unaryNode:
@@ -435,7 +436,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 		}
 		return canDistribute, nil
-
 	case *createStatsNode:
 		return shouldDistribute, nil
 
@@ -2364,7 +2364,6 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		} else {
 			plan, err = dsp.createPlanForValues(planCtx, n)
 		}
-
 	case *createStatsNode:
 		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 
