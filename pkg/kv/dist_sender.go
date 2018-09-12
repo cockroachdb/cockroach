@@ -1324,20 +1324,21 @@ func (ds *DistSender) sendToReplicas(
 				ambiguousError = err
 			}
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
-			if storeID, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok && curReplica.StoreID == storeID {
-				// If the down replica is cached as the lease holder, evict
-				// it. The only other eviction happens below on
-				// NotLeaseHolderError, but if the next replica is the
-				// actual lease holder, we're never going to receive one of
-				// those and will thus pay the price of trying the down node
-				// first forever.
-				//
-				// NB: we could consider instead adding a successful reply
-				// from the next replica into the cache, but without a
-				// leaseholder (and taking into account that the local
-				// node can't be down) it won't take long until we talk
-				// to a replica that tells us who the leaseholder is.
-				ds.leaseHolderCache.Update(ctx, rangeID, 0 /* evict */)
+
+			// If the error wasn't just a context cancellation and the down replica
+			// is cached as the lease holder, evict it. The only other eviction
+			// happens below on NotLeaseHolderError, but if the next replica is the
+			// actual lease holder, we're never going to receive one of those and
+			// will thus pay the price of trying the down node first forever.
+			//
+			// NB: we should consider instead adding a successful reply from the next
+			// replica into the cache, but without a leaseholder (and taking into
+			// account that the local node can't be down) it won't take long until we
+			// talk to a replica that tells us who the leaseholder is.
+			if ctx.Err() == nil {
+				if storeID, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok && curReplica.StoreID == storeID {
+					ds.leaseHolderCache.Update(ctx, rangeID, 0 /* evict */)
+				}
 			}
 		} else {
 			propagateError := false
