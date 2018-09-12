@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// Helpers here a split out of storage/engine since that package also contains
+// Helpers here are split out of storage/engine since that package also contains
 // rocksdb-interfacing code that pulls in our c-deps build requirements. These
 // helpers are used by packages that do not want to pull in all of that, so they
 // live here instead. We might want to undertake a larger refactor to split up
